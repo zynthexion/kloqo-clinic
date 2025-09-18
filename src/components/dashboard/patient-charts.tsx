@@ -2,7 +2,8 @@
 
 import { Bar, BarChart, Pie, PieChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, Cell } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { ChartTooltipContent } from "@/components/ui/chart";
+import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
+import type { ChartConfig } from "@/components/ui/chart";
 
 const ageData = [
   { age: "0-18", count: 8 },
@@ -13,14 +14,24 @@ const ageData = [
 ];
 
 const departmentData = [
-  { name: 'Cardiology', value: 400 },
-  { name: 'Neurology', value: 300 },
-  { name: 'Pediatrics', value: 300 },
-  { name: 'Orthopedics', value: 200 },
-  { name: 'Other', value: 278 },
+  { name: 'Cardiology', value: 400, fill: "hsl(var(--chart-1))" },
+  { name: 'Neurology', value: 300, fill: "hsl(var(--chart-2))" },
+  { name: 'Pediatrics', value: 300, fill: "hsl(var(--chart-3))" },
+  { name: 'Orthopedics', value: 200, fill: "hsl(var(--chart-4))" },
+  { name: 'Other', value: 278, fill: "hsl(var(--chart-5))" },
 ];
 
-const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
+const chartConfig: ChartConfig = {
+  count: {
+    label: "Patients",
+    color: "hsl(var(--primary))",
+  },
+  Cardiology: { label: "Cardiology", color: "hsl(var(--chart-1))" },
+  Neurology: { label: "Neurology", color: "hsl(var(--chart-2))" },
+  Pediatrics: { label: "Pediatrics", color: "hsl(var(--chart-3))" },
+  Orthopedics: { label: "Orthopedics", color: "hsl(var(--chart-4))" },
+  Other: { label: "Other", color: "hsl(var(--chart-5))" },
+};
 
 
 export default function PatientCharts() {
@@ -33,25 +44,25 @@ export default function PatientCharts() {
       <CardContent className="flex-grow grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="flex flex-col">
           <h3 className="text-sm font-medium text-center mb-2">Patients by Age Group</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={ageData}>
+          <ChartContainer config={chartConfig} className="w-full h-[250px]">
+            <BarChart data={ageData} accessibilityLayer>
               <XAxis dataKey="age" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
               <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
               <Tooltip
                 cursor={{ fill: 'hsla(var(--muted))' }}
                 content={<ChartTooltipContent />}
                 />
-              <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="count" radius={[4, 4, 0, 0]} />
             </BarChart>
-          </ResponsiveContainer>
+          </ChartContainer>
         </div>
         <div className="flex flex-col">
           <h3 className="text-sm font-medium text-center mb-2">Patients by Department</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <PieChart>
+          <ChartContainer config={chartConfig} className="w-full h-[250px]">
+            <PieChart accessibilityLayer>
               <Tooltip
                 cursor={{ fill: 'hsla(var(--muted))' }}
-                content={<ChartTooltipContent />}
+                content={<ChartTooltipContent nameKey="name" />}
               />
               <Pie
                 data={departmentData}
@@ -60,17 +71,16 @@ export default function PatientCharts() {
                 labelLine={false}
                 innerRadius={60}
                 outerRadius={80}
-                fill="#8884d8"
                 paddingAngle={5}
                 dataKey="value"
               >
                 {departmentData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  <Cell key={`cell-${index}`} fill={entry.fill} />
                 ))}
               </Pie>
-              <Legend iconSize={10} />
+              <Legend />
             </PieChart>
-          </ResponsiveContainer>
+          </ChartContainer>
         </div>
       </CardContent>
     </Card>
