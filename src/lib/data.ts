@@ -163,6 +163,23 @@ export const doctors: Doctor[] = [
   },
 ];
 
+export function addDoctor(doctorData: Omit<Doctor, 'id' | 'avatar' | 'schedule' | 'preferences' | 'historicalData' | 'totalPatients' | 'todaysAppointments'>): Doctor {
+  const newId = `D${(doctors.length + 1).toString().padStart(3, '0')}`;
+  const newDoctor: Doctor = {
+    id: newId,
+    avatar: `https://picsum.photos/seed/${newId}/100/100`,
+    schedule: 'Not set',
+    preferences: 'Not set',
+    historicalData: 'No data',
+    totalPatients: 0,
+    todaysAppointments: 0,
+    ...doctorData,
+  };
+  doctors.push(newDoctor);
+  return newDoctor;
+}
+
+
 export const appointments: Appointment[] = [
   {
     id: 'APT001',

@@ -1,3 +1,6 @@
+
+"use client";
+
 import { SidebarInset } from "@/components/ui/sidebar";
 import { DoctorsHeader } from "@/components/layout/header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,20 +28,28 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Edit,
   MoreHorizontal,
-  PlusCircle,
   Search,
   Trash,
 } from "lucide-react";
-import { doctors } from "@/lib/data";
+import { doctors as initialDoctors, addDoctor } from "@/lib/data";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
+import { AddDoctorForm } from "@/components/doctors/add-doctor-form";
+import React, { useState } from "react";
+import type { Doctor } from "@/lib/types";
 
 export default function DoctorsPage() {
+  const [doctors, setDoctors] = useState<Doctor[]>(initialDoctors);
+
+  const handleAddDoctor = (doctor: Omit<Doctor, 'id' | 'avatar' | 'schedule' | 'preferences' | 'historicalData' | 'totalPatients' | 'todaysAppointments'>) => {
+    const newDoctor = addDoctor(doctor);
+    setDoctors(prev => [...prev, newDoctor]);
+  };
+
   return (
     <SidebarInset>
       <DoctorsHeader />
@@ -94,10 +105,7 @@ export default function DoctorsPage() {
                     <SelectItem value="unavailable">Unavailable</SelectItem>
                   </SelectContent>
                 </Select>
-                <Button>
-                  <PlusCircle className="mr-2 h-4 w-4" />
-                  Add Doctor
-                </Button>
+                <AddDoctorForm onAddDoctor={handleAddDoctor} />
               </div>
               <div className="rounded-md border">
                 <Table>
