@@ -45,7 +45,7 @@ import type { Doctor, AvailabilitySlot } from "@/lib/types";
 export default function DoctorsPage() {
   const [doctors, setDoctors] = useState<Doctor[]>(initialDoctors);
 
-  const handleAddDoctor = (doctor: Omit<Doctor, 'id' | 'avatar' | 'schedule' | 'preferences' | 'historicalData' | 'totalPatients' | 'todaysAppointments'> & { maxPatientsPerDay: number, availabilitySlots: AvailabilitySlot[] }) => {
+  const handleAddDoctor = (doctor: Omit<Doctor, 'id' | 'avatar' | 'preferences' | 'historicalData' | 'totalPatients' | 'todaysAppointments'> & { maxPatientsPerDay: number, availabilitySlots: AvailabilitySlot[] }) => {
     const newDoctor = addDoctor(doctor);
     setDoctors(prev => [...prev, newDoctor]);
   };
@@ -217,3 +217,5 @@ export default function DoctorsPage() {
     </SidebarInset>
   );
 }
+
+    

@@ -1,6 +1,7 @@
 
 
-import type { Doctor, Report, Appointment, Department, AvailabilitySlot } from './types';
+
+import type { Doctor, Report, Appointment, Department, AvailabilitySlot, TimeSlot } from './types';
 import { PlaceHolderImages } from './placeholder-images';
 
 const getImageUrl = (id: string) => PlaceHolderImages.find(img => img.id === id)?.imageUrl || '';
@@ -173,7 +174,7 @@ export function addDoctor(doctorData: NewDoctorData): Doctor {
   const newId = `D${(doctors.length + 1).toString().padStart(3, '0')}`;
   
   const scheduleString = doctorData.availabilitySlots
-    .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => ts.time).join(', ')}`)
+    .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${ts.from}-${ts.to}`).join(', ')}`)
     .join('; ');
 
   const newDoctor: Doctor = {
@@ -420,3 +421,5 @@ export const departments: Department[] = [
     doctors: ['Dr. Sarah Johnson', 'Dr. Petra Winsburry', 'Dr. Olivia Martinez', 'Dr. Samuel Thompson', 'Dr. Andrew Peterson', 'Dr. Mark Wilson', 'Dr. Thomas Brown', 'Dr. Chloe Harrington', 'Dr. Damian Sanchez', 'Dr. William Carter', 'Dr. Emily Smith'],
   }
 ];
+
+    

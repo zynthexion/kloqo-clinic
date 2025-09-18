@@ -33,14 +33,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { PlusCircle, Trash } from "lucide-react";
+import { PlusCircle, Trash, Copy } from "lucide-react";
 import { departments } from "@/lib/data";
-import type { Doctor, AvailabilitySlot } from "@/lib/types";
+import type { Doctor, AvailabilitySlot, TimeSlot } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "../ui/scroll-area";
 
 const timeSlotSchema = z.object({
-  time: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Invalid time format (HH:MM)"),
+  from: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Invalid time format (HH:MM)"),
+  to: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Invalid time format (HH:MM)"),
 });
 
 const availabilitySlotSchema = z.object({
@@ -92,9 +93,41 @@ export function AddDoctorForm({ onAddDoctor }: AddDoctorFormProps) {
 
   const watchedAvailableDays = form.watch("availableDays");
 
+  const copyTimeSlotToAllDays = (dayIndex: number, timeIndex: number) => {
+    const timeSlotToCopy = form.getValues(`availabilitySlots.${dayIndex}.timeSlots.${timeIndex}`);
+    if (!timeSlotToCopy.from || !timeSlotToCopy.to) {
+        toast({
+            variant: "destructive",
+            title: "Cannot Copy",
+            description: "Please fill in both 'From' and 'To' times before copying.",
+        });
+        return;
+    }
+
+    const currentSlots = form.getValues('availabilitySlots');
+    const updatedSlots = currentSlots.map(daySlot => {
+        if (watchedAvailableDays.includes(daySlot.day)) {
+            const timeSlotExists = daySlot.timeSlots.some(ts => ts.from === timeSlotToCopy.from && ts.to === timeSlotToCopy.to);
+            if (!timeSlotExists) {
+                return { ...daySlot, timeSlots: [...daySlot.timeSlots, timeSlotToCopy] };
+            }
+        }
+        return daySlot;
+    });
+
+    form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true });
+
+    toast({
+      title: "Time Slot Copied",
+      description: `Time slot ${timeSlotToCopy.from} - ${timeSlotToCopy.to} has been applied to all selected days.`,
+    });
+  }
+
   function onSubmit(values: AddDoctorFormValues) {
     const { availableDays, ...rest } = values;
-    const scheduleString = values.availabilitySlots.map(slot => `${slot.day}: ${slot.timeSlots.map(ts => ts.time).join(', ')}`).join('; ');
+    const scheduleString = values.availabilitySlots
+      .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${ts.from}-${ts.to}`).join(', ')}`)
+      .join('; ');
     
     onAddDoctor({
         ...rest,
@@ -250,7 +283,7 @@ export function AddDoctorForm({ onAddDoctor }: AddDoctorFormProps) {
 
                                         const dayIndex = fields.findIndex(f => f.day === day);
                                         if (checked && dayIndex === -1) {
-                                          append({ day: day, timeSlots: [{ time: "09:00" }] });
+                                          append({ day: day, timeSlots: [{ from: "09:00", to: "10:00" }] });
                                         } else if (!checked && dayIndex > -1) {
                                           remove(dayIndex);
                                         }
@@ -281,9 +314,10 @@ export function AddDoctorForm({ onAddDoctor }: AddDoctorFormProps) {
                                 <div key={timeIndex} className="flex items-center gap-2">
                                     <FormField
                                         control={form.control}
-                                        name={`availabilitySlots.${dayIndex}.timeSlots.${timeIndex}.time`}
+                                        name={`availabilitySlots.${dayIndex}.timeSlots.${timeIndex}.from`}
                                         render={({ field }) => (
                                             <FormItem className="flex-grow">
+                                                <FormLabel className="text-xs">From</FormLabel>
                                                 <FormControl>
                                                     <Input {...field} placeholder="HH:MM" />
                                                 </FormControl>
@@ -291,7 +325,23 @@ export function AddDoctorForm({ onAddDoctor }: AddDoctorFormProps) {
                                             </FormItem>
                                         )}
                                     />
-                                    <Button type="button" variant="outline" size="icon" onClick={() => {
+                                    <FormField
+                                        control={form.control}
+                                        name={`availabilitySlots.${dayIndex}.timeSlots.${timeIndex}.to`}
+                                        render={({ field }) => (
+                                            <FormItem className="flex-grow">
+                                                <FormLabel className="text-xs">To</FormLabel>
+                                                <FormControl>
+                                                    <Input {...field} placeholder="HH:MM" />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <Button type="button" variant="ghost" size="icon" onClick={() => copyTimeSlotToAllDays(dayIndex, timeIndex)} className="self-end">
+                                        <Copy className="h-4 w-4" />
+                                    </Button>
+                                    <Button type="button" variant="outline" size="icon" className="self-end" onClick={() => {
                                         const currentSlots = form.getValues(`availabilitySlots.${dayIndex}.timeSlots`);
                                         const newSlots = currentSlots.filter((_, i) => i !== timeIndex);
                                         update(dayIndex, { ...form.getValues(`availabilitySlots.${dayIndex}`), timeSlots: newSlots });
@@ -302,7 +352,7 @@ export function AddDoctorForm({ onAddDoctor }: AddDoctorFormProps) {
                             ))}
                             <Button type="button" size="sm" variant="outline" onClick={() => {
                                 const currentSlots = form.getValues(`availabilitySlots.${dayIndex}.timeSlots`);
-                                const newSlots = [...currentSlots, { time: "" }];
+                                const newSlots = [...currentSlots, { from: "", to: "" }];
                                 update(dayIndex, { ...form.getValues(`availabilitySlots.${dayIndex}`), timeSlots: newSlots });
                             }}>
                                 Add Time Slot
@@ -323,3 +373,5 @@ export function AddDoctorForm({ onAddDoctor }: AddDoctorFormProps) {
     </Dialog>
   );
 }
+
+    

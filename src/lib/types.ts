@@ -1,8 +1,13 @@
 
 
+export type TimeSlot = {
+  from: string;
+  to: string;
+};
+
 export type AvailabilitySlot = {
   day: string;
-  timeSlots: { time: string }[];
+  timeSlots: TimeSlot[];
 };
 
 export type Doctor = {
@@ -54,3 +59,5 @@ export type Department = {
     imageHint: string;
     doctors: string[];
 }
+
+    
