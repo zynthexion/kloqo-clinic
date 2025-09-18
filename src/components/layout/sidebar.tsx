@@ -40,11 +40,6 @@ const menuItems = [
     label: "Appointments",
   },
   {
-    href: "/patients",
-    icon: Users,
-    label: "Patients",
-  },
-  {
     href: "/doctors",
     icon: Stethoscope,
     label: "Doctors",
@@ -53,27 +48,6 @@ const menuItems = [
     href: "/departments",
     icon: Building2,
     label: "Departments",
-  },
-  {
-    href: "/schedule",
-    icon: BriefcaseMedical,
-    label: "Doctors' Schedule",
-  },
-  {
-    href: "/payments",
-    icon: Wallet,
-    label: "Payments",
-  },
-  {
-    href: "/inventory",
-    icon: Inbox,
-    label: "Inventory",
-  },
-  {
-    href: "/messages",
-    icon: MessageSquare,
-    label: "Messages",
-    badge: "7",
   },
 ];
 
