@@ -33,11 +33,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { PlusCircle, Trash, Copy } from "lucide-react";
+import { PlusCircle, Trash, Copy, Upload } from "lucide-react";
 import { departments } from "@/lib/data";
 import type { Doctor, AvailabilitySlot, TimeSlot } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "../ui/scroll-area";
+import Image from "next/image";
 
 const timeSlotSchema = z.object({
   from: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Invalid time format (HH:MM)"),
@@ -59,18 +60,20 @@ const formSchema = z.object({
     message: "You have to select at least one day.",
   }),
   availabilitySlots: z.array(availabilitySlotSchema),
+  photo: z.instanceof(File).optional(),
 });
 
 type AddDoctorFormValues = z.infer<typeof formSchema>;
 
 type AddDoctorFormProps = {
-  onAddDoctor: (doctor: Omit<Doctor, 'id' | 'avatar' | 'schedule' | 'preferences' | 'historicalData' | 'totalPatients' | 'todaysAppointments'> & { maxPatientsPerDay: number; availabilitySlots: AvailabilitySlot[] }) => void;
+  onAddDoctor: (doctor: AddDoctorFormValues) => void;
 };
 
 const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 export function AddDoctorForm({ onAddDoctor }: AddDoctorFormProps) {
   const [open, setOpen] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const { toast } = useToast();
 
   const form = useForm<AddDoctorFormValues>({
@@ -124,27 +127,32 @@ export function AddDoctorForm({ onAddDoctor }: AddDoctorFormProps) {
   }
 
   function onSubmit(values: AddDoctorFormValues) {
-    const { availableDays, ...rest } = values;
-    const scheduleString = values.availabilitySlots
-      .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${ts.from}-${ts.to}`).join(', ')}`)
-      .join('; ');
-    
-    onAddDoctor({
-        ...rest,
-        availabilitySlots: values.availabilitySlots,
-        schedule: scheduleString
-    });
-
-    toast({
-      title: "Doctor Added",
-      description: `${values.name} has been successfully added.`,
-    });
+    onAddDoctor(values);
     setOpen(false);
     form.reset();
+    setPhotoPreview(null);
   }
 
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      form.setValue('photo', file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPhotoPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(isOpen) => {
+        setOpen(isOpen);
+        if (!isOpen) {
+            form.reset();
+            setPhotoPreview(null);
+        }
+    }}>
       <DialogTrigger asChild>
         <Button>
           <PlusCircle className="mr-2 h-4 w-4" />
@@ -162,6 +170,34 @@ export function AddDoctorForm({ onAddDoctor }: AddDoctorFormProps) {
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <ScrollArea className="h-[60vh] p-4">
               <div className="space-y-4">
+                 <FormField
+                  control={form.control}
+                  name="photo"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Doctor's Photo</FormLabel>
+                      <FormControl>
+                        <div className="flex items-center gap-4">
+                          <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center overflow-hidden">
+                            {photoPreview ? (
+                              <Image src={photoPreview} alt="Doctor's Photo" width={96} height={96} className="object-cover" />
+                            ) : (
+                              <Upload className="w-8 h-8 text-muted-foreground" />
+                            )}
+                          </div>
+                          <Input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" id="photo-upload" />
+                          <label htmlFor="photo-upload" className="cursor-pointer">
+                            <Button type="button" variant="outline">
+                              <Upload className="mr-2 h-4 w-4" />
+                              Upload
+                            </Button>
+                          </label>
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <FormField
                   control={form.control}
                   name="name"
@@ -373,5 +409,3 @@ export function AddDoctorForm({ onAddDoctor }: AddDoctorFormProps) {
     </Dialog>
   );
 }
-
-    

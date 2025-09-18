@@ -35,19 +35,79 @@ import {
   Search,
   Trash,
 } from "lucide-react";
-import { doctors as initialDoctors, addDoctor } from "@/lib/data";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { AddDoctorForm } from "@/components/doctors/add-doctor-form";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import type { Doctor, AvailabilitySlot } from "@/lib/types";
+import { collection, getDocs, addDoc, doc, setDoc } from "firebase/firestore";
+import { db, storage } from "@/lib/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { useToast } from "@/hooks/use-toast";
 
 export default function DoctorsPage() {
-  const [doctors, setDoctors] = useState<Doctor[]>(initialDoctors);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const { toast } = useToast();
 
-  const handleAddDoctor = (doctor: Omit<Doctor, 'id' | 'avatar' | 'preferences' | 'historicalData' | 'totalPatients' | 'todaysAppointments'> & { maxPatientsPerDay: number, availabilitySlots: AvailabilitySlot[] }) => {
-    const newDoctor = addDoctor(doctor);
-    setDoctors(prev => [...prev, newDoctor]);
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      const doctorsCollection = collection(db, "doctors");
+      const doctorsSnapshot = await getDocs(doctorsCollection);
+      const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
+      setDoctors(doctorsList);
+    };
+
+    fetchDoctors();
+  }, []);
+
+  const handleAddDoctor = async (doctorData: Omit<Doctor, 'id' | 'avatar' | 'schedule' | 'preferences' | 'historicalData' | 'totalPatients' | 'todaysAppointments'> & { maxPatientsPerDay: number; availabilitySlots: AvailabilitySlot[]; photo?: File }) => {
+    try {
+      let photoUrl = `https://picsum.photos/seed/${new Date().getTime()}/100/100`;
+
+      if (doctorData.photo) {
+        const storageRef = ref(storage, `doctor_photos/${doctorData.photo.name}`);
+        const snapshot = await uploadBytes(storageRef, doctorData.photo);
+        photoUrl = await getDownloadURL(snapshot.ref);
+      }
+      
+      const newDoctorRef = doc(collection(db, "doctors"));
+      const scheduleString = doctorData.availabilitySlots
+        .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${ts.from}-${ts.to}`).join(', ')}`)
+        .join('; ');
+
+      const newDoctor: Doctor = {
+        id: newDoctorRef.id,
+        avatar: photoUrl,
+        schedule: scheduleString,
+        preferences: 'Not set',
+        historicalData: 'No data',
+        totalPatients: 0,
+        todaysAppointments: 0,
+        name: doctorData.name,
+        specialty: doctorData.specialty,
+        department: doctorData.department,
+        availability: doctorData.availability,
+        maxPatientsPerDay: doctorData.maxPatientsPerDay,
+        availabilitySlots: doctorData.availabilitySlots,
+      };
+
+      await setDoc(newDoctorRef, newDoctor);
+
+      setDoctors(prev => [...prev, newDoctor]);
+
+      toast({
+        title: "Doctor Added",
+        description: `${newDoctor.name} has been successfully added.`,
+      });
+
+    } catch (error) {
+      console.error("Error adding doctor: ", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to add doctor. Please try again.",
+      });
+    }
   };
 
   return (
@@ -194,7 +254,7 @@ export default function DoctorsPage() {
                       <SelectItem value="48">48</SelectItem>
                     </SelectContent>
                   </Select>
-                  <span>out of 58</span>
+                  <span>out of {doctors.length}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button variant="outline" size="icon">
@@ -217,5 +277,3 @@ export default function DoctorsPage() {
     </SidebarInset>
   );
 }
-
-    

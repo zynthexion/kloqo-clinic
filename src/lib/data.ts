@@ -1,6 +1,7 @@
 
 
 
+
 import type { Doctor, Report, Appointment, Department, AvailabilitySlot, TimeSlot } from './types';
 import { PlaceHolderImages } from './placeholder-images';
 
@@ -164,37 +165,6 @@ export let doctors: Doctor[] = [
     availability: 'Available',
   },
 ];
-
-type NewDoctorData = Omit<Doctor, 'id' | 'avatar' | 'schedule' | 'preferences' | 'historicalData' | 'totalPatients' | 'todaysAppointments'> & {
-  maxPatientsPerDay: number;
-  availabilitySlots: AvailabilitySlot[];
-};
-
-export function addDoctor(doctorData: NewDoctorData): Doctor {
-  const newId = `D${(doctors.length + 1).toString().padStart(3, '0')}`;
-  
-  const scheduleString = doctorData.availabilitySlots
-    .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${ts.from}-${ts.to}`).join(', ')}`)
-    .join('; ');
-
-  const newDoctor: Doctor = {
-    id: newId,
-    avatar: `https://picsum.photos/seed/${newId}/100/100`,
-    schedule: scheduleString,
-    preferences: 'Not set',
-    historicalData: 'No data',
-    totalPatients: 0,
-    todaysAppointments: 0,
-    name: doctorData.name,
-    specialty: doctorData.specialty,
-    department: doctorData.department,
-    availability: doctorData.availability,
-    maxPatientsPerDay: doctorData.maxPatientsPerDay,
-    availabilitySlots: doctorData.availabilitySlots,
-  };
-  doctors.push(newDoctor);
-  return newDoctor;
-}
 
 
 export const appointments: Appointment[] = [
@@ -421,5 +391,3 @@ export const departments: Department[] = [
     doctors: ['Dr. Sarah Johnson', 'Dr. Petra Winsburry', 'Dr. Olivia Martinez', 'Dr. Samuel Thompson', 'Dr. Andrew Peterson', 'Dr. Mark Wilson', 'Dr. Thomas Brown', 'Dr. Chloe Harrington', 'Dr. Damian Sanchez', 'Dr. William Carter', 'Dr. Emily Smith'],
   }
 ];
-
-    
