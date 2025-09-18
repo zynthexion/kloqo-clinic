@@ -12,14 +12,14 @@ export type Appointment = {
   id: string;
   patientName: string;
   doctor: string;
-  date: Date;
+  date: string;
   time: string;
   department: string;
 };
 
 export type Activity = {
   id: string;
-  timestamp: Date;
+  timestamp: string;
   description: string;
   icon: React.ComponentType<{ className?: string }>;
 };

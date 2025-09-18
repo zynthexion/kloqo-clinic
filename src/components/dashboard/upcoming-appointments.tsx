@@ -12,6 +12,8 @@ import { doctors } from "@/lib/data";
 export default function UpcomingAppointments() {
   const [appointments] = useLocalStorage<Appointment[]>("appointments", []);
 
+  const now = React.useMemo(() => new Date().getTime(), []);
+
   const upcomingAppointments = React.useMemo(() => {
     // Sort appointments by date and time
     const sortedAppointments = [...appointments].sort((a, b) => {
@@ -22,9 +24,9 @@ export default function UpcomingAppointments() {
 
     return sortedAppointments.filter(apt => {
       const aptDateTime = new Date(apt.date).setHours(parseInt(apt.time.split(':')[0]), parseInt(apt.time.split(':')[1]));
-      return aptDateTime >= new Date().getTime();
+      return aptDateTime >= now;
     }).slice(0, 5);
-  }, [appointments]);
+  }, [appointments, now]);
 
 
   const getDoctorAvatar = (doctorName: string) => {

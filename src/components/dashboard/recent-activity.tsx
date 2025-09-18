@@ -9,17 +9,20 @@ import type { Activity } from "@/lib/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 const initialActivities: Activity[] = [
-    { id: 'act-3', timestamp: new Date(Date.now() - 3600000 * 3), description: 'Vitals check for Jane Smith.', icon: HeartPulse },
-    { id: 'act-2', timestamp: new Date(Date.now() - 3600000), description: 'Patient John Doe discharged from Room 201.', icon: LogOut },
-    { id: 'act-1', timestamp: new Date(Date.now() - 60000), description: 'New patient, Jane Smith, admitted.', icon: UserPlus },
+    { id: 'act-3', timestamp: new Date(Date.now() - 3600000 * 3).toISOString(), description: 'Vitals check for Jane Smith.', icon: HeartPulse },
+    { id: 'act-2', timestamp: new Date(Date.now() - 3600000).toISOString(), description: 'Patient John Doe discharged from Room 201.', icon: LogOut },
+    { id: 'act-1', timestamp: new Date(Date.now() - 60000).toISOString(), description: 'New patient, Jane Smith, admitted.', icon: UserPlus },
 ]
 
 export default function RecentActivity() {
   const [activities] = useLocalStorage<Activity[]>("activities", initialActivities);
 
   const sortedActivities = React.useMemo(() => {
-    return [...activities].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return [...activities]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }, [activities]);
+
+  const now = React.useMemo(() => new Date(), []);
 
   return (
     <Card className="h-full flex flex-col">
@@ -38,7 +41,7 @@ export default function RecentActivity() {
                 <div className="flex-grow">
                     <p className="text-sm">{activity.description}</p>
                     <p className="text-xs text-muted-foreground">
-                    {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
+                    {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true, now })}
                     </p>
                 </div>
                 </div>
