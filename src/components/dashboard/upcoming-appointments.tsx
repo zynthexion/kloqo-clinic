@@ -11,10 +11,14 @@ import { doctors } from "@/lib/data";
 
 export default function UpcomingAppointments() {
   const [appointments] = useLocalStorage<Appointment[]>("appointments", []);
+  const [isClient, setIsClient] = React.useState(false);
 
-  const now = React.useMemo(() => new Date().getTime(), []);
+  React.useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const upcomingAppointments = React.useMemo(() => {
+    const now = new Date().getTime();
     // Sort appointments by date and time
     const sortedAppointments = [...appointments].sort((a, b) => {
       const dateA = new Date(a.date).setHours(parseInt(a.time.split(':')[0]), parseInt(a.time.split(':')[1]));
@@ -26,7 +30,7 @@ export default function UpcomingAppointments() {
       const aptDateTime = new Date(apt.date).setHours(parseInt(apt.time.split(':')[0]), parseInt(apt.time.split(':')[1]));
       return aptDateTime >= now;
     }).slice(0, 5);
-  }, [appointments, now]);
+  }, [appointments]);
 
 
   const getDoctorAvatar = (doctorName: string) => {
@@ -43,7 +47,7 @@ export default function UpcomingAppointments() {
       <CardContent className="flex-grow overflow-hidden">
         <ScrollArea className="h-full">
             <div className="space-y-4">
-            {upcomingAppointments.length > 0 ? upcomingAppointments.map((apt) => (
+            {isClient && (upcomingAppointments.length > 0 ? upcomingAppointments.map((apt) => (
                 <div key={apt.id} className="flex items-center gap-4 p-2 rounded-lg hover:bg-muted/50">
                     <Image
                         src={getDoctorAvatar(apt.doctor)}
@@ -64,7 +68,7 @@ export default function UpcomingAppointments() {
                 </div>
             )) : (
                 <p className="text-sm text-muted-foreground text-center py-8">No upcoming appointments.</p>
-            )}
+            ))}
             </div>
         </ScrollArea>
       </CardContent>

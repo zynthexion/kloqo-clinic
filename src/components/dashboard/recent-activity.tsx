@@ -16,13 +16,18 @@ const initialActivities: Activity[] = [
 
 export default function RecentActivity() {
   const [activities] = useLocalStorage<Activity[]>("activities", initialActivities);
+  const [isClient, setIsClient] = React.useState(false);
+
+  React.useEffect(() => {
+    setIsClient(true);
+  }, []);
+
 
   const sortedActivities = React.useMemo(() => {
     return [...activities]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }, [activities]);
 
-  const now = React.useMemo(() => new Date(), []);
 
   return (
     <Card className="h-full flex flex-col">
@@ -33,7 +38,7 @@ export default function RecentActivity() {
       <CardContent className="flex-grow overflow-hidden">
         <ScrollArea className="h-full">
             <div className="space-y-6">
-            {sortedActivities.map((activity) => (
+            {isClient && sortedActivities.map((activity) => (
                 <div key={activity.id} className="flex items-start gap-4">
                 <div className="bg-muted rounded-full p-2">
                     <activity.icon className="w-4 h-4 text-muted-foreground" />
@@ -41,7 +46,7 @@ export default function RecentActivity() {
                 <div className="flex-grow">
                     <p className="text-sm">{activity.description}</p>
                     <p className="text-xs text-muted-foreground">
-                    {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true, now })}
+                    {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
                     </p>
                 </div>
                 </div>
