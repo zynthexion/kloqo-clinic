@@ -1,3 +1,4 @@
+
 {
   "placeholderImages": [
     {
@@ -29,6 +30,60 @@
       "description": "Avatar for the current user",
       "imageUrl": "https://picsum.photos/seed/99/100/100",
       "imageHint": "professional woman"
+    },
+    {
+        "id": "general_medicine",
+        "description": "Stethoscope and pills representing general medicine.",
+        "imageUrl": "https://picsum.photos/seed/gm/600/400",
+        "imageHint": "stethoscope pills"
+    },
+    {
+        "id": "cardiology",
+        "description": "Anatomical model of a human heart.",
+        "imageUrl": "https://picsum.photos/seed/cardio/600/400",
+        "imageHint": "heart model"
+    },
+    {
+        "id": "pediatrics",
+        "description": "Doctor examining a baby.",
+        "imageUrl": "https://picsum.photos/seed/peds/600/400",
+        "imageHint": "doctor baby"
+    },
+    {
+        "id": "dermatology",
+        "description": "Close-up of skin care treatment.",
+        "imageUrl": "https://picsum.photos/seed/derma/600/400",
+        "imageHint": "skin care"
+    },
+    {
+        "id": "internal_medicine",
+        "description": "Doctor pointing to an anatomical model of the digestive system.",
+        "imageUrl": "https://picsum.photos/seed/im/600/400",
+        "imageHint": "anatomical model"
+    },
+    {
+        "id": "orthopedics",
+        "description": "Doctor applying a brace to a patient's wrist.",
+        "imageUrl": "https://picsum.photos/seed/ortho/600/400",
+        "imageHint": "joint brace"
+    },
+    {
+        "id": "neurology",
+        "description": "Doctor pointing to a model of the human brain.",
+        "imageUrl": "https://picsum.photos/seed/neuro/600/400",
+        "imageHint": "brain model"
+    },
+    {
+        "id": "oncology",
+        "description": "Hands holding a cancer awareness ribbon with a stethoscope.",
+        "imageUrl": "https://picsum.photos/seed/onco/600/400",
+        "imageHint": "awareness ribbon"
+    },
+    {
+        "id": "obgyn",
+        "description": "A pregnant woman holding supplements.",
+        "imageUrl": "https://picsum.photos/seed/obgyn/600/400",
+        "imageHint": "pregnant woman"
     }
   ]
 }

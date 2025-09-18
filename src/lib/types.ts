@@ -37,3 +37,12 @@ export type Report = {
   statuses: string[];
   type: 'room' | 'equipment';
 };
+
+export type Department = {
+    id: string;
+    name: string;
+    description: string;
+    image: string;
+    imageHint: string;
+    doctors: string[];
+}
