@@ -28,7 +28,6 @@ import { Button } from "@/components/ui/button";
 import { MediDashLogo } from "@/components/icons";
 import { usePathname } from "next/navigation";
 import { Badge } from "../ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 
 const menuItems = [
   {
@@ -101,19 +100,6 @@ export function AppSidebar() {
             </SidebarMenu>
         </div>
       </SidebarContent>
-      <SidebarFooter className="group-data-[collapsible=icon]:hidden">
-        <Card className="m-2 bg-muted/20">
-            <CardHeader className="p-4">
-                <CardTitle className="text-sm font-semibold leading-normal">
-                    Unlock New Features & Maximize Your Hospital Management Efficiency
-                </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 pt-0 flex gap-2">
-                <Button size="sm" variant="ghost">What's New?</Button>
-                <Button size="sm">Upgrade</Button>
-            </CardContent>
-        </Card>
-      </SidebarFooter>
     </Sidebar>
   );
 }
