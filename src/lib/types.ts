@@ -1,4 +1,10 @@
 
+
+export type AvailabilitySlot = {
+  day: string;
+  timeSlots: { time: string }[];
+};
+
 export type Doctor = {
   id: string;
   name: string;
@@ -11,6 +17,8 @@ export type Doctor = {
   totalPatients?: number;
   todaysAppointments?: number;
   availability: 'Available' | 'Unavailable';
+  maxPatientsPerDay?: number;
+  availabilitySlots?: AvailabilitySlot[];
 };
 
 export type Appointment = {

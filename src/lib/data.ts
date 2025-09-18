@@ -1,10 +1,11 @@
 
-import type { Doctor, Report, Appointment, Department } from './types';
+
+import type { Doctor, Report, Appointment, Department, AvailabilitySlot } from './types';
 import { PlaceHolderImages } from './placeholder-images';
 
 const getImageUrl = (id: string) => PlaceHolderImages.find(img => img.id === id)?.imageUrl || '';
 
-export const doctors: Doctor[] = [
+export let doctors: Doctor[] = [
   {
     id: 'D001',
     name: 'Dr. Petra Winsburry',
@@ -163,17 +164,32 @@ export const doctors: Doctor[] = [
   },
 ];
 
-export function addDoctor(doctorData: Omit<Doctor, 'id' | 'avatar' | 'schedule' | 'preferences' | 'historicalData' | 'totalPatients' | 'todaysAppointments'>): Doctor {
+type NewDoctorData = Omit<Doctor, 'id' | 'avatar' | 'schedule' | 'preferences' | 'historicalData' | 'totalPatients' | 'todaysAppointments'> & {
+  maxPatientsPerDay: number;
+  availabilitySlots: AvailabilitySlot[];
+};
+
+export function addDoctor(doctorData: NewDoctorData): Doctor {
   const newId = `D${(doctors.length + 1).toString().padStart(3, '0')}`;
+  
+  const scheduleString = doctorData.availabilitySlots
+    .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => ts.time).join(', ')}`)
+    .join('; ');
+
   const newDoctor: Doctor = {
     id: newId,
     avatar: `https://picsum.photos/seed/${newId}/100/100`,
-    schedule: 'Not set',
+    schedule: scheduleString,
     preferences: 'Not set',
     historicalData: 'No data',
     totalPatients: 0,
     todaysAppointments: 0,
-    ...doctorData,
+    name: doctorData.name,
+    specialty: doctorData.specialty,
+    department: doctorData.department,
+    availability: doctorData.availability,
+    maxPatientsPerDay: doctorData.maxPatientsPerDay,
+    availabilitySlots: doctorData.availabilitySlots,
   };
   doctors.push(newDoctor);
   return newDoctor;

@@ -40,12 +40,12 @@ import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { AddDoctorForm } from "@/components/doctors/add-doctor-form";
 import React, { useState } from "react";
-import type { Doctor } from "@/lib/types";
+import type { Doctor, AvailabilitySlot } from "@/lib/types";
 
 export default function DoctorsPage() {
   const [doctors, setDoctors] = useState<Doctor[]>(initialDoctors);
 
-  const handleAddDoctor = (doctor: Omit<Doctor, 'id' | 'avatar' | 'schedule' | 'preferences' | 'historicalData' | 'totalPatients' | 'todaysAppointments'>) => {
+  const handleAddDoctor = (doctor: Omit<Doctor, 'id' | 'avatar' | 'schedule' | 'preferences' | 'historicalData' | 'totalPatients' | 'todaysAppointments'> & { maxPatientsPerDay: number, availabilitySlots: AvailabilitySlot[] }) => {
     const newDoctor = addDoctor(doctor);
     setDoctors(prev => [...prev, newDoctor]);
   };
