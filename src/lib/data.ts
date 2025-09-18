@@ -1,4 +1,5 @@
-import type { Doctor, Report } from './types';
+
+import type { Doctor, Report, Appointment } from './types';
 import { PlaceHolderImages } from './placeholder-images';
 
 const getImageUrl = (id: string) => PlaceHolderImages.find(img => img.id === id)?.imageUrl || '';
@@ -161,6 +162,140 @@ export const doctors: Doctor[] = [
     availability: 'Available',
   },
 ];
+
+export const appointments: Appointment[] = [
+  {
+    id: 'APT001',
+    patientName: 'Caren G. Simpson',
+    date: '20 July 2028',
+    time: '09:00 AM',
+    doctor: 'Dr. Petra Winsburry',
+    treatment: 'Routine Check-Up',
+    status: 'Confirmed',
+    department: 'General Medicine',
+  },
+  {
+    id: 'APT002',
+    patientName: 'Edgar Warrow',
+    date: '20 July 2028',
+    time: '10:30 AM',
+    doctor: 'Dr. Olivia Martinez',
+    treatment: 'Cardiac Consultation',
+    status: 'Confirmed',
+    department: 'Cardiology',
+  },
+  {
+    id: 'APT003',
+    patientName: 'Ocean Jane Lupre',
+    date: '20 July 2028',
+    time: '11:00 AM',
+    doctor: 'Dr. Damian Sanchez',
+    treatment: 'Pediatric Check-Up',
+    status: 'Pending',
+    department: 'Pediatrics',
+  },
+  {
+    id: 'APT004',
+    patientName: 'Shane Riddick',
+    date: '20 July 2028',
+    time: '01:00 PM',
+    doctor: 'Dr. Chloe Harrington',
+    treatment: 'Skin Allergy',
+    status: 'Cancelled',
+    department: 'Dermatology',
+  },
+  {
+    id: 'APT005',
+    patientName: 'Queen Lawnston',
+    date: '20-07-28',
+    time: '02:30 PM',
+    doctor: 'Dr. Petra Winsburry',
+    treatment: 'Follow-Up Visit',
+    status: 'Confirmed',
+    department: 'General Medicine',
+  },
+  {
+    id: 'APT006',
+    patientName: 'Alice Mitchell',
+    date: '20 July 2028',
+    time: '09:00 AM',
+    doctor: 'Dr. Emily Smith',
+    treatment: 'Routine Check-Up',
+    status: 'Confirmed',
+    department: 'General Medicine',
+  },
+  {
+    id: 'APT007',
+    patientName: 'Mikhail Morozov',
+    date: '20 July 2028',
+    time: '10:30 AM',
+    doctor: 'Dr. Samuel Thompson',
+    treatment: 'Cardiac Consultation',
+    status: 'Confirmed',
+    department: 'Cardiology',
+  },
+  {
+    id: 'APT008',
+    patientName: 'Mateus Fernandes',
+    date: '20 July 2028',
+    time: '11:00 AM',
+    doctor: 'Dr. Sarah Johnson',
+    treatment: 'Pediatric Check-Up',
+    status: 'Pending',
+    department: 'Pediatrics',
+  },
+  {
+    id: 'APT009',
+    patientName: 'Pari Desai',
+    date: '20 July 2028',
+    time: '01:00 PM',
+    doctor: 'Dr. Luke Harrison',
+    treatment: 'Skin Allergy',
+    status: 'Cancelled',
+    department: 'Dermatology',
+  },
+  {
+    id: 'APT010',
+    patientName: 'Omar Ali',
+    date: '20 July 2028',
+    time: '02:30 PM',
+    doctor: 'Dr. Andrew Peterson',
+    treatment: 'Follow-Up Visit',
+    status: 'Confirmed',
+    department: 'Internal Medicine',
+  },
+  {
+    id: 'APT011',
+    patientName: 'Camila Alvarez',
+    date: '20 July 2028',
+    time: '03:00 PM',
+    doctor: 'Dr. Olivia Martinez',
+    treatment: 'Cardiac Check-Up',
+    status: 'Confirmed',
+    department: 'Cardiology',
+  },
+  {
+    id: 'APT012',
+    patientName: 'Thabo van Rooyen',
+    date: '20 July 2028',
+    time: '04:00 PM',
+    doctor: 'Dr. William Carter',
+    treatment: 'Pediatric Check-Up',
+    status: 'Pending',
+    department: 'Pediatrics',
+  },
+  {
+    id: 'APT013',
+    patientName: 'Chance Geidt',
+    date: '20 July 2028',
+    time: '04:30 PM',
+    doctor: 'Dr. Samuel Thompson',
+    treatment: 'Follow-Up Visit',
+    status: 'Confirmed',
+    department: 'Cardiology',
+  }
+];
+
 
 export const reports: Report[] = [
     { id: 'room-101', name: 'Room 101', statuses: ['Clean', 'Occupied', 'Needs Cleaning'], type: 'room' },

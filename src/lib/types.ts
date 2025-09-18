@@ -1,3 +1,4 @@
+
 export type Doctor = {
   id: string;
   name: string;
@@ -19,6 +20,8 @@ export type Appointment = {
   date: string;
   time: string;
   department: string;
+  status: 'Confirmed' | 'Pending' | 'Cancelled';
+  treatment: string;
 };
 
 export type Activity = {
