@@ -11,6 +11,7 @@ import {
   MessageSquare,
   Stethoscope,
   Building2,
+  LogOut,
 } from "lucide-react";
 import {
   Sidebar,
@@ -21,6 +22,7 @@ import {
   SidebarMenuButton,
   SidebarFooter,
   useSidebar,
+  SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { MediDashLogo } from "@/components/icons";
@@ -87,6 +89,17 @@ export function AppSidebar() {
             </SidebarMenuItem>
           ))}
         </SidebarMenu>
+        <div className="mt-auto">
+            <SidebarSeparator className="my-2"/>
+            <SidebarMenu>
+                <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Logout">
+                        <LogOut />
+                        <span>Logout</span>
+                    </SidebarMenuButton>
+                </SidebarMenuItem>
+            </SidebarMenu>
+        </div>
       </SidebarContent>
       <SidebarFooter className="group-data-[collapsible=icon]:hidden">
         <Card className="m-2 bg-muted/20">
