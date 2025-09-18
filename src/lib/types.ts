@@ -6,6 +6,10 @@ export type Doctor = {
   schedule: string;
   preferences: string;
   historicalData: string;
+  department?: string;
+  totalPatients?: number;
+  todaysAppointments?: number;
+  availability: 'Available' | 'Unavailable';
 };
 
 export type Appointment = {

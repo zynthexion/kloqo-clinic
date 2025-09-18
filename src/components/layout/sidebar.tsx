@@ -4,8 +4,13 @@ import {
   Home,
   Users,
   BriefcaseMedical,
-  FileText,
   Settings,
+  Calendar,
+  Wallet,
+  Inbox,
+  MessageSquare,
+  Stethoscope,
+  Building2,
 } from "lucide-react";
 import {
   Sidebar,
@@ -17,49 +22,65 @@ import {
   SidebarFooter,
   useSidebar,
 } from "@/components/ui/sidebar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { MediDashLogo } from "@/components/icons";
-import { user } from "@/lib/data";
+import { usePathname } from "next/navigation";
+import { Badge } from "../ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 
 const menuItems = [
   {
-    href: "#",
+    href: "/",
     icon: Home,
     label: "Dashboard",
   },
   {
-    href: "#",
-    icon: BriefcaseMedical,
+    href: "/appointments",
+    icon: Calendar,
     label: "Appointments",
   },
   {
-    href: "#",
+    href: "/patients",
     icon: Users,
     label: "Patients",
   },
   {
-    href: "#",
-    icon: FileText,
-    label: "Reports",
+    href: "/doctors",
+    icon: Stethoscope,
+    label: "Doctors",
   },
   {
-    href: "#",
-    icon: Settings,
-    label: "Settings",
+    href: "/departments",
+    icon: Building2,
+    label: "Departments",
+  },
+  {
+    href: "/schedule",
+    icon: BriefcaseMedical,
+    label: "Doctors' Schedule",
+  },
+  {
+    href: "/payments",
+    icon: Wallet,
+    label: "Payments",
+  },
+  {
+    href: "/inventory",
+    icon: Inbox,
+    label: "Inventory",
+  },
+  {
+    href: "/messages",
+    icon: MessageSquare,
+    label: "Messages",
+    badge: "7",
   },
 ];
 
 export function AppSidebar() {
   const { state } = useSidebar();
+  const pathname = usePathname();
+
   return (
     <Sidebar>
       <SidebarHeader>
@@ -70,7 +91,7 @@ export function AppSidebar() {
                 state === "collapsed" ? "hidden" : ""
               }`}
             >
-              MediDash
+              WellNest
             </span>
         </div>
       </SidebarHeader>
@@ -81,47 +102,30 @@ export function AppSidebar() {
               <SidebarMenuButton
                 asChild
                 tooltip={item.label}
-                isActive={item.label === "Dashboard"}
+                isActive={pathname === item.href}
               >
                 <Link href={item.href}>
                   <item.icon />
                   <span>{item.label}</span>
+                  {item.badge && <Badge variant="destructive" className="ml-auto">{item.badge}</Badge>}
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
         </SidebarMenu>
       </SidebarContent>
-      <SidebarFooter>
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className={`w-full justify-start gap-2 p-2 ${state === 'collapsed' ? 'size-10 !p-0' : ''}`}>
-                    <Avatar className="h-10 w-10">
-                        <AvatarImage src={user.avatar} alt={user.name} data-ai-hint="professional woman"/>
-                        <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
-                    </Avatar>
-                    <div className={`text-left ${state === 'collapsed' ? 'hidden' : ''}`}>
-                        <p className="font-semibold text-sm">{user.name}</p>
-                        <p className="text-xs text-muted-foreground">{user.email}</p>
-                    </div>
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56" align="end" forceMount>
-                <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{user.name}</p>
-                    <p className="text-xs leading-none text-muted-foreground">
-                    {user.email}
-                    </p>
-                </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem>Profile</DropdownMenuItem>
-                <DropdownMenuItem>Settings</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem>Log out</DropdownMenuItem>
-            </DropdownMenuContent>
-        </DropdownMenu>
+      <SidebarFooter className="group-data-[collapsible=icon]:hidden">
+        <Card className="m-2 bg-muted/20">
+            <CardHeader className="p-4">
+                <CardTitle className="text-sm font-semibold leading-normal">
+                    Unlock New Features & Maximize Your Hospital Management Efficiency
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 pt-0 flex gap-2">
+                <Button size="sm" variant="ghost">What's New?</Button>
+                <Button size="sm">Upgrade</Button>
+            </CardContent>
+        </Card>
       </SidebarFooter>
     </Sidebar>
   );

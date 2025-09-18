@@ -1,9 +1,12 @@
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Search, UserPlus } from "lucide-react";
+import { Bell, Search, Settings, UserPlus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "../ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
+import { user } from "@/lib/data";
 
-export function Header() {
+export function DashboardHeader() {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
       <SidebarTrigger className="sm:hidden" />
@@ -22,6 +25,51 @@ export function Header() {
             Add Patient
           </span>
         </Button>
+    </header>
+  );
+}
+
+
+export function DoctorsHeader() {
+  return (
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
+      <SidebarTrigger className="sm:hidden" />
+      <h1 className="text-xl font-semibold md:text-2xl">Doctors</h1>
+      <div className="ml-auto flex items-center gap-4">
+        <Button variant="ghost" size="icon" className="rounded-full">
+            <Settings className="h-5 w-5" />
+            <span className="sr-only">Settings</span>
+        </Button>
+        <Button variant="ghost" size="icon" className="rounded-full">
+            <Bell className="h-5 w-5" />
+            <span className="sr-only">Notifications</span>
+        </Button>
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                    <Avatar className="h-10 w-10">
+                        <AvatarImage src={user.avatar} alt={user.name} data-ai-hint="professional woman"/>
+                        <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                    </Avatar>
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56" align="end" forceMount>
+                <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">{user.name}</p>
+                    <p className="text-xs leading-none text-muted-foreground">
+                    {user.email}
+                    </p>
+                </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem>Profile</DropdownMenuItem>
+                <DropdownMenuItem>Settings</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem>Log out</DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </header>
   );
 }
