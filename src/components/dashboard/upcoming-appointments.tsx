@@ -4,13 +4,15 @@ import Image from "next/image";
 import React from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import useLocalStorage from "@/hooks/use-local-storage";
 import type { Appointment } from "@/lib/types";
 import { format } from "date-fns";
 import { doctors } from "@/lib/data";
 
+const initialAppointments: Appointment[] = [];
+
+
 export default function UpcomingAppointments() {
-  const [appointments] = useLocalStorage<Appointment[]>("appointments", []);
+  const [appointments] = React.useState<Appointment[]>(initialAppointments);
   const [isClient, setIsClient] = React.useState(false);
 
   React.useEffect(() => {

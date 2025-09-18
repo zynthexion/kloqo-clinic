@@ -4,7 +4,6 @@ import React from "react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { formatDistanceToNow } from "date-fns";
 import { UserPlus, LogOut, HeartPulse } from 'lucide-react';
-import useLocalStorage from "@/hooks/use-local-storage";
 import type { Activity } from "@/lib/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -15,7 +14,7 @@ const initialActivities: Activity[] = [
 ]
 
 export default function RecentActivity() {
-  const [activities] = useLocalStorage<Activity[]>("activities", initialActivities);
+  const [activities] = React.useState<Activity[]>(initialActivities);
   const [isClient, setIsClient] = React.useState(false);
 
   React.useEffect(() => {
