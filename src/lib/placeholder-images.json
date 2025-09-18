@@ -1,3 +1,34 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "dr_smith",
+      "description": "Portrait of Dr. Emily Smith",
+      "imageUrl": "https://picsum.photos/seed/101/100/100",
+      "imageHint": "doctor portrait"
+    },
+    {
+      "id": "dr_jones",
+      "description": "Portrait of Dr. Michael Jones",
+      "imageUrl": "https://picsum.photos/seed/102/100/100",
+      "imageHint": "doctor headshot"
+    },
+    {
+      "id": "dr_chen",
+      "description": "Portrait of Dr. Linda Chen",
+      "imageUrl": "https://picsum.photos/seed/103/100/100",
+      "imageHint": "medical professional"
+    },
+    {
+      "id": "dr_rodriguez",
+      "description": "Portrait of Dr. Carlos Rodriguez",
+      "imageUrl": "https://picsum.photos/seed/104/100/100",
+      "imageHint": "physician"
+    },
+    {
+      "id": "user_avatar",
+      "description": "Avatar for the current user",
+      "imageUrl": "https://picsum.photos/seed/99/100/100",
+      "imageHint": "professional woman"
+    }
+  ]
 }
