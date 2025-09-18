@@ -272,7 +272,7 @@ export function AddDoctorForm({ onAddDoctor }: AddDoctorFormProps) {
                 />
                 
                 {fields.map((field, dayIndex) => {
-                    const timeSlotsArray = form.control.getValues(`availabilitySlots.${dayIndex}.timeSlots`);
+                    const timeSlotsArray = form.getValues(`availabilitySlots.${dayIndex}.timeSlots`);
                     
                     return (
                         <div key={field.id} className="space-y-2 p-3 border rounded-md">
