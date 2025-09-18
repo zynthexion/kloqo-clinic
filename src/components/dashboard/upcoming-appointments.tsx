@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import React from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import useLocalStorage from "@/hooks/use-local-storage";
@@ -11,17 +12,19 @@ import { doctors } from "@/lib/data";
 export default function UpcomingAppointments() {
   const [appointments] = useLocalStorage<Appointment[]>("appointments", []);
 
-  // Sort appointments by date and time
-  const sortedAppointments = [...appointments].sort((a, b) => {
-    const dateA = new Date(a.date).setHours(parseInt(a.time.split(':')[0]), parseInt(a.time.split(':')[1]));
-    const dateB = new Date(b.date).setHours(parseInt(b.time.split(':')[0]), parseInt(b.time.split(':')[1]));
-    return dateA - dateB;
-  });
+  const upcomingAppointments = React.useMemo(() => {
+    // Sort appointments by date and time
+    const sortedAppointments = [...appointments].sort((a, b) => {
+      const dateA = new Date(a.date).setHours(parseInt(a.time.split(':')[0]), parseInt(a.time.split(':')[1]));
+      const dateB = new Date(b.date).setHours(parseInt(b.time.split(':')[0]), parseInt(b.time.split(':')[1]));
+      return dateA - dateB;
+    });
 
-  const upcomingAppointments = sortedAppointments.filter(apt => {
-    const aptDateTime = new Date(apt.date).setHours(parseInt(apt.time.split(':')[0]), parseInt(apt.time.split(':')[1]));
-    return aptDateTime >= new Date().getTime();
-  }).slice(0, 5);
+    return sortedAppointments.filter(apt => {
+      const aptDateTime = new Date(apt.date).setHours(parseInt(apt.time.split(':')[0]), parseInt(apt.time.split(':')[1]));
+      return aptDateTime >= new Date().getTime();
+    }).slice(0, 5);
+  }, [appointments]);
 
 
   const getDoctorAvatar = (doctorName: string) => {

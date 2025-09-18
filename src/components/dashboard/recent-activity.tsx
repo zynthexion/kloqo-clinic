@@ -1,8 +1,9 @@
 "use client";
 
+import React from "react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { formatDistanceToNow } from "date-fns";
-import { Calendar, UserPlus, LogOut, HeartPulse } from 'lucide-react';
+import { UserPlus, LogOut, HeartPulse } from 'lucide-react';
 import useLocalStorage from "@/hooks/use-local-storage";
 import type { Activity } from "@/lib/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -16,6 +17,10 @@ const initialActivities: Activity[] = [
 export default function RecentActivity() {
   const [activities] = useLocalStorage<Activity[]>("activities", initialActivities);
 
+  const sortedActivities = React.useMemo(() => {
+    return [...activities].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [activities]);
+
   return (
     <Card className="h-full flex flex-col">
       <CardHeader>
@@ -25,7 +30,7 @@ export default function RecentActivity() {
       <CardContent className="flex-grow overflow-hidden">
         <ScrollArea className="h-full">
             <div className="space-y-6">
-            {activities.map((activity) => (
+            {sortedActivities.map((activity) => (
                 <div key={activity.id} className="flex items-start gap-4">
                 <div className="bg-muted rounded-full p-2">
                     <activity.icon className="w-4 h-4 text-muted-foreground" />
