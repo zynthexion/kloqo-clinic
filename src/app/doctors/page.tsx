@@ -25,6 +25,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -39,8 +50,8 @@ import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { AddDoctorForm } from "@/components/doctors/add-doctor-form";
 import React, { useState, useEffect } from "react";
-import type { Doctor, AvailabilitySlot } from "@/lib/types";
-import { collection, getDocs, addDoc, doc, setDoc } from "firebase/firestore";
+import type { Doctor } from "@/lib/types";
+import { collection, getDocs, addDoc, doc, setDoc, deleteDoc, updateDoc } from "firebase/firestore";
 import { db, storage } from "@/lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useToast } from "@/hooks/use-toast";
@@ -48,6 +59,9 @@ import { useToast } from "@/hooks/use-toast";
 export default function DoctorsPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const { toast } = useToast();
+  const [isAddDoctorOpen, setIsAddDoctorOpen] = useState(false);
+  const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
+  const [deletingDoctor, setDeletingDoctor] = useState<Doctor | null>(null);
 
   useEffect(() => {
     const fetchDoctors = async () => {
@@ -60,9 +74,9 @@ export default function DoctorsPage() {
     fetchDoctors();
   }, []);
 
-  const handleAddDoctor = async (doctorData: Omit<Doctor, 'id' | 'avatar' | 'schedule' | 'preferences' | 'historicalData' | 'totalPatients' | 'todaysAppointments'> & { maxPatientsPerDay: number; availabilitySlots: AvailabilitySlot[]; photo?: File }) => {
+  const handleSaveDoctor = async (doctorData: Omit<Doctor, 'id' | 'avatar' | 'schedule' | 'preferences' | 'historicalData' | 'totalPatients' | 'todaysAppointments'> & { photo?: File; id?: string }) => {
     try {
-      let photoUrl = `https://picsum.photos/seed/${new Date().getTime()}/100/100`;
+      let photoUrl = doctorData.id ? doctors.find(d => d.id === doctorData.id)?.avatar : `https://picsum.photos/seed/${new Date().getTime()}/100/100`;
 
       if (doctorData.photo) {
         const storageRef = ref(storage, `doctor_photos/${doctorData.photo.name}`);
@@ -70,45 +84,80 @@ export default function DoctorsPage() {
         photoUrl = await getDownloadURL(snapshot.ref);
       }
       
-      const newDoctorRef = doc(collection(db, "doctors"));
       const scheduleString = doctorData.availabilitySlots
         .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${ts.from}-${ts.to}`).join(', ')}`)
         .join('; ');
 
-      const newDoctor: Doctor = {
-        id: newDoctorRef.id,
-        avatar: photoUrl,
-        schedule: scheduleString,
-        preferences: 'Not set',
-        historicalData: 'No data',
-        totalPatients: 0,
-        todaysAppointments: 0,
-        name: doctorData.name,
-        specialty: doctorData.specialty,
-        department: doctorData.department,
-        availability: doctorData.availability,
-        maxPatientsPerDay: doctorData.maxPatientsPerDay,
-        availabilitySlots: doctorData.availabilitySlots,
-      };
-
-      await setDoc(newDoctorRef, newDoctor);
-
-      setDoctors(prev => [...prev, newDoctor]);
-
-      toast({
-        title: "Doctor Added",
-        description: `${newDoctor.name} has been successfully added.`,
-      });
-
+      if (doctorData.id) { // Editing existing doctor
+        const doctorRef = doc(db, "doctors", doctorData.id);
+        const updatedDoctorData = {
+          ...doctorData,
+          avatar: photoUrl,
+          schedule: scheduleString,
+        };
+        await updateDoc(doctorRef, updatedDoctorData);
+        setDoctors(prev => prev.map(d => d.id === doctorData.id ? { ...d, ...updatedDoctorData } : d));
+        toast({
+          title: "Doctor Updated",
+          description: `${doctorData.name} has been successfully updated.`,
+        });
+      } else { // Adding new doctor
+        const newDoctorRef = doc(collection(db, "doctors"));
+        const newDoctor: Doctor = {
+          id: newDoctorRef.id,
+          avatar: photoUrl,
+          schedule: scheduleString,
+          preferences: 'Not set',
+          historicalData: 'No data',
+          totalPatients: 0,
+          todaysAppointments: 0,
+          name: doctorData.name,
+          specialty: doctorData.specialty,
+          department: doctorData.department,
+          availability: doctorData.availability,
+          maxPatientsPerDay: doctorData.maxPatientsPerDay,
+          availabilitySlots: doctorData.availabilitySlots,
+        };
+        await setDoc(newDoctorRef, newDoctor);
+        setDoctors(prev => [...prev, newDoctor]);
+        toast({
+          title: "Doctor Added",
+          description: `${newDoctor.name} has been successfully added.`,
+        });
+      }
     } catch (error) {
-      console.error("Error adding doctor: ", error);
+      console.error("Error saving doctor: ", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to add doctor. Please try again.",
+        description: "Failed to save doctor. Please try again.",
       });
+    } finally {
+        setIsAddDoctorOpen(false);
+        setEditingDoctor(null);
     }
   };
+  
+  const handleDeleteDoctor = async () => {
+    if (!deletingDoctor) return;
+    try {
+      await deleteDoc(doc(db, "doctors", deletingDoctor.id));
+      setDoctors(prev => prev.filter(d => d.id !== deletingDoctor.id));
+      toast({
+        title: "Doctor Deleted",
+        description: `${deletingDoctor.name} has been removed.`,
+      });
+    } catch (error) {
+      console.error("Error deleting doctor:", error);
+       toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to delete doctor. Please try again.",
+      });
+    } finally {
+        setDeletingDoctor(null);
+    }
+  }
 
   return (
     <SidebarInset>
@@ -165,7 +214,19 @@ export default function DoctorsPage() {
                     <SelectItem value="unavailable">Unavailable</SelectItem>
                   </SelectContent>
                 </Select>
-                <AddDoctorForm onAddDoctor={handleAddDoctor} />
+                <AddDoctorForm 
+                    onSave={handleSaveDoctor}
+                    isOpen={isAddDoctorOpen || !!editingDoctor}
+                    setIsOpen={(open) => {
+                        if (!open) {
+                            setIsAddDoctorOpen(false);
+                            setEditingDoctor(null);
+                        } else {
+                            setIsAddDoctorOpen(true);
+                        }
+                    }}
+                    doctor={editingDoctor}
+                />
               </div>
               <div className="rounded-md border">
                 <Table>
@@ -191,7 +252,7 @@ export default function DoctorsPage() {
                               alt={doctor.name}
                               width={40}
                               height={40}
-                              className="rounded-full"
+                              className="rounded-full object-cover"
                               data-ai-hint="doctor portrait"
                             />
                             <span className="font-medium">{doctor.name}</span>
@@ -225,11 +286,11 @@ export default function DoctorsPage() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => setEditingDoctor(doctor)}>
                                 <Edit className="mr-2 h-4 w-4" />
                                 Edit
                               </DropdownMenuItem>
-                              <DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => setDeletingDoctor(doctor)} className="text-red-600">
                                 <Trash className="mr-2 h-4 w-4" />
                                 Delete
                               </DropdownMenuItem>
@@ -274,6 +335,22 @@ export default function DoctorsPage() {
           </CardContent>
         </Card>
       </main>
+        <AlertDialog open={!!deletingDoctor} onOpenChange={(open) => !open && setDeletingDoctor(null)}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                    This action cannot be undone. This will permanently delete Dr. {deletingDoctor?.name} and remove their data from our servers.
+                </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDeleteDoctor} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
     </SidebarInset>
   );
 }
+
+    

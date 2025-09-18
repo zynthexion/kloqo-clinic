@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -35,7 +35,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { PlusCircle, Trash, Copy, Upload } from "lucide-react";
 import { departments } from "@/lib/data";
-import type { Doctor, AvailabilitySlot, TimeSlot } from "@/lib/types";
+import type { Doctor } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "../ui/scroll-area";
 import Image from "next/image";
@@ -51,6 +51,7 @@ const availabilitySlotSchema = z.object({
 });
 
 const formSchema = z.object({
+  id: z.string().optional(),
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   specialty: z.string().min(2, { message: "Specialty must be at least 2 characters." }),
   department: z.string().min(1, { message: "Please select a department." }),
@@ -66,15 +67,18 @@ const formSchema = z.object({
 type AddDoctorFormValues = z.infer<typeof formSchema>;
 
 type AddDoctorFormProps = {
-  onAddDoctor: (doctor: AddDoctorFormValues) => void;
+  onSave: (doctor: AddDoctorFormValues) => void;
+  isOpen: boolean;
+  setIsOpen: (isOpen: boolean) => void;
+  doctor: Doctor | null;
 };
 
 const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
-export function AddDoctorForm({ onAddDoctor }: AddDoctorFormProps) {
-  const [open, setOpen] = useState(false);
+export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor }: AddDoctorFormProps) {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const { toast } = useToast();
+  const isEditMode = !!doctor;
 
   const form = useForm<AddDoctorFormValues>({
     resolver: zodResolver(formSchema),
@@ -88,6 +92,34 @@ export function AddDoctorForm({ onAddDoctor }: AddDoctorFormProps) {
       availabilitySlots: [],
     },
   });
+
+  useEffect(() => {
+    if (doctor) {
+      form.reset({
+        id: doctor.id,
+        name: doctor.name,
+        specialty: doctor.specialty,
+        department: doctor.department,
+        availability: doctor.availability,
+        maxPatientsPerDay: doctor.maxPatientsPerDay,
+        availableDays: doctor.availabilitySlots?.map(s => s.day) || [],
+        availabilitySlots: doctor.availabilitySlots || [],
+      });
+      setPhotoPreview(doctor.avatar);
+    } else {
+      form.reset({
+        name: "",
+        specialty: "",
+        department: "",
+        availability: "Available",
+        maxPatientsPerDay: 10,
+        availableDays: [],
+        availabilitySlots: [],
+      });
+      setPhotoPreview(null);
+    }
+  }, [doctor, form]);
+
 
   const { fields, append, remove, update } = useFieldArray({
     control: form.control,
@@ -127,8 +159,8 @@ export function AddDoctorForm({ onAddDoctor }: AddDoctorFormProps) {
   }
 
   function onSubmit(values: AddDoctorFormValues) {
-    onAddDoctor(values);
-    setOpen(false);
+    onSave(values);
+    setIsOpen(false);
     form.reset();
     setPhotoPreview(null);
   }
@@ -146,24 +178,24 @@ export function AddDoctorForm({ onAddDoctor }: AddDoctorFormProps) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => {
-        setOpen(isOpen);
-        if (!isOpen) {
+    <Dialog open={isOpen} onOpenChange={(open) => {
+        setIsOpen(open);
+        if (!open) {
             form.reset();
             setPhotoPreview(null);
         }
     }}>
       <DialogTrigger asChild>
-        <Button>
+        <Button onClick={() => setIsOpen(true)}>
           <PlusCircle className="mr-2 h-4 w-4" />
           Add Doctor
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add New Doctor</DialogTitle>
+          <DialogTitle>{isEditMode ? "Edit Doctor" : "Add New Doctor"}</DialogTitle>
           <DialogDescription>
-            Fill in the details below to add a new doctor to the system.
+            {isEditMode ? "Update the details for this doctor." : "Fill in the details below to add a new doctor to the system."}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -230,7 +262,7 @@ export function AddDoctorForm({ onAddDoctor }: AddDoctorFormProps) {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Department</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select a department" />
@@ -254,7 +286,7 @@ export function AddDoctorForm({ onAddDoctor }: AddDoctorFormProps) {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Availability</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select availability" />
@@ -310,9 +342,10 @@ export function AddDoctorForm({ onAddDoctor }: AddDoctorFormProps) {
                                     <Checkbox
                                       checked={field.value?.includes(day)}
                                       onCheckedChange={(checked) => {
+                                        const currentDays = field.value || [];
                                         const newDays = checked
-                                          ? [...field.value, day]
-                                          : field.value?.filter(
+                                          ? [...currentDays, day]
+                                          : currentDays.filter(
                                               (value) => value !== day
                                             );
                                         field.onChange(newDays);
@@ -401,7 +434,7 @@ export function AddDoctorForm({ onAddDoctor }: AddDoctorFormProps) {
               </div>
             </ScrollArea>
             <DialogFooter>
-              <Button type="submit">Save Doctor</Button>
+              <Button type="submit">{isEditMode ? "Save Changes" : "Save Doctor"}</Button>
             </DialogFooter>
           </form>
         </Form>
@@ -409,3 +442,5 @@ export function AddDoctorForm({ onAddDoctor }: AddDoctorFormProps) {
     </Dialog>
   );
 }
+
+    
