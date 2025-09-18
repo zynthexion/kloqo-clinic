@@ -1,7 +1,7 @@
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Search } from "lucide-react";
+import { Search, UserPlus } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { AppointmentScheduler } from "../dashboard/appointment-scheduler";
+import { Button } from "@/components/ui/button";
 
 export function Header() {
   return (
@@ -16,7 +16,12 @@ export function Header() {
           className="w-full rounded-lg bg-background pl-8 md:w-[200px] lg:w-[320px]"
         />
       </div>
-      <AppointmentScheduler />
+       <Button size="sm" className="gap-1">
+          <UserPlus className="h-3.5 w-3.5" />
+          <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
+            Add Patient
+          </span>
+        </Button>
     </header>
   );
 }

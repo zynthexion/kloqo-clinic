@@ -1,30 +1,30 @@
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { FileText, Users, Calendar, BedDouble } from "lucide-react";
+import { Users, Activity, DollarSign, BriefcaseMedical } from "lucide-react";
 
 const stats = [
   {
-    title: "Total Invoices",
-    value: "$125,430",
-    change: "+20.1% from last month",
-    icon: FileText,
-  },
-  {
     title: "Total Patients",
     value: "1,234",
-    change: "+180 since last week",
+    change: "+10% from last month",
     icon: Users,
   },
   {
     title: "Appointments",
     value: "356",
-    change: "+19% from last month",
-    icon: Calendar,
+    change: "+2% from last month",
+    icon: BriefcaseMedical,
+  },
+  {
+    title: "Avg. Treatment Cost",
+    value: "$2,420",
+    change: "+5% from last month",
+    icon: DollarSign,
   },
   {
     title: "Bed Occupancy",
     value: "78%",
-    change: "52 of 67 beds filled",
-    icon: BedDouble,
+    change: "-2% from last month",
+    icon: Activity,
   },
 ];
 

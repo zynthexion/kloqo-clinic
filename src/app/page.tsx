@@ -4,8 +4,8 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import OverviewStats from "@/components/dashboard/overview-stats";
 import PatientCharts from "@/components/dashboard/patient-charts";
 import DoctorAvailability from "@/components/dashboard/doctor-availability";
-import CalendarView from "@/components/dashboard/calendar-view";
-import RealTimeReports from "@/components/dashboard/real-time-reports";
+import UpcomingAppointments from "@/components/dashboard/upcoming-appointments";
+import HospitalStatus from "@/components/dashboard/hospital-status";
 import RecentActivity from "@/components/dashboard/recent-activity";
 
 export default function Home() {
@@ -25,8 +25,8 @@ export default function Home() {
             </div>
           </div>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-            <CalendarView />
-            <RealTimeReports />
+            <UpcomingAppointments />
+            <HospitalStatus />
             <RecentActivity />
           </div>
         </main>

@@ -1,11 +1,11 @@
 "use client";
 import Link from "next/link";
 import {
-  Bell,
-  Calendar,
   Home,
-  Settings,
   Users,
+  BriefcaseMedical,
+  FileText,
+  Settings,
 } from "lucide-react";
 import {
   Sidebar,
@@ -38,13 +38,18 @@ const menuItems = [
   },
   {
     href: "#",
-    icon: Calendar,
+    icon: BriefcaseMedical,
     label: "Appointments",
   },
   {
     href: "#",
     icon: Users,
     label: "Patients",
+  },
+  {
+    href: "#",
+    icon: FileText,
+    label: "Reports",
   },
   {
     href: "#",
@@ -90,8 +95,8 @@ export function AppSidebar() {
       <SidebarFooter>
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className={`w-full justify-start gap-2 p-2 ${state === 'collapsed' ? 'size-8 !p-0' : ''}`}>
-                    <Avatar className="h-8 w-8">
+                <Button variant="ghost" className={`w-full justify-start gap-2 p-2 ${state === 'collapsed' ? 'size-10 !p-0' : ''}`}>
+                    <Avatar className="h-10 w-10">
                         <AvatarImage src={user.avatar} alt={user.name} data-ai-hint="professional woman"/>
                         <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
                     </Avatar>

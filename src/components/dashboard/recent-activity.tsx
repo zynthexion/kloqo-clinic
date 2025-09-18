@@ -2,15 +2,15 @@
 
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { formatDistanceToNow } from "date-fns";
-import { Calendar, UserPlus, LogOut, Wrench } from 'lucide-react';
+import { Calendar, UserPlus, LogOut, HeartPulse } from 'lucide-react';
 import useLocalStorage from "@/hooks/use-local-storage";
 import type { Activity } from "@/lib/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 const initialActivities: Activity[] = [
-    { id: 'act-3', timestamp: new Date(Date.now() - 3600000 * 3), description: 'Equipment "X-Ray 1" reported for maintenance.', icon: Wrench },
+    { id: 'act-3', timestamp: new Date(Date.now() - 3600000 * 3), description: 'Vitals check for Jane Smith.', icon: HeartPulse },
     { id: 'act-2', timestamp: new Date(Date.now() - 3600000), description: 'Patient John Doe discharged from Room 201.', icon: LogOut },
-    { id: 'act-1', timestamp: new Date(Date.now() - 60000), description: 'New patient, Jane Smith, admitted to Room 305.', icon: UserPlus },
+    { id: 'act-1', timestamp: new Date(Date.now() - 60000), description: 'New patient, Jane Smith, admitted.', icon: UserPlus },
 ]
 
 export default function RecentActivity() {
@@ -20,7 +20,7 @@ export default function RecentActivity() {
     <Card className="h-full flex flex-col">
       <CardHeader>
         <CardTitle>Recent Activity</CardTitle>
-        <CardDescription>A log of recent events in the hospital.</CardDescription>
+        <CardDescription>A log of recent events.</CardDescription>
       </CardHeader>
       <CardContent className="flex-grow overflow-hidden">
         <ScrollArea className="h-full">
