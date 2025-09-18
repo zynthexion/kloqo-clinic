@@ -12,7 +12,7 @@ export default function UpcomingAppointments() {
   const [appointments] = useLocalStorage<Appointment[]>("appointments", []);
 
   // Sort appointments by date and time
-  const sortedAppointments = appointments.sort((a, b) => {
+  const sortedAppointments = [...appointments].sort((a, b) => {
     const dateA = new Date(a.date).setHours(parseInt(a.time.split(':')[0]), parseInt(a.time.split(':')[1]));
     const dateB = new Date(b.date).setHours(parseInt(b.time.split(':')[0]), parseInt(b.time.split(':')[1]));
     return dateA - dateB;
