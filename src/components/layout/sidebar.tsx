@@ -25,7 +25,7 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { MediDashLogo } from "@/components/icons";
+import { PeterdrawLogo } from "@/components/icons";
 import { usePathname } from "next/navigation";
 import { Badge } from "../ui/badge";
 
@@ -60,13 +60,13 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader>
         <div className="flex items-center gap-2">
-           <MediDashLogo className="w-8 h-8 text-primary" />
+           <PeterdrawLogo className="w-8 h-8" />
             <span
               className={`font-bold text-lg ${
                 state === "collapsed" ? "hidden" : ""
               }`}
             >
-              WellNest
+              Peterdraw
             </span>
         </div>
       </SidebarHeader>

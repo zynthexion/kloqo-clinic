@@ -5,7 +5,7 @@ import { SidebarProvider } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/layout/sidebar';
 
 export const metadata: Metadata = {
-  title: 'WellNest',
+  title: 'Peterdraw',
   description: 'AI-powered medical dashboard.',
 };
 
