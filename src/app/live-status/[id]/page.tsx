@@ -9,17 +9,15 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { liveStatuses } from "@/lib/data";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AlertCircle, CheckCircle, Clock } from "lucide-react";
+import { CheckCircle, Clock } from "lucide-react";
 
 // Dummy data for token details
 const completedTokens = ["A001", "A002"];
 const pendingTokens = ["A003", "A004", "A005", "A006", "A007"];
-const missedTokens = ["A008"];
 
 const allTokens = [
     ...completedTokens.map(token => ({ token, status: 'completed' })),
     ...pendingTokens.map(token => ({ token, status: 'pending' })),
-    ...missedTokens.map(token => ({ token, status: 'missed' })),
 ];
 
 const statusStyles = {
@@ -33,11 +31,6 @@ const statusStyles = {
         icon: <Clock size={16} className="mr-2" />,
         text: "Pending",
     },
-    missed: {
-        variant: "danger",
-        icon: <AlertCircle size={16} className="mr-2" />,
-        text: "Missed",
-    }
 } as const;
 
 
