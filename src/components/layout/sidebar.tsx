@@ -12,6 +12,7 @@ import {
   Stethoscope,
   Building2,
   LogOut,
+  Activity,
 } from "lucide-react";
 import {
   Sidebar,
@@ -49,6 +50,11 @@ const menuItems = [
     href: "/departments",
     icon: Building2,
     label: "Departments",
+  },
+  {
+    href: "/live-status",
+    icon: Activity,
+    label: "Live Status",
   },
 ];
 
