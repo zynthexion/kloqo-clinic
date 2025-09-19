@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
 import { LiveStatusHeader } from "@/components/layout/header";
 import { SidebarInset } from "@/components/ui/sidebar";
 import { Card } from "@/components/ui/card";
@@ -9,39 +9,41 @@ import { Button } from "@/components/ui/button";
 import { liveStatuses } from "@/lib/data";
 import type { LiveStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { Maximize, Minus, ZoomIn, ZoomOut, Activity } from "lucide-react";
+import { Maximize, ZoomIn, ZoomOut } from "lucide-react";
 
 const DoctorStatusCard = ({ data }: { data: LiveStatus }) => (
-  <Card
-    className={cn(
-      "p-4 flex flex-col justify-between border-2",
-      data.status === "available" ? "border-blue-400" : "border-red-500"
-    )}
-  >
-    <div>
-      <h3 className="font-semibold text-lg">{`${data.doctorName} - ${data.specialty}`}</h3>
-      <p className="text-sm text-muted-foreground">Room {data.room}</p>
-    </div>
-    <div className="mt-4">
-      {data.status === "available" ? (
-        <>
-          <p className="text-green-600 font-bold text-xl">
-            Current: {data.currentToken}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Queue: {data.queue} patients
-          </p>
-        </>
-      ) : (
-        <>
-          <p className="text-red-500 font-bold text-xl">BREAK</p>
-          <p className="text-sm text-muted-foreground">
-            Returns: {data.returnTime}
-          </p>
-        </>
+  <Link href={`/live-status/${data.id}`}>
+    <Card
+      className={cn(
+        "p-4 flex flex-col justify-between border-2 h-full hover:shadow-lg transition-shadow",
+        data.status === "available" ? "border-blue-400 hover:border-blue-500" : "border-red-500 hover:border-red-600"
       )}
-    </div>
-  </Card>
+    >
+      <div>
+        <h3 className="font-semibold text-lg">{`${data.doctorName} - ${data.specialty}`}</h3>
+        <p className="text-sm text-muted-foreground">Room {data.room}</p>
+      </div>
+      <div className="mt-4">
+        {data.status === "available" ? (
+          <>
+            <p className="text-green-600 font-bold text-xl">
+              Current: {data.currentToken}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Queue: {data.queue} patients
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-red-500 font-bold text-xl">BREAK</p>
+            <p className="text-sm text-muted-foreground">
+              Returns: {data.returnTime}
+            </p>
+          </>
+        )}
+      </div>
+    </Card>
+  </Link>
 );
 
 const ZoomControls = () => (

@@ -1,12 +1,13 @@
 
 
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Bell, Search, Settings, UserPlus, Calendar as CalendarIcon, Plus, Maximize, Minus, ZoomIn, ZoomOut, Activity } from "lucide-react";
+import { Bell, Search, Settings, UserPlus, Calendar as CalendarIcon, Plus, Maximize, Minus, ZoomIn, ZoomOut, Activity, ChevronLeft } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { user } from "@/lib/data";
+import Link from "next/link";
 
 export function DashboardHeader() {
   return (
@@ -79,7 +80,7 @@ export function DoctorsHeader() {
 
 export function AppointmentsHeader() {
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static smh-auto sm:border-0 sm:bg-transparent sm:px-6">
       <SidebarTrigger className="sm:hidden" />
       <h1 className="text-xl font-semibold md:text-2xl">Appointments</h1>
       <div className="ml-auto flex items-center gap-4">
@@ -143,7 +144,7 @@ export function AppointmentsHeader() {
 
 export function DepartmentsHeader() {
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static smh-auto sm:border-0 sm:bg-transparent sm:px-6">
       <SidebarTrigger className="sm:hidden" />
       <h1 className="text-xl font-semibold md:text-2xl">Departments</h1>
       <div className="ml-auto flex items-center gap-4">
@@ -191,7 +192,7 @@ export function DepartmentsHeader() {
 
 export function LiveStatusHeader() {
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static smh-auto sm:border-0 sm:bg-transparent sm:px-6">
       <SidebarTrigger className="sm:hidden" />
       <h1 className="text-xl font-semibold md:text-2xl flex items-center gap-2">
         <Activity /> Live Token Status
@@ -239,4 +240,59 @@ export function LiveStatusHeader() {
   );
 }
 
+export function LiveStatusDetailHeader() {
+    return (
+      <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
+        <SidebarTrigger className="sm:hidden" />
+        <Link href="/live-status">
+            <Button variant="outline" size="icon" className="h-7 w-7">
+                <ChevronLeft className="h-4 w-4" />
+                <span className="sr-only">Back</span>
+            </Button>
+        </Link>
+        <h1 className="text-xl font-semibold md:text-2xl flex items-center gap-2">
+            Token Overview
+        </h1>
+        <div className="ml-auto flex items-center gap-4">
+          <Button variant="ghost" size="icon" className="rounded-full">
+              <Settings className="h-5 w-5" />
+              <span className="sr-only">Settings</span>
+          </Button>
+          <Button variant="ghost" size="icon" className="rounded-full relative">
+              <Bell className="h-5 w-5" />
+              <span className="sr-only">Notifications</span>
+               <span className="absolute top-1 right-1 flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+              </span>
+          </Button>
+          <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                      <Avatar className="h-10 w-10">
+                          <AvatarImage src={user.avatar} alt={user.name} data-ai-hint="professional woman"/>
+                          <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                      </Avatar>
+                  </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56" align="end" forceMount>
+                  <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium leading-none">{user.name}</p>
+                      <p className="text-xs leading-none text-muted-foreground">
+                      {user.email}
+                      </p>
+                  </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem>Profile</DropdownMenuItem>
+                  <DropdownMenuItem>Settings</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem>Log out</DropdownMenuItem>
+              </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </header>
+    );
+  }
     
