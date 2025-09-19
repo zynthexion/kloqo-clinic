@@ -4,7 +4,7 @@
 import { useParams } from "next/navigation";
 import { SidebarInset } from "@/components/ui/sidebar";
 import { LiveStatusDetailHeader } from "@/components/layout/header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { liveStatuses } from "@/lib/data";
@@ -12,13 +12,33 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { AlertCircle, CheckCircle, Clock } from "lucide-react";
 
 // Dummy data for token details
-const generateTokens = (prefix: string, count: number, start: number) => {
-    return Array.from({ length: count }, (_, i) => `${prefix}00${start + i}`);
-}
+const completedTokens = ["A001", "A002"];
+const pendingTokens = ["A003", "A004", "A005", "A006", "A007"];
+const missedTokens = ["A008"];
 
-const completedTokens = generateTokens('A', 2, 1);
-const pendingTokens = generateTokens('A', 5, 3);
-const missedTokens = generateTokens('A', 1, 8);
+const allTokens = [
+    ...completedTokens.map(token => ({ token, status: 'completed' })),
+    ...pendingTokens.map(token => ({ token, status: 'pending' })),
+    ...missedTokens.map(token => ({ token, status: 'missed' })),
+];
+
+const statusStyles = {
+    completed: {
+        variant: "success",
+        icon: <CheckCircle size={16} className="mr-2" />,
+        text: "Completed",
+    },
+    pending: {
+        variant: "warning",
+        icon: <Clock size={16} className="mr-2" />,
+        text: "Pending",
+    },
+    missed: {
+        variant: "danger",
+        icon: <AlertCircle size={16} className="mr-2" />,
+        text: "Missed",
+    }
+} as const;
 
 
 export default function LiveStatusDetailPage() {
@@ -69,57 +89,29 @@ export default function LiveStatusDetailPage() {
                 </div>
             </CardContent>
         </Card>
+        
+        <Card>
+            <CardHeader>
+                <CardTitle>Token Queue Status</CardTitle>
+                <CardDescription>Overview of all tokens for this queue.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <ScrollArea className="h-[calc(100vh-420px)]">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                        {allTokens.map(({ token, status }) => {
+                            const style = statusStyles[status as keyof typeof statusStyles];
+                            return (
+                                <Badge key={token} variant={style.variant} className="text-base font-medium p-3 flex items-center justify-center">
+                                    {style.icon}
+                                    <span>{token}</span>
+                                </Badge>
+                            )
+                        })}
+                    </div>
+                </ScrollArea>
+            </CardContent>
+        </Card>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[calc(100vh-300px)]">
-            <Card className="flex flex-col">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-green-600">
-                        <CheckCircle size={20} /> Completed Tokens
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="flex-grow overflow-hidden">
-                    <ScrollArea className="h-full">
-                        <div className="space-y-2">
-                        {completedTokens.map(token => (
-                            <Badge key={token} variant="success" className="text-base font-medium mr-2 mb-2 p-2">{token}</Badge>
-                        ))}
-                        </div>
-                    </ScrollArea>
-                </CardContent>
-            </Card>
-            <Card className="flex flex-col">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-yellow-600">
-                        <Clock size={20} /> Pending Tokens
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="flex-grow overflow-hidden">
-                     <ScrollArea className="h-full">
-                        <div className="space-y-2">
-                        {pendingTokens.map(token => (
-                             <Badge key={token} variant="warning" className="text-base font-medium mr-2 mb-2 p-2">{token}</Badge>
-                        ))}
-                        </div>
-                    </ScrollArea>
-                </CardContent>
-            </Card>
-            <Card className="flex flex-col">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-red-600">
-                        <AlertCircle size={20} /> Missed Tokens
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="flex-grow overflow-hidden">
-                     <ScrollArea className="h-full">
-                        <div className="space-y-2">
-                        {missedTokens.map(token => (
-                            <Badge key={token} variant="danger" className="text-base font-medium mr-2 mb-2 p-2">{token}</Badge>
-                        ))}
-                        </div>
-                    </ScrollArea>
-                </CardContent>
-            </Card>
-        </div>
       </main>
     </SidebarInset>
   );
