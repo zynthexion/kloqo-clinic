@@ -1,5 +1,6 @@
 
 
+
 export type TimeSlot = {
   from: string;
   to: string;
@@ -60,4 +61,14 @@ export type Department = {
     doctors: string[];
 }
 
+export type LiveStatus = {
+    id: string;
+    doctorName: string;
+    specialty: string;
+    room: string;
+    status: 'available' | 'break';
+    currentToken?: string;
+    queue?: number;
+    returnTime?: string;
+};
     
