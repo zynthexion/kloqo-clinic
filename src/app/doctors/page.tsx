@@ -149,11 +149,14 @@ export default function DoctorsPage() {
       const scheduleString = doctorData.availabilitySlots
         .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${ts.from}-${ts.to}`).join(', ')}`)
         .join('; ');
+      
+      const dataToSave: any = { ...doctorData };
+      delete dataToSave.photo;
 
       if (doctorData.id) { // Editing existing doctor
         const doctorRef = doc(db, "doctors", doctorData.id);
         const updatedDoctorData = {
-          ...doctorData,
+          ...dataToSave,
           avatar: photoUrl,
           schedule: scheduleString,
         };
@@ -166,7 +169,7 @@ export default function DoctorsPage() {
       } else { // Adding new doctor
         const newDoctorRef = doc(collection(db, "doctors"));
         const newDoctorData = {
-            ...doctorData,
+            ...dataToSave,
             id: newDoctorRef.id,
             avatar: photoUrl,
             schedule: scheduleString,
