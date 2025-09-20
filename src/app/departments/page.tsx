@@ -30,6 +30,7 @@ import { collection, getDocs, addDoc, doc, setDoc } from "firebase/firestore";
 import { db, storage } from "@/lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useToast } from "@/hooks/use-toast";
+import { DepartmentDoctorsDialog } from "@/components/departments/department-doctors-dialog";
 
 
 const getDoctorAvatar = (doctorName: string) => {
@@ -37,7 +38,7 @@ const getDoctorAvatar = (doctorName: string) => {
   return doctor ? doctor.avatar : "https://picsum.photos/seed/placeholder/100/100";
 }
 
-const DepartmentCard = ({ department }: { department: Department }) => (
+const DepartmentCard = ({ department, onSeeDetail }: { department: Department, onSeeDetail: (department: Department) => void }) => (
     <Card className="overflow-hidden">
         <CardContent className="p-0">
             <div className="relative h-40 w-full">
@@ -77,7 +78,7 @@ const DepartmentCard = ({ department }: { department: Department }) => (
             </div>
         </CardContent>
         <CardFooter className="bg-muted/30 px-4 py-3">
-             <Button variant="link" className="ml-auto p-0 h-auto">See Detail</Button>
+             <Button variant="link" className="ml-auto p-0 h-auto" onClick={() => onSeeDetail(department)}>See Detail</Button>
         </CardFooter>
     </Card>
 );
@@ -86,6 +87,8 @@ export default function DepartmentsPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const { toast } = useToast();
   const [isAddDepartmentOpen, setIsAddDepartmentOpen] = useState(false);
+  const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
+  const [isDoctorsDialogOpen, setIsDoctorsDialogOpen] = useState(false);
 
   useEffect(() => {
     const fetchDepartments = async () => {
@@ -133,6 +136,11 @@ export default function DepartmentsPage() {
         });
     }
   }
+  
+  const handleSeeDetail = (department: Department) => {
+    setSelectedDepartment(department);
+    setIsDoctorsDialogOpen(true);
+  }
 
 
   return (
@@ -153,7 +161,7 @@ export default function DepartmentsPage() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {departments.map((dept) => (
-                <DepartmentCard key={dept.id} department={dept} />
+                <DepartmentCard key={dept.id} department={dept} onSeeDetail={handleSeeDetail} />
             ))}
         </div>
         <div className="flex items-center justify-between mt-6">
@@ -184,6 +192,14 @@ export default function DepartmentsPage() {
             </div>
         </div>
       </main>
+      {selectedDepartment && (
+        <DepartmentDoctorsDialog
+          isOpen={isDoctorsDialogOpen}
+          setIsOpen={setIsDoctorsDialogOpen}
+          department={selectedDepartment}
+          allDoctors={doctors}
+        />
+      )}
        <footer className="text-center text-sm text-muted-foreground p-4">
           Copyright &copy; 2024 Peterdraw &nbsp;&middot;&nbsp; Privacy Policy &nbsp;&middot;&nbsp; Term and conditions &nbsp;&middot;&nbsp; Contact
       </footer>
