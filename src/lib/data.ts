@@ -1,8 +1,4 @@
 
-
-
-
-
 import type { Doctor, Report, Appointment, Department, AvailabilitySlot, TimeSlot, LiveStatus } from './types';
 import { PlaceHolderImages } from './placeholder-images';
 
@@ -314,7 +310,7 @@ export const reports: Report[] = [
 export const user = {
     name: 'Alfredo Westervelt',
     email: 'alfredo.westervelt@wellnest.com',
-    avatar: "https://picsum.photos/seed/user/100/100",
+    avatar: "https://picsum.photos/seed/user-avatar/100/100",
 };
 
 
@@ -448,3 +444,5 @@ export const liveStatuses: LiveStatus[] = [
     status: 'available',
   },
 ];
+
+    

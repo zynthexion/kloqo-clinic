@@ -152,7 +152,7 @@ export default function DoctorsPage() {
 
   const handleSaveDoctor = async (doctorData: Omit<Doctor, 'id' | 'avatar' | 'schedule' | 'preferences' | 'historicalData'> & { photo?: File; id?: string }) => {
     try {
-      let photoUrl = doctorData.id ? doctors.find(d => d.id === doctorData.id)?.avatar : `https://picsum.photos/seed/${new Date().getTime()}/100/100`;
+      let photoUrl = doctorData.id ? doctors.find(d => d.id === doctorData.id)?.avatar : `https://picsum.photos/seed/new-doc-${new Date().getTime()}/100/100`;
 
       if (doctorData.photo) {
         const storageRef = ref(storage, `doctor_photos/${doctorData.photo.name}`);
@@ -380,4 +380,5 @@ export default function DoctorsPage() {
   );
 }
 
+    
     

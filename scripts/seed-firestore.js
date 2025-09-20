@@ -59,7 +59,7 @@ const doctors = [
     id: 'D005',
     name: 'Dr. Emily Smith',
     specialty: 'Routine Check-Ups',
-    avatar: 'https://picsum.photos/seed/101/100/100',
+    avatar: 'https://picsum.photos/seed/doc5/100/100',
     schedule: 'Mon, Wed, Fri: 9 AM - 5 PM. Short lunch breaks.',
     preferences: 'Prefers back-to-back consultations in the morning to leave afternoons for administrative tasks. Avoids scheduling follow-ups on Fridays.',
     historicalData: 'Tends to run 15 minutes late for afternoon appointments. High patient satisfaction scores.',
@@ -265,4 +265,5 @@ async function main() {
 
 main().catch(console.error);
 
+    
     

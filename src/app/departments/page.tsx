@@ -61,7 +61,7 @@ export default function DepartmentsPage() {
 
   const getDoctorAvatar = (doctorName: string) => {
     const doctor = doctors.find((d) => d.name === doctorName);
-    return doctor ? doctor.avatar : "https://picsum.photos/seed/placeholder/100/100";
+    return doctor ? doctor.avatar : "https://picsum.photos/seed/generic-doctor/100/100";
   }
 
   const DepartmentCard = ({ department, onSeeDetail }: { department: Department, onSeeDetail: (department: Department) => void }) => (
@@ -111,7 +111,7 @@ export default function DepartmentsPage() {
 
   const handleSaveDepartment = async (deptData: { name: string; description: string; imageFile?: File; id?: string }) => {
     try {
-        let imageUrl = `https://picsum.photos/seed/${new Date().getTime()}/600/400`;
+        let imageUrl = `https://picsum.photos/seed/new-dept-${new Date().getTime()}/600/400`;
 
         if (deptData.imageFile) {
             const storageRef = ref(storage, `department_images/${deptData.imageFile.name}`);
@@ -216,3 +216,5 @@ export default function DepartmentsPage() {
     </SidebarInset>
   );
 }
+
+    

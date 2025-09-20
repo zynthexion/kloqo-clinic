@@ -1,3 +1,4 @@
+
 "use client";
 
 import Image from "next/image";
@@ -37,7 +38,7 @@ export default function UpcomingAppointments() {
 
   const getDoctorAvatar = (doctorName: string) => {
     const doctor = doctors.find(d => d.name === doctorName);
-    return doctor ? doctor.avatar : "https://picsum.photos/seed/placeholder/100/100";
+    return doctor ? doctor.avatar : "https://picsum.photos/seed/generic-doctor/100/100";
   }
 
   return (
@@ -77,3 +78,5 @@ export default function UpcomingAppointments() {
     </Card>
   );
 }
+
+    
