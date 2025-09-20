@@ -136,7 +136,7 @@ export default function DoctorsPage() {
     fetchDoctors();
   }, []);
 
-  const handleSaveDoctor = async (doctorData: Omit<Doctor, 'id' | 'avatar' | 'schedule' | 'preferences' | 'historicalData' | 'totalPatients' | 'todaysAppointments'> & { photo?: File; id?: string }) => {
+  const handleSaveDoctor = async (doctorData: Omit<Doctor, 'id' | 'avatar' | 'schedule' | 'preferences' | 'historicalData'> & { photo?: File; id?: string }) => {
     try {
       let photoUrl = doctorData.id ? doctors.find(d => d.id === doctorData.id)?.avatar : `https://picsum.photos/seed/${new Date().getTime()}/100/100`;
 
@@ -165,26 +165,19 @@ export default function DoctorsPage() {
         });
       } else { // Adding new doctor
         const newDoctorRef = doc(collection(db, "doctors"));
-        const newDoctor: Doctor = {
-          id: newDoctorRef.id,
-          avatar: photoUrl,
-          schedule: scheduleString,
-          preferences: 'Not set',
-          historicalData: 'No data',
-          totalPatients: 0,
-          todaysAppointments: 0,
-          name: doctorData.name,
-          specialty: doctorData.specialty,
-          department: doctorData.department,
-          availability: doctorData.availability,
-          maxPatientsPerDay: doctorData.maxPatientsPerDay,
-          availabilitySlots: doctorData.availabilitySlots,
+        const newDoctorData = {
+            ...doctorData,
+            id: newDoctorRef.id,
+            avatar: photoUrl,
+            schedule: scheduleString,
+            preferences: 'Not set',
+            historicalData: 'No data',
         };
-        await setDoc(newDoctorRef, newDoctor);
-        setDoctors(prev => [...prev, newDoctor]);
+        await setDoc(newDoctorRef, newDoctorData);
+        setDoctors(prev => [...prev, newDoctorData as Doctor]);
         toast({
           title: "Doctor Added",
-          description: `${newDoctor.name} has been successfully added.`,
+          description: `${newDoctorData.name} has been successfully added.`,
         });
       }
     } catch (error) {
@@ -348,5 +341,7 @@ export default function DoctorsPage() {
     </SidebarInset>
   );
 }
+
+    
 
     

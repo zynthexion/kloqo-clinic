@@ -56,6 +56,8 @@ const formSchema = z.object({
   specialty: z.string().min(2, { message: "Specialty must be at least 2 characters." }),
   department: z.string().min(1, { message: "Please select a department." }),
   availability: z.enum(["Available", "Unavailable"]),
+  totalPatients: z.coerce.number().min(0),
+  todaysAppointments: z.coerce.number().min(0),
   maxPatientsPerDay: z.coerce.number().min(1, "Must be at least 1."),
   availableDays: z.array(z.string()).refine((value) => value.some((item) => item), {
     message: "You have to select at least one day.",
@@ -87,6 +89,8 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor }: AddDoctorFo
       specialty: "",
       department: "",
       availability: "Available",
+      totalPatients: 0,
+      todaysAppointments: 0,
       maxPatientsPerDay: 10,
       availableDays: [],
       availabilitySlots: [],
@@ -101,6 +105,8 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor }: AddDoctorFo
         specialty: doctor.specialty,
         department: doctor.department,
         availability: doctor.availability,
+        totalPatients: doctor.totalPatients,
+        todaysAppointments: doctor.todaysAppointments,
         maxPatientsPerDay: doctor.maxPatientsPerDay,
         availableDays: doctor.availabilitySlots?.map(s => s.day) || [],
         availabilitySlots: doctor.availabilitySlots || [],
@@ -112,6 +118,8 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor }: AddDoctorFo
         specialty: "",
         department: "",
         availability: "Available",
+        totalPatients: 0,
+        todaysAppointments: 0,
         maxPatientsPerDay: 10,
         availableDays: [],
         availabilitySlots: [],
@@ -280,6 +288,32 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor }: AddDoctorFo
                     </FormItem>
                   )}
                 />
+                 <FormField
+                  control={form.control}
+                  name="totalPatients"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Total Patients</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                 <FormField
+                  control={form.control}
+                  name="todaysAppointments"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Today's Appointments</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <FormField
                   control={form.control}
                   name="availability"
@@ -442,5 +476,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor }: AddDoctorFo
     </Dialog>
   );
 }
+
+    
 
     
