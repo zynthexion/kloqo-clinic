@@ -129,8 +129,8 @@ export default function DepartmentsPage() {
         };
         
         await setDoc(newDeptRef, newDepartmentData);
-        const newDepartment = {id: newDeptRef.id, ...newDepartmentData};
         
+        const newDepartment: Department = { id: newDeptRef.id, ...newDepartmentData };
         setDepartments(prev => [...prev, newDepartment]);
 
         toast({
