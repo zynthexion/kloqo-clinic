@@ -124,6 +124,7 @@ export default function DoctorsPage() {
   const [isAddDoctorOpen, setIsAddDoctorOpen] = useState(false);
   const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
   const [deletingDoctor, setDeletingDoctor] = useState<Doctor | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     const fetchDoctors = async () => {
@@ -216,6 +217,16 @@ export default function DoctorsPage() {
         setDeletingDoctor(null);
     }
   }
+  
+  const filteredDoctors = doctors.filter(doctor => {
+    const searchTermLower = searchTerm.toLowerCase();
+    return (
+        doctor.name.toLowerCase().includes(searchTermLower) ||
+        doctor.id.toLowerCase().includes(searchTermLower) ||
+        doctor.specialty.toLowerCase().includes(searchTermLower) ||
+        (doctor.department && doctor.department.toLowerCase().includes(searchTermLower))
+    );
+  });
 
   return (
     <SidebarInset>
@@ -227,8 +238,10 @@ export default function DoctorsPage() {
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                 type="search"
-                placeholder="Search name, ID, age, etc"
+                placeholder="Search name, ID, specialty, etc."
                 className="w-full rounded-lg bg-background pl-8"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
                 />
             </div>
             <Select>
@@ -286,7 +299,7 @@ export default function DoctorsPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {doctors.map((doctor) => (
+                {filteredDoctors.map((doctor) => (
                     <DoctorCard 
                         key={doctor.id} 
                         doctor={doctor} 
@@ -309,7 +322,7 @@ export default function DoctorsPage() {
                     <SelectItem value="48">48</SelectItem>
                 </SelectContent>
                 </Select>
-                <span>out of {doctors.length}</span>
+                <span>out of {filteredDoctors.length}</span>
             </div>
             <div className="flex items-center gap-2">
                 <Button variant="outline" size="icon">
@@ -344,6 +357,8 @@ export default function DoctorsPage() {
     </SidebarInset>
   );
 }
+
+    
 
     
 
