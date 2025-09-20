@@ -10,7 +10,6 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { doctors } from "@/lib/data";
 import {
   ChevronLeft,
   ChevronRight,
@@ -23,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Department } from "@/lib/types";
+import type { Department, Doctor } from "@/lib/types";
 import { AddDepartmentForm } from "@/components/departments/add-department-form";
 import React, { useState, useEffect } from "react";
 import { collection, getDocs, addDoc, doc, setDoc } from "firebase/firestore";
@@ -33,58 +32,9 @@ import { useToast } from "@/hooks/use-toast";
 import { DepartmentDoctorsDialog } from "@/components/departments/department-doctors-dialog";
 
 
-const getDoctorAvatar = (doctorName: string) => {
-  const doctor = doctors.find((d) => d.name === doctorName);
-  return doctor ? doctor.avatar : "https://picsum.photos/seed/placeholder/100/100";
-}
-
-const DepartmentCard = ({ department, onSeeDetail }: { department: Department, onSeeDetail: (department: Department) => void }) => (
-    <Card className="overflow-hidden">
-        <CardContent className="p-0">
-            <div className="relative h-40 w-full">
-                <Image
-                    src={department.image}
-                    alt={department.name}
-                    fill
-                    objectFit="cover"
-                    data-ai-hint={department.imageHint}
-                />
-            </div>
-            <div className="p-4">
-                <h3 className="text-lg font-semibold">{department.name}</h3>
-                <p className="text-sm text-muted-foreground mt-1 h-10 overflow-hidden">
-                    {department.description}
-                </p>
-                <div className="flex items-center mt-4">
-                    <div className="flex -space-x-2">
-                        {department.doctors && department.doctors.slice(0, 5).map((doctorName, index) => (
-                            <Image
-                                key={index}
-                                src={getDoctorAvatar(doctorName)}
-                                alt={doctorName}
-                                width={32}
-                                height={32}
-                                className="rounded-full border-2 border-white"
-                                data-ai-hint="doctor portrait"
-                            />
-                        ))}
-                    </div>
-                    {department.doctors && department.doctors.length > 5 && (
-                        <span className="text-xs text-muted-foreground ml-2">
-                            + {department.doctors.length - 5} others
-                        </span>
-                    )}
-                </div>
-            </div>
-        </CardContent>
-        <CardFooter className="bg-muted/30 px-4 py-3">
-             <Button variant="link" className="ml-auto p-0 h-auto" onClick={() => onSeeDetail(department)}>See Detail</Button>
-        </CardFooter>
-    </Card>
-);
-
 export default function DepartmentsPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
   const { toast } = useToast();
   const [isAddDepartmentOpen, setIsAddDepartmentOpen] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
@@ -98,8 +48,66 @@ export default function DepartmentsPage() {
       setDepartments(departmentsList);
     };
 
+    const fetchDoctors = async () => {
+        const doctorsCollection = collection(db, "doctors");
+        const doctorsSnapshot = await getDocs(doctorsCollection);
+        const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
+        setDoctors(doctorsList);
+    };
+
     fetchDepartments();
+    fetchDoctors();
   }, []);
+
+  const getDoctorAvatar = (doctorName: string) => {
+    const doctor = doctors.find((d) => d.name === doctorName);
+    return doctor ? doctor.avatar : "https://picsum.photos/seed/placeholder/100/100";
+  }
+
+  const DepartmentCard = ({ department, onSeeDetail }: { department: Department, onSeeDetail: (department: Department) => void }) => (
+      <Card className="overflow-hidden">
+          <CardContent className="p-0">
+              <div className="relative h-40 w-full">
+                  <Image
+                      src={department.image}
+                      alt={department.name}
+                      fill
+                      objectFit="cover"
+                      data-ai-hint={department.imageHint}
+                  />
+              </div>
+              <div className="p-4">
+                  <h3 className="text-lg font-semibold">{department.name}</h3>
+                  <p className="text-sm text-muted-foreground mt-1 h-10 overflow-hidden">
+                      {department.description}
+                  </p>
+                  <div className="flex items-center mt-4">
+                      <div className="flex -space-x-2">
+                          {department.doctors && department.doctors.slice(0, 5).map((doctorName, index) => (
+                              <Image
+                                  key={index}
+                                  src={getDoctorAvatar(doctorName)}
+                                  alt={doctorName}
+                                  width={32}
+                                  height={32}
+                                  className="rounded-full border-2 border-white"
+                                  data-ai-hint="doctor portrait"
+                              />
+                          ))}
+                      </div>
+                      {department.doctors && department.doctors.length > 5 && (
+                          <span className="text-xs text-muted-foreground ml-2">
+                              + {department.doctors.length - 5} others
+                          </span>
+                      )}
+                  </div>
+              </div>
+          </CardContent>
+          <CardFooter className="bg-muted/30 px-4 py-3">
+               <Button variant="link" className="ml-auto p-0 h-auto" onClick={() => onSeeDetail(department)}>See Detail</Button>
+          </CardFooter>
+      </Card>
+  );
 
   const handleSaveDepartment = async (deptData: { name: string; description: string; imageFile?: File; id?: string }) => {
     try {
@@ -112,7 +120,7 @@ export default function DepartmentsPage() {
         }
 
         const newDeptRef = doc(collection(db, "departments"));
-        const newDepartment: Omit<Department, 'id'> = {
+        const newDepartmentData: Omit<Department, 'id'> = {
             name: deptData.name,
             description: deptData.description,
             image: imageUrl,
@@ -120,8 +128,10 @@ export default function DepartmentsPage() {
             doctors: [],
         };
         
-        await setDoc(newDeptRef, newDepartment);
-        setDepartments(prev => [...prev, {id: newDeptRef.id, ...newDepartment}]);
+        await setDoc(newDeptRef, newDepartmentData);
+        const newDepartment = {id: newDeptRef.id, ...newDepartmentData};
+        
+        setDepartments(prev => [...prev, newDepartment]);
 
         toast({
             title: "Department Added",
@@ -206,5 +216,3 @@ export default function DepartmentsPage() {
     </SidebarInset>
   );
 }
-
-    
