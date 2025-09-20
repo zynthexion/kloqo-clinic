@@ -161,6 +161,80 @@ const doctors = [
   },
 ];
 
+const departments = [
+  {
+    id: 'dept-01',
+    name: 'General Medicine',
+    description: 'Provides comprehensive healthcare services including routine check-ups, preventive care, and treatment for a wide range of illnesses.',
+    image: 'https://picsum.photos/seed/gm/600/400',
+    imageHint: 'stethoscope pills',
+    doctors: ['Dr. Petra Winsburry', 'Dr. Emily Smith', 'Dr. Samuel Thompson', 'Dr. Sarah Johnson', 'Dr. Luke Harrison', 'Dr. Andrew Peterson', 'Dr. William Carter', 'Dr. Mark Wilson', 'Dr. Thomas Brown', 'Dr. Olivia Martinez', 'Dr. Damian Sanchez', 'Dr. Chloe Harrington'],
+  },
+  {
+    id: 'dept-02',
+    name: 'Cardiology',
+    description: 'Specializes in the diagnosis and treatment of heart-related conditions, offering advanced cardiac care and preventive services.',
+    image: 'https://picsum.photos/seed/cardio/600/400',
+    imageHint: 'heart model',
+    doctors: ['Dr. Olivia Martinez', 'Dr. Samuel Thompson', 'Dr. Emily Smith', 'Dr. Sarah Johnson', 'Dr. Luke Harrison', 'Dr. Andrew Peterson', 'Dr. William Carter', 'Dr. Mark Wilson'],
+  },
+  {
+    id: 'dept-03',
+    name: 'Pediatrics',
+    description: 'Dedicated to the health and well-being of children, providing specialized care for infants, children, and adolescents.',
+    image: 'https://picsum.photos/seed/peds/600/400',
+    imageHint: 'doctor baby',
+    doctors: ['Dr. Damian Sanchez', 'Dr. Sarah Johnson', 'Dr. William Carter', 'Dr. Petra Winsburry', 'Dr. Emily Smith', 'Dr. Samuel Thompson', 'Dr. Luke Harrison'],
+  },
+  {
+    id: 'dept-04',
+    name: 'Dermatology',
+    description: 'Focuses on the treatment of skin conditions, offering medical and cosmetic dermatology services to improve skin health and appearance.',
+    image: 'https://picsum.photos/seed/derma/600/400',
+    imageHint: 'skin care',
+    doctors: ['Dr. Chloe Harrington', 'Dr. Luke Harrison', 'Dr. Petra Winsburry', 'Dr. Emily Smith', 'Dr. Samuel Thompson'],
+  },
+  {
+    id: 'dept-05',
+    name: 'Internal Medicine',
+    description: 'Provides primary care for adults, focusing on the prevention, diagnosis, and treatment of adult diseases.',
+    image: 'https://picsum.photos/seed/im/600/400',
+    imageHint: 'anatomical model',
+    doctors: ['Dr. Andrew Peterson', 'Dr. Petra Winsburry', 'Dr. Olivia Martinez', 'Dr. Samuel Thompson', 'Dr. Mark Wilson', 'Dr. Thomas Brown', 'Dr. Chloe Harrington', 'Dr. Damian Sanchez', 'Dr. Sarah Johnson', 'Dr. William Carter', 'Dr. Emily Smith', 'Dr. Luke Harrison'],
+  },
+  {
+    id: 'dept-06',
+    name: 'Orthopedics',
+    description: 'Specializes in the treatment of musculoskeletal system disorders, including bones, joints, ligaments, tendons, and muscles.',
+    image: 'https://picsum.photos/seed/ortho/600/400',
+    imageHint: 'joint brace',
+    doctors: ['Dr. Mark Wilson', 'Dr. Petra Winsburry', 'Dr. Olivia Martinez', 'Dr. Samuel Thompson', 'Dr. Andrew Peterson', 'Dr. Thomas Brown', 'Dr. Chloe Harrington', 'Dr. Damian Sanchez'],
+  },
+    {
+    id: 'dept-07',
+    name: 'Neurology',
+    description: 'Deals with disorders of the nervous system, offering expert care for conditions affecting the brain, spinal cord, and nerves.',
+    image: 'https://picsum.photos/seed/neuro/600/400',
+    imageHint: 'brain model',
+    doctors: ['Dr. Thomas Brown', 'Dr. Olivia Martinez', 'Dr. Samuel Thompson', 'Dr. Andrew Peterson', 'Dr. Mark Wilson', 'Dr. Chloe Harrington'],
+  },
+  {
+    id: 'dept-08',
+    name: 'Oncology',
+    description: 'Focuses on the diagnosis and treatment of cancer, providing comprehensive cancer care and support services.',
+    image: 'https://picsum.photos/seed/onco/600/400',
+    imageHint: 'awareness ribbon',
+    doctors: ['Dr. Emily Smith', 'Dr. Petra Winsburry', 'Dr. Olivia Martinez', 'Dr. Samuel Thompson', 'Dr. Andrew Peterson', 'Dr. Mark Wilson', 'Dr. Thomas Brown'],
+  },
+  {
+    id: 'dept-09',
+    name: 'Obstetrics and Gynecology (OB/GYN)',
+    description: "Provides care for women's health, including pregnancy, childbirth, and reproductive health.",
+    image: 'https://picsum.photos/seed/obgyn/600/400',
+    imageHint: 'pregnant woman',
+    doctors: ['Dr. Sarah Johnson', 'Dr. Petra Winsburry', 'Dr. Olivia Martinez', 'Dr. Samuel Thompson', 'Dr. Andrew Peterson', 'Dr. Mark Wilson', 'Dr. Thomas Brown', 'Dr. Chloe Harrington', 'Dr. Damian Sanchez', 'Dr. William Carter', 'Dr. Emily Smith'],
+  }
+];
 
 // Initialize Firebase Admin SDK
 // Make sure to have your service account key file in the root directory
@@ -169,21 +243,26 @@ initializeApp();
 
 const db = getFirestore();
 
-async function seedDoctors() {
-  const doctorsCollection = db.collection('doctors');
-  
-  console.log('Starting to seed doctors...');
+async function seedCollection(collectionName, data, idField) {
+  const collectionRef = db.collection(collectionName);
+  console.log(`Starting to seed ${collectionName}...`);
 
-  const promises = doctors.map(async (doctor) => {
-    // Create a new document with an auto-generated ID
-    const docRef = doctorsCollection.doc(doctor.id);
-    await docRef.set(doctor);
-    console.log(`Added doctor ${doctor.name} with ID: ${doctor.id}`);
+  const promises = data.map(async (item) => {
+    const docRef = collectionRef.doc(item[idField]);
+    await docRef.set(item);
+    console.log(`Added ${collectionName} ${item.name || item[idField]} with ID: ${item[idField]}`);
   });
 
   await Promise.all(promises);
-  
-  console.log('Finished seeding doctors.');
+  console.log(`Finished seeding ${collectionName}.`);
 }
 
-seedDoctors().catch(console.error);
+async function main() {
+    await seedCollection('doctors', doctors, 'id');
+    await seedCollection('departments', departments, 'id');
+}
+
+
+main().catch(console.error);
+
+    

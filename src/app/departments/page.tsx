@@ -1,20 +1,20 @@
 
+"use client";
+
 import Image from "next/image";
 import { DepartmentsHeader } from "@/components/layout/header";
 import { SidebarInset } from "@/components/ui/sidebar";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { departments, doctors } from "@/lib/data";
+import { doctors } from "@/lib/data";
 import {
   ChevronLeft,
   ChevronRight,
+  PlusCircle,
 } from "lucide-react";
 import {
   Select,
@@ -24,6 +24,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Department } from "@/lib/types";
+import { AddDepartmentForm } from "@/components/departments/add-department-form";
+import React, { useState, useEffect } from "react";
+import { collection, getDocs, addDoc, doc, setDoc } from "firebase/firestore";
+import { db, storage } from "@/lib/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { useToast } from "@/hooks/use-toast";
+
 
 const getDoctorAvatar = (doctorName: string) => {
   const doctor = doctors.find((d) => d.name === doctorName);
@@ -37,7 +44,7 @@ const DepartmentCard = ({ department }: { department: Department }) => (
                 <Image
                     src={department.image}
                     alt={department.name}
-                    layout="fill"
+                    fill
                     objectFit="cover"
                     data-ai-hint={department.imageHint}
                 />
@@ -49,7 +56,7 @@ const DepartmentCard = ({ department }: { department: Department }) => (
                 </p>
                 <div className="flex items-center mt-4">
                     <div className="flex -space-x-2">
-                        {department.doctors.slice(0, 5).map((doctorName, index) => (
+                        {department.doctors && department.doctors.slice(0, 5).map((doctorName, index) => (
                             <Image
                                 key={index}
                                 src={getDoctorAvatar(doctorName)}
@@ -61,7 +68,7 @@ const DepartmentCard = ({ department }: { department: Department }) => (
                             />
                         ))}
                     </div>
-                    {department.doctors.length > 5 && (
+                    {department.doctors && department.doctors.length > 5 && (
                         <span className="text-xs text-muted-foreground ml-2">
                             + {department.doctors.length - 5} others
                         </span>
@@ -76,10 +83,74 @@ const DepartmentCard = ({ department }: { department: Department }) => (
 );
 
 export default function DepartmentsPage() {
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const { toast } = useToast();
+  const [isAddDepartmentOpen, setIsAddDepartmentOpen] = useState(false);
+
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      const departmentsCollection = collection(db, "departments");
+      const departmentsSnapshot = await getDocs(departmentsCollection);
+      const departmentsList = departmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Department));
+      setDepartments(departmentsList);
+    };
+
+    fetchDepartments();
+  }, []);
+
+  const handleSaveDepartment = async (deptData: { name: string; description: string; imageFile?: File; id?: string }) => {
+    try {
+        let imageUrl = `https://picsum.photos/seed/${new Date().getTime()}/600/400`;
+
+        if (deptData.imageFile) {
+            const storageRef = ref(storage, `department_images/${deptData.imageFile.name}`);
+            const snapshot = await uploadBytes(storageRef, deptData.imageFile);
+            imageUrl = await getDownloadURL(snapshot.ref);
+        }
+
+        const newDeptRef = doc(collection(db, "departments"));
+        const newDepartment: Omit<Department, 'id'> = {
+            name: deptData.name,
+            description: deptData.description,
+            image: imageUrl,
+            imageHint: `${deptData.name.toLowerCase()} department`,
+            doctors: [],
+        };
+        
+        await setDoc(newDeptRef, newDepartment);
+        setDepartments(prev => [...prev, {id: newDeptRef.id, ...newDepartment}]);
+
+        toast({
+            title: "Department Added",
+            description: `${deptData.name} has been successfully added.`,
+        });
+    } catch (error) {
+        console.error("Error saving department:", error);
+        toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Failed to save department. Please try again.",
+        });
+    }
+  }
+
+
   return (
     <SidebarInset>
       <DepartmentsHeader />
       <main className="flex-1 p-4 sm:p-6">
+        <div className="flex justify-end mb-4">
+             <Button onClick={() => setIsAddDepartmentOpen(true)}>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Add Department
+            </Button>
+             <AddDepartmentForm 
+                onSave={handleSaveDepartment}
+                isOpen={isAddDepartmentOpen}
+                setIsOpen={setIsAddDepartmentOpen}
+                department={null}
+            />
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {departments.map((dept) => (
                 <DepartmentCard key={dept.id} department={dept} />
@@ -119,3 +190,5 @@ export default function DepartmentsPage() {
     </SidebarInset>
   );
 }
+
+    

@@ -1,6 +1,7 @@
 
 
 
+
 export type TimeSlot = {
   from: string;
   to: string;
@@ -71,4 +72,6 @@ export type LiveStatus = {
     queue?: number;
     returnTime?: string;
 };
+    
+
     
