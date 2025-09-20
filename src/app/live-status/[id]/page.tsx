@@ -38,6 +38,8 @@ export default function LiveStatusDetailPage() {
   const params = useParams();
   const { id } = params;
 
+  console.log("Reloading live status page to fix HMR issue.");
+
   const statusData = liveStatuses.find((s) => s.id === id);
 
   if (!statusData) {
