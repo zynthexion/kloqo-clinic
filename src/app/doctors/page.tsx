@@ -43,8 +43,8 @@ import {
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { AddDoctorForm } from "@/components/doctors/add-doctor-form";
-import React, { useState, useEffect } from "react";
-import type { Doctor } from "@/lib/types";
+import React, { useState, useEffect, useMemo } from "react";
+import type { Doctor, Department } from "@/lib/types";
 import { collection, getDocs, addDoc, doc, setDoc, deleteDoc, updateDoc } from "firebase/firestore";
 import { db, storage } from "@/lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -120,11 +120,16 @@ const DoctorCard = ({ doctor, onEdit, onDelete }: { doctor: Doctor, onEdit: (doc
 
 export default function DoctorsPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const { toast } = useToast();
   const [isAddDoctorOpen, setIsAddDoctorOpen] = useState(false);
   const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
   const [deletingDoctor, setDeletingDoctor] = useState<Doctor | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("All");
+  const [specialtyFilter, setSpecialtyFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState<"All" | "Available" | "Unavailable">("All");
+
 
   useEffect(() => {
     const fetchDoctors = async () => {
@@ -134,7 +139,15 @@ export default function DoctorsPage() {
       setDoctors(doctorsList);
     };
 
+    const fetchDepartments = async () => {
+      const departmentsCollection = collection(db, "departments");
+      const departmentsSnapshot = await getDocs(departmentsCollection);
+      const departmentsList = departmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Department));
+      setDepartments(departmentsList);
+    };
+
     fetchDoctors();
+    fetchDepartments();
   }, []);
 
   const handleSaveDoctor = async (doctorData: Omit<Doctor, 'id' | 'avatar' | 'schedule' | 'preferences' | 'historicalData'> & { photo?: File; id?: string }) => {
@@ -169,7 +182,7 @@ export default function DoctorsPage() {
         });
       } else { // Adding new doctor
         const newDoctorRef = doc(collection(db, "doctors"));
-        const newDoctorData = {
+        const newDoctorData: Doctor = {
             ...dataToSave,
             id: newDoctorRef.id,
             avatar: photoUrl,
@@ -178,7 +191,7 @@ export default function DoctorsPage() {
             historicalData: 'No data',
         };
         await setDoc(newDoctorRef, newDoctorData);
-        setDoctors(prev => [...prev, newDoctorData as Doctor]);
+        setDoctors(prev => [...prev, newDoctorData]);
         toast({
           title: "Doctor Added",
           description: `${newDoctorData.name} has been successfully added.`,
@@ -218,15 +231,30 @@ export default function DoctorsPage() {
     }
   }
   
-  const filteredDoctors = doctors.filter(doctor => {
-    const searchTermLower = searchTerm.toLowerCase();
-    return (
-        doctor.name.toLowerCase().includes(searchTermLower) ||
-        doctor.id.toLowerCase().includes(searchTermLower) ||
-        doctor.specialty.toLowerCase().includes(searchTermLower) ||
-        (doctor.department && doctor.department.toLowerCase().includes(searchTermLower))
-    );
-  });
+  const filteredDoctors = useMemo(() => {
+    return doctors.filter(doctor => {
+        const searchTermLower = searchTerm.toLowerCase();
+        
+        const matchesSearchTerm = (
+            doctor.name.toLowerCase().includes(searchTermLower) ||
+            doctor.id.toLowerCase().includes(searchTermLower) ||
+            doctor.specialty.toLowerCase().includes(searchTermLower) ||
+            (doctor.department && doctor.department.toLowerCase().includes(searchTermLower))
+        );
+
+        const matchesDepartment = departmentFilter === 'All' || doctor.department === departmentFilter;
+        const matchesSpecialty = specialtyFilter === 'All' || doctor.specialty === specialtyFilter;
+        const matchesStatus = statusFilter === 'All' || doctor.availability === statusFilter;
+
+        return matchesSearchTerm && matchesDepartment && matchesSpecialty && matchesStatus;
+    });
+  }, [doctors, searchTerm, departmentFilter, specialtyFilter, statusFilter]);
+
+  const uniqueSpecialties = useMemo(() => {
+      const specialties = new Set(doctors.map(d => d.specialty));
+      return ['All', ...Array.from(specialties)];
+  }, [doctors]);
+
 
   return (
     <SidebarInset>
@@ -244,43 +272,37 @@ export default function DoctorsPage() {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 />
             </div>
-            <Select>
+            <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
                 <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Department" />
                 </SelectTrigger>
                 <SelectContent>
-                <SelectItem value="general-medicine">
-                    General Medicine
-                </SelectItem>
-                <SelectItem value="cardiology">Cardiology</SelectItem>
-                <SelectItem value="pediatrics">Pediatrics</SelectItem>
-                <SelectItem value="dermatology">Dermatology</SelectItem>
+                    <SelectItem value="All">All Departments</SelectItem>
+                    {departments.map(dept => (
+                        <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
+                    ))}
                 </SelectContent>
             </Select>
-            <Select>
+            <Select value={specialtyFilter} onValueChange={setSpecialtyFilter}>
                 <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Specialist" />
                 </SelectTrigger>
                 <SelectContent>
-                <SelectItem value="routine-check-ups">
-                    Routine Check-Ups
-                </SelectItem>
-                <SelectItem value="heart-specialist">
-                    Heart Specialist
-                </SelectItem>
-                <SelectItem value="child-health">Child Health</SelectItem>
-                <SelectItem value="skin-specialist">
-                    Skin Specialist
-                </SelectItem>
+                     {uniqueSpecialties.map(specialty => (
+                        <SelectItem key={specialty} value={specialty}>
+                            {specialty === 'All' ? 'All Specialties' : specialty}
+                        </SelectItem>
+                     ))}
                 </SelectContent>
             </Select>
-            <Select>
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as any)}>
                 <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                <SelectItem value="available">Available</SelectItem>
-                <SelectItem value="unavailable">Unavailable</SelectItem>
+                    <SelectItem value="All">All Statuses</SelectItem>
+                    <SelectItem value="Available">Available</SelectItem>
+                    <SelectItem value="Unavailable">Unavailable</SelectItem>
                 </SelectContent>
             </Select>
             <AddDoctorForm 
@@ -357,9 +379,5 @@ export default function DoctorsPage() {
     </SidebarInset>
   );
 }
-
-    
-
-    
 
     
