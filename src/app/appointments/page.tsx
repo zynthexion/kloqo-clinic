@@ -47,6 +47,7 @@ export default function AppointmentsPage() {
   const [loading, setLoading] = useState(true);
   const [tabCounts, setTabCounts] = useState({ all: 0, confirmed: 0, pending: 0, cancelled: 0 });
   const [isAddAppointmentOpen, setIsAddAppointmentOpen] = useState(false);
+  const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -57,14 +58,7 @@ export default function AppointmentsPage() {
         const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ ...doc.data() } as Appointment));
         setAppointments(appointmentsList);
 
-        const counts = appointmentsList.reduce((acc, apt) => {
-          acc.all++;
-          if (apt.status === "Confirmed") acc.confirmed++;
-          else if (apt.status === "Pending") acc.pending++;
-          else if (apt.status === "Cancelled") acc.cancelled++;
-          return acc;
-        }, { all: 0, confirmed: 0, pending: 0, cancelled: 0 });
-        setTabCounts(counts);
+        updateTabCounts(appointmentsList);
 
       } catch (error) {
         console.error("Error fetching appointments:", error);
@@ -83,64 +77,93 @@ export default function AppointmentsPage() {
     fetchAppointments();
     fetchDoctors();
   }, []);
+  
+  const updateTabCounts = (appointmentList: Appointment[]) => {
+      const counts = appointmentList.reduce((acc, apt) => {
+        acc.all++;
+        if (apt.status === "Confirmed") acc.confirmed++;
+        else if (apt.status === "Pending") acc.pending++;
+        else if (apt.status === "Cancelled") acc.cancelled++;
+        return acc;
+      }, { all: 0, confirmed: 0, pending: 0, cancelled: 0 });
+      setTabCounts(counts);
+  }
 
-  const handleSaveAppointment = async (appointmentData: Omit<Appointment, 'id' | 'tokenNumber' | 'date'> & { date: string }) => {
+  const handleSaveAppointment = async (appointmentData: Omit<Appointment, 'date'> & { date: string, id?: string }) => {
      try {
-        const newAppointmentRef = doc(collection(db, "appointments"));
         const doctorName = doctors.find(d => d.id === appointmentData.doctor)?.name || "Unknown Doctor";
-        
-        let prefix = '';
-        if (appointmentData.bookedVia === 'Online') prefix = 'A';
-        else if (appointmentData.bookedVia === 'Phone') prefix = 'P';
-        else if (appointmentData.bookedVia === 'Walk-in') prefix = 'W';
-        
-        const tokenNumber = `${prefix}${appointments.length + 1}`;
+        const isEditing = !!appointmentData.id;
 
-        const { doctor, ...restOfAppointmentData } = appointmentData;
+        let dataToSave: Appointment;
 
-        const newAppointmentData: Appointment = {
-            ...restOfAppointmentData,
-            id: newAppointmentRef.id,
-            doctor: doctorName,
-            tokenNumber: tokenNumber,
-        };
+        if (isEditing) {
+            const { id, ...restOfData } = appointmentData;
+            dataToSave = {
+                ...restOfData,
+                id: id!,
+                doctor: doctorName,
+            };
+            const appointmentRef = doc(db, "appointments", id!);
+            await setDoc(appointmentRef, dataToSave, { merge: true });
 
-        await setDoc(newAppointmentRef, newAppointmentData);
-
-        setAppointments(prev => {
-          const newAppointments = [...prev, newAppointmentData];
-          const counts = newAppointments.reduce((acc, apt) => {
-            acc.all++;
-            if (apt.status === "Confirmed") acc.confirmed++;
-            else if (apt.status === "Pending") acc.pending++;
-            else if (apt.status === "Cancelled") acc.cancelled++;
-            return acc;
-          }, { all: 0, confirmed: 0, pending: 0, cancelled: 0 });
-          setTabCounts(counts);
-          return newAppointments;
-        });
-
-        toast({
-            title: "Appointment Booked",
-            description: `Appointment for ${newAppointmentData.patientName} has been successfully booked.`,
-        });
+            setAppointments(prev => {
+                const updatedAppointments = prev.map(apt => apt.id === id ? dataToSave : apt);
+                updateTabCounts(updatedAppointments);
+                return updatedAppointments;
+            });
+            toast({
+                title: "Appointment Rescheduled",
+                description: `Appointment for ${dataToSave.patientName} has been updated.`,
+            });
+        } else {
+            const newAppointmentRef = doc(collection(db, "appointments"));
+            let prefix = '';
+            if (appointmentData.bookedVia === 'Online') prefix = 'A';
+            else if (appointmentData.bookedVia === 'Phone') prefix = 'P';
+            else if (appointmentData.bookedVia === 'Walk-in') prefix = 'W';
+            const tokenNumber = `${prefix}${appointments.length + 1}`;
+            
+            const { id, ...restOfData } = appointmentData;
+            dataToSave = {
+                ...restOfData,
+                id: newAppointmentRef.id,
+                doctor: doctorName,
+                tokenNumber: tokenNumber,
+            };
+            await setDoc(newAppointmentRef, dataToSave);
+            setAppointments(prev => {
+                const newAppointments = [...prev, dataToSave];
+                updateTabCounts(newAppointments);
+                return newAppointments;
+            });
+            toast({
+                title: "Appointment Booked",
+                description: `Appointment for ${dataToSave.patientName} has been successfully booked.`,
+            });
+        }
      } catch (error) {
         console.error("Error saving appointment: ", error);
         toast({
             variant: "destructive",
             title: "Error",
-            description: "Failed to book appointment. Please try again.",
+            description: "Failed to save appointment. Please try again.",
         });
      } finally {
         setIsAddAppointmentOpen(false);
+        setEditingAppointment(null);
      }
+  }
+  
+  const handleOpenReschedule = (appointment: Appointment) => {
+    setEditingAppointment(appointment);
+    setIsAddAppointmentOpen(true);
   }
 
   return (
     <>
       <AppSidebar />
       <SidebarInset>
-        <AppointmentsHeader onAddAppointment={() => setIsAddAppointmentOpen(true)} />
+        <AppointmentsHeader onAddAppointment={() => { setEditingAppointment(null); setIsAddAppointmentOpen(true); }} />
         <main className="flex-1 p-4 sm:p-6">
           <Tabs defaultValue="all">
             <TabsList>
@@ -241,7 +264,7 @@ export default function AppointmentsPage() {
                               </TableCell>
                               <TableCell>
                                 <div className="flex gap-2">
-                                  <Button variant="link" className="p-0 h-auto text-primary">
+                                  <Button variant="link" className="p-0 h-auto text-primary" onClick={() => handleOpenReschedule(appointment)}>
                                     Reschedule
                                   </Button>
                                   <Button variant="link" className="p-0 h-auto text-muted-foreground">
@@ -300,10 +323,16 @@ export default function AppointmentsPage() {
       </SidebarInset>
        <AddAppointmentForm
         isOpen={isAddAppointmentOpen}
-        setIsOpen={setIsAddAppointmentOpen}
+        setIsOpen={(isOpen) => {
+            if (!isOpen) {
+                setEditingAppointment(null);
+            }
+            setIsAddAppointmentOpen(isOpen);
+        }}
         onSave={handleSaveAppointment}
         doctors={doctors}
         appointments={appointments}
+        appointment={editingAppointment}
       />
     </>
   );

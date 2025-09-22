@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 import { format, parse, getDay, setHours, setMinutes, isSameDay } from "date-fns";
 
 const formSchema = z.object({
+  id: z.string().optional(),
   patientName: z.string().min(2, { message: "Name must be at least 2 characters." }),
   gender: z.enum(["Male", "Female", "Other"]),
   phone: z.string().min(10, { message: "Phone number must be at least 10 digits." }),
@@ -52,22 +53,25 @@ const formSchema = z.object({
   treatment: z.string().min(2, { message: "Treatment must be at least 2 characters." }),
   bookedVia: z.enum(["Online", "Phone", "Walk-in"]),
   place: z.string().min(2, { message: "Place must be at least 2 characters." }),
+  tokenNumber: z.string().optional(),
 });
 
 type AddAppointmentFormValues = z.infer<typeof formSchema>;
 type AddAppointmentFormProps = {
-  onSave: (appointment: Omit<Appointment, 'id' | 'tokenNumber' | 'date'> & { date: string }) => void;
+  onSave: (appointment: Omit<Appointment, 'date'> & { date: string, id?: string }) => void;
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
   doctors: Doctor[];
   appointments: Appointment[];
+  appointment?: Appointment | null;
 };
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-export function AddAppointmentForm({ onSave, isOpen, setIsOpen, doctors, appointments }: AddAppointmentFormProps) {
+export function AddAppointmentForm({ onSave, isOpen, setIsOpen, doctors, appointments, appointment }: AddAppointmentFormProps) {
   
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
+  const isEditing = !!appointment;
   
   const form = useForm<AddAppointmentFormValues>({
     resolver: zodResolver(formSchema),
@@ -87,15 +91,42 @@ export function AddAppointmentForm({ onSave, isOpen, setIsOpen, doctors, appoint
     },
   });
 
+  useEffect(() => {
+    if (isOpen && appointment) {
+        const doctor = doctors.find(d => d.name === appointment.doctor);
+        const doctorId = doctor ? doctor.id : '';
+        form.reset({
+            ...appointment,
+            date: parse(appointment.date, "d MMMM yyyy", new Date()),
+            doctor: doctorId,
+        });
+        setSelectedDoctor(doctor || null);
+    } else {
+        form.reset({
+          patientName: "",
+          gender: "Male",
+          phone: "",
+          age: 0,
+          doctor: "",
+          date: undefined,
+          time: undefined,
+          department: "",
+          treatment: "",
+          place: "",
+          status: "Pending",
+          bookedVia: "Online",
+        });
+        setSelectedDoctor(null);
+    }
+  }, [isOpen, appointment, form, doctors]);
+
   function onSubmit(values: AddAppointmentFormValues) {
     const dataToSave = {
         ...values,
         date: format(values.date, "d MMMM yyyy"),
+        tokenNumber: values.tokenNumber || '',
     };
     onSave(dataToSave);
-    setIsOpen(false);
-    form.reset();
-    setSelectedDoctor(null);
   }
 
   const onDoctorChange = (doctorId: string) => {
@@ -104,8 +135,8 @@ export function AddAppointmentForm({ onSave, isOpen, setIsOpen, doctors, appoint
     if (doctor) {
         setSelectedDoctor(doctor);
         form.setValue("department", doctor.department || "");
-        form.clearErrors("date");
-        form.clearErrors("time");
+        form.setValue("date", undefined, { shouldValidate: true });
+        form.setValue("time", undefined, { shouldValidate: true });
     } else {
         setSelectedDoctor(null);
         form.setValue("department", "");
@@ -142,7 +173,9 @@ export function AddAppointmentForm({ onSave, isOpen, setIsOpen, doctors, appoint
     if (!availabilityForDay) return [];
     
     const formattedDate = format(selectedDate, "d MMMM yyyy");
-    const bookedSlotsForDay = appointments
+    // Filter out the current appointment being edited from the check
+    const otherAppointments = appointments.filter(apt => !(isEditing && apt.id === appointment?.id));
+    const bookedSlotsForDay = otherAppointments
       .filter(apt => apt.doctor === selectedDoctor.name && apt.date === formattedDate)
       .map(apt => apt.time);
 
@@ -177,22 +210,16 @@ export function AddAppointmentForm({ onSave, isOpen, setIsOpen, doctors, appoint
     });
 
     return slots;
-  }, [selectedDate, selectedDoctor, appointments]);
+  }, [selectedDate, selectedDoctor, appointments, isEditing, appointment]);
 
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => {
-        setIsOpen(open);
-        if (!open) {
-          form.reset();
-          setSelectedDoctor(null);
-        }
-    }}>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="sm:max-w-4xl">
         <DialogHeader>
-          <DialogTitle>Book New Appointment</DialogTitle>
+          <DialogTitle>{isEditing ? "Reschedule Appointment" : "Book New Appointment"}</DialogTitle>
           <DialogDescription>
-            Fill in the details below to book a new appointment.
+            {isEditing ? "Update the details for this appointment." : "Fill in the details below to book a new appointment."}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -293,7 +320,7 @@ export function AddAppointmentForm({ onSave, isOpen, setIsOpen, doctors, appoint
                         render={({ field }) => (
                             <FormItem>
                             <FormLabel>Status</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <Select onValueChange={field.onChange} value={field.value}>
                                 <FormControl>
                                 <SelectTrigger>
                                     <SelectValue placeholder="Select status" />
@@ -315,7 +342,7 @@ export function AddAppointmentForm({ onSave, isOpen, setIsOpen, doctors, appoint
                         render={({ field }) => (
                             <FormItem>
                             <FormLabel>Booked Via</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <Select onValueChange={field.onChange} value={field.value}>
                                 <FormControl>
                                 <SelectTrigger>
                                     <SelectValue placeholder="Select booking channel" />
@@ -426,7 +453,7 @@ export function AddAppointmentForm({ onSave, isOpen, setIsOpen, doctors, appoint
             </ScrollArea>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>Cancel</Button>
-              <Button type="submit">Book Appointment</Button>
+              <Button type="submit">{isEditing ? "Save Changes" : "Book Appointment"}</Button>
             </DialogFooter>
           </form>
         </Form>
