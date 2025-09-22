@@ -1,4 +1,5 @@
 
+
 export type TimeSlot = {
   from: string;
   to: string;
@@ -49,6 +50,18 @@ export type Appointment = {
   place?: string;
 };
 
+export type Patient = {
+  id: string;
+  name: string;
+  age: number;
+  gender: 'Male' | 'Female' | 'Other';
+  phone: string;
+  place?: string;
+  lastVisit: string;
+  doctor: string;
+  totalAppointments: number;
+};
+
 export type Activity = {
   id: string;
   timestamp: string;
@@ -89,3 +102,4 @@ export type LiveStatus = {
     
 
     
+
