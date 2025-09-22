@@ -1,12 +1,13 @@
+
 "use client";
 import Link from "next/link";
 import {
   Home,
-  Calendar,
   Stethoscope,
   Building2,
-  Activity,
   LogOut,
+  Activity,
+  ClipboardList
 } from "lucide-react";
 import {
   Sidebar,
@@ -33,7 +34,7 @@ export function OnboardingSidebar({ step }: { step: number }) {
     },
     {
       href: "/onboarding-demo",
-      icon: Calendar,
+      icon: ClipboardList,
       label: "Appointments",
       step: -1,
     },
@@ -68,7 +69,7 @@ export function OnboardingSidebar({ step }: { step: number }) {
                 state === "collapsed" && "hidden"
               )}
             >
-              Peterdraw
+              Dashyat
             </span>
         </div>
       </SidebarHeader>
@@ -86,9 +87,7 @@ export function OnboardingSidebar({ step }: { step: number }) {
                   isActive={isActive}
                   disabled={isDisabled}
                   className={cn(
-                    "transition-colors duration-300",
-                    isDisabled && "cursor-not-allowed opacity-50 hover:bg-transparent",
-                    isActive && "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
+                    isDisabled && "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-sidebar-foreground",
                   )}
                 >
                   <Link href={item.href} legacyBehavior>
@@ -106,7 +105,7 @@ export function OnboardingSidebar({ step }: { step: number }) {
             <SidebarSeparator className="my-2"/>
             <SidebarMenu>
                 <SidebarMenuItem>
-                    <SidebarMenuButton tooltip="Logout" disabled className="cursor-not-allowed opacity-50 hover:bg-transparent">
+                    <SidebarMenuButton tooltip="Logout" disabled className="cursor-not-allowed opacity-50 hover:bg-transparent hover:text-sidebar-foreground">
                         <LogOut />
                         <span>Logout</span>
                     </SidebarMenuButton>
