@@ -86,3 +86,17 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  @keyframes wave {
+    0%, 100% {
+      box-shadow: 0 0 0 0 hsl(var(--primary) / 0.5), 0 0 0 0 hsl(var(--primary) / 0.5);
+    }
+    50% {
+      box-shadow: 0 0 0 20px hsl(var(--primary) / 0), 0 0 0 0 hsl(var(--primary) / 0.5);
+    }
+  }
+  .animate-wave {
+    animation: wave 2s infinite;
+  }
+}

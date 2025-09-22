@@ -530,9 +530,11 @@ export default function AppointmentsPage() {
         
         <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
             <SheetTrigger asChild>
-                <Button className="fixed right-6 bottom-6 h-16 w-16 rounded-full shadow-lg" size="icon">
-                    <ClipboardList className="h-8 w-8" />
-                </Button>
+                <div className="fixed right-0 top-1/2 -translate-y-1/2 mr-4">
+                    <Button className="relative h-16 w-16 rounded-full shadow-lg animate-wave" size="icon">
+                        <ClipboardList className="h-8 w-8" />
+                    </Button>
+                </div>
             </SheetTrigger>
             <SheetContent className="w-full sm:max-w-none md:w-2/3 p-0">
                 <SheetHeader className="p-6 border-b">
