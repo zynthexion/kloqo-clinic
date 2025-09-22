@@ -1,6 +1,5 @@
 
 
-
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Bell, Search, Settings, UserPlus, Calendar as CalendarIcon, Plus, Maximize, Minus, ZoomIn, ZoomOut, Activity, ChevronLeft } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -34,7 +33,7 @@ export function DoctorsHeader() {
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
       <SidebarTrigger className="sm:hidden" />
       <h1 className="text-xl font-semibold md:text-2xl">Doctors</h1>
-      <div className="ml-auto flex items-center gap-4">
+      <div className="ml-auto flex items-center gap-2">
         <Button variant="ghost" size="icon" className="rounded-full">
             <Settings className="h-5 w-5" />
             <span className="sr-only">Settings</span>
@@ -151,7 +150,7 @@ export function DepartmentsHeader() {
           className="w-full rounded-lg bg-background pl-8 md:w-[200px] lg:w-[320px]"
         />
       </div>
-      <div className="ml-auto flex items-center gap-4">
+      <div className="ml-auto flex items-center gap-2">
         <Button variant="ghost" size="icon" className="rounded-full">
             <Settings className="h-5 w-5" />
             <span className="sr-only">Settings</span>
@@ -201,7 +200,7 @@ export function LiveStatusHeader() {
       <h1 className="text-xl font-semibold md:text-2xl flex items-center gap-2">
         <Activity /> Live Token Status
       </h1>
-      <div className="ml-auto flex items-center gap-4">
+      <div className="ml-auto flex items-center gap-2">
         <Button variant="ghost" size="icon" className="rounded-full">
             <Settings className="h-5 w-5" />
             <span className="sr-only">Settings</span>
@@ -257,7 +256,7 @@ export function LiveStatusDetailHeader() {
         <h1 className="text-xl font-semibold md:text-2xl flex items-center gap-2">
             Token Overview
         </h1>
-        <div className="ml-auto flex items-center gap-4">
+        <div className="ml-auto flex items-center gap-2">
           <Button variant="ghost" size="icon" className="rounded-full">
               <Settings className="h-5 w-5" />
               <span className="sr-only">Settings</span>
@@ -305,7 +304,7 @@ export function MobileAppHeader() {
       <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
         <SidebarTrigger className="sm:hidden" />
         <h1 className="text-xl font-semibold md:text-2xl">Mobile App Credentials</h1>
-        <div className="ml-auto flex items-center gap-4">
+        <div className="ml-auto flex items-center gap-2">
           <Button variant="ghost" size="icon" className="rounded-full">
               <Settings className="h-5 w-5" />
               <span className="sr-only">Settings</span>

@@ -99,7 +99,6 @@ export function AppSidebar() {
                 <Link href={item.href}>
                   <item.icon />
                   <span>{item.label}</span>
-                  {item.badge && <Badge variant="destructive" className="ml-auto">{item.badge}</Badge>}
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -107,13 +106,14 @@ export function AppSidebar() {
         </SidebarMenu>
         
       </SidebarContent>
-      <SidebarFooter className={state === "collapsed" ? "hidden" : ""}>
-        <div className="p-4">
-          <Button className="w-full">
-            <PlusCircle />
-            <span>Add New Project</span>
-          </Button>
-        </div>
+      <SidebarFooter>
+        <SidebarMenu>
+            <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Settings" asChild>
+                    <Link href="#"><Settings /> <span>Settings</span></Link>
+                </SidebarMenuButton>
+            </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
   );
