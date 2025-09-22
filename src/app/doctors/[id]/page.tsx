@@ -38,7 +38,7 @@ export default function DoctorDetailPage() {
   const id = params.id as string;
   const [doctor, setDoctor] = useState<Doctor | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date(new Date().getFullYear(), 6, 20));
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

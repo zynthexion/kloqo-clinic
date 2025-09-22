@@ -6,6 +6,17 @@ const getImageUrl = (id: string) => PlaceHolderImages.find(img => img.id === id)
 
 export let doctors: Doctor[] = [];
 
+const today = new Date();
+const currentYear = today.getFullYear();
+const currentMonth = today.getMonth();
+const currentDay = today.getDate();
+
+// Helper to format date as "DD Month YYYY"
+const formatDate = (day: number) => {
+    const date = new Date(currentYear, currentMonth, day);
+    return date.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' });
+};
+
 
 export const appointments: Appointment[] = [
   {
@@ -14,7 +25,7 @@ export const appointments: Appointment[] = [
     gender: 'Female',
     phone: '123-456-7890',
     age: 34,
-    date: `20 July ${new Date().getFullYear()}`,
+    date: formatDate(currentDay),
     time: '09:00 AM',
     doctor: 'Dr. Petra Winsburry',
     treatment: 'Routine Check-Up',
@@ -27,7 +38,7 @@ export const appointments: Appointment[] = [
     gender: 'Male',
     phone: '234-567-8901',
     age: 45,
-    date: `20 July ${new Date().getFullYear()}`,
+    date: formatDate(currentDay),
     time: '10:30 AM',
     doctor: 'Dr. Olivia Martinez',
     treatment: 'Cardiac Consultation',
@@ -40,7 +51,7 @@ export const appointments: Appointment[] = [
     gender: 'Female',
     phone: '345-678-9012',
     age: 28,
-    date: `20 July ${new Date().getFullYear()}`,
+    date: formatDate(currentDay),
     time: '11:00 AM',
     doctor: 'Dr. Damian Sanchez',
     treatment: 'Pediatric Check-Up',
@@ -53,7 +64,7 @@ export const appointments: Appointment[] = [
     gender: 'Male',
     phone: '456-789-0123',
     age: 52,
-    date: `20 July ${new Date().getFullYear()}`,
+    date: formatDate(currentDay + 1),
     time: '01:00 PM',
     doctor: 'Dr. Chloe Harrington',
     treatment: 'Skin Allergy',
@@ -66,7 +77,7 @@ export const appointments: Appointment[] = [
     gender: 'Female',
     phone: '567-890-1234',
     age: 61,
-    date: `20 July ${new Date().getFullYear()}`,
+    date: formatDate(currentDay + 1),
     time: '02:30 PM',
     doctor: 'Dr. Petra Winsburry',
     treatment: 'Follow-Up Visit',
@@ -79,7 +90,7 @@ export const appointments: Appointment[] = [
     gender: 'Female',
     phone: '678-901-2345',
     age: 29,
-    date: `21 July ${new Date().getFullYear()}`,
+    date: formatDate(currentDay + 2),
     time: '09:00 AM',
     doctor: 'Dr. Emily Smith',
     treatment: 'Routine Check-Up',
@@ -92,7 +103,7 @@ export const appointments: Appointment[] = [
     gender: 'Male',
     phone: '789-012-3456',
     age: 58,
-    date: `21 July ${new Date().getFullYear()}`,
+    date: formatDate(currentDay + 2),
     time: '10:30 AM',
     doctor: 'Dr. Samuel Thompson',
     treatment: 'Cardiac Consultation',
@@ -105,7 +116,7 @@ export const appointments: Appointment[] = [
     gender: 'Male',
     phone: '890-123-4567',
     age: 7,
-    date: `21 July ${new Date().getFullYear()}`,
+    date: formatDate(currentDay + 3),
     time: '11:00 AM',
     doctor: 'Dr. Sarah Johnson',
     treatment: 'Pediatric Check-Up',
@@ -118,7 +129,7 @@ export const appointments: Appointment[] = [
     gender: 'Female',
     phone: '901-234-5678',
     age: 41,
-    date: `22 July ${new Date().getFullYear()}`,
+    date: formatDate(currentDay + 3),
     time: '01:00 PM',
     doctor: 'Dr. Luke Harrison',
     treatment: 'Skin Allergy',
@@ -131,7 +142,7 @@ export const appointments: Appointment[] = [
     gender: 'Male',
     phone: '012-345-6789',
     age: 33,
-    date: `22 July ${new Date().getFullYear()}`,
+    date: formatDate(currentDay + 4),
     time: '02:30 PM',
     doctor: 'Dr. Andrew Peterson',
     treatment: 'Follow-Up Visit',
@@ -144,7 +155,7 @@ export const appointments: Appointment[] = [
     gender: 'Female',
     phone: '112-233-4455',
     age: 68,
-    date: `20 July ${new Date().getFullYear()}`,
+    date: formatDate(currentDay),
     time: '03:00 PM',
     doctor: 'Dr. Olivia Martinez',
     treatment: 'Cardiac Check-Up',
@@ -157,7 +168,7 @@ export const appointments: Appointment[] = [
     gender: 'Male',
     phone: '223-344-5566',
     age: 5,
-    date: `20 July ${new Date().getFullYear()}`,
+    date: formatDate(currentDay + 1),
     time: '04:00 PM',
     doctor: 'Dr. William Carter',
     treatment: 'Pediatric Check-Up',
@@ -170,7 +181,7 @@ export const appointments: Appointment[] = [
     gender: 'Male',
     phone: '334-455-6677',
     age: 50,
-    date: `20 July ${new Date().getFullYear()}`,
+    date: formatDate(currentDay + 2),
     time: '04:30 PM',
     doctor: 'Dr. Samuel Thompson',
     treatment: 'Follow-Up Visit',
