@@ -27,7 +27,7 @@ export function DepartmentDoctorsDialog({ isOpen, setIsOpen, department, allDoct
 
     useEffect(() => {
         if (department && allDoctors.length > 0) {
-            const doctorsOfDept = allDoctors.filter(doctor => department.doctors.includes(doctor.id));
+            const doctorsOfDept = allDoctors.filter(doctor => department.doctors.includes(doctor.name));
             setDepartmentDoctors(doctorsOfDept);
         }
     }, [department, allDoctors]);
