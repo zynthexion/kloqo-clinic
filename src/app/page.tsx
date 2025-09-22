@@ -17,6 +17,8 @@ import { Line, LineChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianG
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import type { ChartConfig } from "@/components/ui/chart";
 import { TopNav } from "@/components/layout/top-nav";
+import UpcomingAppointmentsDrawer from "@/components/dashboard/upcoming-appointments-drawer";
+
 
 function DashboardHeader() {
   return (
@@ -161,53 +163,6 @@ function ProgressChart() {
     )
 }
 
-function TimeTracker() {
-    return (
-        <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Time tracker</CardTitle>
-                <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4 text-muted-foreground" /></Button>
-            </CardHeader>
-            <CardContent className="flex flex-col items-center justify-center">
-                 <div className="relative w-32 h-32">
-                    <svg className="w-full h-full" viewBox="0 0 36 36">
-                        <path
-                            d="M18 2.0845a 15.9155 15.9155 0 0 1 0 31.831a 15.9155 15.9155 0 0 1 0 -31.831"
-                            fill="none"
-                            stroke="hsl(var(--primary))"
-                            strokeWidth="2"
-                            strokeDasharray="75, 100"
-                        />
-                         <path
-                            d="M18 2.0845a 15.9155 15.9155 0 0 1 0 31.831a 15.9155 15.9155 0 0 1 0 -31.831"
-                            fill="none"
-                            stroke="hsl(var(--muted))"
-                            strokeWidth="2"
-                            strokeDasharray="100, 100"
-                            strokeDashoffset="-25"
-                        />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <p className="text-2xl font-bold">02:35</p>
-                        <p className="text-sm text-muted-foreground">Work Time</p>
-                    </div>
-                </div>
-                <div className="flex items-center gap-4 mt-4">
-                    <Button variant="outline" size="icon">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M11 7L6 12L11 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M18 7L13 12L18 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </Button>
-                    <Button size="icon" className="w-12 h-12">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 21V3L21 12L10 21Z" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </Button>
-                    <Button variant="outline" size="icon">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M13 7L18 12L13 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M6 7L11 12L6 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </Button>
-                </div>
-            </CardContent>
-        </Card>
-    )
-}
-
 function Onboarding() {
     return (
         <Card className="col-span-2">
@@ -280,7 +235,7 @@ export default function Home() {
                 <WelcomeMetrics />
                 <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     <ProgressChart />
-                    <TimeTracker />
+                    <UpcomingAppointmentsDrawer />
                     <Onboarding />
                 </div>
                  <OnboardingTask />
@@ -297,5 +252,3 @@ export default function Home() {
     </div>
   );
 }
-
-    
