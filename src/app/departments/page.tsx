@@ -23,14 +23,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Department, Doctor } from "@/lib/types";
-import { AddDepartmentForm } from "@/components/departments/add-department-form";
 import React, { useState, useEffect } from "react";
-import { collection, getDocs, addDoc, doc, setDoc } from "firebase/firestore";
-import { db, storage } from "@/lib/firebase";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { collection, getDocs, doc, setDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { DepartmentDoctorsDialog } from "@/components/departments/department-doctors-dialog";
 import { AppSidebar } from "@/components/layout/sidebar";
+import { SelectDepartmentDialog } from "@/components/onboarding/select-department-dialog";
+
+const superAdminDepartments: Department[] = [
+    { id: 'dept-01', name: 'General Medicine', description: 'Comprehensive primary care.', image: 'https://picsum.photos/seed/gm/600/400', imageHint: 'stethoscope pills', doctors: [] },
+    { id: 'dept-02', name: 'Cardiology', description: 'Specialized heart care.', image: 'https://picsum.photos/seed/cardio/600/400', imageHint: 'heart model', doctors: [] },
+    { id: 'dept-03', name: 'Pediatrics', description: 'Healthcare for children.', image: 'https://picsum.photos/seed/peds/600/400', imageHint: 'doctor baby', doctors: [] },
+    { id: 'dept-04', name: 'Dermatology', description: 'Skin health services.', image: 'https://picsum.photos/seed/derma/600/400', imageHint: 'skin care', doctors: [] },
+    { id: 'dept-05', name: 'Neurology', description: 'Nervous system disorders.', image: 'https://picsum.photos/seed/neuro/600/400', imageHint: 'brain model', doctors: [] },
+    { id: 'dept-06', name: 'Orthopedics', description: 'Musculoskeletal system disorders.', image: 'https://picsum.photos/seed/ortho/600/400', imageHint: 'joint brace', doctors: [] },
+    { id: 'dept-07', name: 'Oncology', description: 'Cancer diagnosis and treatment.', image: 'https://picsum.photos/seed/onco/600/400', imageHint: 'awareness ribbon', doctors: [] },
+    { id: 'dept-08', name: 'Obstetrics and Gynecology (OB/GYN)', description: 'Women\'s health services.', image: 'https://picsum.photos/seed/obgyn/600/400', imageHint: 'pregnant woman', doctors: [] },
+];
 
 
 export default function DepartmentsPage() {
@@ -110,40 +120,34 @@ export default function DepartmentsPage() {
       </Card>
   );
 
-  const handleSaveDepartment = async (deptData: { name: string; description: string; imageFile?: File; id?: string }) => {
+  const handleSaveDepartments = async (selectedDepts: Department[]) => {
     try {
-        let imageUrl = `https://picsum.photos/seed/new-dept-${new Date().getTime()}/600/400`;
-
-        if (deptData.imageFile) {
-            const storageRef = ref(storage, `department_images/${deptData.imageFile.name}`);
-            const snapshot = await uploadBytes(storageRef, deptData.imageFile);
-            imageUrl = await getDownloadURL(snapshot.ref);
-        }
-
-        const newDeptRef = doc(collection(db, "departments"));
-        const newDepartmentData: Omit<Department, 'id'> = {
-            name: deptData.name,
-            description: deptData.description,
-            image: imageUrl,
-            imageHint: `${deptData.name.toLowerCase()} department`,
-            doctors: [],
-        };
+        const promises = selectedDepts.map(dept => {
+            const deptRef = doc(db, "departments", dept.id);
+            // We're setting the document with its own ID, which is fine for this case.
+            // This will create or overwrite the department.
+            return setDoc(deptRef, dept, { merge: true });
+        });
         
-        await setDoc(newDeptRef, newDepartmentData);
-        
-        const newDepartment: Department = { id: newDeptRef.id, ...newDepartmentData };
-        setDepartments(prev => [...prev, newDepartment]);
+        await Promise.all(promises);
+
+        // This is a simple way to refresh the list. For a more optimized approach,
+        // you might only add the new departments to the state.
+        const departmentsCollection = collection(db, "departments");
+        const departmentsSnapshot = await getDocs(departmentsCollection);
+        const departmentsList = departmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Department));
+        setDepartments(departmentsList);
 
         toast({
-            title: "Department Added",
-            description: `${deptData.name} has been successfully added.`,
+            title: "Departments Added",
+            description: `${selectedDepts.length} department(s) have been successfully added/updated.`,
         });
     } catch (error) {
-        console.error("Error saving department:", error);
+        console.error("Error saving departments:", error);
         toast({
             variant: "destructive",
             title: "Error",
-            description: "Failed to save department. Please try again.",
+            description: "Failed to save departments. Please try again.",
         });
     }
   }
@@ -165,11 +169,11 @@ export default function DepartmentsPage() {
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Add Department
               </Button>
-              <AddDepartmentForm 
-                  onSave={handleSaveDepartment}
+              <SelectDepartmentDialog
                   isOpen={isAddDepartmentOpen}
                   setIsOpen={setIsAddDepartmentOpen}
-                  department={null}
+                  departments={superAdminDepartments}
+                  onDepartmentsSelect={handleSaveDepartments}
               />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
