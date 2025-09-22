@@ -393,6 +393,37 @@ export default function AppointmentsPage() {
                           </div>
 
                            <div className="space-y-4 md:col-span-1">
+                             <h3 className="text-lg font-medium border-b pb-2">Select Date</h3>
+                            <FormField control={form.control} name="date" render={({ field }) => (
+                                <FormItem className="flex flex-col">
+                                  <Calendar
+                                    mode="single" selected={field.value} onSelect={field.onChange}
+                                    disabled={(date) => 
+                                        date < new Date(new Date().setHours(0,0,0,0)) || 
+                                        !selectedDoctor ||
+                                        !availableDaysOfWeek.includes(getDay(date)) ||
+                                        leaveDates.some(leaveDate => isSameDay(date, leaveDate))
+                                    }
+                                    initialFocus
+                                    className="rounded-md border"
+                                    pagedNavigation
+                                    compact={isDrawerOpen}
+                                    modifiers={{ 
+                                      available: selectedDoctor ? { dayOfWeek: availableDaysOfWeek } : {},
+                                      leave: leaveDates 
+                                    }}
+                                    modifiersStyles={{ 
+                                        available: { backgroundColor: 'hsl(var(--primary)/0.1)', color: 'hsl(var(--primary))' },
+                                        leave: { color: 'red', textDecoration: 'line-through' } 
+                                    }}
+                                  />
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+
+                          <div className="space-y-4 md:col-span-1">
                              <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
                              <div className="space-y-4">
                                 <FormField control={form.control} name="doctor" render={({ field }) => (
@@ -451,37 +482,6 @@ export default function AppointmentsPage() {
                                 )}
                               />
                             )}
-                          </div>
-                          
-                          <div className="space-y-4 md:col-span-1">
-                             <h3 className="text-lg font-medium border-b pb-2">Select Date</h3>
-                            <FormField control={form.control} name="date" render={({ field }) => (
-                                <FormItem className="flex flex-col">
-                                  <Calendar
-                                    mode="single" selected={field.value} onSelect={field.onChange}
-                                    disabled={(date) => 
-                                        date < new Date(new Date().setHours(0,0,0,0)) || 
-                                        !selectedDoctor ||
-                                        !availableDaysOfWeek.includes(getDay(date)) ||
-                                        leaveDates.some(leaveDate => isSameDay(date, leaveDate))
-                                    }
-                                    initialFocus
-                                    className="rounded-md border"
-                                    pagedNavigation
-                                    compact={isDrawerOpen}
-                                    modifiers={{ 
-                                      available: selectedDoctor ? { dayOfWeek: availableDaysOfWeek } : {},
-                                      leave: leaveDates 
-                                    }}
-                                    modifiersStyles={{ 
-                                        available: { backgroundColor: 'hsl(var(--primary)/0.1)', color: 'hsl(var(--primary))' },
-                                        leave: { color: 'red', textDecoration: 'line-through' } 
-                                    }}
-                                  />
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
                           </div>
 
                         </div>
