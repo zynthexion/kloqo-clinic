@@ -37,6 +37,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
+import { TimeSlots } from "@/components/doctors/time-slots";
 
 export default function DoctorDetailPage() {
   const params = useParams();
@@ -46,7 +47,8 @@ export default function DoctorDetailPage() {
 
   const [doctor, setDoctor] = useState<Doctor | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [leaveCalDate, setLeaveCalDate] = useState<Date | undefined>(new Date());
   const [loading, setLoading] = useState(true);
 
   const [isEditingTime, setIsEditingTime] = useState(false);
@@ -76,9 +78,9 @@ export default function DoctorDetailPage() {
 
           if (doctorAppointments.length > 0) {
               const firstAptDate = parse(doctorAppointments[0].date, 'd MMMM yyyy', new Date());
-              setSelectedDate(firstAptDate);
-          } else {
-             setSelectedDate(new Date());
+              if (!isNaN(firstAptDate.getTime())) {
+                setSelectedDate(firstAptDate);
+              }
           }
 
         } else {
@@ -90,17 +92,6 @@ export default function DoctorDetailPage() {
       fetchDoctorData();
     }
   }, [id]);
-
-  useEffect(() => {
-    if (appointments.length > 0 && !selectedDate) {
-        const firstAptDate = parse(appointments[0].date, 'd MMMM yyyy', new Date());
-        if (!isNaN(firstAptDate.getTime())) {
-            setSelectedDate(firstAptDate);
-        } else {
-            setSelectedDate(new Date());
-        }
-    }
-  }, [appointments, selectedDate]);
 
     const handleStatusChange = async (newStatus: 'Available' | 'Unavailable') => {
         if (!doctor) return;
@@ -298,14 +289,22 @@ export default function DoctorDetailPage() {
                      <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2"><CalendarIcon className="w-5 h-5" /> Mark Leave</CardTitle>
-                             <CardDescription>Select dates the doctor will be unavailable. Bookings will be disabled on these days.</CardDescription>
+                             <CardDescription>Select dates to view or edit time slot availability.</CardDescription>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
                            <Calendar
-                                mode="multiple"
-                                selected={leaveDates}
-                                onSelect={(dates) => handleLeaveUpdate(dates)}
+                                mode="single"
+                                selected={leaveCalDate}
+                                onSelect={setLeaveCalDate}
                                 className="rounded-md border w-full"
+                                modifiers={{ leave: leaveDates }}
+                                modifiersStyles={{ 
+                                  leave: { color: 'red', textDecoration: 'line-through' }
+                                }}
+                            />
+                            <TimeSlots
+                              selectedDate={leaveCalDate}
+                              availabilitySlots={doctor.availabilitySlots || []}
                             />
                         </CardContent>
                     </Card>
@@ -432,7 +431,3 @@ export default function DoctorDetailPage() {
     </div>
   );
 }
-
-    
-
-    
