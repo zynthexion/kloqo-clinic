@@ -36,22 +36,22 @@ const menuItems = [
   {
     href: "/appointments",
     icon: ClipboardList,
-    label: "Projects",
+    label: "Appointments",
   },
   {
     href: "/doctors",
     icon: Stethoscope,
-    label: "Tasks",
+    label: "Doctors",
   },
   {
     href: "/departments",
-    icon: Settings,
-    label: "Settings",
+    icon: Building2,
+    label: "Departments",
   },
   {
     href: "/live-status",
-    icon: HelpCircle,
-    label: "Help",
+    icon: Activity,
+    label: "Live Status",
   },
 ];
 
