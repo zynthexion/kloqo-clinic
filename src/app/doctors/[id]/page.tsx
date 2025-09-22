@@ -297,10 +297,6 @@ export default function DoctorDetailPage() {
                                 selected={leaveCalDate}
                                 onSelect={setLeaveCalDate}
                                 className="rounded-md border w-full"
-                                modifiers={{ leave: leaveDates }}
-                                modifiersStyles={{ 
-                                  leave: { color: 'red', textDecoration: 'line-through' }
-                                }}
                             />
                             <TimeSlots
                               selectedDate={leaveCalDate}
