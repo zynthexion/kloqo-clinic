@@ -39,6 +39,8 @@ import { db } from "@/lib/firebase";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AddAppointmentForm } from "@/components/appointments/add-appointment-form";
 import { useToast } from "@/hooks/use-toast";
+import { parse, isSameDay, parse as parseDateFns } from "date-fns";
+import { cn } from "@/lib/utils";
 
 
 export default function AppointmentsPage() {
@@ -159,6 +161,26 @@ export default function AppointmentsPage() {
     setIsAddAppointmentOpen(true);
   }
 
+  const isAppointmentOnLeave = (appointment: Appointment): boolean => {
+      if (!doctors.length || !appointment) return false;
+      
+      const doctorForApt = doctors.find(d => d.name === appointment.doctor);
+      if (!doctorForApt || !doctorForApt.leaveSlots) return false;
+      
+      const aptDate = parse(appointment.date, "d MMMM yyyy", new Date());
+      const leaveForDay = doctorForApt.leaveSlots.find(ls => isSameDay(parse(ls.date, "yyyy-MM-dd", new Date()), aptDate));
+      
+      if (!leaveForDay) return false;
+
+      const aptTime = parseDateFns(appointment.time, "hh:mm a", new Date(0));
+      
+      return leaveForDay.slots.some(leaveSlot => {
+          const leaveStart = parseDateFns(leaveSlot.from, "HH:mm", new Date(0));
+          const leaveEnd = parseDateFns(leaveSlot.to, "HH:mm", new Date(0));
+          return aptTime >= leaveStart && aptTime < leaveEnd;
+      });
+  };
+
   return (
     <>
       <AppSidebar />
@@ -237,7 +259,7 @@ export default function AppointmentsPage() {
                           ))
                         ) : (
                           appointments.map((appointment) => (
-                            <TableRow key={appointment.id}>
+                            <TableRow key={appointment.id} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
                               <TableCell>
                                 <Checkbox />
                               </TableCell>
@@ -337,3 +359,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
