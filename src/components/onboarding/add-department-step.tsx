@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState } from "react";
@@ -57,7 +58,7 @@ export function AddDepartmentStep({ onDepartmentsAdded }: { onDepartmentsAdded: 
                                 src={department.image}
                                 alt={department.name}
                                 fill
-                                objectFit="cover"
+                                style={{objectFit: "cover"}}
                                 data-ai-hint={department.imageHint}
                             />
                         </div>

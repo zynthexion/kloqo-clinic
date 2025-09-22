@@ -73,7 +73,7 @@ export default function DepartmentsPage() {
                       src={department.image}
                       alt={department.name}
                       fill
-                      objectFit="cover"
+                      style={{objectFit: "cover"}}
                       data-ai-hint={department.imageHint}
                   />
               </div>
