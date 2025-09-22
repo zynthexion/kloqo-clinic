@@ -66,7 +66,7 @@ export const appointments: Appointment[] = [
     gender: 'Female',
     phone: '567-890-1234',
     age: 61,
-    date: '20-07-28',
+    date: '20 July 2028',
     time: '02:30 PM',
     doctor: 'Dr. Petra Winsburry',
     treatment: 'Follow-Up Visit',
@@ -326,6 +326,8 @@ export const liveStatuses: LiveStatus[] = [
     status: 'available',
   },
 ];
+
+    
 
     
 

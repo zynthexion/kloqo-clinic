@@ -38,7 +38,7 @@ export default function DoctorDetailPage() {
   const id = params.id as string;
   const [doctor, setDoctor] = useState<Doctor | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date('2028-07-20T12:00:00Z'));
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -77,7 +77,10 @@ export default function DoctorDetailPage() {
 
     return appointments.filter((appointment) => {
         try {
-            const appointmentDay = format(new Date(appointment.date), "yyyy-MM-dd");
+            // Handle multiple potential date formats
+            const parsedDate = new Date(appointment.date.replace(/-/g, ' '));
+            if (isNaN(parsedDate.getTime())) return false; // Invalid date
+            const appointmentDay = format(parsedDate, "yyyy-MM-dd");
             return appointmentDay === selectedDay;
         } catch (e) {
             // Handle potential invalid date formats in dummy data gracefully
@@ -275,5 +278,7 @@ export default function DoctorDetailPage() {
     </div>
   );
 }
+
+    
 
     
