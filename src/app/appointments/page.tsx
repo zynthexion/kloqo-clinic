@@ -357,7 +357,7 @@ export default function AppointmentsPage() {
           <h1 className="text-xl font-semibold md:text-2xl">Appointments</h1>
         </header>
 
-        <main className="flex-1 p-6 overflow-auto">
+        <main className="flex-1 p-6 pr-24 overflow-auto">
             <Card className="h-full">
               <CardHeader>
                 <CardTitle>{isEditing ? "Reschedule Appointment" : "Book New Appointment"}</CardTitle>
@@ -596,6 +596,3 @@ export default function AppointmentsPage() {
     </div>
   );
 }
-
-    
-    
