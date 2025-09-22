@@ -89,30 +89,7 @@ const timeOptions = generateTimeOptions();
 
 export default function DoctorDetailPage() {
   const params = useParams();
-  const id = params.id as string;
-  const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
-
-  const [doctor, setDoctor] = useState<Doctor | null>(null);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [leaveCalDate, setLeaveCalDate] = useState<Date | undefined>(new Date());
-  const [loading, setLoading] = useState(true);
-
-  const [isEditingTime, setIsEditingTime] = useState(false);
-  const [newAvgTime, setNewAvgTime] = useState<number | string>("");
-
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [isEditingBio, setIsEditingBio] = useState(false);
-  const [newBio, setNewBio] = useState("");
-  const [isEditingSpecialty, setIsEditingSpecialty] = useState(false);
-  const [newSpecialty, setNewSpecialty] = useState("");
-  const [isEditingDepartment, setIsEditingDepartment] = useState(false);
-  const [newDepartment, setNewDepartment] = useState("");
-
-  const [isEditingAvailability, setIsEditingAvailability] = useState(false);
 
   const form = useForm<WeeklyAvailabilityFormValues>({
     defaultValues: {
@@ -125,6 +102,27 @@ export default function DoctorDetailPage() {
     control: form.control,
     name: "availabilitySlots",
   });
+  
+  const id = params.id as string;
+  const { toast } = useToast();
+
+  const [doctor, setDoctor] = useState<Doctor | null>(null);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [leaveCalDate, setLeaveCalDate] = useState<Date | undefined>(new Date());
+  const [loading, setLoading] = useState(true);
+
+  const [isEditingTime, setIsEditingTime] = useState(false);
+  const [newAvgTime, setNewAvgTime] = useState<number | string>("");
+
+  const [isEditingDetails, setIsEditingDetails] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newBio, setNewBio] = useState("");
+  const [newSpecialty, setNewSpecialty] = useState("");
+  const [newDepartment, setNewDepartment] = useState("");
+
+  const [isEditingAvailability, setIsEditingAvailability] = useState(false);
   
   const watchedAvailableDays = form.watch("availableDays");
 
@@ -232,88 +230,32 @@ export default function DoctorDetailPage() {
         });
     }
 
-     const handleNameSave = async () => {
-        if (!doctor || newName.trim() === "") {
-            toast({ variant: "destructive", title: "Invalid Name", description: "Name cannot be empty." });
-            return;
-        }
-
-        startTransition(async () => {
-            const doctorRef = doc(db, "doctors", doctor.id);
-            try {
-                await updateDoc(doctorRef, { name: newName });
-                setDoctor(prev => prev ? { ...prev, name: newName } : null);
-                setIsEditingName(false);
-                toast({
-                    title: "Name Updated",
-                    description: `Doctor's name has been updated to ${newName}.`,
-                });
-            } catch (error) {
-                console.error("Error updating name:", error);
-                toast({ variant: "destructive", title: "Update Failed", description: "Could not update name." });
-            }
-        });
-    };
-
-    const handleBioSave = async () => {
+    const handleDetailsSave = async () => {
         if (!doctor) return;
-
-        startTransition(async () => {
-            const doctorRef = doc(db, "doctors", doctor.id);
-            try {
-                await updateDoc(doctorRef, { bio: newBio });
-                setDoctor(prev => prev ? { ...prev, bio: newBio } : null);
-                setIsEditingBio(false);
-                toast({ title: "Bio Updated", description: "Doctor's biography has been updated." });
-            } catch (error) {
-                console.error("Error updating bio:", error);
-                toast({ variant: "destructive", title: "Update Failed", description: "Could not update bio." });
-            }
-        });
-    };
-
-    const handleSpecialtySave = async () => {
-        if (!doctor || newSpecialty.trim() === "") {
-            toast({ variant: "destructive", title: "Invalid Specialty", description: "Specialty cannot be empty." });
+        if (newName.trim() === "" || newSpecialty.trim() === "" || newDepartment.trim() === "") {
+            toast({ variant: "destructive", title: "Invalid Details", description: "Name, specialty, and department cannot be empty." });
             return;
         }
 
         startTransition(async () => {
             const doctorRef = doc(db, "doctors", doctor.id);
             try {
-                await updateDoc(doctorRef, { specialty: newSpecialty });
-                setDoctor(prev => prev ? { ...prev, specialty: newSpecialty } : null);
-                setIsEditingSpecialty(false);
+                const updatedData = { 
+                    name: newName,
+                    specialty: newSpecialty,
+                    department: newDepartment,
+                    bio: newBio 
+                };
+                await updateDoc(doctorRef, updatedData);
+                setDoctor(prev => prev ? { ...prev, ...updatedData } : null);
+                setIsEditingDetails(false);
                 toast({
-                    title: "Specialty Updated",
-                    description: `Doctor's specialty has been updated to ${newSpecialty}.`,
+                    title: "Doctor Details Updated",
+                    description: `Dr. ${newName}'s details have been updated.`,
                 });
             } catch (error) {
-                console.error("Error updating specialty:", error);
-                toast({ variant: "destructive", title: "Update Failed", description: "Could not update specialty." });
-            }
-        });
-    };
-
-    const handleDepartmentSave = async () => {
-        if (!doctor || newDepartment.trim() === "") {
-            toast({ variant: "destructive", title: "Invalid Department", description: "Department cannot be empty." });
-            return;
-        }
-
-        startTransition(async () => {
-            const doctorRef = doc(db, "doctors", doctor.id);
-            try {
-                await updateDoc(doctorRef, { department: newDepartment });
-                setDoctor(prev => prev ? { ...prev, department: newDepartment } : null);
-                setIsEditingDepartment(false);
-                toast({
-                    title: "Department Updated",
-                    description: `Doctor's department has been updated to ${newDepartment}.`,
-                });
-            } catch (error) {
-                console.error("Error updating department:", error);
-                toast({ variant: "destructive", title: "Update Failed", description: "Could not update department." });
+                console.error("Error updating details:", error);
+                toast({ variant: "destructive", title: "Update Failed", description: "Could not update doctor details." });
             }
         });
     };
@@ -464,8 +406,8 @@ export default function DoctorDetailPage() {
         <DoctorsHeader />
         <main className="flex-1 p-6 bg-background">
           <Card className="mb-6">
-            <CardHeader>
-              <div className="flex items-start gap-6">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div className="flex items-start gap-6 flex-grow">
                 <Image
                   src={doctor.avatar}
                   alt={doctor.name}
@@ -474,7 +416,8 @@ export default function DoctorDetailPage() {
                   className="rounded-full border-4 border-primary/20 object-cover"
                 />
                 <div className="flex-grow">
-                   {isEditingName ? (
+                   {isEditingDetails ? (
+                       <>
                         <div className="flex items-center gap-2">
                             <Input 
                                 value={newName} 
@@ -482,55 +425,41 @@ export default function DoctorDetailPage() {
                                 className="text-3xl font-bold h-12"
                                 disabled={isPending}
                             />
-                            <Button size="icon" onClick={handleNameSave} disabled={isPending}><Save className="h-5 w-5"/></Button>
-                            <Button size="icon" variant="ghost" onClick={() => {setIsEditingName(false); setNewName(doctor.name)}} disabled={isPending}><X className="h-5 w-5"/></Button>
                         </div>
+                         <div className="flex items-center gap-2 mt-1">
+                            <Input 
+                                value={newSpecialty} 
+                                onChange={(e) => setNewSpecialty(e.target.value)} 
+                                className="text-lg h-10"
+                                disabled={isPending}
+                            />
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                            <Select onValueChange={setNewDepartment} value={newDepartment}>
+                                <SelectTrigger className="w-[200px] h-9">
+                                    <SelectValue placeholder="Select department" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {departments.map(dept => (
+                                        <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                       </>
                     ) : (
+                       <>
                         <div className="flex items-center gap-2">
                            <h1 className="text-3xl font-bold">{doctor.name}</h1>
-                           <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setIsEditingName(true)}><Edit className="h-4 w-4"/></Button>
                         </div>
+                        <div className="flex items-center gap-2">
+                            <p className="text-lg text-muted-foreground">{doctor.specialty}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                        <p className="mt-2 text-sm text-muted-foreground">{doctor.department}</p>
+                        </div>
+                       </>
                     )}
-                  {isEditingSpecialty ? (
-                    <div className="flex items-center gap-2 mt-1">
-                        <Input 
-                            value={newSpecialty} 
-                            onChange={(e) => setNewSpecialty(e.target.value)} 
-                            className="text-lg h-10"
-                            disabled={isPending}
-                        />
-                        <Button size="icon" onClick={handleSpecialtySave} disabled={isPending}><Save className="h-5 w-5"/></Button>
-                        <Button size="icon" variant="ghost" onClick={() => {setIsEditingSpecialty(false); setNewSpecialty(doctor.specialty)}} disabled={isPending}><X className="h-5 w-5"/></Button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <p className="text-lg text-muted-foreground">{doctor.specialty}</p>
-                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setIsEditingSpecialty(true)}><Edit className="h-4 w-4"/></Button>
-                    </div>
-                  )}
-
-                  {isEditingDepartment ? (
-                    <div className="flex items-center gap-2 mt-1">
-                        <Select onValueChange={setNewDepartment} value={newDepartment}>
-                            <SelectTrigger className="w-[200px] h-9">
-                                <SelectValue placeholder="Select department" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {departments.map(dept => (
-                                    <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <Button size="icon" className="h-9 w-9" onClick={handleDepartmentSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
-                        <Button size="icon" variant="ghost" className="h-9 w-9" onClick={() => {setIsEditingDepartment(false); setNewDepartment(doctor.department || "")}} disabled={isPending}><X className="h-4 w-4"/></Button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <p className="mt-2 text-sm text-muted-foreground">{doctor.department}</p>
-                      <Button size="icon" variant="ghost" className="h-8 w-8 mt-1" onClick={() => setIsEditingDepartment(true)}><Edit className="h-4 w-4"/></Button>
-                    </div>
-                  )}
-
                    <div className="flex items-center space-x-2 mt-4">
                       <Switch
                         id="status-switch"
@@ -544,6 +473,11 @@ export default function DoctorDetailPage() {
                    </div>
                 </div>
               </div>
+                {!isEditingDetails && (
+                    <Button variant="outline" size="sm" onClick={() => setIsEditingDetails(true)}>
+                        <Edit className="mr-2 h-4 w-4" /> Edit
+                    </Button>
+                )}
             </CardHeader>
           </Card>
           
@@ -556,16 +490,11 @@ export default function DoctorDetailPage() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
                     <Card>
-                        <CardHeader className="flex flex-row items-center justify-between">
+                        <CardHeader>
                             <CardTitle className="flex items-center gap-2"><Info className="w-5 h-5" /> Bio</CardTitle>
-                             {!isEditingBio && (
-                                <Button variant="outline" size="sm" onClick={() => setIsEditingBio(true)}>
-                                    <Edit className="mr-2 h-4 w-4" /> Edit
-                                </Button>
-                            )}
                         </CardHeader>
                         <CardContent>
-                           {isEditingBio ? (
+                           {isEditingDetails ? (
                                 <div className="space-y-2">
                                     <Textarea 
                                         value={newBio} 
@@ -573,17 +502,19 @@ export default function DoctorDetailPage() {
                                         className="min-h-[120px]"
                                         disabled={isPending}
                                     />
-                                    <div className="flex justify-end gap-2">
-                                        <Button variant="ghost" onClick={() => {setIsEditingBio(false); setNewBio(doctor.bio || "")}} disabled={isPending}>Cancel</Button>
-                                        <Button onClick={handleBioSave} disabled={isPending}>
-                                            {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Saving...</> : 'Save Bio'}
-                                        </Button>
-                                    </div>
                                 </div>
                             ) : (
                                 <p className="text-muted-foreground">{doctor.bio || "No biography available."}</p>
                             )}
                         </CardContent>
+                         {isEditingDetails && (
+                            <CardContent className="flex justify-end gap-2">
+                                <Button variant="ghost" onClick={() => {setIsEditingDetails(false); setNewName(doctor.name); setNewSpecialty(doctor.specialty); setNewDepartment(doctor.department || ""); setNewBio(doctor.bio || "");}} disabled={isPending}>Cancel</Button>
+                                <Button onClick={handleDetailsSave} disabled={isPending}>
+                                    {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Saving...</> : <><Save className="mr-2 h-4 w-4" /> Save Details</>}
+                                </Button>
+                            </CardContent>
+                        )}
                     </Card>
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between">
@@ -891,6 +822,3 @@ export default function DoctorDetailPage() {
     </div>
   );
 }
-
-
-
