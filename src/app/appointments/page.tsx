@@ -413,7 +413,7 @@ export default function AppointmentsPage() {
                                       leave: leaveDates 
                                     }}
                                     modifiersStyles={{ 
-                                        available: { backgroundColor: 'hsl(var(--primary)/0.4)', color: 'hsl(var(--primary-foreground))' },
+                                        available: { backgroundColor: 'hsl(var(--primary)/0.9)', color: 'hsl(var(--primary-foreground))' },
                                         leave: { color: 'hsl(var(--destructive))', textDecoration: 'line-through', backgroundColor: 'hsl(var(--destructive)/0.1)' } 
                                     }}
                                   />
@@ -590,4 +590,5 @@ export default function AppointmentsPage() {
   );
 }
 
+    
     
