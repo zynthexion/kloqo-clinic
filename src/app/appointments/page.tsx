@@ -363,8 +363,8 @@ export default function AppointmentsPage() {
                   <CardContent>
                     <Form {...form}>
                       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                        <div className={cn("grid grid-cols-1 gap-x-8 gap-y-4", "md:grid-cols-3")}>
-                          <div className={cn("space-y-4", !isDrawerOpen && "md:col-span-1")}>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4">
+                          <div className="space-y-4 md:col-span-1">
                             <h3 className="text-lg font-medium border-b pb-2">Patient Details</h3>
                             <FormField control={form.control} name="patientName" render={({ field }) => (
                                 <FormItem>
@@ -419,7 +419,7 @@ export default function AppointmentsPage() {
                             />
                           </div>
 
-                           <div className={cn("space-y-4", isDrawerOpen ? "md:col-span-1" : "md:col-span-2")}>
+                           <div className="space-y-4 md:col-span-1">
                             <h3 className="text-lg font-medium border-b pb-2">Select Date</h3>
                             <FormField control={form.control} name="date" render={({ field }) => (
                                 <FormItem className="flex flex-col">
@@ -444,7 +444,7 @@ export default function AppointmentsPage() {
                             />
                           </div>
                           
-                          <div className={cn("space-y-4", !isDrawerOpen && "md:col-span-1")}>
+                          <div className="space-y-4 md:col-span-1">
                             <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
                             <div className="space-y-4">
                                 <FormField control={form.control} name="doctor" render={({ field }) => (
@@ -608,11 +608,3 @@ export default function AppointmentsPage() {
     </div>
   );
 }
-
-    
-
-    
-
-    
-
-    
