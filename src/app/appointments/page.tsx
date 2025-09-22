@@ -88,10 +88,15 @@ export default function AppointmentsPage() {
      try {
         const newAppointmentRef = doc(collection(db, "appointments"));
         const tokenNumber = `TKN${String(appointments.length + 1).padStart(3, '0')}`;
+        
+        // Find doctor name from ID
+        const doctorName = doctors.find(d => d.id === appointmentData.doctor)?.name || "Unknown Doctor";
+
         const newAppointmentData = {
             ...appointmentData,
             id: newAppointmentRef.id,
             tokenNumber: tokenNumber,
+            doctor: doctorName,
         };
         await setDoc(newAppointmentRef, newAppointmentData);
         setAppointments(prev => [...prev, newAppointmentData]);
@@ -282,4 +287,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+    
     
