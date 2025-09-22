@@ -58,6 +58,17 @@ export default function DoctorDetailPage() {
           );
           setAppointments(doctorAppointments);
 
+          if (doctorAppointments.length > 0) {
+            try {
+              const firstAptDate = parse(doctorAppointments[0].date, 'd MMMM yyyy', new Date());
+              setSelectedDate(firstAptDate);
+            } catch (e) {
+              setSelectedDate(new Date());
+            }
+          } else {
+             setSelectedDate(new Date());
+          }
+
         } else {
           console.log("No such document!");
         }
@@ -75,7 +86,6 @@ export default function DoctorDetailPage() {
 
     return appointments.filter((appointment) => {
         try {
-            // The dummy data uses "dd MMMM yyyy" format.
             const parsedDate = parse(appointment.date, 'd MMMM yyyy', new Date());
             if (isNaN(parsedDate.getTime())) return false; // Invalid date
             const appointmentDay = format(parsedDate, "yyyy-MM-dd");

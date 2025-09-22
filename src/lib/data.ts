@@ -1,6 +1,8 @@
 
+
 import type { Doctor, Report, Appointment, Department, AvailabilitySlot, TimeSlot, LiveStatus } from './types';
 import { PlaceHolderImages } from './placeholder-images';
+import { format } from 'date-fns';
 
 const getImageUrl = (id: string) => PlaceHolderImages.find(img => img.id === id)?.imageUrl || '';
 
@@ -11,10 +13,10 @@ const currentYear = today.getFullYear();
 const currentMonth = today.getMonth();
 const currentDay = today.getDate();
 
-// Helper to format date as "DD Month YYYY"
+// Helper to format date as "dd MMMM yyyy"
 const formatDate = (day: number) => {
     const date = new Date(currentYear, currentMonth, day);
-    return date.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' });
+    return format(date, 'd MMMM yyyy');
 };
 
 
