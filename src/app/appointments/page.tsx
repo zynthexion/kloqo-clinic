@@ -40,7 +40,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { PlusCircle, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -162,35 +162,6 @@ export default function AppointmentsPage() {
 
   const selectedDate = form.watch("date");
 
-  const availableDoctorsForDate = useMemo(() => {
-    if (!selectedDate) return doctors;
-    const dayOfWeekIndex = getDay(selectedDate);
-    const dayOfWeek = daysOfWeek[dayOfWeekIndex];
-
-    return doctors.filter(doctor => {
-        const isAvailableOnDay = doctor.availabilitySlots?.some(slot => slot.day === dayOfWeek);
-        if (!isAvailableOnDay) return false;
-
-        const isOnLeave = doctor.leaveSlots?.some(leave => 
-            isSameDay(parse(leave.date, 'yyyy-MM-dd', new Date()), selectedDate)
-        );
-        if (isOnLeave) return false;
-        
-        return true;
-    });
-  }, [doctors, selectedDate]);
-
-  useEffect(() => {
-    if (selectedDate && selectedDoctorId) {
-        const isDoctorAvailable = availableDoctorsForDate.some(d => d.id === selectedDoctorId);
-        if (!isDoctorAvailable) {
-            form.setValue("doctor", "");
-            setSelectedDoctorId(null);
-            form.setValue("department", "");
-        }
-    }
-  }, [selectedDate, selectedDoctorId, availableDoctorsForDate, form]);
-
   async function onSubmit(values: AddAppointmentFormValues) {
      try {
         const doctorName = doctors.find(d => d.id === values.doctor)?.name || "Unknown Doctor";
@@ -253,6 +224,7 @@ export default function AppointmentsPage() {
     const doctor = doctors.find(d => d.id === doctorId);
     if (doctor) {
         form.setValue("department", doctor.department || "");
+        form.setValue("date", undefined, { shouldValidate: true });
         form.setValue("time", undefined, { shouldValidate: true });
     } else {
         form.setValue("department", "");
@@ -421,45 +393,19 @@ export default function AppointmentsPage() {
                           </div>
 
                            <div className="space-y-4 md:col-span-1">
-                            <h3 className="text-lg font-medium border-b pb-2">Select Date</h3>
-                            <FormField control={form.control} name="date" render={({ field }) => (
-                                <FormItem className="flex flex-col">
-                                  <Calendar
-                                    mode="single" selected={field.value} onSelect={field.onChange}
-                                    disabled={(date) => date < new Date(new Date().setHours(0,0,0,0)) || (!!selectedDoctor && !availableDaysOfWeek.includes(getDay(date)))}
-                                    initialFocus
-                                    className="rounded-md border"
-                                    pagedNavigation
-                                    compact={isDrawerOpen}
-                                    modifiers={{ 
-                                      available: selectedDoctor ? { dayOfWeek: availableDaysOfWeek } : {},
-                                      leave: leaveDates 
-                                    }}
-                                    modifiersStyles={{ 
-                                        available: { backgroundColor: 'hsl(var(--primary)/0.1)', color: 'hsl(var(--primary))' },
-                                        leave: { color: 'red', textDecoration: 'line-through' } 
-                                    }}
-                                  />
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                          </div>
-                          
-                          <div className="space-y-4 md:col-span-1">
-                            <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
-                            <div className="space-y-4">
+                             <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
+                             <div className="space-y-4">
                                 <FormField control={form.control} name="doctor" render={({ field }) => (
                                     <FormItem>
                                       <FormLabel>Doctor</FormLabel>
-                                      <Select onValueChange={onDoctorChange} value={field.value} disabled={!selectedDate}>
+                                      <Select onValueChange={onDoctorChange} value={field.value}>
                                         <FormControl>
                                           <SelectTrigger>
-                                            <SelectValue placeholder={selectedDate ? "Select an available doctor" : "Select a date first"} />
+                                            <SelectValue placeholder="Select a doctor" />
                                           </SelectTrigger>
                                         </FormControl>
                                         <SelectContent>
-                                          {availableDoctorsForDate.map(doc => (
+                                          {doctors.map(doc => (
                                             <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
                                           ))}
                                         </SelectContent>
@@ -506,6 +452,38 @@ export default function AppointmentsPage() {
                               />
                             )}
                           </div>
+                          
+                          <div className="space-y-4 md:col-span-1">
+                             <h3 className="text-lg font-medium border-b pb-2">Select Date</h3>
+                            <FormField control={form.control} name="date" render={({ field }) => (
+                                <FormItem className="flex flex-col">
+                                  <Calendar
+                                    mode="single" selected={field.value} onSelect={field.onChange}
+                                    disabled={(date) => 
+                                        date < new Date(new Date().setHours(0,0,0,0)) || 
+                                        !selectedDoctor ||
+                                        !availableDaysOfWeek.includes(getDay(date)) ||
+                                        leaveDates.some(leaveDate => isSameDay(date, leaveDate))
+                                    }
+                                    initialFocus
+                                    className="rounded-md border"
+                                    pagedNavigation
+                                    compact={isDrawerOpen}
+                                    modifiers={{ 
+                                      available: selectedDoctor ? { dayOfWeek: availableDaysOfWeek } : {},
+                                      leave: leaveDates 
+                                    }}
+                                    modifiersStyles={{ 
+                                        available: { backgroundColor: 'hsl(var(--primary)/0.1)', color: 'hsl(var(--primary))' },
+                                        leave: { color: 'red', textDecoration: 'line-through' } 
+                                    }}
+                                  />
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+
                         </div>
                         <div className="flex justify-end items-center pt-4">
                             <div className="flex justify-end gap-2">
