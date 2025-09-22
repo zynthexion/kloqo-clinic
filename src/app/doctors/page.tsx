@@ -4,240 +4,125 @@
 import { DoctorsHeader } from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ChevronLeft,
   ChevronRight,
-  Edit,
-  MoreHorizontal,
   Search,
-  Trash,
   Users,
-  CalendarDays
+  CalendarDays,
+  Clock,
+  User,
+  BriefcaseMedical,
+  Mail,
+  Phone,
+  Cake,
 } from "lucide-react";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
-import { AddDoctorForm } from "@/components/doctors/add-doctor-form";
 import React, { useState, useEffect, useMemo } from "react";
-import type { Doctor, Department } from "@/lib/types";
-import { collection, getDocs, addDoc, doc, setDoc, deleteDoc, updateDoc } from "firebase/firestore";
-import { db, storage } from "@/lib/firebase";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import type { Doctor, Department, Appointment } from "@/lib/types";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import Link from 'next/link';
 import { TopNav } from "@/components/layout/top-nav";
+import { Calendar } from "@/components/ui/calendar";
+import { format, isSameDay, parse, getDay, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
+import { cn } from "@/lib/utils";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
-const DoctorCard = ({ doctor, onEdit, onDelete }: { doctor: Doctor, onEdit: (doctor: Doctor) => void, onDelete: (doctor: Doctor) => void }) => (
-    <Card className="flex flex-col h-full group">
-        <Link href={`/doctors/${doctor.id}`} className="flex-grow">
-            <CardHeader className="flex-row items-start justify-between">
-                <div className="flex items-center gap-4">
-                    <Image
-                        src={doctor.avatar}
-                        alt={doctor.name}
-                        width={48}
-                        height={48}
-                        className="rounded-full object-cover"
-                        data-ai-hint="doctor portrait"
-                    />
-                    <div>
-                        <CardTitle className="text-lg group-hover:text-primary">{doctor.name}</CardTitle>
-                        <p className="text-sm text-muted-foreground">{doctor.specialty}</p>
-                    </div>
-                </div>
-                 <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0" onClick={(e) => e.stopPropagation()}>
-                            <span className="sr-only">Open menu</span>
-                            <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem onSelect={(e) => { e.stopPropagation(); onEdit(doctor); }}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={(e) => { e.stopPropagation(); onDelete(doctor); }} className="text-red-600">
-                            <Trash className="mr-2 h-4 w-4" />
-                            Delete
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <div>
-                    <p className="text-xs font-medium uppercase text-muted-foreground">Department</p>
-                    <p className="text-sm">{doctor.department}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                        <p className="text-xs font-medium uppercase text-muted-foreground flex items-center gap-1"><Users className="h-3 w-3" /> Total Patients</p>
-                        <p className="text-sm">{doctor.totalPatients}</p>
-                    </div>
-                    <div>
-                        <p className="text-xs font-medium uppercase text-muted-foreground flex items-center gap-1"><CalendarDays className="h-3 w-3" /> Today</p>
-                        <p className="text-sm">{doctor.todaysAppointments}</p>
-                    </div>
-                </div>
-            </CardContent>
-        </Link>
-        <CardFooter>
-            <Badge
-                variant={
-                    doctor.availability === "Available"
-                        ? "success"
-                        : "danger"
-                }
-                className="w-full justify-center"
-            >
-                {doctor.availability}
-            </Badge>
-        </CardFooter>
-    </Card>
+const DoctorListItem = ({ doctor, onSelect, isSelected }: { doctor: Doctor, onSelect: () => void, isSelected: boolean }) => (
+    <div
+      className={cn(
+        "flex items-center gap-4 p-3 rounded-lg cursor-pointer transition-colors",
+        isSelected ? "bg-primary/10" : "hover:bg-muted/50"
+      )}
+      onClick={onSelect}
+    >
+        <Image
+            src={doctor.avatar}
+            alt={doctor.name}
+            width={40}
+            height={40}
+            className="rounded-full object-cover"
+            data-ai-hint="doctor portrait"
+        />
+        <div className="flex-grow">
+            <p className={cn("font-semibold text-sm", isSelected && "text-primary")}>{doctor.name}</p>
+            <p className="text-xs text-muted-foreground">{doctor.specialty}</p>
+        </div>
+        <Badge
+            variant={doctor.availability === "Available" ? "success" : "danger"}
+            className="h-2 w-2 p-0 rounded-full"
+        />
+    </div>
 );
 
 
 export default function DoctorsPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  
+  const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+
   const { toast } = useToast();
-  const [isAddDoctorOpen, setIsAddDoctorOpen] = useState(false);
-  const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
-  const [deletingDoctor, setDeletingDoctor] = useState<Doctor | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("All");
-  const [specialtyFilter, setSpecialtyFilter] = useState("All");
-  const [statusFilter, setStatusFilter] = useState<"All" | "Available" | "Unavailable">("All");
   const [currentPage, setCurrentPage] = useState(1);
-  const [doctorsPerPage, setDoctorsPerPage] = useState(12);
+  const [doctorsPerPage, setDoctorsPerPage] = useState(8);
 
 
   useEffect(() => {
-    const fetchDoctors = async () => {
-      const doctorsCollection = collection(db, "doctors");
-      const doctorsSnapshot = await getDocs(doctorsCollection);
-      const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
-      setDoctors(doctorsList);
-    };
+    const fetchAllData = async () => {
+      try {
+        const [doctorsSnapshot, departmentsSnapshot, appointmentsSnapshot] = await Promise.all([
+          getDocs(collection(db, "doctors")),
+          getDocs(collection(db, "departments")),
+          getDocs(collection(db, "appointments")),
+        ]);
 
-    const fetchDepartments = async () => {
-      const departmentsCollection = collection(db, "departments");
-      const departmentsSnapshot = await getDocs(departmentsCollection);
-      const departmentsList = departmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Department));
-      setDepartments(departmentsList);
-    };
+        const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
+        setDoctors(doctorsList);
+        if (doctorsList.length > 0) {
+          setSelectedDoctor(doctorsList[0]);
+        }
 
-    fetchDoctors();
-    fetchDepartments();
-  }, []);
+        const departmentsList = departmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Department));
+        setDepartments(departmentsList);
 
-  const handleSaveDoctor = async (doctorData: Omit<Doctor, 'id' | 'avatar' | 'schedule' | 'preferences' | 'historicalData' | 'availability' | 'totalPatients' | 'todaysAppointments'> & { photo?: File; id?: string }) => {
-    try {
-      let photoUrl = doctorData.id ? doctors.find(d => d.id === doctorData.id)?.avatar : `https://picsum.photos/seed/new-doc-${new Date().getTime()}/100/100`;
+        const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ ...doc.data() } as Appointment));
+        setAppointments(appointmentsList);
 
-      if (doctorData.photo) {
-        const storageRef = ref(storage, `doctor_photos/${doctorData.photo.name}`);
-        const snapshot = await uploadBytes(storageRef, doctorData.photo);
-        photoUrl = await getDownloadURL(snapshot.ref);
-      }
-      
-      const scheduleString = doctorData.availabilitySlots
-        ?.map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${ts.from}-${ts.to}`).join(', ')}`)
-        .join('; ');
-      
-      const dataToSave: any = { ...doctorData };
-      delete dataToSave.photo;
-
-      if (doctorData.id) { // Editing existing doctor
-        const doctorRef = doc(db, "doctors", doctorData.id);
-        const updatedDoctorData = {
-          ...dataToSave,
-          avatar: photoUrl,
-          schedule: scheduleString,
-        };
-        await updateDoc(doctorRef, updatedDoctorData);
-        setDoctors(prev => prev.map(d => d.id === doctorData.id ? { ...d, ...updatedDoctorData } as Doctor : d));
+      } catch (error) {
+        console.error("Error fetching data:", error);
         toast({
-          title: "Doctor Updated",
-          description: `${doctorData.name} has been successfully updated.`,
-        });
-      } else { // Adding new doctor
-        const newDoctorRef = doc(collection(db, "doctors"));
-        const newDoctorData = {
-            ...dataToSave,
-            id: newDoctorRef.id,
-            avatar: photoUrl,
-            schedule: scheduleString || 'Not set',
-            preferences: 'Not set',
-            historicalData: 'No data',
-            availability: 'Available', // Default availability
-            totalPatients: 0,
-            todaysAppointments: 0,
-        };
-        await setDoc(newDoctorRef, newDoctorData);
-        setDoctors(prev => [...prev, newDoctorData as Doctor]);
-        toast({
-          title: "Doctor Added",
-          description: `${newDoctorData.name} has been successfully added.`,
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to load data. Please try again.",
         });
       }
-    } catch (error) {
-      console.error("Error saving doctor: ", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to save doctor. Please try again.",
-      });
-    } finally {
-        setIsAddDoctorOpen(false);
-        setEditingDoctor(null);
-    }
-  };
-  
-  const handleDeleteDoctor = async () => {
-    if (!deletingDoctor) return;
-    try {
-      await deleteDoc(doc(db, "doctors", deletingDoctor.id));
-      setDoctors(prev => prev.filter(d => d.id !== deletingDoctor.id));
-      toast({
-        title: "Doctor Deleted",
-        description: `${deletingDoctor.name} has been removed.`,
-      });
-    } catch (error) {
-      console.error("Error deleting doctor:", error);
-       toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to delete doctor. Please try again.",
-      });
-    } finally {
-        setDeletingDoctor(null);
-    }
-  }
+    };
+
+    fetchAllData();
+  }, [toast]);
   
   const filteredDoctors = useMemo(() => {
     return doctors.filter(doctor => {
@@ -245,23 +130,14 @@ export default function DoctorsPage() {
         
         const matchesSearchTerm = (
             doctor.name.toLowerCase().includes(searchTermLower) ||
-            doctor.id.toLowerCase().includes(searchTermLower) ||
-            doctor.specialty.toLowerCase().includes(searchTermLower) ||
-            (doctor.department && doctor.department.toLowerCase().includes(searchTermLower))
+            doctor.specialty.toLowerCase().includes(searchTermLower)
         );
 
         const matchesDepartment = departmentFilter === 'All' || doctor.department === departmentFilter;
-        const matchesSpecialty = specialtyFilter === 'All' || doctor.specialty === specialtyFilter;
-        const matchesStatus = statusFilter === 'All' || doctor.availability === statusFilter;
 
-        return matchesSearchTerm && matchesDepartment && matchesSpecialty && matchesStatus;
+        return matchesSearchTerm && matchesDepartment;
     });
-  }, [doctors, searchTerm, departmentFilter, specialtyFilter, statusFilter]);
-
-  const uniqueSpecialties = useMemo(() => {
-      const specialties = new Set(doctors.map(d => d.specialty));
-      return ['All', ...Array.from(specialties)];
-  }, [doctors]);
+  }, [doctors, searchTerm, departmentFilter]);
 
   const totalPages = Math.ceil(filteredDoctors.length / doctorsPerPage);
   const currentDoctors = filteredDoctors.slice(
@@ -269,201 +145,222 @@ export default function DoctorsPage() {
       currentPage * doctorsPerPage
   );
 
-  const renderPageNumbers = () => {
-    const pageNumbers = [];
-    if (totalPages <= 5) {
-      for (let i = 1; i <= totalPages; i++) {
-        pageNumbers.push(
-          <Button
-            key={i}
-            variant="outline"
-            size="icon"
-            className={currentPage === i ? "bg-primary/10 text-primary" : ""}
-            onClick={() => setCurrentPage(i)}
-          >
-            {i}
-          </Button>
-        );
-      }
-    } else {
-      pageNumbers.push(
-        <Button
-          key={1}
-          variant="outline"
-          size="icon"
-          className={currentPage === 1 ? "bg-primary/10 text-primary" : ""}
-          onClick={() => setCurrentPage(1)}
-        >
-          1
-        </Button>
-      );
-      if (currentPage > 3) {
-        pageNumbers.push(<span key="start-ellipsis" className="text-muted-foreground">...</span>);
-      }
-      let startPage = Math.max(2, currentPage - 1);
-      let endPage = Math.min(totalPages - 1, currentPage + 1);
+  const doctorAppointments = useMemo(() => {
+    if (!selectedDoctor) return [];
+    return appointments.filter(apt => apt.doctor === selectedDoctor.name);
+  }, [selectedDoctor, appointments]);
 
-      if (currentPage === 1) {
-          endPage = 3;
-      }
-       if (currentPage === totalPages) {
-          startPage = totalPages - 2;
-      }
+  const appointmentsOnSelectedDate = useMemo(() => {
+    if (!selectedDate || !doctorAppointments) return [];
+    return doctorAppointments.filter(apt => isSameDay(parse(apt.date, 'd MMMM yyyy', new Date()), selectedDate));
+  }, [selectedDate, doctorAppointments]);
 
-      for (let i = startPage; i <= endPage; i++) {
-        pageNumbers.push(
-          <Button
-            key={i}
-            variant="outline"
-            size="icon"
-            className={currentPage === i ? "bg-primary/10 text-primary" : ""}
-            onClick={() => setCurrentPage(i)}
-          >
-            {i}
-          </Button>
-        );
-      }
-      if (currentPage < totalPages - 2) {
-        pageNumbers.push(<span key="end-ellipsis" className="text-muted-foreground">...</span>);
-      }
-       pageNumbers.push(
-        <Button
-          key={totalPages}
-          variant="outline"
-          size="icon"
-          className={currentPage === totalPages ? "bg-primary/10 text-primary" : ""}
-          onClick={() => setCurrentPage(totalPages)}
-        >
-          {totalPages}
-        </Button>
-      );
-    }
-    return pageNumbers;
-  };
+  const leaveDates = useMemo(() => {
+    if (!selectedDoctor?.leaveSlots) return [];
+    return selectedDoctor.leaveSlots.map(ls => parse(ls.date, 'yyyy-MM-dd', new Date()));
+  }, [selectedDoctor?.leaveSlots]);
+
 
   return (
-    <>
+    <div className="flex flex-col h-screen">
       <TopNav />
-      <div className="flex flex-col">
-        <DoctorsHeader />
-        <main className="flex flex-1 flex-col gap-6 p-4 sm:p-6">
-          <div className="flex flex-col gap-4">
-              <div className="flex items-center gap-4">
-              <div className="relative flex-1">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                  type="search"
-                  placeholder="Search name, ID, specialty, etc."
-                  className="w-full rounded-lg bg-background pl-8"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-              </div>
-              <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-                  <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                      <SelectItem value="All">All Departments</SelectItem>
-                      {departments.map(dept => (
-                          <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
-                      ))}
-                  </SelectContent>
-              </Select>
-              <Select value={specialtyFilter} onValueChange={setSpecialtyFilter}>
-                  <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Specialist" />
-                  </SelectTrigger>
-                  <SelectContent>
-                      {uniqueSpecialties.map(specialty => (
-                          <SelectItem key={specialty} value={specialty}>
-                              {specialty === 'All' ? 'All Specialties' : specialty}
-                          </SelectItem>
-                      ))}
-                  </SelectContent>
-              </Select>
-              <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as any)}>
-                  <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                      <SelectItem value="All">All Statuses</SelectItem>
-                      <SelectItem value="Available">Available</SelectItem>
-                      <SelectItem value="Unavailable">Unavailable</SelectItem>
-                  </SelectContent>
-              </Select>
-              <AddDoctorForm 
-                  onSave={handleSaveDoctor}
-                  isOpen={isAddDoctorOpen || !!editingDoctor}
-                  setIsOpen={(open) => {
-                      if (!open) {
-                          setIsAddDoctorOpen(false);
-                          setEditingDoctor(null);
-                      } else {
-                          setIsAddDoctorOpen(true);
-                      }
-                  }}
-                  doctor={editingDoctor}
-                  departments={departments}
-              />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                  {currentDoctors.map((doctor) => (
-                      <DoctorCard 
-                          key={doctor.id} 
-                          doctor={doctor} 
-                          onEdit={() => setEditingDoctor(doctor)}
-                          onDelete={() => setDeletingDoctor(doctor)}
+      <main className="flex-1 overflow-hidden">
+        <div className="h-full grid grid-cols-12 gap-6 p-6">
+          {/* Left Column: Doctor List */}
+          <div className="col-span-12 lg:col-span-3 h-full">
+             <Card className="h-full flex flex-col">
+                <CardHeader>
+                  <CardTitle>Doctors</CardTitle>
+                   <div className="relative mt-2">
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                      type="search"
+                      placeholder="Search name or specialty"
+                      className="w-full rounded-lg bg-background pl-8"
+                      value={searchTerm}
+                      onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                       />
-                  ))}
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <span>Showing</span>
-                    <Select value={`${doctorsPerPage}`} onValueChange={(value) => setDoctorsPerPage(Number(value))}>
-                        <SelectTrigger className="w-[70px]">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="12">12</SelectItem>
-                            <SelectItem value="24">24</SelectItem>
-                            <SelectItem value="48">48</SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <span>out of {filteredDoctors.length}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Button variant="outline" size="icon" onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>
-                        <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    {renderPageNumbers()}
-                    <Button variant="outline" size="icon" onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>
-                        <ChevronRight className="h-4 w-4" />
-                    </Button>
-                </div>
-              </div>
+                  </div>
+                   <Select value={departmentFilter} onValueChange={(value) => { setDepartmentFilter(value); setCurrentPage(1); }}>
+                      <SelectTrigger className="w-full mt-2">
+                        <SelectValue placeholder="Department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                          <SelectItem value="All">All Departments</SelectItem>
+                          {departments.map(dept => (
+                              <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                  </Select>
+                </CardHeader>
+                <CardContent className="flex-grow overflow-y-auto pr-2 space-y-1">
+                    {currentDoctors.map(doctor => (
+                        <DoctorListItem 
+                            key={doctor.id}
+                            doctor={doctor}
+                            onSelect={() => setSelectedDoctor(doctor)}
+                            isSelected={selectedDoctor?.id === doctor.id}
+                        />
+                    ))}
+                </CardContent>
+                <CardFooter className="pt-4 flex items-center justify-between">
+                   <div className="text-sm text-muted-foreground">
+                      Page {currentPage} of {totalPages}
+                   </div>
+                   <div className="flex items-center gap-2">
+                        <Button variant="outline" size="icon" onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>
+                            <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <Button variant="outline" size="icon" onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>
+                            <ChevronRight className="h-4 w-4" />
+                        </Button>
+                   </div>
+                </CardFooter>
+             </Card>
           </div>
-        </main>
-          <AlertDialog open={!!deletingDoctor} onOpenChange={(open) => !open && setDeletingDoctor(null)}>
-              <AlertDialogContent>
-                  <AlertDialogHeader>
-                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                      This action cannot be undone. This will permanently delete Dr. {deletingDoctor?.name} and remove their data from our servers.
-                  </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDeleteDoctor} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
-                  </AlertDialogFooter>
-              </AlertDialogContent>
-          </AlertDialog>
-      </div>
-    </>
+
+          {/* Middle Column: Calendar and Appointments */}
+          <div className="col-span-12 lg:col-span-5 h-full">
+            <Card className="h-full flex flex-col">
+                <CardHeader>
+                    <CardTitle>Schedule</CardTitle>
+                </CardHeader>
+                <CardContent className="flex-grow flex flex-col">
+                    <Calendar
+                        mode="single"
+                        selected={selectedDate}
+                        onSelect={setSelectedDate}
+                        className="rounded-md border"
+                        month={selectedDate}
+                        onMonthChange={(month) => setSelectedDate(month)}
+                        modifiers={{ leave: leaveDates }}
+                        modifiersStyles={{ 
+                            leave: { color: 'red', textDecoration: 'line-through' },
+                        }}
+                        components={{
+                            DayContent: ({ date }) => {
+                                const appointmentsForDay = doctorAppointments.filter(apt => isSameDay(parse(apt.date, 'd MMMM yyyy', new Date()), date)).length;
+                                return (
+                                    <div className="relative w-full h-full flex items-center justify-center">
+                                        <span>{format(date, 'd')}</span>
+                                        {appointmentsForDay > 0 && <span className="absolute bottom-1 right-1 w-1.5 h-1.5 bg-primary rounded-full"></span>}
+                                    </div>
+                                );
+                            },
+                        }}
+                    />
+                    <div className="mt-4 flex-grow overflow-hidden">
+                       <h3 className="font-semibold text-md mb-2">Appointments on {selectedDate ? format(selectedDate, "MMM d, yyyy") : ''}</h3>
+                       <div className="overflow-y-auto h-[calc(100%-2rem)]">
+                        {appointmentsOnSelectedDate.length > 0 ? (
+                             <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Patient</TableHead>
+                                        <TableHead>Time</TableHead>
+                                        <TableHead>Status</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {appointmentsOnSelectedDate.map(apt => (
+                                        <TableRow key={apt.id}>
+                                            <TableCell className="font-medium">{apt.patientName}</TableCell>
+                                            <TableCell>{apt.time}</TableCell>
+                                            <TableCell>
+                                               <Badge
+                                                  variant={
+                                                    apt.status === "Confirmed" ? "success"
+                                                    : apt.status === "Pending" ? "warning"
+                                                    : "destructive"
+                                                  }
+                                                >
+                                                  {apt.status}
+                                                </Badge>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        ) : (
+                            <div className="text-center text-sm text-muted-foreground py-10">No appointments for this day.</div>
+                        )}
+                       </div>
+                    </div>
+                </CardContent>
+            </Card>
+          </div>
+
+          {/* Right Column: Doctor Details */}
+          <div className="col-span-12 lg:col-span-4 h-full">
+            {selectedDoctor ? (
+                <Card className="h-full flex flex-col">
+                    <CardContent className="p-6 flex flex-col items-center text-center flex-grow">
+                        <div className="relative">
+                            <div className="absolute inset-0 bg-gradient-to-br from-yellow-300 via-primary to-yellow-500 rounded-full blur-xl opacity-30"></div>
+                            <Image
+                                src={selectedDoctor.avatar}
+                                alt={selectedDoctor.name}
+                                width={120}
+                                height={120}
+                                className="rounded-full object-cover relative border-4 border-background"
+                                data-ai-hint="doctor portrait"
+                            />
+                        </div>
+                        <h3 className="mt-4 text-xl font-semibold">{selectedDoctor.name}</h3>
+                        <p className="text-muted-foreground">{selectedDoctor.specialty}</p>
+                        <p className="text-xs text-muted-foreground">{selectedDoctor.department}</p>
+
+                        <div className="w-full text-left mt-6 space-y-4">
+                            <h4 className="font-semibold">Basic Information</h4>
+                            <div className="space-y-3 text-sm">
+                               <div className="flex items-center gap-3">
+                                  <Mail className="w-4 h-4 text-muted-foreground" />
+                                  <span className="text-muted-foreground">email@domain.com</span>
+                               </div>
+                               <div className="flex items-center gap-3">
+                                  <Phone className="w-4 h-4 text-muted-foreground" />
+                                  <span className="text-muted-foreground">+1 234 567 890</span>
+                               </div>
+                               <div className="flex items-center gap-3">
+                                  <Cake className="w-4 h-4 text-muted-foreground" />
+                                  <span className="text-muted-foreground">26 September 1988</span>
+                               </div>
+                            </div>
+
+                            <h4 className="font-semibold pt-4 border-t">Statistics</h4>
+                             <div className="space-y-3 text-sm">
+                               <div className="flex items-center justify-between gap-3">
+                                  <p className="text-muted-foreground">Total Patients</p>
+                                  <p className="font-semibold">{selectedDoctor.totalPatients ?? 'N/A'}</p>
+                               </div>
+                               <div className="flex items-center justify-between gap-3">
+                                  <p className="text-muted-foreground">Today's Appointments</p>
+                                  <p className="font-semibold">{selectedDoctor.todaysAppointments ?? 'N/A'}</p>
+                               </div>
+                               <div className="flex items-center justify-between gap-3">
+                                  <p className="text-muted-foreground">Avg. Consulting Time</p>
+                                  <p className="font-semibold">{selectedDoctor.averageConsultingTime ?? 'N/A'} min</p>
+                               </div>
+                            </div>
+                        </div>
+
+                    </CardContent>
+                    <CardFooter>
+                         <Button asChild className="w-full">
+                           <Link href={`/doctors/${selectedDoctor.id}`}>View Full Profile & Edit</Link>
+                         </Button>
+                    </CardFooter>
+                </Card>
+            ) : (
+                 <Card className="h-full flex items-center justify-center">
+                    <p className="text-muted-foreground">Select a doctor to view details</p>
+                 </Card>
+            )}
+          </div>
+        </div>
+      </main>
+    </div>
   );
 }
-
 
     
