@@ -24,6 +24,7 @@ export type Doctor = {
   bio?: string;
   averageConsultingTime?: number;
   availabilitySlots?: AvailabilitySlot[];
+  leaveDates?: string[];
 };
 
 export type Appointment = {
@@ -73,6 +74,8 @@ export type LiveStatus = {
     queue?: number;
     returnTime?: string;
 };
+    
+
     
 
     

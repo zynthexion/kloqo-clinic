@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useTransition } from "react";
 import { useParams } from "next/navigation";
 import Image from "next/image";
 import {
@@ -26,20 +26,33 @@ import { Button } from "@/components/ui/button";
 import { AppSidebar } from "@/components/layout/sidebar";
 import { SidebarInset } from "@/components/ui/sidebar";
 import { DoctorsHeader } from "@/components/layout/header";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Doctor, Appointment } from "@/lib/types";
 import { appointments as dummyAppointments } from "@/lib/data";
-import { format, parse } from "date-fns";
-import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info } from "lucide-react";
+import { format, parse, isSameDay } from "date-fns";
+import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
+import { Input } from "@/components/ui/input";
 
 export default function DoctorDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const { toast } = useToast();
+  const [isPending, startTransition] = useTransition();
+
   const [doctor, setDoctor] = useState<Doctor | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [loading, setLoading] = useState(true);
+
+  const [isEditingTime, setIsEditingTime] = useState(false);
+  const [newAvgTime, setNewAvgTime] = useState<number | string>("");
+
+  const [leaveDates, setLeaveDates] = useState<Date[]>([]);
+
 
   useEffect(() => {
     if (id) {
@@ -51,6 +64,8 @@ export default function DoctorDetailPage() {
         if (doctorSnap.exists()) {
           const doctorData = { id: doctorSnap.id, ...doctorSnap.data() } as Doctor;
           setDoctor(doctorData);
+          setNewAvgTime(doctorData.averageConsultingTime || "");
+          setLeaveDates((doctorData.leaveDates || []).map(d => new Date(d)));
 
           // Use dummy appointments and filter by doctor name
           const doctorAppointments = dummyAppointments.filter(
@@ -85,6 +100,83 @@ export default function DoctorDetailPage() {
         }
     }
   }, [appointments, selectedDate]);
+
+    const handleStatusChange = async (newStatus: 'Available' | 'Unavailable') => {
+        if (!doctor) return;
+
+        startTransition(async () => {
+            const doctorRef = doc(db, "doctors", doctor.id);
+            try {
+                await updateDoc(doctorRef, { availability: newStatus });
+                setDoctor(prev => prev ? { ...prev, availability: newStatus } : null);
+                toast({
+                    title: "Status Updated",
+                    description: `Dr. ${doctor.name} is now marked as ${newStatus === 'Available' ? 'In' : 'Out'}.`,
+                });
+            } catch (error) {
+                console.error("Error updating status:", error);
+                toast({
+                    variant: "destructive",
+                    title: "Update Failed",
+                    description: "Could not update the doctor's status.",
+                });
+            }
+        });
+    };
+
+    const handleTimeSave = async () => {
+        if (!doctor || newAvgTime === "") return;
+        const timeValue = Number(newAvgTime);
+        if (isNaN(timeValue) || timeValue <= 0) {
+             toast({ variant: "destructive", title: "Invalid Time", description: "Please enter a valid number." });
+             return;
+        }
+
+        startTransition(async () => {
+            const doctorRef = doc(db, "doctors", doctor.id);
+            try {
+                await updateDoc(doctorRef, { averageConsultingTime: timeValue });
+                setDoctor(prev => prev ? { ...prev, averageConsultingTime: timeValue } : null);
+                setIsEditingTime(false);
+                toast({
+                    title: "Consulting Time Updated",
+                    description: `Average consulting time set to ${timeValue} minutes.`,
+                });
+            } catch (error) {
+                console.error("Error updating time:", error);
+                toast({
+                    variant: "destructive",
+                    title: "Update Failed",
+                    description: "Could not update the consulting time.",
+                });
+            }
+        });
+    }
+
+    const handleLeaveUpdate = async (dates?: Date[]) => {
+      if (!doctor || !dates) return;
+
+      const newLeaveDates = dates.map(d => d.toISOString().split('T')[0]);
+
+      startTransition(async () => {
+          const doctorRef = doc(db, "doctors", doctor.id);
+          try {
+              await updateDoc(doctorRef, { leaveDates: newLeaveDates });
+              setLeaveDates(dates);
+              toast({
+                  title: "Leave Dates Updated",
+                  description: "Doctor's leave schedule has been successfully updated.",
+              });
+          } catch (error) {
+              console.error("Error updating leave dates:", error);
+              toast({
+                  variant: "destructive",
+                  title: "Update Failed",
+                  description: "Could not update leave dates.",
+              });
+          }
+      });
+  };
 
 
   const filteredAppointments = useMemo(() => {
@@ -129,6 +221,8 @@ export default function DoctorDetailPage() {
     );
   }
 
+  const isDoctorOnLeave = selectedDate ? leaveDates.some(d => isSameDay(d, selectedDate)) : false;
+
   return (
     <div className="flex">
       <AppSidebar />
@@ -149,9 +243,17 @@ export default function DoctorDetailPage() {
                   <h1 className="text-3xl font-bold">{doctor.name}</h1>
                   <p className="text-lg text-muted-foreground">{doctor.specialty}</p>
                   <p className="mt-2 text-sm text-muted-foreground">{doctor.department}</p>
-                  <Badge className="mt-4" variant={doctor.availability === "Available" ? "success" : "danger"}>
-                    {doctor.availability}
-                  </Badge>
+                   <div className="flex items-center space-x-2 mt-4">
+                      <Switch
+                        id="status-switch"
+                        checked={doctor.availability === 'Available'}
+                        onCheckedChange={(checked) => handleStatusChange(checked ? 'Available' : 'Unavailable')}
+                        disabled={isPending}
+                      />
+                      <Label htmlFor="status-switch" className={`font-semibold ${doctor.availability === 'Available' ? 'text-green-600' : 'text-red-600'}`}>
+                        {doctor.availability === 'Available' ? 'In' : 'Out'}
+                      </Label>
+                   </div>
                 </div>
               </div>
             </CardHeader>
@@ -196,6 +298,20 @@ export default function DoctorDetailPage() {
                            </div>
                         </CardContent>
                     </Card>
+                     <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2"><CalendarIcon className="w-5 h-5" /> Mark Leave</CardTitle>
+                             <CardDescription>Select dates the doctor will be unavailable. Bookings will be disabled on these days.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                           <Calendar
+                                mode="multiple"
+                                selected={leaveDates}
+                                onSelect={(dates) => handleLeaveUpdate(dates)}
+                                className="rounded-md border w-full"
+                            />
+                        </CardContent>
+                    </Card>
                 </div>
                 <div className="space-y-6">
                      <Card>
@@ -207,7 +323,24 @@ export default function DoctorDetailPage() {
                                 <Clock className="w-5 h-5 text-muted-foreground" />
                                 <div>
                                     <p className="text-sm text-muted-foreground">Avg. Consulting Time</p>
-                                    <p className="font-semibold">{doctor.averageConsultingTime || "N/A"} minutes</p>
+                                     {isEditingTime ? (
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <Input 
+                                                type="number" 
+                                                value={newAvgTime} 
+                                                onChange={(e) => setNewAvgTime(e.target.value)} 
+                                                className="w-20 h-8"
+                                                disabled={isPending}
+                                            />
+                                            <Button size="icon" className="h-8 w-8" onClick={handleTimeSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
+                                            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => {setIsEditingTime(false); setNewAvgTime(doctor.averageConsultingTime || "")}} disabled={isPending}><X className="h-4 w-4"/></Button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-2">
+                                            <p className="font-semibold">{doctor.averageConsultingTime || "N/A"} minutes</p>
+                                            <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingTime(true)}><Edit className="h-3 w-3"/></Button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                              <div className="flex items-center gap-3">
@@ -240,6 +373,9 @@ export default function DoctorDetailPage() {
                                     onSelect={setSelectedDate}
                                     className="w-full"
                                     defaultMonth={selectedDate}
+                                    disabled={isDoctorOnLeave}
+                                    modifiers={{ leave: leaveDates }}
+                                    modifiersStyles={{ leave: { color: 'red', textDecoration: 'line-through' } }}
                                 />
                             </CardContent>
                         </Card>
@@ -248,7 +384,11 @@ export default function DoctorDetailPage() {
                         <Card>
                             <CardHeader>
                                 <CardTitle>Appointments for {selectedDate ? format(selectedDate, "MMMM d, yyyy") : 'all time'}</CardTitle>
-                                <CardDescription>A list of scheduled appointments for the selected date.</CardDescription>
+                                <CardDescription>
+                                     {isDoctorOnLeave 
+                                        ? "The doctor is on leave on this day."
+                                        : "A list of scheduled appointments for the selected date."}
+                                </CardDescription>
                             </CardHeader>
                             <CardContent>
                                 <Table>
@@ -262,7 +402,7 @@ export default function DoctorDetailPage() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {filteredAppointments.length > 0 ? (
+                                        {filteredAppointments.length > 0 && !isDoctorOnLeave ? (
                                             filteredAppointments.map((apt, index) => (
                                                 <TableRow key={apt.id}>
                                                     <TableCell className="font-medium">{apt.patientName}</TableCell>
@@ -274,7 +414,9 @@ export default function DoctorDetailPage() {
                                             ))
                                         ) : (
                                             <TableRow>
-                                                <TableCell colSpan={5} className="text-center h-24">No appointments for this day.</TableCell>
+                                                <TableCell colSpan={5} className="text-center h-24">
+                                                    {isDoctorOnLeave ? "Doctor on leave." : "No appointments for this day."}
+                                                </TableCell>
                                             </TableRow>
                                         )}
                                     </TableBody>
@@ -290,3 +432,5 @@ export default function DoctorDetailPage() {
     </div>
   );
 }
+
+    
