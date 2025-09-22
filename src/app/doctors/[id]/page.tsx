@@ -31,13 +31,15 @@ import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Doctor, Appointment } from "@/lib/types";
 import { appointments as dummyAppointments } from "@/lib/data";
-import { format, parse, isSameDay } from "date-fns";
+import { format, parse, isSameDay, getDay } from "date-fns";
 import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { TimeSlots } from "@/components/doctors/time-slots";
+
+const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 export default function DoctorDetailPage() {
   const params = useParams();
@@ -185,6 +187,17 @@ export default function DoctorDetailPage() {
     });
   }, [appointments, selectedDate]);
   
+  const availableDaysOfWeek = useMemo(() => {
+    if (!doctor?.availabilitySlots) return [];
+    const dayNames = doctor.availabilitySlots.map(s => s.day);
+    return daysOfWeek.reduce((acc, day, index) => {
+        if (dayNames.includes(day)) {
+            acc.push(index);
+        }
+        return acc;
+    }, [] as number[]);
+  }, [doctor?.availabilitySlots]);
+
   if (loading) {
     return (
         <div className="flex">
@@ -297,6 +310,8 @@ export default function DoctorDetailPage() {
                                 selected={leaveCalDate}
                                 onSelect={setLeaveCalDate}
                                 className="rounded-md border w-full"
+                                modifiers={{ available: { dayOfWeek: availableDaysOfWeek } }}
+                                modifiersStyles={{ available: { backgroundColor: 'hsl(var(--primary)/0.1)', color: 'hsl(var(--primary))' } }}
                             />
                             <TimeSlots
                               selectedDate={leaveCalDate}
