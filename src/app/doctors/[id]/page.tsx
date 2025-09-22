@@ -30,8 +30,7 @@ import { DoctorsHeader } from "@/components/layout/header";
 import { doc, getDoc, updateDoc, collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Doctor, Appointment, LeaveSlot, AvailabilitySlot, Department } from "@/lib/types";
-import { appointments as dummyAppointments } from "@/lib/data";
-import { format, parse, isSameDay, getDay, setHours, setMinutes, parse as parseDateFns } from "date-fns";
+import { format, parse, isSameDay, getDay, parse as parseDateFns } from "date-fns";
 import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -383,11 +382,11 @@ export default function DoctorDetailPage() {
       
       if (!leaveForDay) return false;
 
-      const aptTime = parseDateFns(appointment.time, "hh:mm a", aptDate);
-
+      const aptTime = parseDateFns(appointment.time, "hh:mm a", new Date(0));
+      
       return leaveForDay.slots.some(leaveSlot => {
-          const leaveStart = parseDateFns(leaveSlot.from, "HH:mm", aptDate);
-          const leaveEnd = parseDateFns(leaveSlot.to, "HH:mm", aptDate);
+          const leaveStart = parseDateFns(leaveSlot.from, "HH:mm", new Date(0));
+          const leaveEnd = parseDateFns(leaveSlot.to, "HH:mm", new Date(0));
           return aptTime >= leaveStart && aptTime < leaveEnd;
       });
   };
@@ -814,13 +813,13 @@ export default function DoctorDetailPage() {
                                     </TableHeader>
                                     <TableBody>
                                         {filteredAppointments.length > 0 && !isDoctorOnLeave ? (
-                                            filteredAppointments.map((apt, index) => (
+                                            filteredAppointments.map((apt) => (
                                                 <TableRow key={apt.id} className={cn(isAppointmentOnLeave(apt) && "bg-red-100 dark:bg-red-900/30")}>
                                                     <TableCell className="font-medium">{apt.patientName}</TableCell>
                                                     <TableCell>{apt.age}</TableCell>
                                                     <TableCell>{apt.gender}</TableCell>
-                                                    <TableCell>{['App', 'Phone', 'Walk In'][index % 3]}</TableCell>
-                                                    <TableCell>TKN{String(index + 1).padStart(3, '0')}</TableCell>
+                                                    <TableCell>{apt.bookedVia}</TableCell>
+                                                    <TableCell>{apt.tokenNumber}</TableCell>
                                                 </TableRow>
                                             ))
                                         ) : (

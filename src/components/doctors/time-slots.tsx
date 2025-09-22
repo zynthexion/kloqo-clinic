@@ -48,17 +48,10 @@ export function TimeSlots({ selectedDate, availabilitySlots, leaveSlots, appoint
   const getAppointmentsForSlot = (slot: TimeSlot) => {
     if (!selectedDate) return 0;
     const formattedDate = format(selectedDate, 'd MMMM yyyy');
-    const slotStart = parseDateFns(slot.from, 'HH:mm', selectedDate);
+    const slotTimeFormatted = format(parseDateFns(slot.from, 'HH:mm', new Date()), 'hh:mm a');
 
     return appointments.filter(apt => {
-        if (apt.date !== formattedDate) return false;
-        try {
-            const aptTime = parseDateFns(apt.time, 'hh:mm a', selectedDate);
-            return aptTime.getTime() === slotStart.getTime();
-        } catch (e) {
-            console.error("Error parsing appointment time", apt.time, e);
-            return false;
-        }
+        return apt.date === formattedDate && apt.time === slotTimeFormatted;
     }).length;
   }
 
