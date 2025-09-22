@@ -79,7 +79,7 @@ export function OnboardingSidebar({ step }: { step: number }) {
                 tooltip={item.label}
                 isActive={(item.label === "Departments" && step === 1) || (item.label === "Doctors" && step === 2)}
                 disabled={item.disabled}
-                className={item.disabled ? "cursor-not-allowed opacity-50" : ""}
+                className={item.disabled ? "cursor-not-allowed" : ""}
               >
                 <Link href={item.href} legacyBehavior>
                     <a className={item.disabled ? "pointer-events-none" : ""}>
@@ -95,7 +95,7 @@ export function OnboardingSidebar({ step }: { step: number }) {
             <SidebarSeparator className="my-2"/>
             <SidebarMenu>
                 <SidebarMenuItem>
-                    <SidebarMenuButton tooltip="Logout">
+                    <SidebarMenuButton tooltip="Logout" disabled>
                         <LogOut />
                         <span>Logout</span>
                     </SidebarMenuButton>

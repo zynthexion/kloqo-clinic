@@ -18,58 +18,62 @@ const superAdminDepartments: Department[] = [
 ];
 
 
-export function AddDepartmentStep({ onDepartmentAdded }: { onDepartmentAdded: (department: Department) => void }) {
+export function AddDepartmentStep({ onDepartmentsAdded }: { onDepartmentsAdded: (departments: Department[]) => void }) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
+  const [selectedDepartments, setSelectedDepartments] = useState<Department[]>([]);
   const { toast } = useToast();
 
-  const handleSelectDepartment = (department: Department) => {
-    setSelectedDepartment(department);
-    onDepartmentAdded(department);
+  const handleSelectDepartments = (departments: Department[]) => {
+    setSelectedDepartments(departments);
+    onDepartmentsAdded(departments);
     toast({
-        title: "Department Added",
-        description: `${department.name} has been added to your clinic.`,
+        title: "Departments Added",
+        description: `${departments.length} departments have been added to your clinic.`,
     });
   };
 
   return (
     <div className="flex flex-col items-center justify-center h-full text-center">
-      {!selectedDepartment ? (
+      {selectedDepartments.length === 0 ? (
         <>
-          <h1 className="text-2xl font-bold mb-2">Select your initial department</h1>
+          <h1 className="text-2xl font-bold mb-2">Select your initial departments</h1>
           <p className="text-muted-foreground mb-6">
-            Add a department to your clinic to begin using the application.
+            Add one or more departments to your clinic to begin using the application.
           </p>
           <Button size="lg" onClick={() => setIsDialogOpen(true)}>
             <PlusCircle className="mr-2 h-5 w-5" />
-            Add Department
+            Add Departments
           </Button>
         </>
       ) : (
-        <div className="w-full max-w-md">
-            <h2 className="text-2xl font-bold mb-4">Your Department</h2>
-            <Card className="overflow-hidden">
-                <CardContent className="p-0">
-                    <div className="relative h-48 w-full">
-                        <Image
-                            src={selectedDepartment.image}
-                            alt={selectedDepartment.name}
-                            fill
-                            objectFit="cover"
-                            data-ai-hint={selectedDepartment.imageHint}
-                        />
-                    </div>
-                    <div className="p-4">
-                        <h3 className="text-lg font-semibold">{selectedDepartment.name}</h3>
-                        <p className="text-sm text-muted-foreground mt-1">
-                            {selectedDepartment.description}
-                        </p>
-                    </div>
-                </CardContent>
-                <CardFooter className="bg-muted/30 px-4 py-3 justify-center">
-                     <p className="text-sm text-primary font-semibold">Department Added Successfully!</p>
-                </CardFooter>
-            </Card>
+        <div className="w-full max-w-4xl">
+            <h2 className="text-2xl font-bold mb-4">Your Departments</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {selectedDepartments.map(department => (
+                <Card key={department.id} className="overflow-hidden">
+                    <CardContent className="p-0">
+                        <div className="relative h-40 w-full">
+                            <Image
+                                src={department.image}
+                                alt={department.name}
+                                fill
+                                objectFit="cover"
+                                data-ai-hint={department.imageHint}
+                            />
+                        </div>
+                        <div className="p-4">
+                            <h3 className="text-lg font-semibold">{department.name}</h3>
+                            <p className="text-sm text-muted-foreground mt-1 h-10">
+                                {department.description}
+                            </p>
+                        </div>
+                    </CardContent>
+                    <CardFooter className="bg-muted/30 px-4 py-3 justify-center">
+                        <p className="text-sm text-primary font-semibold">Added Successfully!</p>
+                    </CardFooter>
+                </Card>
+            ))}
+            </div>
         </div>
       )}
 
@@ -77,7 +81,7 @@ export function AddDepartmentStep({ onDepartmentAdded }: { onDepartmentAdded: (d
         isOpen={isDialogOpen}
         setIsOpen={setIsDialogOpen}
         departments={superAdminDepartments}
-        onDepartmentSelect={handleSelectDepartment}
+        onDepartmentsSelect={handleSelectDepartments}
       />
     </div>
   );

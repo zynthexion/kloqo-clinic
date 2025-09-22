@@ -9,11 +9,11 @@ import { Department, Doctor } from "@/lib/types";
 
 export default function OnboardingDemoPage() {
   const [step, setStep] = useState(1);
-  const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
+  const [selectedDepartments, setSelectedDepartments] = useState<Department[]>([]);
   const [addedDoctor, setAddedDoctor] = useState<Doctor | null>(null);
 
-  const handleDepartmentAdded = (department: Department) => {
-    setSelectedDepartment(department);
+  const handleDepartmentsAdded = (departments: Department[]) => {
+    setSelectedDepartments(departments);
     setStep(2);
   };
   
@@ -27,16 +27,21 @@ export default function OnboardingDemoPage() {
       <OnboardingSidebar step={step} />
       <SidebarInset>
         <main className="flex-1 p-4 sm:p-6">
-          {step === 1 && <AddDepartmentStep onDepartmentAdded={handleDepartmentAdded} />}
-          {step === 2 && selectedDepartment && <AddDoctorStep department={selectedDepartment} onDoctorAdded={handleDoctorAdded} />}
-          {step === 3 && selectedDepartment && addedDoctor && (
+          {step === 1 && <AddDepartmentStep onDepartmentsAdded={handleDepartmentsAdded} />}
+          {step === 2 && selectedDepartments.length > 0 && <AddDoctorStep department={selectedDepartments[0]} onDoctorAdded={handleDoctorAdded} />}
+          {step === 3 && selectedDepartments.length > 0 && addedDoctor && (
              <div className="flex flex-col items-center justify-center h-full text-center bg-background p-8 rounded-lg">
                 <h1 className="text-3xl font-bold text-primary mb-4">Onboarding Complete!</h1>
                 <p className="text-lg text-muted-foreground">
-                    You have successfully added your first department and doctor.
+                    You have successfully added your first departments and a doctor.
                 </p>
                 <div className="mt-8 space-y-4">
-                    <p>Department: <span className="font-semibold">{selectedDepartment.name}</span></p>
+                    <div>
+                        <p className="font-semibold">Departments:</p>
+                        <ul className="list-disc list-inside text-muted-foreground">
+                            {selectedDepartments.map(d => <li key={d.id}>{d.name}</li>)}
+                        </ul>
+                    </div>
                     <p>Doctor: <span className="font-semibold">{addedDoctor.name}</span></p>
                 </div>
             </div>
