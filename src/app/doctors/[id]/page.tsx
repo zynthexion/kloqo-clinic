@@ -31,7 +31,7 @@ import { db } from "@/lib/firebase";
 import type { Doctor, Appointment, AvailabilitySlot } from "@/lib/types";
 import { appointments as dummyAppointments } from "@/lib/data";
 import { format, parse, isSameDay, getDay } from "date-fns";
-import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy } from "lucide-react";
+import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -630,5 +630,3 @@ export default function DoctorDetailPage() {
     </div>
   );
 }
-
-    
