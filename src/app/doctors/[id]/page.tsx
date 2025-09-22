@@ -48,6 +48,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -99,6 +100,12 @@ export default function DoctorDetailPage() {
 
   const [isEditingTime, setIsEditingTime] = useState(false);
   const [newAvgTime, setNewAvgTime] = useState<number | string>("");
+
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [isEditingBio, setIsEditingBio] = useState(false);
+  const [newBio, setNewBio] = useState("");
+
   const [isEditingAvailability, setIsEditingAvailability] = useState(false);
 
   const form = useForm<WeeklyAvailabilityFormValues>({
@@ -127,6 +134,8 @@ export default function DoctorDetailPage() {
           const doctorData = { id: doctorSnap.id, ...doctorSnap.data() } as Doctor;
           setDoctor(doctorData);
           setNewAvgTime(doctorData.averageConsultingTime || "");
+          setNewName(doctorData.name);
+          setNewBio(doctorData.bio || "");
           form.reset({
             availableDays: doctorData.availabilitySlots?.map(s => s.day) || [],
             availabilitySlots: doctorData.availabilitySlots || [],
@@ -206,6 +215,46 @@ export default function DoctorDetailPage() {
             }
         });
     }
+
+     const handleNameSave = async () => {
+        if (!doctor || newName.trim() === "") {
+            toast({ variant: "destructive", title: "Invalid Name", description: "Name cannot be empty." });
+            return;
+        }
+
+        startTransition(async () => {
+            const doctorRef = doc(db, "doctors", doctor.id);
+            try {
+                await updateDoc(doctorRef, { name: newName });
+                setDoctor(prev => prev ? { ...prev, name: newName } : null);
+                setIsEditingName(false);
+                toast({
+                    title: "Name Updated",
+                    description: `Doctor's name has been updated to ${newName}.`,
+                });
+            } catch (error) {
+                console.error("Error updating name:", error);
+                toast({ variant: "destructive", title: "Update Failed", description: "Could not update name." });
+            }
+        });
+    };
+
+    const handleBioSave = async () => {
+        if (!doctor) return;
+
+        startTransition(async () => {
+            const doctorRef = doc(db, "doctors", doctor.id);
+            try {
+                await updateDoc(doctorRef, { bio: newBio });
+                setDoctor(prev => prev ? { ...prev, bio: newBio } : null);
+                setIsEditingBio(false);
+                toast({ title: "Bio Updated", description: "Doctor's biography has been updated." });
+            } catch (error) {
+                console.error("Error updating bio:", error);
+                toast({ variant: "destructive", title: "Update Failed", description: "Could not update bio." });
+            }
+        });
+    };
 
     const handleAvailabilitySave = (values: WeeklyAvailabilityFormValues) => {
         if (!doctor) return;
@@ -363,7 +412,23 @@ export default function DoctorDetailPage() {
                   className="rounded-full border-4 border-primary/20 object-cover"
                 />
                 <div className="flex-grow">
-                  <h1 className="text-3xl font-bold">{doctor.name}</h1>
+                   {isEditingName ? (
+                        <div className="flex items-center gap-2">
+                            <Input 
+                                value={newName} 
+                                onChange={(e) => setNewName(e.target.value)} 
+                                className="text-3xl font-bold h-12"
+                                disabled={isPending}
+                            />
+                            <Button size="icon" onClick={handleNameSave} disabled={isPending}><Save className="h-5 w-5"/></Button>
+                            <Button size="icon" variant="ghost" onClick={() => {setIsEditingName(false); setNewName(doctor.name)}} disabled={isPending}><X className="h-5 w-5"/></Button>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-2">
+                           <h1 className="text-3xl font-bold">{doctor.name}</h1>
+                           <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setIsEditingName(true)}><Edit className="h-4 w-4"/></Button>
+                        </div>
+                    )}
                   <p className="text-lg text-muted-foreground">{doctor.specialty}</p>
                   <p className="mt-2 text-sm text-muted-foreground">{doctor.department}</p>
                    <div className="flex items-center space-x-2 mt-4">
@@ -391,11 +456,33 @@ export default function DoctorDetailPage() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
                     <Card>
-                        <CardHeader>
+                        <CardHeader className="flex flex-row items-center justify-between">
                             <CardTitle className="flex items-center gap-2"><Info className="w-5 h-5" /> Bio</CardTitle>
+                             {!isEditingBio && (
+                                <Button variant="outline" size="sm" onClick={() => setIsEditingBio(true)}>
+                                    <Edit className="mr-2 h-4 w-4" /> Edit
+                                </Button>
+                            )}
                         </CardHeader>
                         <CardContent>
-                            <p className="text-muted-foreground">{doctor.bio || "No biography available."}</p>
+                           {isEditingBio ? (
+                                <div className="space-y-2">
+                                    <Textarea 
+                                        value={newBio} 
+                                        onChange={(e) => setNewBio(e.target.value)} 
+                                        className="min-h-[120px]"
+                                        disabled={isPending}
+                                    />
+                                    <div className="flex justify-end gap-2">
+                                        <Button variant="ghost" onClick={() => {setIsEditingBio(false); setNewBio(doctor.bio || "")}} disabled={isPending}>Cancel</Button>
+                                        <Button onClick={handleBioSave} disabled={isPending}>
+                                            {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Saving...</> : 'Save Bio'}
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="text-muted-foreground">{doctor.bio || "No biography available."}</p>
+                            )}
                         </CardContent>
                     </Card>
                     <Card>
@@ -704,3 +791,5 @@ export default function DoctorDetailPage() {
     </div>
   );
 }
+
+    
