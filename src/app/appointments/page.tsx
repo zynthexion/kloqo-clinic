@@ -355,8 +355,8 @@ export default function AppointmentsPage() {
       <header className="sticky top-16 z-10 flex h-14 items-center gap-4 border-b bg-background px-4 sm:px-6">
         <h1 className="text-xl font-semibold md:text-2xl">Appointments</h1>
       </header>
-      <div className="flex-1 flex overflow-hidden">
-        <main className={cn("p-6 overflow-auto transition-all duration-300 ease-in-out", isDrawerOpen ? 'w-2/3' : 'w-full')}>
+      <div className="flex-1 flex overflow-hidden p-6 gap-6">
+        <main className={cn("overflow-auto transition-all duration-300 ease-in-out w-full", isDrawerOpen ? 'md:w-2/3' : 'w-full')}>
             <Card className="h-full">
               <CardHeader>
                 <CardTitle>{isEditing ? "Reschedule Appointment" : "Book New Appointment"}</CardTitle>
@@ -525,10 +525,10 @@ export default function AppointmentsPage() {
         </main>
         
         <aside className={cn(
-            "h-full border-l transition-all duration-300 ease-in-out overflow-hidden",
+            "transition-all duration-300 ease-in-out overflow-hidden",
             isDrawerOpen ? 'w-full md:w-1/3' : 'w-0'
         )}>
-            <Card className="h-full rounded-none">
+            <Card className="h-full rounded-2xl">
                 <CardHeader className="p-6 border-b">
                     <CardTitle>Upcoming Appointments</CardTitle>
                     <CardDescription>A list of all scheduled appointments.</CardDescription>
@@ -591,9 +591,9 @@ export default function AppointmentsPage() {
             </Card>
         </aside>
 
-         <div className="fixed right-0 top-1/2 -translate-y-1/2 z-20">
+         <div className="fixed right-6 top-1/2 -translate-y-1/2 z-20">
               <Button 
-                className="relative h-24 w-8 rounded-l-lg rounded-r-none shadow-lg animate-wave" 
+                className="relative h-24 w-8 rounded-lg shadow-lg animate-wave" 
                 size="icon" 
                 onClick={() => setIsDrawerOpen(!isDrawerOpen)}
               >
@@ -604,5 +604,3 @@ export default function AppointmentsPage() {
     </div>
   );
 }
-
-    
