@@ -26,9 +26,9 @@ import { Button } from "@/components/ui/button";
 import { AppSidebar } from "@/components/layout/sidebar";
 import { SidebarInset } from "@/components/ui/sidebar";
 import { DoctorsHeader } from "@/components/layout/header";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Doctor, Appointment, LeaveSlot, AvailabilitySlot } from "@/lib/types";
+import type { Doctor, Appointment, LeaveSlot, AvailabilitySlot, Department } from "@/lib/types";
 import { appointments as dummyAppointments } from "@/lib/data";
 import { format, parse, isSameDay, getDay } from "date-fns";
 import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2 } from "lucide-react";
@@ -93,6 +93,7 @@ export default function DoctorDetailPage() {
   const [isPending, startTransition] = useTransition();
 
   const [doctor, setDoctor] = useState<Doctor | null>(null);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [leaveCalDate, setLeaveCalDate] = useState<Date | undefined>(new Date());
@@ -105,6 +106,10 @@ export default function DoctorDetailPage() {
   const [newName, setNewName] = useState("");
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [newBio, setNewBio] = useState("");
+  const [isEditingSpecialty, setIsEditingSpecialty] = useState(false);
+  const [newSpecialty, setNewSpecialty] = useState("");
+  const [isEditingDepartment, setIsEditingDepartment] = useState(false);
+  const [newDepartment, setNewDepartment] = useState("");
 
   const [isEditingAvailability, setIsEditingAvailability] = useState(false);
 
@@ -136,6 +141,8 @@ export default function DoctorDetailPage() {
           setNewAvgTime(doctorData.averageConsultingTime || "");
           setNewName(doctorData.name);
           setNewBio(doctorData.bio || "");
+          setNewSpecialty(doctorData.specialty);
+          setNewDepartment(doctorData.department || "");
           form.reset({
             availableDays: doctorData.availabilitySlots?.map(s => s.day) || [],
             availabilitySlots: doctorData.availabilitySlots || [],
@@ -160,7 +167,15 @@ export default function DoctorDetailPage() {
         setLoading(false);
       };
 
+      const fetchDepartments = async () => {
+        const departmentsCollection = collection(db, "departments");
+        const departmentsSnapshot = await getDocs(departmentsCollection);
+        const departmentsList = departmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Department));
+        setDepartments(departmentsList);
+      };
+
       fetchDoctorData();
+      fetchDepartments();
     }
   }, [id, form]);
 
@@ -252,6 +267,52 @@ export default function DoctorDetailPage() {
             } catch (error) {
                 console.error("Error updating bio:", error);
                 toast({ variant: "destructive", title: "Update Failed", description: "Could not update bio." });
+            }
+        });
+    };
+
+    const handleSpecialtySave = async () => {
+        if (!doctor || newSpecialty.trim() === "") {
+            toast({ variant: "destructive", title: "Invalid Specialty", description: "Specialty cannot be empty." });
+            return;
+        }
+
+        startTransition(async () => {
+            const doctorRef = doc(db, "doctors", doctor.id);
+            try {
+                await updateDoc(doctorRef, { specialty: newSpecialty });
+                setDoctor(prev => prev ? { ...prev, specialty: newSpecialty } : null);
+                setIsEditingSpecialty(false);
+                toast({
+                    title: "Specialty Updated",
+                    description: `Doctor's specialty has been updated to ${newSpecialty}.`,
+                });
+            } catch (error) {
+                console.error("Error updating specialty:", error);
+                toast({ variant: "destructive", title: "Update Failed", description: "Could not update specialty." });
+            }
+        });
+    };
+
+    const handleDepartmentSave = async () => {
+        if (!doctor || newDepartment.trim() === "") {
+            toast({ variant: "destructive", title: "Invalid Department", description: "Department cannot be empty." });
+            return;
+        }
+
+        startTransition(async () => {
+            const doctorRef = doc(db, "doctors", doctor.id);
+            try {
+                await updateDoc(doctorRef, { department: newDepartment });
+                setDoctor(prev => prev ? { ...prev, department: newDepartment } : null);
+                setIsEditingDepartment(false);
+                toast({
+                    title: "Department Updated",
+                    description: `Doctor's department has been updated to ${newDepartment}.`,
+                });
+            } catch (error) {
+                console.error("Error updating department:", error);
+                toast({ variant: "destructive", title: "Update Failed", description: "Could not update department." });
             }
         });
     };
@@ -429,8 +490,46 @@ export default function DoctorDetailPage() {
                            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setIsEditingName(true)}><Edit className="h-4 w-4"/></Button>
                         </div>
                     )}
-                  <p className="text-lg text-muted-foreground">{doctor.specialty}</p>
-                  <p className="mt-2 text-sm text-muted-foreground">{doctor.department}</p>
+                  {isEditingSpecialty ? (
+                    <div className="flex items-center gap-2 mt-1">
+                        <Input 
+                            value={newSpecialty} 
+                            onChange={(e) => setNewSpecialty(e.target.value)} 
+                            className="text-lg h-10"
+                            disabled={isPending}
+                        />
+                        <Button size="icon" onClick={handleSpecialtySave} disabled={isPending}><Save className="h-5 w-5"/></Button>
+                        <Button size="icon" variant="ghost" onClick={() => {setIsEditingSpecialty(false); setNewSpecialty(doctor.specialty)}} disabled={isPending}><X className="h-5 w-5"/></Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <p className="text-lg text-muted-foreground">{doctor.specialty}</p>
+                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setIsEditingSpecialty(true)}><Edit className="h-4 w-4"/></Button>
+                    </div>
+                  )}
+
+                  {isEditingDepartment ? (
+                    <div className="flex items-center gap-2 mt-1">
+                        <Select onValueChange={setNewDepartment} value={newDepartment}>
+                            <SelectTrigger className="w-[200px] h-9">
+                                <SelectValue placeholder="Select department" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {departments.map(dept => (
+                                    <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Button size="icon" className="h-9 w-9" onClick={handleDepartmentSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
+                        <Button size="icon" variant="ghost" className="h-9 w-9" onClick={() => {setIsEditingDepartment(false); setNewDepartment(doctor.department || "")}} disabled={isPending}><X className="h-4 w-4"/></Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <p className="mt-2 text-sm text-muted-foreground">{doctor.department}</p>
+                      <Button size="icon" variant="ghost" className="h-8 w-8 mt-1" onClick={() => setIsEditingDepartment(true)}><Edit className="h-4 w-4"/></Button>
+                    </div>
+                  )}
+
                    <div className="flex items-center space-x-2 mt-4">
                       <Switch
                         id="status-switch"
@@ -792,4 +891,4 @@ export default function DoctorDetailPage() {
   );
 }
 
-    
+
