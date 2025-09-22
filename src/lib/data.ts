@@ -11,6 +11,9 @@ export const appointments: Appointment[] = [
   {
     id: 'APT001',
     patientName: 'Caren G. Simpson',
+    gender: 'Female',
+    phone: '123-456-7890',
+    age: 34,
     date: '20 July 2028',
     time: '09:00 AM',
     doctor: 'Dr. Petra Winsburry',
@@ -21,6 +24,9 @@ export const appointments: Appointment[] = [
   {
     id: 'APT002',
     patientName: 'Edgar Warrow',
+    gender: 'Male',
+    phone: '234-567-8901',
+    age: 45,
     date: '20 July 2028',
     time: '10:30 AM',
     doctor: 'Dr. Olivia Martinez',
@@ -31,6 +37,9 @@ export const appointments: Appointment[] = [
   {
     id: 'APT003',
     patientName: 'Ocean Jane Lupre',
+    gender: 'Female',
+    phone: '345-678-9012',
+    age: 28,
     date: '20 July 2028',
     time: '11:00 AM',
     doctor: 'Dr. Damian Sanchez',
@@ -41,6 +50,9 @@ export const appointments: Appointment[] = [
   {
     id: 'APT004',
     patientName: 'Shane Riddick',
+    gender: 'Male',
+    phone: '456-789-0123',
+    age: 52,
     date: '20 July 2028',
     time: '01:00 PM',
     doctor: 'Dr. Chloe Harrington',
@@ -51,6 +63,9 @@ export const appointments: Appointment[] = [
   {
     id: 'APT005',
     patientName: 'Queen Lawnston',
+    gender: 'Female',
+    phone: '567-890-1234',
+    age: 61,
     date: '20-07-28',
     time: '02:30 PM',
     doctor: 'Dr. Petra Winsburry',
@@ -61,6 +76,9 @@ export const appointments: Appointment[] = [
   {
     id: 'APT006',
     patientName: 'Alice Mitchell',
+    gender: 'Female',
+    phone: '678-901-2345',
+    age: 29,
     date: '20 July 2028',
     time: '09:00 AM',
     doctor: 'Dr. Emily Smith',
@@ -71,6 +89,9 @@ export const appointments: Appointment[] = [
   {
     id: 'APT007',
     patientName: 'Mikhail Morozov',
+    gender: 'Male',
+    phone: '789-012-3456',
+    age: 58,
     date: '20 July 2028',
     time: '10:30 AM',
     doctor: 'Dr. Samuel Thompson',
@@ -81,6 +102,9 @@ export const appointments: Appointment[] = [
   {
     id: 'APT008',
     patientName: 'Mateus Fernandes',
+    gender: 'Male',
+    phone: '890-123-4567',
+    age: 7,
     date: '20 July 2028',
     time: '11:00 AM',
     doctor: 'Dr. Sarah Johnson',
@@ -91,6 +115,9 @@ export const appointments: Appointment[] = [
   {
     id: 'APT009',
     patientName: 'Pari Desai',
+    gender: 'Female',
+    phone: '901-234-5678',
+    age: 41,
     date: '20 July 2028',
     time: '01:00 PM',
     doctor: 'Dr. Luke Harrison',
@@ -101,6 +128,9 @@ export const appointments: Appointment[] = [
   {
     id: 'APT010',
     patientName: 'Omar Ali',
+    gender: 'Male',
+    phone: '012-345-6789',
+    age: 33,
     date: '20 July 2028',
     time: '02:30 PM',
     doctor: 'Dr. Andrew Peterson',
@@ -111,6 +141,9 @@ export const appointments: Appointment[] = [
   {
     id: 'APT011',
     patientName: 'Camila Alvarez',
+    gender: 'Female',
+    phone: '112-233-4455',
+    age: 68,
     date: '20 July 2028',
     time: '03:00 PM',
     doctor: 'Dr. Olivia Martinez',
@@ -121,6 +154,9 @@ export const appointments: Appointment[] = [
   {
     id: 'APT012',
     patientName: 'Thabo van Rooyen',
+    gender: 'Male',
+    phone: '223-344-5566',
+    age: 5,
     date: '20 July 2028',
     time: '04:00 PM',
     doctor: 'Dr. William Carter',
@@ -131,6 +167,9 @@ export const appointments: Appointment[] = [
   {
     id: 'APT013',
     patientName: 'Chance Geidt',
+    gender: 'Male',
+    phone: '334-455-6677',
+    age: 50,
     date: '20 July 2028',
     time: '04:30 PM',
     doctor: 'Dr. Samuel Thompson',
@@ -287,5 +326,7 @@ export const liveStatuses: LiveStatus[] = [
     status: 'available',
   },
 ];
+
+    
 
     

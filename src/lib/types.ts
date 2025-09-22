@@ -1,9 +1,4 @@
 
-
-
-
-
-
 export type TimeSlot = {
   from: string;
   to: string;
@@ -34,6 +29,9 @@ export type Doctor = {
 export type Appointment = {
   id: string;
   patientName: string;
+  gender: 'Male' | 'Female' | 'Other';
+  phone: string;
+  age: number;
   doctor: string;
   date: string;
   time: string;
@@ -75,6 +73,8 @@ export type LiveStatus = {
     queue?: number;
     returnTime?: string;
 };
+    
+
     
 
     
