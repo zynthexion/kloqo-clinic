@@ -50,59 +50,62 @@ import { db, storage } from "@/lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useToast } from "@/hooks/use-toast";
 import { AppSidebar } from "@/components/layout/sidebar";
+import Link from 'next/link';
 
 const DoctorCard = ({ doctor, onEdit, onDelete }: { doctor: Doctor, onEdit: (doctor: Doctor) => void, onDelete: (doctor: Doctor) => void }) => (
-    <Card>
-        <CardHeader className="flex-row items-start justify-between">
-            <div className="flex items-center gap-4">
-                <Image
-                    src={doctor.avatar}
-                    alt={doctor.name}
-                    width={48}
-                    height={48}
-                    className="rounded-full object-cover"
-                    data-ai-hint="doctor portrait"
-                />
-                <div>
-                    <CardTitle className="text-lg">{doctor.name}</CardTitle>
-                    <p className="text-sm text-muted-foreground">{doctor.specialty}</p>
+    <Card className="flex flex-col h-full group">
+        <Link href={`/doctors/${doctor.id}`} className="flex-grow">
+            <CardHeader className="flex-row items-start justify-between">
+                <div className="flex items-center gap-4">
+                    <Image
+                        src={doctor.avatar}
+                        alt={doctor.name}
+                        width={48}
+                        height={48}
+                        className="rounded-full object-cover"
+                        data-ai-hint="doctor portrait"
+                    />
+                    <div>
+                        <CardTitle className="text-lg group-hover:text-primary">{doctor.name}</CardTitle>
+                        <p className="text-sm text-muted-foreground">{doctor.specialty}</p>
+                    </div>
                 </div>
-            </div>
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="h-8 w-8 p-0">
-                        <span className="sr-only">Open menu</span>
-                        <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                    <DropdownMenuItem onSelect={() => onEdit(doctor)}>
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => onDelete(doctor)} className="text-red-600">
-                        <Trash className="mr-2 h-4 w-4" />
-                        Delete
-                    </DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
-        </CardHeader>
-        <CardContent className="space-y-4">
-             <div>
-                <p className="text-xs font-medium uppercase text-muted-foreground">Department</p>
-                <p className="text-sm">{doctor.department}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-4 text-sm">
+                 <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0" onClick={(e) => e.stopPropagation()}>
+                            <span className="sr-only">Open menu</span>
+                            <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem onSelect={(e) => { e.stopPropagation(); onEdit(doctor); }}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={(e) => { e.stopPropagation(); onDelete(doctor); }} className="text-red-600">
+                            <Trash className="mr-2 h-4 w-4" />
+                            Delete
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </CardHeader>
+            <CardContent className="space-y-4">
                 <div>
-                    <p className="text-xs font-medium uppercase text-muted-foreground flex items-center gap-1"><Users className="h-3 w-3" /> Total Patients</p>
-                    <p className="text-sm">{doctor.totalPatients}</p>
+                    <p className="text-xs font-medium uppercase text-muted-foreground">Department</p>
+                    <p className="text-sm">{doctor.department}</p>
                 </div>
-                <div>
-                    <p className="text-xs font-medium uppercase text-muted-foreground flex items-center gap-1"><CalendarDays className="h-3 w-3" /> Today</p>
-                    <p className="text-sm">{doctor.todaysAppointments}</p>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <p className="text-xs font-medium uppercase text-muted-foreground flex items-center gap-1"><Users className="h-3 w-3" /> Total Patients</p>
+                        <p className="text-sm">{doctor.totalPatients}</p>
+                    </div>
+                    <div>
+                        <p className="text-xs font-medium uppercase text-muted-foreground flex items-center gap-1"><CalendarDays className="h-3 w-3" /> Today</p>
+                        <p className="text-sm">{doctor.todaysAppointments}</p>
+                    </div>
                 </div>
-            </div>
-        </CardContent>
+            </CardContent>
+        </Link>
         <CardFooter>
             <Badge
                 variant={
@@ -178,7 +181,7 @@ export default function DoctorsPage() {
           schedule: scheduleString,
         };
         await updateDoc(doctorRef, updatedDoctorData);
-        setDoctors(prev => prev.map(d => d.id === doctorData.id ? { ...d, ...updatedDoctorData } : d));
+        setDoctors(prev => prev.map(d => d.id === doctorData.id ? { ...d, ...updatedDoctorData } as Doctor : d));
         toast({
           title: "Doctor Updated",
           description: `${doctorData.name} has been successfully updated.`,
@@ -462,5 +465,3 @@ export default function DoctorsPage() {
     </>
   );
 }
-
-    

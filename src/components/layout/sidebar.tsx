@@ -1,3 +1,4 @@
+
 "use client";
 import Link from "next/link";
 import {
@@ -9,7 +10,8 @@ import {
   Activity,
   PlusCircle,
   HelpCircle,
-  ClipboardList
+  ClipboardList,
+  Users
 } from "lucide-react";
 import {
   Sidebar,
@@ -42,6 +44,11 @@ const menuItems = [
     href: "/doctors",
     icon: Stethoscope,
     label: "Doctors",
+  },
+    {
+    href: "/patients",
+    icon: Users,
+    label: "Patients",
   },
   {
     href: "/departments",
@@ -80,7 +87,7 @@ export function AppSidebar() {
               <SidebarMenuButton
                 asChild
                 tooltip={item.label}
-                isActive={pathname === item.href}
+                isActive={pathname.startsWith(item.href) && item.href !== "/" || pathname === item.href}
               >
                 <Link href={item.href}>
                   <item.icon />
