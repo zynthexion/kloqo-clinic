@@ -40,7 +40,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { PlusCircle, ClipboardList, ChevronRight } from "lucide-react";
+import { PlusCircle, ChevronRight } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -324,11 +324,6 @@ export default function AppointmentsPage() {
     return slots;
   }, [selectedDate, selectedDoctor, appointments, isEditing, editingAppointment]);
   
-  const handleOpenReschedule = (appointment: Appointment) => {
-    setEditingAppointment(appointment);
-    setIsDrawerOpen(false);
-  }
-
   const isAppointmentOnLeave = (appointment: Appointment): boolean => {
       if (!doctors.length || !appointment) return false;
       
@@ -355,8 +350,8 @@ export default function AppointmentsPage() {
       <header className="sticky top-16 z-10 flex h-14 items-center gap-4 border-b bg-background px-4 sm:px-6">
         <h1 className="text-xl font-semibold md:text-2xl">Appointments</h1>
       </header>
-      <div className="flex-1 flex overflow-hidden p-6 gap-6">
-        <main className={cn("overflow-auto transition-all duration-300 ease-in-out w-full", isDrawerOpen ? 'md:w-2/3' : 'w-full')}>
+      <div className="relative flex-1 flex overflow-hidden p-6 gap-6">
+        <main className={cn("flex-shrink-0 overflow-auto transition-all duration-300 ease-in-out", isDrawerOpen ? 'w-2/3' : 'w-full')}>
             <Card className="h-full">
               <CardHeader>
                 <CardTitle>{isEditing ? "Reschedule Appointment" : "Book New Appointment"}</CardTitle>
@@ -525,8 +520,8 @@ export default function AppointmentsPage() {
         </main>
         
         <aside className={cn(
-            "transition-all duration-300 ease-in-out overflow-hidden",
-            isDrawerOpen ? 'w-full md:w-1/3' : 'w-0'
+            "flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden",
+            isDrawerOpen ? 'w-1/3' : 'w-0'
         )}>
             <Card className="h-full rounded-2xl">
                 <CardHeader className="p-6 border-b">
@@ -593,14 +588,26 @@ export default function AppointmentsPage() {
 
          <div className="fixed right-6 top-1/2 -translate-y-1/2 z-20">
               <Button 
-                className="relative h-24 w-8 rounded-lg shadow-lg animate-wave" 
+                className={cn("relative h-24 w-8 rounded-lg shadow-lg animate-wave", isDrawerOpen && "hidden")}
                 size="icon" 
-                onClick={() => setIsDrawerOpen(!isDrawerOpen)}
+                onClick={() => setIsDrawerOpen(true)}
               >
-                  <ChevronRight className={cn("h-6 w-6 transition-transform duration-300", isDrawerOpen && "rotate-180")} />
+                  <ChevronRight className="h-6 w-6 transition-transform duration-300 -rotate-180" />
               </Button>
           </div>
+          <Button 
+            className={cn("fixed top-1/2 -translate-y-1/2 h-24 w-8 rounded-lg shadow-lg animate-wave z-20", 
+                         "transition-all duration-300 ease-in-out",
+                         isDrawerOpen ? "right-[calc(33.33%-1rem)]" : "-right-10"
+            )}
+            size="icon" 
+            onClick={() => setIsDrawerOpen(false)}
+          >
+              <ChevronRight className="h-6 w-6 transition-transform duration-300" />
+          </Button>
       </div>
     </div>
   );
 }
+
+    
