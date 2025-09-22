@@ -356,7 +356,7 @@ export default function AppointmentsPage() {
         <h1 className="text-xl font-semibold md:text-2xl">Appointments</h1>
       </header>
       <div className="flex-1 flex overflow-hidden">
-        <main className={cn("flex-1 p-6 overflow-auto transition-all duration-300 ease-in-out", isDrawerOpen ? 'md:w-2/3' : 'w-full')}>
+        <main className={cn("p-6 overflow-auto transition-all duration-300 ease-in-out", isDrawerOpen ? 'w-2/3' : 'w-full')}>
             <Card className="h-full">
               <CardHeader>
                 <CardTitle>{isEditing ? "Reschedule Appointment" : "Book New Appointment"}</CardTitle>
@@ -525,7 +525,7 @@ export default function AppointmentsPage() {
         </main>
         
         <aside className={cn(
-            "h-full bg-background border-l transition-all duration-300 ease-in-out overflow-hidden",
+            "h-full bg-background border-l transition-all duration-300 ease-in-out overflow-hidden rounded-l-2xl",
             isDrawerOpen ? 'w-full md:w-1/3' : 'w-0'
         )}>
             <div className="p-6 border-b">
@@ -589,7 +589,7 @@ export default function AppointmentsPage() {
 
          <div className="fixed right-0 top-1/2 -translate-y-1/2 z-20">
               <Button 
-                className="relative h-24 w-8 rounded-l-lg rounded-r-none shadow-lg" 
+                className="relative h-24 w-8 rounded-l-lg rounded-r-none shadow-lg animate-wave" 
                 size="icon" 
                 onClick={() => setIsDrawerOpen(!isDrawerOpen)}
               >
@@ -600,3 +600,5 @@ export default function AppointmentsPage() {
     </div>
   );
 }
+
+    
