@@ -2,22 +2,32 @@
 "use client";
 
 import Image from "next/image";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { Appointment } from "@/lib/types";
+import type { Appointment, Doctor } from "@/lib/types";
 import { format } from "date-fns";
-import { doctors } from "@/lib/data";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
 
 const initialAppointments: Appointment[] = [];
 
 
 export default function UpcomingAppointments() {
   const [appointments] = React.useState<Appointment[]>(initialAppointments);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [isClient, setIsClient] = React.useState(false);
 
   React.useEffect(() => {
     setIsClient(true);
+    const fetchDoctors = async () => {
+      const doctorsCollection = collection(db, "doctors");
+      const doctorsSnapshot = await getDocs(doctorsCollection);
+      const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
+      setDoctors(doctorsList);
+    };
+    fetchDoctors();
   }, []);
 
   const upcomingAppointments = React.useMemo(() => {
@@ -78,5 +88,3 @@ export default function UpcomingAppointments() {
     </Card>
   );
 }
-
-    

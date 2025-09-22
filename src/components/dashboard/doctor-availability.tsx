@@ -1,16 +1,17 @@
 
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useState, useTransition, useEffect } from "react";
 import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { doctors } from "@/lib/data";
 import type { Doctor } from "@/lib/types";
 import { getAdjustedAvailability } from "@/app/actions";
 import { Loader2, Wand2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 type DoctorAvailabilityState = {
   [key: string]: {
@@ -23,6 +24,17 @@ export default function DoctorAvailability() {
   const [isPending, startTransition] = useTransition();
   const [availability, setAvailability] = useState<DoctorAvailabilityState>({});
   const { toast } = useToast();
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      const doctorsCollection = collection(db, "doctors");
+      const doctorsSnapshot = await getDocs(doctorsCollection);
+      const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
+      setDoctors(doctorsList);
+    };
+    fetchDoctors();
+  }, []);
 
   const handleAnalysis = (doctor: Doctor) => {
     startTransition(async () => {
