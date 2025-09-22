@@ -352,7 +352,7 @@ export default function AppointmentsPage() {
       </header>
       <div className="relative flex flex-1 overflow-hidden">
         <div className="flex flex-1 p-6 gap-6">
-            <main className={cn("flex-shrink-0 overflow-auto transition-all duration-300 ease-in-out", isDrawerOpen ? 'w-2/3 pr-6' : 'w-full')}>
+            <main className={cn("flex-shrink-0 overflow-auto transition-all duration-300 ease-in-out pr-6", isDrawerOpen ? 'w-2/3' : 'w-full')}>
                 <Card className="h-full">
                   <CardHeader>
                     <CardTitle>{isEditing ? "Reschedule Appointment" : "Book New Appointment"}</CardTitle>
@@ -505,13 +505,7 @@ export default function AppointmentsPage() {
                             )}
                           </div>
                         </div>
-                        <div className="flex justify-between items-center pt-4">
-                            <div className="flex gap-2">
-                                 <Button onClick={resetForm} variant="outline">
-                                    <PlusCircle className="mr-2 h-4 w-4" />
-                                    New Appointment
-                                </Button>
-                            </div>
+                        <div className="flex justify-end items-center pt-4">
                             <div className="flex justify-end gap-2">
                                 {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
                                 <Button type="submit">{isEditing ? "Save Changes" : "Book Appointment"}</Button>
@@ -524,7 +518,7 @@ export default function AppointmentsPage() {
             </main>
             
             <aside className={cn(
-                "flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden bg-background",
+                "flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden",
                 isDrawerOpen ? 'w-1/3' : 'w-0'
             )}>
                 <Card className="h-full rounded-2xl">
@@ -614,6 +608,8 @@ export default function AppointmentsPage() {
     </div>
   );
 }
+
+    
 
     
 
