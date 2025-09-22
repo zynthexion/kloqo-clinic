@@ -60,11 +60,12 @@ type AddAppointmentFormProps = {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
   doctors: Doctor[];
+  appointments: Appointment[];
 };
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-export function AddAppointmentForm({ onSave, isOpen, setIsOpen, doctors }: AddAppointmentFormProps) {
+export function AddAppointmentForm({ onSave, isOpen, setIsOpen, doctors, appointments }: AddAppointmentFormProps) {
   
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   
@@ -135,11 +136,17 @@ export function AddAppointmentForm({ onSave, isOpen, setIsOpen, doctors }: AddAp
     if (!selectedDate || !selectedDoctor || !selectedDoctor.availabilitySlots || !selectedDoctor.averageConsultingTime) {
       return [];
     }
+
     const dayOfWeek = daysOfWeek[getDay(selectedDate)];
     const availabilityForDay = selectedDoctor.availabilitySlots.find(s => s.day === dayOfWeek);
     if (!availabilityForDay) return [];
+    
+    const formattedDate = format(selectedDate, "d MMMM yyyy");
+    const bookedSlotsForDay = appointments
+      .filter(apt => apt.doctor === selectedDoctor.name && apt.date === formattedDate)
+      .map(apt => apt.time);
 
-    const slots: string[] = [];
+    const slots: { time: string; disabled: boolean }[] = [];
     const avgTime = selectedDoctor.averageConsultingTime;
     
     const leaveForDate = selectedDoctor.leaveSlots?.find(ls => isSameDay(parse(ls.date, 'yyyy-MM-dd', new Date()), selectedDate));
@@ -159,7 +166,10 @@ export function AddAppointmentForm({ onSave, isOpen, setIsOpen, doctors }: AddAp
         });
 
         if (!isLeave) {
-            slots.push(slotTime);
+            slots.push({
+              time: slotTime,
+              disabled: bookedSlotsForDay.includes(slotTime),
+            });
         }
 
         currentTime.setMinutes(currentTime.getMinutes() + avgTime);
@@ -167,7 +177,7 @@ export function AddAppointmentForm({ onSave, isOpen, setIsOpen, doctors }: AddAp
     });
 
     return slots;
-  }, [selectedDate, selectedDoctor]);
+  }, [selectedDate, selectedDoctor, appointments]);
 
 
   return (
@@ -392,12 +402,14 @@ export function AddAppointmentForm({ onSave, isOpen, setIsOpen, doctors }: AddAp
                                 <div className="grid grid-cols-4 gap-2">
                                   {timeSlots.length > 0 ? timeSlots.map(slot => (
                                     <Button
-                                      key={slot}
+                                      key={slot.time}
                                       type="button"
-                                      variant={field.value === slot ? "default" : "outline"}
-                                      onClick={() => field.onChange(slot)}
+                                      variant={field.value === slot.time ? "default" : "outline"}
+                                      onClick={() => field.onChange(slot.time)}
+                                      disabled={slot.disabled}
+                                      className={cn(slot.disabled && "line-through")}
                                     >
-                                      {slot}
+                                      {slot.time}
                                     </Button>
                                   )) : <p className="text-sm text-muted-foreground col-span-4">No available slots for this day.</p>}
                                 </div>

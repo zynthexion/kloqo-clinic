@@ -90,21 +90,13 @@ export default function AppointmentsPage() {
         const tokenNumber = `TKN${String(appointments.length + 1).padStart(3, '0')}`;
         const doctorName = doctors.find(d => d.id === appointmentData.doctor)?.name || "Unknown Doctor";
         
+        const { doctor, ...restOfAppointmentData } = appointmentData;
+
         const newAppointmentData: Appointment = {
+            ...restOfAppointmentData,
             id: newAppointmentRef.id,
-            patientName: appointmentData.patientName,
-            gender: appointmentData.gender,
-            phone: appointmentData.phone,
-            age: appointmentData.age,
-            date: appointmentData.date,
-            time: appointmentData.time,
             doctor: doctorName,
-            department: appointmentData.department,
-            status: appointmentData.status,
-            treatment: appointmentData.treatment,
             tokenNumber: tokenNumber,
-            bookedVia: appointmentData.bookedVia,
-            place: appointmentData.place,
         };
 
         await setDoc(newAppointmentRef, newAppointmentData);
@@ -305,6 +297,7 @@ export default function AppointmentsPage() {
         setIsOpen={setIsAddAppointmentOpen}
         onSave={handleSaveAppointment}
         doctors={doctors}
+        appointments={appointments}
       />
     </>
   );
