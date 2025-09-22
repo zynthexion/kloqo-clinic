@@ -1,12 +1,14 @@
 
+
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
-import { format, getDay } from "date-fns";
+import { useState, useEffect, useMemo } from "react";
+import { format, getDay, isSameDay, parse as parseDateFns } from "date-fns";
 import { Badge } from "@/components/ui/badge";
-import type { AvailabilitySlot, TimeSlot, LeaveSlot } from "@/lib/types";
+import type { AvailabilitySlot, TimeSlot, LeaveSlot, Appointment } from "@/lib/types";
 import { Button } from "../ui/button";
-import { Loader2 } from "lucide-react";
+import { Loader2, Users } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -14,11 +16,12 @@ type TimeSlotsProps = {
   selectedDate: Date | undefined;
   availabilitySlots: AvailabilitySlot[];
   leaveSlots: LeaveSlot[];
+  appointments: Appointment[];
   onLeaveUpdate: (updatedLeave: LeaveSlot[]) => void;
   isPending: boolean;
 };
 
-export function TimeSlots({ selectedDate, availabilitySlots, leaveSlots, onLeaveUpdate, isPending }: TimeSlotsProps) {
+export function TimeSlots({ selectedDate, availabilitySlots, leaveSlots, appointments, onLeaveUpdate, isPending }: TimeSlotsProps) {
   const [markedAsLeave, setMarkedAsLeave] = useState<TimeSlot[]>([]);
 
   useEffect(() => {
@@ -41,6 +44,18 @@ export function TimeSlots({ selectedDate, availabilitySlots, leaveSlots, onLeave
 
   const dayOfWeek = daysOfWeek[getDay(selectedDate)];
   const daySlots = availabilitySlots.find(slot => slot.day === dayOfWeek);
+
+  const getAppointmentsForSlot = (slot: TimeSlot) => {
+    if (!selectedDate) return 0;
+    const formattedDate = format(selectedDate, 'd MMMM yyyy');
+    const slotStart = parseDateFns(slot.from, 'HH:mm', selectedDate);
+
+    return appointments.filter(apt => {
+        if (apt.date !== formattedDate) return false;
+        const aptTime = parseDateFns(apt.time, 'hh:mm a', selectedDate);
+        return aptTime.getTime() === slotStart.getTime();
+    }).length;
+  }
 
   const toggleSlot = (slotToToggle: TimeSlot) => {
     setMarkedAsLeave(prev => {
@@ -78,19 +93,26 @@ export function TimeSlots({ selectedDate, availabilitySlots, leaveSlots, onLeave
       <h3 className="font-semibold mb-2">
         Available Slots for {format(selectedDate, "MMMM d, yyyy")}
       </h3>
-      <div className="space-y-2 flex-grow">
+      <div className="space-y-2 flex-grow overflow-y-auto">
         {daySlots && daySlots.timeSlots.length > 0 ? (
           daySlots.timeSlots.map((ts, i) => {
             const isMarked = markedAsLeave.some(s => s.from === ts.from && s.to === ts.to);
+            const appointmentCount = getAppointmentsForSlot(ts);
             return (
-              <Badge
+              <Button
                 key={i}
-                variant={isMarked ? "danger" : "success"}
-                className="text-sm cursor-pointer w-full justify-center"
+                variant={isMarked ? "destructive" : "outline"}
+                className="text-sm cursor-pointer w-full justify-between h-auto"
                 onClick={() => toggleSlot(ts)}
               >
-                {ts.from} - {ts.to}
-              </Badge>
+                <span>{ts.from} - {ts.to}</span>
+                {appointmentCount > 0 && (
+                    <Badge variant="secondary" className={cn(isMarked && "bg-white/20")}>
+                        <Users className="w-3 h-3 mr-1" />
+                        {appointmentCount}
+                    </Badge>
+                )}
+              </Button>
             );
           })
         ) : (

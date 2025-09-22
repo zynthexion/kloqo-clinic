@@ -31,7 +31,7 @@ import { doc, getDoc, updateDoc, collection, getDocs } from "firebase/firestore"
 import { db } from "@/lib/firebase";
 import type { Doctor, Appointment, LeaveSlot, AvailabilitySlot, Department } from "@/lib/types";
 import { appointments as dummyAppointments } from "@/lib/data";
-import { format, parse, isSameDay, getDay } from "date-fns";
+import { format, parse, isSameDay, getDay, setHours, setMinutes, parse as parseDateFns } from "date-fns";
 import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -50,6 +50,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -147,8 +148,10 @@ export default function DoctorDetailPage() {
             availabilitySlots: doctorData.availabilitySlots || [],
           });
 
-          // Use dummy appointments and filter by doctor name
-          const doctorAppointments = dummyAppointments.filter(
+          const appointmentsCollection = collection(db, "appointments");
+          const appointmentsSnapshot = await getDocs(appointmentsCollection);
+          const allAppointments = appointmentsSnapshot.docs.map(doc => ({ ...doc.data() } as Appointment));
+          const doctorAppointments = allAppointments.filter(
             (apt) => apt.doctor === doctorData.name
           );
           setAppointments(doctorAppointments);
@@ -371,6 +374,23 @@ export default function DoctorDetailPage() {
           .filter(ls => ls.slots.length > 0)
           .map(ls => parse(ls.date, 'yyyy-MM-dd', new Date()));
   }, [doctor?.leaveSlots]);
+
+  const isAppointmentOnLeave = (appointment: Appointment): boolean => {
+      if (!doctor?.leaveSlots || !appointment) return false;
+      
+      const aptDate = parse(appointment.date, "d MMMM yyyy", new Date());
+      const leaveForDay = doctor.leaveSlots.find(ls => isSameDay(parse(ls.date, "yyyy-MM-dd", new Date()), aptDate));
+      
+      if (!leaveForDay) return false;
+
+      const aptTime = parseDateFns(appointment.time, "hh:mm a", aptDate);
+
+      return leaveForDay.slots.some(leaveSlot => {
+          const leaveStart = parseDateFns(leaveSlot.from, "HH:mm", aptDate);
+          const leaveEnd = parseDateFns(leaveSlot.to, "HH:mm", aptDate);
+          return aptTime >= leaveStart && aptTime < leaveEnd;
+      });
+  };
 
 
   if (loading) {
@@ -695,6 +715,7 @@ export default function DoctorDetailPage() {
                               selectedDate={leaveCalDate}
                               availabilitySlots={doctor.availabilitySlots || []}
                               leaveSlots={doctor.leaveSlots || []}
+                              appointments={appointments}
                               onLeaveUpdate={handleLeaveUpdate}
                               isPending={isPending}
                             />
@@ -794,7 +815,7 @@ export default function DoctorDetailPage() {
                                     <TableBody>
                                         {filteredAppointments.length > 0 && !isDoctorOnLeave ? (
                                             filteredAppointments.map((apt, index) => (
-                                                <TableRow key={apt.id}>
+                                                <TableRow key={apt.id} className={cn(isAppointmentOnLeave(apt) && "bg-red-100 dark:bg-red-900/30")}>
                                                     <TableCell className="font-medium">{apt.patientName}</TableCell>
                                                     <TableCell>{apt.age}</TableCell>
                                                     <TableCell>{apt.gender}</TableCell>
