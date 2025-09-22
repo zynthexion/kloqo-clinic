@@ -20,7 +20,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import type { Appointment } from "@/lib/types";
+import type { Appointment, Doctor } from "@/lib/types";
 import {
   ChevronLeft,
   ChevronRight,
@@ -34,14 +34,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AppSidebar } from "@/components/layout/sidebar";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, addDoc, setDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AddAppointmentForm } from "@/components/appointments/add-appointment-form";
+import { useToast } from "@/hooks/use-toast";
+
 
 export default function AppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
   const [tabCounts, setTabCounts] = useState({ all: 0, confirmed: 0, pending: 0, cancelled: 0 });
+  const [isAddAppointmentOpen, setIsAddAppointmentOpen] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchAppointments = async () => {
@@ -66,14 +72,50 @@ export default function AppointmentsPage() {
         setLoading(false);
       }
     };
+    
+    const fetchDoctors = async () => {
+      const doctorsCollection = collection(db, "doctors");
+      const doctorsSnapshot = await getDocs(doctorsCollection);
+      const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
+      setDoctors(doctorsList);
+    };
+
     fetchAppointments();
+    fetchDoctors();
   }, []);
+
+  const handleSaveAppointment = async (appointmentData: Omit<Appointment, 'id' | 'tokenNumber'> & { id?: string }) => {
+     try {
+        const newAppointmentRef = doc(collection(db, "appointments"));
+        const tokenNumber = `TKN${String(appointments.length + 1).padStart(3, '0')}`;
+        const newAppointmentData = {
+            ...appointmentData,
+            id: newAppointmentRef.id,
+            tokenNumber: tokenNumber,
+        };
+        await setDoc(newAppointmentRef, newAppointmentData);
+        setAppointments(prev => [...prev, newAppointmentData]);
+        toast({
+            title: "Appointment Booked",
+            description: `Appointment for ${newAppointmentData.patientName} has been successfully booked.`,
+        });
+     } catch (error) {
+        console.error("Error saving appointment: ", error);
+        toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Failed to book appointment. Please try again.",
+        });
+     } finally {
+        setIsAddAppointmentOpen(false);
+     }
+  }
 
   return (
     <>
       <AppSidebar />
       <SidebarInset>
-        <AppointmentsHeader />
+        <AppointmentsHeader onAddAppointment={() => setIsAddAppointmentOpen(true)} />
         <main className="flex-1 p-4 sm:p-6">
           <Tabs defaultValue="all">
             <TabsList>
@@ -231,6 +273,13 @@ export default function AppointmentsPage() {
           </div>
         </main>
       </SidebarInset>
+       <AddAppointmentForm
+        isOpen={isAddAppointmentOpen}
+        setIsOpen={setIsAddAppointmentOpen}
+        onSave={handleSaveAppointment}
+        doctors={doctors}
+      />
     </>
   );
 }
+    

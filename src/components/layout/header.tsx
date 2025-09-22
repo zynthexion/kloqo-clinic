@@ -73,7 +73,7 @@ export function DoctorsHeader() {
 }
 
 
-export function AppointmentsHeader() {
+export function AppointmentsHeader({ onAddAppointment }: { onAddAppointment: () => void }) {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static smh-auto sm:border-0 sm:bg-transparent sm:px-6">
       <SidebarTrigger className="sm:hidden" />
@@ -91,7 +91,7 @@ export function AppointmentsHeader() {
             <CalendarIcon className="h-4 w-4" />
             Today
           </Button>
-          <Button>
+          <Button onClick={onAddAppointment}>
             <Plus className="mr-2 h-4 w-4" />
             Add Appointment
           </Button>
@@ -298,3 +298,4 @@ export function LiveStatusDetailHeader() {
       </header>
     );
   }
+    
