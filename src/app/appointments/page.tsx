@@ -87,9 +87,15 @@ export default function AppointmentsPage() {
   const handleSaveAppointment = async (appointmentData: Omit<Appointment, 'id' | 'tokenNumber' | 'date'> & { date: string }) => {
      try {
         const newAppointmentRef = doc(collection(db, "appointments"));
-        const tokenNumber = `TKN${String(appointments.length + 1).padStart(3, '0')}`;
         const doctorName = doctors.find(d => d.id === appointmentData.doctor)?.name || "Unknown Doctor";
         
+        let prefix = '';
+        if (appointmentData.bookedVia === 'Online') prefix = 'A';
+        else if (appointmentData.bookedVia === 'Phone') prefix = 'P';
+        else if (appointmentData.bookedVia === 'Walk-in') prefix = 'W';
+        
+        const tokenNumber = `${prefix}${appointments.length + 1}`;
+
         const { doctor, ...restOfAppointmentData } = appointmentData;
 
         const newAppointmentData: Appointment = {
