@@ -130,6 +130,8 @@ export default function DoctorsPage() {
   const [departmentFilter, setDepartmentFilter] = useState("All");
   const [specialtyFilter, setSpecialtyFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState<"All" | "Available" | "Unavailable">("All");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [doctorsPerPage, setDoctorsPerPage] = useState(12);
 
 
   useEffect(() => {
@@ -259,6 +261,83 @@ export default function DoctorsPage() {
       return ['All', ...Array.from(specialties)];
   }, [doctors]);
 
+  const totalPages = Math.ceil(filteredDoctors.length / doctorsPerPage);
+  const currentDoctors = filteredDoctors.slice(
+      (currentPage - 1) * doctorsPerPage,
+      currentPage * doctorsPerPage
+  );
+
+  const renderPageNumbers = () => {
+    const pageNumbers = [];
+    if (totalPages <= 5) {
+      for (let i = 1; i <= totalPages; i++) {
+        pageNumbers.push(
+          <Button
+            key={i}
+            variant="outline"
+            size="icon"
+            className={currentPage === i ? "bg-primary/10 text-primary" : ""}
+            onClick={() => setCurrentPage(i)}
+          >
+            {i}
+          </Button>
+        );
+      }
+    } else {
+      pageNumbers.push(
+        <Button
+          key={1}
+          variant="outline"
+          size="icon"
+          className={currentPage === 1 ? "bg-primary/10 text-primary" : ""}
+          onClick={() => setCurrentPage(1)}
+        >
+          1
+        </Button>
+      );
+      if (currentPage > 3) {
+        pageNumbers.push(<span key="start-ellipsis" className="text-muted-foreground">...</span>);
+      }
+      let startPage = Math.max(2, currentPage - 1);
+      let endPage = Math.min(totalPages - 1, currentPage + 1);
+
+      if (currentPage === 1) {
+          endPage = 3;
+      }
+       if (currentPage === totalPages) {
+          startPage = totalPages - 2;
+      }
+
+      for (let i = startPage; i <= endPage; i++) {
+        pageNumbers.push(
+          <Button
+            key={i}
+            variant="outline"
+            size="icon"
+            className={currentPage === i ? "bg-primary/10 text-primary" : ""}
+            onClick={() => setCurrentPage(i)}
+          >
+            {i}
+          </Button>
+        );
+      }
+      if (currentPage < totalPages - 2) {
+        pageNumbers.push(<span key="end-ellipsis" className="text-muted-foreground">...</span>);
+      }
+       pageNumbers.push(
+        <Button
+          key={totalPages}
+          variant="outline"
+          size="icon"
+          className={currentPage === totalPages ? "bg-primary/10 text-primary" : ""}
+          onClick={() => setCurrentPage(totalPages)}
+        >
+          {totalPages}
+        </Button>
+      );
+    }
+    return pageNumbers;
+  };
 
   return (
     <>
@@ -328,7 +407,7 @@ export default function DoctorsPage() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                  {filteredDoctors.map((doctor) => (
+                  {currentDoctors.map((doctor) => (
                       <DoctorCard 
                           key={doctor.id} 
                           doctor={doctor} 
@@ -339,33 +418,29 @@ export default function DoctorsPage() {
               </div>
 
               <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span>Showing</span>
-                  <Select defaultValue="12">
-                  <SelectTrigger className="w-[70px]">
-                      <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                      <SelectItem value="12">12</SelectItem>
-                      <SelectItem value="24">24</SelectItem>
-                      <SelectItem value="48">48</SelectItem>
-                  </SelectContent>
-                  </Select>
-                  <span>out of {filteredDoctors.length}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                  <Button variant="outline" size="icon">
-                  <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" size="icon" className="bg-primary/10 text-primary">1</Button>
-                  <Button variant="outline" size="icon">2</Button>
-                  <Button variant="outline" size="icon">3</Button>
-                  <Button variant="outline" size="icon">4</Button>
-                  <Button variant="outline" size="icon">5</Button>
-                  <Button variant="outline" size="icon">
-                  <ChevronRight className="h-4 w-4" />
-                  </Button>
-              </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span>Showing</span>
+                    <Select value={`${doctorsPerPage}`} onValueChange={(value) => setDoctorsPerPage(Number(value))}>
+                        <SelectTrigger className="w-[70px]">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="12">12</SelectItem>
+                            <SelectItem value="24">24</SelectItem>
+                            <SelectItem value="48">48</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <span>out of {filteredDoctors.length}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" size="icon" onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>
+                        <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    {renderPageNumbers()}
+                    <Button variant="outline" size="icon" onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>
+                        <ChevronRight className="h-4 w-4" />
+                    </Button>
+                </div>
               </div>
           </div>
         </main>
@@ -387,3 +462,5 @@ export default function DoctorsPage() {
     </>
   );
 }
+
+    
