@@ -37,10 +37,6 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  devServer: {
-    port: 9002,
-    hostname: '0.0.0.0'
-  }
 };
 
 export default nextConfig;
