@@ -49,6 +49,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import WeeklyDoctorAvailability from "@/components/dashboard/weekly-doctor-availability";
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -605,6 +606,7 @@ export default function AppointmentsPage() {
           >
               <ChevronRight className="h-6 w-6 transition-transform duration-300" />
           </Button>
+          <WeeklyDoctorAvailability />
       </div>
     </div>
   );

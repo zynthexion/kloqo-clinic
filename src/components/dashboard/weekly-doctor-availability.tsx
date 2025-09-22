@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { collection, getDocs } from "firebase/firestore";
@@ -18,6 +18,7 @@ const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Fri
 export default function WeeklyDoctorAvailability() {
   const [isOpen, setIsOpen] = useState(false);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const drawerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const fetchDoctors = async () => {
@@ -28,6 +29,21 @@ export default function WeeklyDoctorAvailability() {
     };
     fetchDoctors();
   }, []);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (drawerRef.current && !drawerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    // Bind the event listener
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      // Unbind the event listener on clean up
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [drawerRef]);
+
 
   const weeklySchedule = useMemo(() => {
     const schedule = [];
@@ -49,7 +65,7 @@ export default function WeeklyDoctorAvailability() {
 
   return (
     <div className="fixed bottom-0 left-1/2 -translate-x-1/2 z-50 w-full max-w-4xl">
-      <div className="relative flex flex-col items-center">
+      <div ref={drawerRef} className="relative flex flex-col items-center">
         {/* Collapsed Button */}
         <div className={cn("transition-all duration-300", isOpen && "translate-y-full opacity-0")}>
             <Button 

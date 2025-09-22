@@ -18,7 +18,6 @@ import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import type { ChartConfig } from "@/components/ui/chart";
 import { TopNav } from "@/components/layout/top-nav";
 import UpcomingAppointmentsDrawer from "@/components/dashboard/upcoming-appointments-drawer";
-import WeeklyDoctorAvailability from "@/components/dashboard/weekly-doctor-availability";
 
 
 function DashboardHeader() {
@@ -249,7 +248,6 @@ export default function Home() {
 
           </div>
         </main>
-        <WeeklyDoctorAvailability />
       </div>
     </div>
   );
