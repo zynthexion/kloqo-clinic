@@ -410,11 +410,13 @@ export default function AppointmentsPage() {
                                     compact={isDrawerOpen}
                                     modifiers={{ 
                                       available: selectedDoctor ? { dayOfWeek: availableDaysOfWeek } : {},
-                                      leave: leaveDates 
+                                      leave: leaveDates,
+                                      selected: field.value
                                     }}
                                     modifiersStyles={{ 
                                         available: { backgroundColor: 'hsl(210 40% 96.1%)', color: 'hsl(222.2 47.4% 11.2%)' },
-                                        leave: { color: 'hsl(var(--destructive))', textDecoration: 'line-through', backgroundColor: 'hsl(var(--destructive)/0.1)' } 
+                                        leave: { color: 'white', backgroundColor: 'hsl(var(--destructive))' },
+                                        selected: { backgroundColor: 'hsl(var(--primary))', color: 'black' }
                                     }}
                                   />
                                   <FormMessage />
@@ -589,8 +591,3 @@ export default function AppointmentsPage() {
     </div>
   );
 }
-
-    
-    
-
-    
