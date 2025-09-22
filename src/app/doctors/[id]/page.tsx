@@ -26,9 +26,10 @@ import { Button } from "@/components/ui/button";
 import { AppSidebar } from "@/components/layout/sidebar";
 import { SidebarInset } from "@/components/ui/sidebar";
 import { DoctorsHeader } from "@/components/layout/header";
-import { doc, getDoc, collection, getDocs, query, where } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Doctor, Appointment } from "@/lib/types";
+import { appointments as dummyAppointments } from "@/lib/data";
 import { format } from "date-fns";
 import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info } from "lucide-react";
 
@@ -51,10 +52,12 @@ export default function DoctorDetailPage() {
           const doctorData = { id: doctorSnap.id, ...doctorSnap.data() } as Doctor;
           setDoctor(doctorData);
 
-          const appointmentsQuery = query(collection(db, "appointments"), where("doctor", "==", doctorData.name));
-          const appointmentsSnapshot = await getDocs(appointmentsQuery);
-          const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
-          setAppointments(appointmentsList);
+          // Use dummy appointments and filter by doctor name
+          const doctorAppointments = dummyAppointments.filter(
+            (apt) => apt.doctor === doctorData.name
+          );
+          setAppointments(doctorAppointments);
+
         } else {
           console.log("No such document!");
         }
@@ -67,9 +70,20 @@ export default function DoctorDetailPage() {
 
   const filteredAppointments = useMemo(() => {
     if (!selectedDate) return appointments;
-    return appointments.filter(
-      (appointment) => format(new Date(appointment.date), "yyyy-MM-dd") === format(selectedDate, "yyyy-MM-dd")
-    );
+    
+    // The dummy data date format is '20 July 2028', which needs to be parsed.
+    // We will compare formatted dates to avoid timezone issues.
+    const selectedDay = format(selectedDate, "yyyy-MM-dd");
+
+    return appointments.filter((appointment) => {
+        try {
+            const appointmentDay = format(new Date(appointment.date), "yyyy-MM-dd");
+            return appointmentDay === selectedDay;
+        } catch (e) {
+            // Handle potential invalid date formats in dummy data gracefully
+            return false;
+        }
+    });
   }, [appointments, selectedDate]);
   
   if (loading) {
@@ -261,3 +275,5 @@ export default function DoctorDetailPage() {
     </div>
   );
 }
+
+    
