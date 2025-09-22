@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useTransition } from "react";
@@ -182,14 +183,10 @@ export default function DoctorDetailPage() {
   const filteredAppointments = useMemo(() => {
     if (!selectedDate) return [];
 
-    const selectedDay = format(selectedDate, "yyyy-MM-dd");
-
     return appointments.filter((appointment) => {
         try {
             const parsedDate = parse(appointment.date, 'd MMMM yyyy', new Date());
-            if (isNaN(parsedDate.getTime())) return false;
-            const appointmentDay = format(parsedDate, "yyyy-MM-dd");
-            return appointmentDay === selectedDay;
+            return isSameDay(parsedDate, selectedDate);
         } catch (e) {
             console.error("Error parsing date:", e);
             return false;
@@ -373,9 +370,12 @@ export default function DoctorDetailPage() {
                                     onSelect={setSelectedDate}
                                     className="w-full"
                                     defaultMonth={selectedDate}
-                                    disabled={isDoctorOnLeave}
+                                    disabled={(date) => leaveDates.some(leaveDate => isSameDay(date, leaveDate))}
                                     modifiers={{ leave: leaveDates }}
-                                    modifiersStyles={{ leave: { color: 'red', textDecoration: 'line-through' } }}
+                                    modifiersStyles={{ 
+                                      leave: { color: 'red', textDecoration: 'line-through' },
+                                      disabled: { color: 'red', textDecoration: 'line-through' },
+                                    }}
                                 />
                             </CardContent>
                         </Card>
@@ -432,5 +432,7 @@ export default function DoctorDetailPage() {
     </div>
   );
 }
+
+    
 
     
