@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState } from "react";
@@ -106,11 +107,7 @@ export function AddDoctorStep({ department, onDoctorAdded }: { department: Depar
       <p className="text-muted-foreground mb-6">
         With your department set up, it's time to add a doctor to the system.
       </p>
-      <Button size="lg" onClick={() => setIsAddDoctorOpen(true)}>
-        <PlusCircle className="mr-2 h-5 w-5" />
-        Add First Doctor
-      </Button>
-
+      
       <AddDoctorForm
         onSave={handleSaveDoctor as any}
         isOpen={isAddDoctorOpen}
