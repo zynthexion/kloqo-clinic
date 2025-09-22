@@ -255,31 +255,26 @@ export default function DoctorDetailPage() {
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead>Patient</TableHead>
-                                            <TableHead>Time</TableHead>
-                                            <TableHead>Treatment</TableHead>
-                                            <TableHead>Status</TableHead>
+                                            <TableHead>Age</TableHead>
+                                            <TableHead>Gender</TableHead>
+                                            <TableHead>Booked Via</TableHead>
+                                            <TableHead>Token Number</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {filteredAppointments.length > 0 ? (
-                                            filteredAppointments.map(apt => (
+                                            filteredAppointments.map((apt, index) => (
                                                 <TableRow key={apt.id}>
                                                     <TableCell className="font-medium">{apt.patientName}</TableCell>
-                                                    <TableCell>{apt.time}</TableCell>
-                                                    <TableCell>{apt.treatment}</TableCell>
-                                                    <TableCell>
-                                                        <Badge variant={
-                                                            apt.status === "Confirmed" ? "success" : 
-                                                            apt.status === "Pending" ? "warning" : "outline"
-                                                        }>
-                                                            {apt.status}
-                                                        </Badge>
-                                                    </TableCell>
+                                                    <TableCell>{apt.age}</TableCell>
+                                                    <TableCell>{apt.gender}</TableCell>
+                                                    <TableCell>{['App', 'Phone', 'Walk In'][index % 3]}</TableCell>
+                                                    <TableCell>TKN{String(index + 1).padStart(3, '0')}</TableCell>
                                                 </TableRow>
                                             ))
                                         ) : (
                                             <TableRow>
-                                                <TableCell colSpan={4} className="text-center h-24">No appointments for this day.</TableCell>
+                                                <TableCell colSpan={5} className="text-center h-24">No appointments for this day.</TableCell>
                                             </TableRow>
                                         )}
                                     </TableBody>
@@ -295,5 +290,3 @@ export default function DoctorDetailPage() {
     </div>
   );
 }
-
-    
