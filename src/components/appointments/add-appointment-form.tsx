@@ -56,7 +56,7 @@ const formSchema = z.object({
 
 type AddAppointmentFormValues = z.infer<typeof formSchema>;
 type AddAppointmentFormProps = {
-  onSave: (appointment: Omit<Appointment, 'id' | 'tokenNumber'>) => void;
+  onSave: (appointment: Omit<Appointment, 'id' | 'tokenNumber' | 'date'> & { date: string }) => void;
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
   doctors: Doctor[];
@@ -419,5 +419,3 @@ export function AddAppointmentForm({ onSave, isOpen, setIsOpen, doctors }: AddAp
     </Dialog>
   );
 }
-
-    

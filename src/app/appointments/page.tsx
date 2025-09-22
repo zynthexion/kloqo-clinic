@@ -84,22 +84,34 @@ export default function AppointmentsPage() {
     fetchDoctors();
   }, []);
 
-  const handleSaveAppointment = async (appointmentData: Omit<Appointment, 'id' | 'tokenNumber'> & { id?: string }) => {
+  const handleSaveAppointment = async (appointmentData: Omit<Appointment, 'id' | 'tokenNumber' | 'date'> & { date: string }) => {
      try {
         const newAppointmentRef = doc(collection(db, "appointments"));
         const tokenNumber = `TKN${String(appointments.length + 1).padStart(3, '0')}`;
         
-        // Find doctor name from ID
         const doctorName = doctors.find(d => d.id === appointmentData.doctor)?.name || "Unknown Doctor";
 
-        const newAppointmentData = {
+        const newAppointmentData: Appointment = {
             ...appointmentData,
             id: newAppointmentRef.id,
             tokenNumber: tokenNumber,
             doctor: doctorName,
         };
         await setDoc(newAppointmentRef, newAppointmentData);
-        setAppointments(prev => [...prev, newAppointmentData]);
+
+        setAppointments(prev => {
+          const newAppointments = [...prev, newAppointmentData];
+          const counts = newAppointments.reduce((acc, apt) => {
+            acc.all++;
+            if (apt.status === "Confirmed") acc.confirmed++;
+            else if (apt.status === "Pending") acc.pending++;
+            else if (apt.status === "Cancelled") acc.cancelled++;
+            return acc;
+          }, { all: 0, confirmed: 0, pending: 0, cancelled: 0 });
+          setTabCounts(counts);
+          return newAppointments;
+        });
+
         toast({
             title: "Appointment Booked",
             description: `Appointment for ${newAppointmentData.patientName} has been successfully booked.`,
@@ -287,5 +299,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-    
-    
