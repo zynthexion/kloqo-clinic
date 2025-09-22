@@ -30,13 +30,13 @@ export function OnboardingSidebar({ step }: { step: number }) {
       href: "/onboarding-demo",
       icon: Home,
       label: "Dashboard",
-      step: -1, 
+      step: 4, 
     },
     {
       href: "/onboarding-demo",
       icon: ClipboardList,
       label: "Appointments",
-      step: -1,
+      step: 4,
     },
     {
       href: "/onboarding-demo",
@@ -54,7 +54,7 @@ export function OnboardingSidebar({ step }: { step: number }) {
       href: "/onboarding-demo",
       icon: Activity,
       label: "Live Status",
-      step: -1,
+      step: 4,
     },
   ];
 
@@ -77,7 +77,8 @@ export function OnboardingSidebar({ step }: { step: number }) {
         <SidebarMenu>
           {menuItems.map((item) => {
             const isActive = item.step === step;
-            const isDisabled = item.step > step || item.step === -1;
+            const isCompleted = step === 3;
+            const isDisabled = !isCompleted && item.step > step;
 
             return (
               <SidebarMenuItem key={item.label}>
@@ -87,11 +88,10 @@ export function OnboardingSidebar({ step }: { step: number }) {
                   isActive={isActive}
                   disabled={isDisabled}
                   className={cn(
-                    "data-[active=false]:bg-transparent data-[active=false]:hover:bg-sidebar-accent data-[active=false]:hover:text-sidebar-accent-foreground",
-                    isDisabled && "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-sidebar-foreground",
+                     isCompleted && "opacity-100 cursor-pointer",
                   )}
                 >
-                  <Link href={item.href} className={isDisabled ? "pointer-events-none" : ""}>
+                  <Link href={isCompleted ? item.href.replace('onboarding-demo', '') : item.href} className={isDisabled ? "pointer-events-none" : ""}>
                     <item.icon />
                     <span>{item.label}</span>
                   </Link>
@@ -104,7 +104,7 @@ export function OnboardingSidebar({ step }: { step: number }) {
             <SidebarSeparator className="my-2"/>
             <SidebarMenu>
                 <SidebarMenuItem>
-                    <SidebarMenuButton tooltip="Logout" disabled className="cursor-not-allowed opacity-50 hover:bg-transparent hover:text-sidebar-foreground">
+                    <SidebarMenuButton tooltip="Logout" disabled={step !== 3} className={cn(step !== 3 && "cursor-not-allowed opacity-50")}>
                         <LogOut />
                         <span>Logout</span>
                     </SidebarMenuButton>

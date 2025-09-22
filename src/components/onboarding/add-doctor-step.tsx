@@ -29,10 +29,9 @@ export function AddDoctorStep({ department, onDoctorAdded }: { department: Depar
       preferences: 'Not set',
       historicalData: 'No data',
       department: doctorData.department,
-      totalPatients: doctorData.totalPatients,
-      todaysAppointments: doctorData.todaysAppointments,
-      availability: doctorData.availability,
-      maxPatientsPerDay: doctorData.maxPatientsPerDay,
+      availability: 'Available',
+      bio: doctorData.bio,
+      averageConsultingTime: doctorData.averageConsultingTime,
       availabilitySlots: doctorData.availabilitySlots,
     };
     setAddedDoctor(newDoctor);
@@ -71,23 +70,17 @@ export function AddDoctorStep({ department, onDoctorAdded }: { department: Depar
                         <p className="text-xs font-medium uppercase text-muted-foreground">Department</p>
                         <p className="text-sm">{addedDoctor.department}</p>
                     </div>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                            <p className="text-xs font-medium uppercase text-muted-foreground flex items-center gap-1"><Users className="h-3 w-3" /> Total Patients</p>
-                            <p className="text-sm">{addedDoctor.totalPatients}</p>
-                        </div>
-                        <div>
-                            <p className="text-xs font-medium uppercase text-muted-foreground flex items-center gap-1"><CalendarDays className="h-3 w-3" /> Today</p>
-                            <p className="text-sm">{addedDoctor.todaysAppointments}</p>
-                        </div>
+                     <div className="space-y-1">
+                        <p className="text-xs font-medium uppercase text-muted-foreground">Bio</p>
+                        <p className="text-sm text-muted-foreground h-12 overflow-hidden">{addedDoctor.bio}</p>
                     </div>
                 </CardContent>
                 <CardFooter>
                     <Badge
-                        variant={addedDoctor.availability === "Available" ? "success" : "danger"}
+                        variant={"success"}
                         className="w-full justify-center"
                     >
-                        {addedDoctor.availability}
+                        Added
                     </Badge>
                 </CardFooter>
             </Card>

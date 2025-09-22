@@ -3,6 +3,7 @@
 
 
 
+
 export type TimeSlot = {
   from: string;
   to: string;
@@ -25,7 +26,8 @@ export type Doctor = {
   totalPatients?: number;
   todaysAppointments?: number;
   availability: 'Available' | 'Unavailable';
-  maxPatientsPerDay?: number;
+  bio?: string;
+  averageConsultingTime?: number;
   availabilitySlots?: AvailabilitySlot[];
 };
 

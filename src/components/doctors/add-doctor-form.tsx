@@ -39,6 +39,7 @@ import type { Doctor } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "../ui/scroll-area";
 import Image from "next/image";
+import { Textarea } from "../ui/textarea";
 
 const timeSlotSchema = z.object({
   from: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Invalid time format (HH:MM)"),
@@ -55,10 +56,8 @@ const formSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   specialty: z.string().min(2, { message: "Specialty must be at least 2 characters." }),
   department: z.string().min(1, { message: "Please select a department." }),
-  availability: z.enum(["Available", "Unavailable"]),
-  totalPatients: z.coerce.number().min(0),
-  todaysAppointments: z.coerce.number().min(0),
-  maxPatientsPerDay: z.coerce.number().min(1, "Must be at least 1."),
+  bio: z.string().min(10, { message: "Bio must be at least 10 characters." }),
+  averageConsultingTime: z.coerce.number().min(5, "Must be at least 5 minutes."),
   availableDays: z.array(z.string()).refine((value) => value.some((item) => item), {
     message: "You have to select at least one day.",
   }),
@@ -88,10 +87,8 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor }: AddDoctorFo
       name: "",
       specialty: "",
       department: "",
-      availability: "Available",
-      totalPatients: 0,
-      todaysAppointments: 0,
-      maxPatientsPerDay: 10,
+      bio: "",
+      averageConsultingTime: 15,
       availableDays: [],
       availabilitySlots: [],
     },
@@ -104,10 +101,8 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor }: AddDoctorFo
         name: doctor.name,
         specialty: doctor.specialty,
         department: doctor.department,
-        availability: doctor.availability,
-        totalPatients: doctor.totalPatients,
-        todaysAppointments: doctor.todaysAppointments,
-        maxPatientsPerDay: doctor.maxPatientsPerDay,
+        bio: doctor.bio || "",
+        averageConsultingTime: doctor.averageConsultingTime || 15,
         availableDays: doctor.availabilitySlots?.map(s => s.day) || [],
         availabilitySlots: doctor.availabilitySlots || [],
       });
@@ -117,10 +112,8 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor }: AddDoctorFo
         name: "",
         specialty: "",
         department: "",
-        availability: "Available",
-        totalPatients: 0,
-        todaysAppointments: 0,
-        maxPatientsPerDay: 10,
+        bio: "",
+        averageConsultingTime: 15,
         availableDays: [],
         availabilitySlots: [],
       });
@@ -290,12 +283,12 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor }: AddDoctorFo
                 />
                  <FormField
                   control={form.control}
-                  name="totalPatients"
+                  name="bio"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Total Patients</FormLabel>
+                      <FormLabel>Bio</FormLabel>
                       <FormControl>
-                        <Input type="number" {...field} />
+                        <Textarea placeholder="A brief biography of the doctor..." {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -303,44 +296,10 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor }: AddDoctorFo
                 />
                  <FormField
                   control={form.control}
-                  name="todaysAppointments"
+                  name="averageConsultingTime"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Today's Appointments</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="availability"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Availability</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select availability" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="Available">Available</SelectItem>
-                          <SelectItem value="Unavailable">Unavailable</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="maxPatientsPerDay"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Maximum Patients Per Day</FormLabel>
+                      <FormLabel>Average Consulting Time (minutes)</FormLabel>
                       <FormControl>
                         <Input type="number" {...field} />
                       </FormControl>
