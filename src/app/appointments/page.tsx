@@ -525,66 +525,70 @@ export default function AppointmentsPage() {
         </main>
         
         <aside className={cn(
-            "h-full bg-background border-l transition-all duration-300 ease-in-out overflow-hidden rounded-l-2xl",
+            "h-full border-l transition-all duration-300 ease-in-out overflow-hidden",
             isDrawerOpen ? 'w-full md:w-1/3' : 'w-0'
         )}>
-            <div className="p-6 border-b">
-                <CardTitle>Upcoming Appointments</CardTitle>
-                <CardDescription>A list of all scheduled appointments.</CardDescription>
-            </div>
-            <ScrollArea className="h-[calc(100%-80px)]">
-                {loading ? (
-                    <div className="p-6">
-                        {Array.from({ length: 10 }).map((_, i) => (
-                            <div key={i} className="p-3 rounded-lg border bg-muted animate-pulse h-20 mb-3"></div>
-                        ))}
-                    </div>
-                ) : (
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Patient</TableHead>
-                                <TableHead>Appointment</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead></TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {appointments
-                                .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-                                .map((appointment) => (
-                                <TableRow key={appointment.id} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
-                                    <TableCell>
-                                        <div className="font-medium">{appointment.patientName}</div>
-                                        <div className="text-xs text-muted-foreground">with {appointment.doctor}</div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div>{appointment.date}</div>
-                                        <div className="text-xs text-muted-foreground">{appointment.time}</div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge
-                                          variant={
-                                            appointment.status === "Confirmed" ? "success"
-                                            : appointment.status === "Pending" ? "warning"
-                                            : "destructive"
-                                          }
-                                        >{appointment.status}</Badge>
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <Button variant="link" size="sm" className="p-0 h-auto text-primary" onClick={() => {
-                                            setEditingAppointment(appointment);
-                                            setIsDrawerOpen(false);
-                                        }}>
-                                            Reschedule
-                                        </Button>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                )}
-            </ScrollArea>
+            <Card className="h-full rounded-none">
+                <CardHeader className="p-6 border-b">
+                    <CardTitle>Upcoming Appointments</CardTitle>
+                    <CardDescription>A list of all scheduled appointments.</CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                    <ScrollArea className="h-[calc(100vh-19rem)]">
+                        {loading ? (
+                            <div className="p-6">
+                                {Array.from({ length: 10 }).map((_, i) => (
+                                    <div key={i} className="p-3 rounded-lg border bg-muted animate-pulse h-20 mb-3"></div>
+                                ))}
+                            </div>
+                        ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Patient</TableHead>
+                                        <TableHead>Appointment</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead></TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {appointments
+                                        .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                                        .map((appointment) => (
+                                        <TableRow key={appointment.id} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
+                                            <TableCell>
+                                                <div className="font-medium">{appointment.patientName}</div>
+                                                <div className="text-xs text-muted-foreground">with {appointment.doctor}</div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div>{appointment.date}</div>
+                                                <div className="text-xs text-muted-foreground">{appointment.time}</div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge
+                                                  variant={
+                                                    appointment.status === "Confirmed" ? "success"
+                                                    : appointment.status === "Pending" ? "warning"
+                                                    : "destructive"
+                                                  }
+                                                >{appointment.status}</Badge>
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <Button variant="link" size="sm" className="p-0 h-auto text-primary" onClick={() => {
+                                                    setEditingAppointment(appointment);
+                                                    setIsDrawerOpen(false);
+                                                }}>
+                                                    Reschedule
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        )}
+                    </ScrollArea>
+                </CardContent>
+            </Card>
         </aside>
 
          <div className="fixed right-0 top-1/2 -translate-y-1/2 z-20">
