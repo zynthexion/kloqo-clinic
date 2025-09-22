@@ -28,7 +28,7 @@ import { SidebarInset } from "@/components/ui/sidebar";
 import { DoctorsHeader } from "@/components/layout/header";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Doctor, Appointment, AvailabilitySlot } from "@/lib/types";
+import type { Doctor, Appointment, LeaveSlot, AvailabilitySlot } from "@/lib/types";
 import { appointments as dummyAppointments } from "@/lib/data";
 import { format, parse, isSameDay, getDay } from "date-fns";
 import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2 } from "lucide-react";
@@ -101,8 +101,6 @@ export default function DoctorDetailPage() {
   const [newAvgTime, setNewAvgTime] = useState<number | string>("");
   const [isEditingAvailability, setIsEditingAvailability] = useState(false);
 
-  const [leaveDates, setLeaveDates] = useState<Date[]>([]);
-
   const form = useForm<WeeklyAvailabilityFormValues>({
     defaultValues: {
       availableDays: [],
@@ -129,7 +127,6 @@ export default function DoctorDetailPage() {
           const doctorData = { id: doctorSnap.id, ...doctorSnap.data() } as Doctor;
           setDoctor(doctorData);
           setNewAvgTime(doctorData.averageConsultingTime || "");
-          setLeaveDates((doctorData.leaveDates || []).map(d => new Date(d)));
           form.reset({
             availableDays: doctorData.availabilitySlots?.map(s => s.day) || [],
             availabilitySlots: doctorData.availabilitySlots || [],
@@ -269,6 +266,28 @@ export default function DoctorDetailPage() {
       });
     }
 
+    const handleLeaveUpdate = async (updatedLeaveSlots: LeaveSlot[]) => {
+        if (!doctor) return;
+        startTransition(async () => {
+            const doctorRef = doc(db, "doctors", doctor.id);
+            try {
+                await updateDoc(doctorRef, { leaveSlots: updatedLeaveSlots });
+                setDoctor(prev => prev ? { ...prev, leaveSlots: updatedLeaveSlots } : null);
+                toast({
+                    title: "Leave Updated",
+                    description: `Leave schedule for Dr. ${doctor.name} has been updated.`,
+                });
+            } catch (error) {
+                console.error("Error updating leave:", error);
+                toast({
+                    variant: "destructive",
+                    title: "Update Failed",
+                    description: "Could not update leave information.",
+                });
+            }
+        });
+    };
+
   const filteredAppointments = useMemo(() => {
     if (!selectedDate) return [];
 
@@ -293,6 +312,13 @@ export default function DoctorDetailPage() {
         return acc;
     }, [] as number[]);
   }, [doctor?.availabilitySlots]);
+
+  const leaveDates = useMemo(() => {
+      return (doctor?.leaveSlots || [])
+          .filter(ls => ls.slots.length > 0)
+          .map(ls => parse(ls.date, 'yyyy-MM-dd', new Date()));
+  }, [doctor?.leaveSlots]);
+
 
   if (loading) {
     return (
@@ -538,12 +564,21 @@ export default function DoctorDetailPage() {
                                 selected={leaveCalDate}
                                 onSelect={setLeaveCalDate}
                                 className="rounded-md border w-full"
-                                modifiers={{ available: { dayOfWeek: availableDaysOfWeek } }}
-                                modifiersStyles={{ available: { backgroundColor: 'hsl(var(--primary)/0.1)', color: 'hsl(var(--primary))' } }}
+                                modifiers={{ 
+                                    available: { dayOfWeek: availableDaysOfWeek },
+                                    leave: leaveDates,
+                                }}
+                                modifiersStyles={{ 
+                                    available: { backgroundColor: 'hsl(var(--primary)/0.1)', color: 'hsl(var(--primary))' },
+                                    leave: { color: 'red', fontWeight: 'bold' } 
+                                }}
                             />
                             <TimeSlots
                               selectedDate={leaveCalDate}
                               availabilitySlots={doctor.availabilitySlots || []}
+                              leaveSlots={doctor.leaveSlots || []}
+                              onLeaveUpdate={handleLeaveUpdate}
+                              isPending={isPending}
                             />
                         </CardContent>
                     </Card>
@@ -669,5 +704,3 @@ export default function DoctorDetailPage() {
     </div>
   );
 }
-
-    

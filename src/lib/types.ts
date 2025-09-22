@@ -9,6 +9,11 @@ export type AvailabilitySlot = {
   timeSlots: TimeSlot[];
 };
 
+export type LeaveSlot = {
+    date: string; // "yyyy-MM-dd"
+    slots: TimeSlot[];
+}
+
 export type Doctor = {
   id: string;
   name: string;
@@ -24,11 +29,11 @@ export type Doctor = {
   bio?: string;
   averageConsultingTime?: number;
   availabilitySlots?: AvailabilitySlot[];
-  leaveDates?: string[];
+  leaveSlots?: LeaveSlot[];
 };
 
 export type Appointment = {
-  id: string;
+  id:string;
   patientName: string;
   gender: 'Male' | 'Female' | 'Other';
   phone: string;

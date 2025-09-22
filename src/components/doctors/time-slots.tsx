@@ -1,25 +1,35 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
-import { format, getDay, isSameDay } from "date-fns";
+import { useState, useEffect, useTransition } from "react";
+import { format, getDay } from "date-fns";
 import { Badge } from "@/components/ui/badge";
-import type { AvailabilitySlot } from "@/lib/types";
+import type { AvailabilitySlot, TimeSlot, LeaveSlot } from "@/lib/types";
+import { Button } from "../ui/button";
+import { Loader2 } from "lucide-react";
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 type TimeSlotsProps = {
   selectedDate: Date | undefined;
   availabilitySlots: AvailabilitySlot[];
+  leaveSlots: LeaveSlot[];
+  onLeaveUpdate: (updatedLeave: LeaveSlot[]) => void;
+  isPending: boolean;
 };
 
-export function TimeSlots({ selectedDate, availabilitySlots }: TimeSlotsProps) {
-  const [disabledSlots, setDisabledSlots] = useState<string[]>([]);
+export function TimeSlots({ selectedDate, availabilitySlots, leaveSlots, onLeaveUpdate, isPending }: TimeSlotsProps) {
+  const [markedAsLeave, setMarkedAsLeave] = useState<TimeSlot[]>([]);
 
   useEffect(() => {
-    // Reset disabled slots when the date changes
-    setDisabledSlots([]);
-  }, [selectedDate]);
+    if (selectedDate) {
+        const dateString = format(selectedDate, "yyyy-MM-dd");
+        const existingLeaveForDate = leaveSlots.find(ls => ls.date === dateString);
+        setMarkedAsLeave(existingLeaveForDate ? existingLeaveForDate.slots : []);
+    } else {
+        setMarkedAsLeave([]);
+    }
+  }, [selectedDate, leaveSlots]);
 
   if (!selectedDate) {
     return (
@@ -32,30 +42,52 @@ export function TimeSlots({ selectedDate, availabilitySlots }: TimeSlotsProps) {
   const dayOfWeek = daysOfWeek[getDay(selectedDate)];
   const daySlots = availabilitySlots.find(slot => slot.day === dayOfWeek);
 
-  const toggleSlot = (slotIdentifier: string) => {
-    setDisabledSlots(prev => 
-      prev.includes(slotIdentifier) 
-        ? prev.filter(s => s !== slotIdentifier)
-        : [...prev, slotIdentifier]
-    );
+  const toggleSlot = (slotToToggle: TimeSlot) => {
+    setMarkedAsLeave(prev => {
+        const isMarked = prev.some(s => s.from === slotToToggle.from && s.to === slotToToggle.to);
+        if (isMarked) {
+            return prev.filter(s => !(s.from === slotToToggle.from && s.to === slotToToggle.to));
+        } else {
+            return [...prev, slotToToggle];
+        }
+    });
   };
+  
+  const handleSave = () => {
+    if (!selectedDate) return;
+    const dateString = format(selectedDate, "yyyy-MM-dd");
+    
+    // Create a copy of existing leave slots, excluding the current date
+    const otherLeaveSlots = leaveSlots.filter(ls => ls.date !== dateString);
+
+    let updatedLeaveSlots;
+    if (markedAsLeave.length > 0) {
+        // If there are slots marked as leave for the current date, add/update it
+        updatedLeaveSlots = [...otherLeaveSlots, { date: dateString, slots: markedAsLeave }];
+    } else {
+        // If no slots are marked as leave, we are just removing any existing leave for this date
+        updatedLeaveSlots = otherLeaveSlots;
+    }
+    
+    onLeaveUpdate(updatedLeaveSlots);
+  }
+
 
   return (
-    <div className="p-4 border rounded-md h-full">
+    <div className="p-4 border rounded-md h-full flex flex-col">
       <h3 className="font-semibold mb-2">
         Available Slots for {format(selectedDate, "MMMM d, yyyy")}
       </h3>
-      <div className="space-y-2">
+      <div className="space-y-2 flex-grow">
         {daySlots && daySlots.timeSlots.length > 0 ? (
           daySlots.timeSlots.map((ts, i) => {
-            const slotIdentifier = `${ts.from}-${ts.to}`;
-            const isDisabled = disabledSlots.includes(slotIdentifier);
+            const isMarked = markedAsLeave.some(s => s.from === ts.from && s.to === ts.to);
             return (
               <Badge
                 key={i}
-                variant={isDisabled ? "danger" : "success"}
+                variant={isMarked ? "danger" : "success"}
                 className="text-sm cursor-pointer w-full justify-center"
-                onClick={() => toggleSlot(slotIdentifier)}
+                onClick={() => toggleSlot(ts)}
               >
                 {ts.from} - {ts.to}
               </Badge>
@@ -67,6 +99,9 @@ export function TimeSlots({ selectedDate, availabilitySlots }: TimeSlotsProps) {
           </p>
         )}
       </div>
+      <Button onClick={handleSave} disabled={isPending} className="mt-4 w-full">
+        {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Saving...</> : 'Save Leave'}
+      </Button>
     </div>
   );
 }
