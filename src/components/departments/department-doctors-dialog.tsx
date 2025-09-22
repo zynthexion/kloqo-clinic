@@ -11,6 +11,9 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Department, Doctor } from "@/lib/types";
+import { useEffect, useState } from "react";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 type DepartmentDoctorsDialogProps = {
   isOpen: boolean;
@@ -20,11 +23,17 @@ type DepartmentDoctorsDialogProps = {
 };
 
 export function DepartmentDoctorsDialog({ isOpen, setIsOpen, department, allDoctors }: DepartmentDoctorsDialogProps) {
-  if (!department) return null;
+    const [departmentDoctors, setDepartmentDoctors] = useState<Doctor[]>([]);
 
-  const departmentDoctors = allDoctors.filter(doctor => 
-    department.doctors.includes(doctor.name)
-  );
+    useEffect(() => {
+        if (department && allDoctors.length > 0) {
+            const doctorsOfDept = allDoctors.filter(doctor => department.doctors.includes(doctor.id));
+            setDepartmentDoctors(doctorsOfDept);
+        }
+    }, [department, allDoctors]);
+    
+
+  if (!department) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
