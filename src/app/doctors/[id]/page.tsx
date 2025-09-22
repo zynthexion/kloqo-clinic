@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useEffect, useMemo, useTransition } from "react";
@@ -29,17 +28,41 @@ import { SidebarInset } from "@/components/ui/sidebar";
 import { DoctorsHeader } from "@/components/layout/header";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Doctor, Appointment } from "@/lib/types";
+import type { Doctor, Appointment, AvailabilitySlot } from "@/lib/types";
 import { appointments as dummyAppointments } from "@/lib/data";
 import { format, parse, isSameDay, getDay } from "date-fns";
-import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X } from "lucide-react";
+import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { TimeSlots } from "@/components/doctors/time-slots";
+import { useForm, useFieldArray } from "react-hook-form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
+import { Checkbox } from "@/components/ui/checkbox";
+import { z } from "zod";
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+const timeSlotSchema = z.object({
+  from: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Invalid time format (HH:MM)"),
+  to: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Invalid time format (HH:MM)"),
+});
+
+const availabilitySlotSchema = z.object({
+  day: z.string(),
+  timeSlots: z.array(timeSlotSchema).min(1, "At least one time slot is required."),
+});
+
+const formSchema = z.object({
+  availableDays: z.array(z.string()).refine((value) => value.some((item) => item), {
+    message: "You have to select at least one day.",
+  }),
+  availabilitySlots: z.array(availabilitySlotSchema),
+});
+
+type WeeklyAvailabilityFormValues = z.infer<typeof formSchema>;
+
 
 export default function DoctorDetailPage() {
   const params = useParams();
@@ -55,8 +78,23 @@ export default function DoctorDetailPage() {
 
   const [isEditingTime, setIsEditingTime] = useState(false);
   const [newAvgTime, setNewAvgTime] = useState<number | string>("");
+  const [isEditingAvailability, setIsEditingAvailability] = useState(false);
 
   const [leaveDates, setLeaveDates] = useState<Date[]>([]);
+
+  const form = useForm<WeeklyAvailabilityFormValues>({
+    defaultValues: {
+      availableDays: [],
+      availabilitySlots: [],
+    },
+  });
+
+  const { fields, append, remove, update } = useFieldArray({
+    control: form.control,
+    name: "availabilitySlots",
+  });
+  
+  const watchedAvailableDays = form.watch("availableDays");
 
 
   useEffect(() => {
@@ -71,6 +109,10 @@ export default function DoctorDetailPage() {
           setDoctor(doctorData);
           setNewAvgTime(doctorData.averageConsultingTime || "");
           setLeaveDates((doctorData.leaveDates || []).map(d => new Date(d)));
+          form.reset({
+            availableDays: doctorData.availabilitySlots?.map(s => s.day) || [],
+            availabilitySlots: doctorData.availabilitySlots || [],
+          });
 
           // Use dummy appointments and filter by doctor name
           const doctorAppointments = dummyAppointments.filter(
@@ -93,7 +135,7 @@ export default function DoctorDetailPage() {
 
       fetchDoctorData();
     }
-  }, [id]);
+  }, [id, form]);
 
     const handleStatusChange = async (newStatus: 'Available' | 'Unavailable') => {
         if (!doctor) return;
@@ -147,31 +189,64 @@ export default function DoctorDetailPage() {
         });
     }
 
-    const handleLeaveUpdate = async (dates?: Date[]) => {
-      if (!doctor || !dates) return;
+    const handleAvailabilitySave = (values: WeeklyAvailabilityFormValues) => {
+        if (!doctor) return;
 
-      const newLeaveDates = dates.map(d => d.toISOString().split('T')[0]);
+        const scheduleString = values.availabilitySlots
+          ?.sort((a, b) => daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day))
+          .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${ts.from}-${ts.to}`).join(', ')}`)
+          .join('; ');
 
-      startTransition(async () => {
-          const doctorRef = doc(db, "doctors", doctor.id);
-          try {
-              await updateDoc(doctorRef, { leaveDates: newLeaveDates });
-              setLeaveDates(dates);
-              toast({
-                  title: "Leave Dates Updated",
-                  description: "Doctor's leave schedule has been successfully updated.",
-              });
-          } catch (error) {
-              console.error("Error updating leave dates:", error);
-              toast({
-                  variant: "destructive",
-                  title: "Update Failed",
-                  description: "Could not update leave dates.",
-              });
+        startTransition(async () => {
+            const doctorRef = doc(db, "doctors", doctor.id);
+            try {
+                await updateDoc(doctorRef, {
+                    availabilitySlots: values.availabilitySlots,
+                    schedule: scheduleString,
+                });
+                setDoctor(prev => prev ? { ...prev, availabilitySlots: values.availabilitySlots, schedule: scheduleString } : null);
+                setIsEditingAvailability(false);
+                toast({
+                    title: "Availability Updated",
+                    description: "Weekly availability has been successfully updated.",
+                });
+            } catch (error) {
+                console.error("Error updating availability:", error);
+                toast({
+                    variant: "destructive",
+                    title: "Update Failed",
+                    description: "Could not update weekly availability.",
+                });
+            }
+        });
+    }
+
+    const copyTimeSlotToAllDays = (dayIndex: number, timeIndex: number) => {
+      const timeSlotToCopy = form.getValues(`availabilitySlots.${dayIndex}.timeSlots.${timeIndex}`);
+      if (!timeSlotToCopy.from || !timeSlotToCopy.to) {
+          toast({
+              variant: "destructive",
+              title: "Cannot Copy",
+              description: "Please fill in both 'From' and 'To' times before copying.",
+          });
+          return;
+      }
+      const currentSlots = form.getValues('availabilitySlots');
+      const updatedSlots = currentSlots.map(daySlot => {
+          if (watchedAvailableDays.includes(daySlot.day)) {
+              const timeSlotExists = daySlot.timeSlots.some(ts => ts.from === timeSlotToCopy.from && ts.to === timeSlotToCopy.to);
+              if (!timeSlotExists) {
+                  return { ...daySlot, timeSlots: [...daySlot.timeSlots, timeSlotToCopy] };
+              }
           }
+          return daySlot;
       });
-  };
-
+      form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true });
+      toast({
+        title: "Time Slot Copied",
+        description: `Time slot ${timeSlotToCopy.from} - ${timeSlotToCopy.to} has been applied to all selected days.`,
+      });
+    }
 
   const filteredAppointments = useMemo(() => {
     if (!selectedDate) return [];
@@ -277,26 +352,140 @@ export default function DoctorDetailPage() {
                         </CardContent>
                     </Card>
                     <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2"><CalendarIcon className="w-5 h-5" /> Weekly Availability</CardTitle>
+                        <CardHeader className="flex flex-row items-center justify-between">
+                            <div className="space-y-1.5">
+                                <CardTitle className="flex items-center gap-2"><CalendarIcon className="w-5 h-5" /> Weekly Availability</CardTitle>
+                                <CardDescription>Manage the doctor's recurring weekly schedule.</CardDescription>
+                            </div>
+                            {!isEditingAvailability && (
+                                <Button variant="outline" size="sm" onClick={() => setIsEditingAvailability(true)}>
+                                    <Edit className="mr-2 h-4 w-4" /> Edit
+                                </Button>
+                            )}
                         </CardHeader>
                         <CardContent>
-                           <div className="space-y-3">
-                                {doctor.availabilitySlots && doctor.availabilitySlots.length > 0 ? (
-                                    doctor.availabilitySlots.map((slot, index) => (
-                                        <div key={index} className="flex items-start">
-                                            <p className="w-24 font-semibold">{slot.day}</p>
-                                            <div className="flex flex-wrap gap-2">
-                                                {slot.timeSlots.map((ts, i) => (
-                                                    <Badge key={i} variant="outline" className="text-sm">{ts.from} - {ts.to}</Badge>
-                                                ))}
+                          {isEditingAvailability ? (
+                               <Form {...form}>
+                                  <form onSubmit={form.handleSubmit(handleAvailabilitySave)} className="space-y-6">
+                                     <FormField
+                                        control={form.control}
+                                        name="availableDays"
+                                        render={() => (
+                                          <FormItem>
+                                            <div className="grid grid-cols-3 gap-2">
+                                              {daysOfWeek.map((day) => (
+                                                <FormField
+                                                  key={day}
+                                                  control={form.control}
+                                                  name="availableDays"
+                                                  render={({ field }) => (
+                                                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                                      <FormControl>
+                                                        <Checkbox
+                                                          checked={field.value?.includes(day)}
+                                                          onCheckedChange={(checked) => {
+                                                            const currentDays = field.value || [];
+                                                            const newDays = checked
+                                                              ? [...currentDays, day]
+                                                              : currentDays.filter((value) => value !== day);
+                                                            field.onChange(newDays);
+
+                                                            const dayIndex = fields.findIndex(f => f.day === day);
+                                                            if (checked && dayIndex === -1) {
+                                                              append({ day: day, timeSlots: [{ from: "09:00", to: "17:00" }] });
+                                                            } else if (!checked && dayIndex > -1) {
+                                                              remove(dayIndex);
+                                                            }
+                                                          }}
+                                                        />
+                                                      </FormControl>
+                                                      <FormLabel className="font-normal text-sm">{day}</FormLabel>
+                                                    </FormItem>
+                                                  )}
+                                                />
+                                              ))}
                                             </div>
-                                        </div>
-                                    ))
-                                ) : (
-                                    <p className="text-sm text-muted-foreground">No availability slots defined.</p>
-                                )}
-                           </div>
+                                            <FormMessage />
+                                          </FormItem>
+                                        )}
+                                      />
+                                      
+                                      <div className="space-y-4">
+                                      {fields.map((field, dayIndex) => {
+                                          const timeSlotsArray = form.getValues(`availabilitySlots.${dayIndex}.timeSlots`);
+                                          return (
+                                              <div key={field.id} className="space-y-2 p-3 border rounded-md bg-muted/50">
+                                                  <h4 className="font-semibold text-sm">{field.day} Time Slots</h4>
+                                                  {timeSlotsArray.map((_, timeIndex) => (
+                                                      <div key={timeIndex} className="flex items-end gap-2">
+                                                          <FormField
+                                                              control={form.control}
+                                                              name={`availabilitySlots.${dayIndex}.timeSlots.${timeIndex}.from`}
+                                                              render={({ field }) => (
+                                                                  <FormItem className="flex-grow">
+                                                                      <FormLabel className="text-xs">From</FormLabel>
+                                                                      <FormControl><Input {...field} placeholder="HH:MM" /></FormControl>
+                                                                  </FormItem>
+                                                              )}
+                                                          />
+                                                          <FormField
+                                                              control={form.control}
+                                                              name={`availabilitySlots.${dayIndex}.timeSlots.${timeIndex}.to`}
+                                                              render={({ field }) => (
+                                                                  <FormItem className="flex-grow">
+                                                                      <FormLabel className="text-xs">To</FormLabel>
+                                                                      <FormControl><Input {...field} placeholder="HH:MM" /></FormControl>
+                                                                  </FormItem>
+                                                              )}
+                                                          />
+                                                          <Button type="button" variant="ghost" size="icon" onClick={() => copyTimeSlotToAllDays(dayIndex, timeIndex)}><Copy className="h-4 w-4" /></Button>
+                                                          <Button type="button" variant="ghost" size="icon" onClick={() => {
+                                                              const currentSlots = form.getValues(`availabilitySlots.${dayIndex}.timeSlots`);
+                                                              if (currentSlots.length > 1) {
+                                                                const newSlots = currentSlots.filter((_, i) => i !== timeIndex);
+                                                                update(dayIndex, { ...form.getValues(`availabilitySlots.${dayIndex}`), timeSlots: newSlots });
+                                                              }
+                                                          }}><Trash className="h-4 w-4" /></Button>
+                                                      </div>
+                                                  ))}
+                                                  <Button type="button" size="sm" variant="outline" onClick={() => {
+                                                      const currentSlots = form.getValues(`availabilitySlots.${dayIndex}.timeSlots`);
+                                                      const newSlots = [...currentSlots, { from: "", to: "" }];
+                                                      update(dayIndex, { ...form.getValues(`availabilitySlots.${dayIndex}`), timeSlots: newSlots });
+                                                  }}>Add Slot</Button>
+                                              </div>
+                                          )
+                                      })}
+                                      </div>
+                                      <div className="flex justify-end gap-2">
+                                        <Button type="button" variant="ghost" onClick={() => setIsEditingAvailability(false)} disabled={isPending}>Cancel</Button>
+                                        <Button type="submit" disabled={isPending}>
+                                            {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Saving...</> : 'Save Changes'}
+                                        </Button>
+                                      </div>
+                                  </form>
+                               </Form>
+                          ) : (
+                             <div className="space-y-3">
+                                  {doctor.availabilitySlots && doctor.availabilitySlots.length > 0 ? (
+                                      doctor.availabilitySlots
+                                      .slice() // Create a shallow copy to avoid mutating the original array
+                                      .sort((a, b) => daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day))
+                                      .map((slot, index) => (
+                                          <div key={index} className="flex items-start">
+                                              <p className="w-28 font-semibold text-sm">{slot.day}</p>
+                                              <div className="flex flex-wrap gap-2">
+                                                  {slot.timeSlots.map((ts, i) => (
+                                                      <Badge key={i} variant="outline" className="text-sm">{ts.from} - {ts.to}</Badge>
+                                                  ))}
+                                              </div>
+                                          </div>
+                                      ))
+                                  ) : (
+                                      <p className="text-sm text-muted-foreground">No availability slots defined.</p>
+                                  )}
+                             </div>
+                          )}
                         </CardContent>
                     </Card>
                      <Card>
@@ -384,7 +573,6 @@ export default function DoctorDetailPage() {
                                     modifiers={{ leave: leaveDates }}
                                     modifiersStyles={{ 
                                       leave: { color: 'red', textDecoration: 'line-through' },
-                                      disabled: { color: 'red', textDecoration: 'line-through' },
                                     }}
                                 />
                             </CardContent>
@@ -442,3 +630,5 @@ export default function DoctorDetailPage() {
     </div>
   );
 }
+
+    
