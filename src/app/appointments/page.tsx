@@ -5,7 +5,6 @@ import { useEffect, useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { AppointmentsHeader } from "@/components/layout/header";
 import {
   Card,
   CardContent,
@@ -18,9 +17,8 @@ import { Badge } from "@/components/ui/badge";
 import type { Appointment, Doctor } from "@/lib/types";
 import { collection, getDocs, addDoc, setDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { parse, isSameDay, parse as parseDateFns, format } from "date-fns";
+import { parse, isSameDay, parse as parseDateFns, format, getDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import { TopNav } from "@/components/layout/top-nav";
 import {
@@ -42,7 +40,6 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { getDay } from "date-fns";
 import { PlusCircle } from "lucide-react";
 
 const formSchema = z.object({
@@ -74,7 +71,7 @@ export default function AppointmentsPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
-  const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const isEditing = !!editingAppointment;
@@ -125,7 +122,7 @@ export default function AppointmentsPage() {
 
   const resetForm = () => {
     setEditingAppointment(null);
-    setSelectedDoctor(null);
+    setSelectedDoctorId(null);
     form.reset({
       patientName: "", gender: "Male", phone: "", age: 0, doctor: "",
       date: undefined, time: undefined, department: "", treatment: "",
@@ -136,17 +133,53 @@ export default function AppointmentsPage() {
   useEffect(() => {
     if (editingAppointment) {
         const doctor = doctors.find(d => d.name === editingAppointment.doctor);
-        const doctorId = doctor ? doctor.id : '';
-        form.reset({
-            ...editingAppointment,
-            date: parse(editingAppointment.date, "d MMMM yyyy", new Date()),
-            doctor: doctorId,
-        });
-        setSelectedDoctor(doctor || null);
+        if (doctor) {
+            form.reset({
+                ...editingAppointment,
+                date: parse(editingAppointment.date, "d MMMM yyyy", new Date()),
+                doctor: doctor.id,
+            });
+            setSelectedDoctorId(doctor.id);
+        }
     } else {
         resetForm();
     }
   }, [editingAppointment, form, doctors]);
+
+  const selectedDoctor = useMemo(() => {
+    return doctors.find(d => d.id === selectedDoctorId) || null;
+  }, [doctors, selectedDoctorId]);
+
+  const selectedDate = form.watch("date");
+
+  const availableDoctorsForDate = useMemo(() => {
+    if (!selectedDate) return doctors;
+    const dayOfWeekIndex = getDay(selectedDate);
+    const dayOfWeek = daysOfWeek[dayOfWeekIndex];
+
+    return doctors.filter(doctor => {
+        const isAvailableOnDay = doctor.availabilitySlots?.some(slot => slot.day === dayOfWeek);
+        if (!isAvailableOnDay) return false;
+
+        const isOnLeave = doctor.leaveSlots?.some(leave => 
+            isSameDay(parse(leave.date, 'yyyy-MM-dd', new Date()), selectedDate)
+        );
+        if (isOnLeave) return false;
+        
+        return true;
+    });
+  }, [doctors, selectedDate]);
+
+  useEffect(() => {
+    if (selectedDate && selectedDoctorId) {
+        const isDoctorAvailable = availableDoctorsForDate.some(d => d.id === selectedDoctorId);
+        if (!isDoctorAvailable) {
+            form.setValue("doctor", "");
+            setSelectedDoctorId(null);
+            form.setValue("department", "");
+        }
+    }
+  }, [selectedDate, selectedDoctorId, availableDoctorsForDate, form]);
 
   async function onSubmit(values: AddAppointmentFormValues) {
      try {
@@ -205,19 +238,15 @@ export default function AppointmentsPage() {
 
   const onDoctorChange = (doctorId: string) => {
     form.setValue("doctor", doctorId);
+    setSelectedDoctorId(doctorId);
     const doctor = doctors.find(d => d.id === doctorId);
     if (doctor) {
-        setSelectedDoctor(doctor);
         form.setValue("department", doctor.department || "");
-        form.setValue("date", undefined, { shouldValidate: true });
         form.setValue("time", undefined, { shouldValidate: true });
     } else {
-        setSelectedDoctor(null);
         form.setValue("department", "");
     }
   }
-
-  const selectedDate = form.watch("date");
 
   const availableDaysOfWeek = useMemo(() => {
     if (!selectedDoctor?.availabilitySlots) return [];
@@ -247,7 +276,6 @@ export default function AppointmentsPage() {
     if (!availabilityForDay) return [];
     
     const formattedDate = format(selectedDate, "d MMMM yyyy");
-    // Filter out the current appointment being edited from the check
     const otherAppointments = appointments.filter(apt => !(isEditing && apt.id === editingAppointment?.id));
     const bookedSlotsForDay = otherAppointments
       .filter(apt => apt.doctor === selectedDoctor.name && apt.date === formattedDate)
@@ -332,174 +360,157 @@ export default function AppointmentsPage() {
                   {isEditing ? "Update the details for this appointment." : "Fill in the details below to book a new appointment."}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="h-[calc(100%-7rem)]">
-                <ScrollArea className="h-full pr-4">
-                  <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-                        {/* Patient Details Column */}
-                        <div className="space-y-4">
-                          <h3 className="text-lg font-medium border-b pb-2">Patient Details</h3>
-                          <FormField control={form.control} name="patientName" render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Patient Name</FormLabel>
-                                <FormControl><Input placeholder="John Doe" {...field} /></FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField control={form.control} name="age" render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Age</FormLabel>
-                                <FormControl><Input type="number" placeholder="35" {...field} /></FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField control={form.control} name="gender" render={({ field }) => (
-                              <FormItem className="space-y-3">
-                                <FormLabel>Gender</FormLabel>
-                                <FormControl>
-                                  <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4">
-                                    <FormItem className="flex items-center space-x-2 space-y-0">
-                                      <FormControl><RadioGroupItem value="Male" /></FormControl>
-                                      <FormLabel className="font-normal">Male</FormLabel>
-                                    </FormItem>
-                                    <FormItem className="flex items-center space-x-2 space-y-0">
-                                      <FormControl><RadioGroupItem value="Female" /></FormControl>
-                                      <FormLabel className="font-normal">Female</FormLabel>
-                                    </FormItem>
-                                    <FormItem className="flex items-center space-x-2 space-y-0">
-                                      <FormControl><RadioGroupItem value="Other" /></FormControl>
-                                      <FormLabel className="font-normal">Other</FormLabel>
-                                    </FormItem>
-                                  </RadioGroup>
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField control={form.control} name="phone" render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Phone Number</FormLabel>
-                                <FormControl><Input placeholder="123-456-7890" {...field} /></FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField control={form.control} name="place" render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Place</FormLabel>
-                                <FormControl><Input placeholder="e.g. New York, USA" {...field} /></FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField control={form.control} name="treatment" render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Treatment</FormLabel>
-                                <FormControl><Input placeholder="e.g. Routine Check-up" {...field} /></FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                           <FormField control={form.control} name="status" render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Status</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value}>
-                                  <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl>
-                                  <SelectContent>
-                                    <SelectItem value="Pending">Pending</SelectItem>
-                                    <SelectItem value="Confirmed">Confirmed</SelectItem>
-                                    <SelectItem value="Cancelled">Cancelled</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                           <FormField control={form.control} name="bookedVia" render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Booked Via</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value}>
-                                  <FormControl><SelectTrigger><SelectValue placeholder="Select booking channel" /></SelectTrigger></FormControl>
-                                  <SelectContent>
-                                    <SelectItem value="Online">Online</SelectItem>
-                                    <SelectItem value="Phone">Phone</SelectItem>
-                                    <SelectItem value="Walk-in">Walk-in</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-                        {/* Appointment/Doctor Details Column */}
-                        <div className="space-y-4">
-                          <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
-                          <FormField control={form.control} name="doctor" render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Doctor</FormLabel>
-                                <Select onValueChange={onDoctorChange} value={field.value}>
-                                  <FormControl><SelectTrigger><SelectValue placeholder="Select a doctor" /></SelectTrigger></FormControl>
-                                  <SelectContent>
-                                    {doctors.map(doc => (
-                                      <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          {selectedDoctor && (
-                            <>
-                              <FormField control={form.control} name="date" render={({ field }) => (
-                                  <FormItem className="flex flex-col">
-                                    <FormLabel>Select Date</FormLabel>
-                                    <Calendar
-                                      mode="single" selected={field.value} onSelect={field.onChange}
-                                      disabled={(date) => date < new Date(new Date().setHours(0,0,0,0)) || !availableDaysOfWeek.includes(getDay(date)) || leaveDates.some(leaveDate => isSameDay(date, leaveDate))}
-                                      initialFocus className="rounded-md border"
-                                      modifiers={{ available: { dayOfWeek: availableDaysOfWeek }, leave: leaveDates }}
-                                      modifiersStyles={{ available: { backgroundColor: 'hsl(var(--primary)/0.1)', color: 'hsl(var(--primary))' }, leave: { color: 'red', textDecoration: 'line-through' } }}
-                                    />
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-
-                              {selectedDate && (
-                                <FormField control={form.control} name="time" render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Select Time Slot</FormLabel>
-                                      <div className="grid grid-cols-4 gap-2">
-                                        {timeSlots.length > 0 ? timeSlots.map(slot => (
-                                          <Button
-                                            key={slot.time} type="button"
-                                            variant={field.value === slot.time ? "default" : "outline"}
-                                            onClick={() => field.onChange(slot.time)}
-                                            disabled={slot.disabled}
-                                            className={cn(slot.disabled && "line-through")}
-                                          >{slot.time}</Button>
-                                        )) : <p className="text-sm text-muted-foreground col-span-4">No available slots for this day.</p>}
-                                      </div>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                              )}
-                            </>
+              <CardContent>
+                <Form {...form}>
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4">
+                      {/* Patient Details Column */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium border-b pb-2">Patient Details</h3>
+                        <FormField control={form.control} name="patientName" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Patient Name</FormLabel>
+                              <FormControl><Input placeholder="John Doe" {...field} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
                           )}
-                        </div>
+                        />
+                        <FormField control={form.control} name="age" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Age</FormLabel>
+                              <FormControl><Input type="number" placeholder="35" {...field} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField control={form.control} name="gender" render={({ field }) => (
+                            <FormItem className="space-y-3">
+                              <FormLabel>Gender</FormLabel>
+                              <FormControl>
+                                <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4">
+                                  <FormItem className="flex items-center space-x-2 space-y-0">
+                                    <FormControl><RadioGroupItem value="Male" /></FormControl>
+                                    <FormLabel className="font-normal">Male</FormLabel>
+                                  </FormItem>
+                                  <FormItem className="flex items-center space-x-2 space-y-0">
+                                    <FormControl><RadioGroupItem value="Female" /></FormControl>
+                                    <FormLabel className="font-normal">Female</FormLabel>
+                                  </FormItem>
+                                </RadioGroup>
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField control={form.control} name="phone" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Phone Number</FormLabel>
+                              <FormControl><Input placeholder="123-456-7890" {...field} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField control={form.control} name="treatment" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Treatment</FormLabel>
+                              <FormControl><Input placeholder="e.g. Routine Check-up" {...field} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
                       </div>
-                      <div className="flex justify-end gap-2 pt-4">
-                        {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
-                        <Button type="submit">{isEditing ? "Save Changes" : "Book Appointment"}</Button>
+
+                      {/* Calendar Column */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium border-b pb-2">Select Date</h3>
+                        <FormField control={form.control} name="date" render={({ field }) => (
+                            <FormItem className="flex flex-col">
+                              <Calendar
+                                mode="single" selected={field.value} onSelect={field.onChange}
+                                disabled={(date) => date < new Date(new Date().setHours(0,0,0,0)) || (!!selectedDoctor && !availableDaysOfWeek.includes(getDay(date)))}
+                                initialFocus
+                                className="rounded-md border"
+                                modifiers={{ 
+                                  available: selectedDoctor ? { dayOfWeek: availableDaysOfWeek } : {},
+                                  leave: leaveDates 
+                                }}
+                                modifiersStyles={{ 
+                                    available: { backgroundColor: 'hsl(var(--primary)/0.1)', color: 'hsl(var(--primary))' },
+                                    leave: { color: 'red', textDecoration: 'line-through' } 
+                                }}
+                              />
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
                       </div>
-                    </form>
-                  </Form>
-                </ScrollArea>
+                      
+                      {/* Appointment/Doctor Details Column */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
+                        <FormField control={form.control} name="doctor" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Doctor</FormLabel>
+                              <Select onValueChange={onDoctorChange} value={field.value} disabled={!selectedDate}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder={selectedDate ? "Select an available doctor" : "Select a date first"} />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {availableDoctorsForDate.map(doc => (
+                                    <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        {selectedDoctor && selectedDate && (
+                          <FormField control={form.control} name="time" render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Select Time Slot</FormLabel>
+                                <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-2">
+                                  {timeSlots.length > 0 ? timeSlots.map(slot => (
+                                    <Button
+                                      key={slot.time} type="button"
+                                      variant={field.value === slot.time ? "default" : "outline"}
+                                      onClick={() => field.onChange(slot.time)}
+                                      disabled={slot.disabled}
+                                      className={cn("text-xs", slot.disabled && "line-through")}
+                                    >{slot.time}</Button>
+                                  )) : <p className="text-sm text-muted-foreground col-span-2">No available slots for this day.</p>}
+                                </div>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        )}
+                         <FormField control={form.control} name="status" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Status</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl>
+                                <SelectContent>
+                                  <SelectItem value="Pending">Pending</SelectItem>
+                                  <SelectItem value="Confirmed">Confirmed</SelectItem>
+                                  <SelectItem value="Cancelled">Cancelled</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-4">
+                      {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
+                      <Button type="submit">{isEditing ? "Save Changes" : "Book Appointment"}</Button>
+                    </div>
+                  </form>
+                </Form>
               </CardContent>
             </Card>
           </div>
