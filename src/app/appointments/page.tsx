@@ -1,30 +1,37 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { AppointmentsHeader } from "@/components/layout/header";
 import {
   Card,
   CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
 } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Appointment, Doctor } from "@/lib/types";
+import { collection, getDocs, addDoc, setDoc, doc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
+import { parse, isSameDay, parse as parseDateFns, format } from "date-fns";
+import { cn } from "@/lib/utils";
+import { TopNav } from "@/components/layout/top-nav";
 import {
-  ChevronLeft,
-  ChevronRight,
-  ArrowUpDown,
-} from "lucide-react";
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -32,24 +39,63 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { collection, getDocs, addDoc, setDoc, doc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { Skeleton } from "@/components/ui/skeleton";
-import { AddAppointmentForm } from "@/components/appointments/add-appointment-form";
-import { useToast } from "@/hooks/use-toast";
-import { parse, isSameDay, parse as parseDateFns } from "date-fns";
-import { cn } from "@/lib/utils";
-import { TopNav } from "@/components/layout/top-nav";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Calendar } from "@/components/ui/calendar";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { getDay } from "date-fns";
+import { PlusCircle } from "lucide-react";
+
+const formSchema = z.object({
+  id: z.string().optional(),
+  patientName: z.string().min(2, { message: "Name must be at least 2 characters." }),
+  gender: z.enum(["Male", "Female", "Other"]),
+  phone: z.string().min(10, { message: "Phone number must be at least 10 digits." }),
+  age: z.coerce.number().min(0, "Age cannot be negative."),
+  doctor: z.string().min(1, { message: "Please select a doctor." }),
+  date: z.date({
+    required_error: "A date is required.",
+  }),
+  time: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]\s(AM|PM)$/, "Invalid time format"),
+  department: z.string().min(1, { message: "Please select a department." }),
+  status: z.enum(["Confirmed", "Pending", "Cancelled"]),
+  treatment: z.string().min(2, { message: "Treatment must be at least 2 characters." }),
+  bookedVia: z.enum(["Online", "Phone", "Walk-in"]),
+  place: z.string().min(2, { message: "Place must be at least 2 characters." }),
+  tokenNumber: z.string().optional(),
+});
+
+type AddAppointmentFormValues = z.infer<typeof formSchema>;
+
+const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 
 export default function AppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tabCounts, setTabCounts] = useState({ all: 0, confirmed: 0, pending: 0, cancelled: 0 });
-  const [isAddAppointmentOpen, setIsAddAppointmentOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
+  const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const { toast } = useToast();
+
+  const isEditing = !!editingAppointment;
+
+  const form = useForm<AddAppointmentFormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      patientName: "",
+      gender: "Male",
+      phone: "",
+      age: 0,
+      doctor: "",
+      date: undefined,
+      time: undefined,
+      department: "",
+      treatment: "",
+      place: "",
+      status: "Pending",
+      bookedVia: "Online",
+    },
+  });
 
   useEffect(() => {
     const fetchAppointments = async () => {
@@ -58,8 +104,6 @@ export default function AppointmentsPage() {
         const appointmentsSnapshot = await getDocs(appointmentsCollection);
         const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ ...doc.data() } as Appointment));
         setAppointments(appointmentsList);
-
-        updateTabCounts(appointmentsList);
 
       } catch (error) {
         console.error("Error fetching appointments:", error);
@@ -78,68 +122,73 @@ export default function AppointmentsPage() {
     fetchAppointments();
     fetchDoctors();
   }, []);
-  
-  const updateTabCounts = (appointmentList: Appointment[]) => {
-      const counts = appointmentList.reduce((acc, apt) => {
-        acc.all++;
-        if (apt.status === "Confirmed") acc.confirmed++;
-        else if (apt.status === "Pending") acc.pending++;
-        else if (apt.status === "Cancelled") acc.cancelled++;
-        return acc;
-      }, { all: 0, confirmed: 0, pending: 0, cancelled: 0 });
-      setTabCounts(counts);
+
+  const resetForm = () => {
+    setEditingAppointment(null);
+    setSelectedDoctor(null);
+    form.reset({
+      patientName: "", gender: "Male", phone: "", age: 0, doctor: "",
+      date: undefined, time: undefined, department: "", treatment: "",
+      place: "", status: "Pending", bookedVia: "Online",
+    });
   }
 
-  const handleSaveAppointment = async (appointmentData: Omit<Appointment, 'date'> & { date: string, id?: string }) => {
-     try {
-        const doctorName = doctors.find(d => d.id === appointmentData.doctor)?.name || "Unknown Doctor";
-        const isEditing = !!appointmentData.id;
+  useEffect(() => {
+    if (editingAppointment) {
+        const doctor = doctors.find(d => d.name === editingAppointment.doctor);
+        const doctorId = doctor ? doctor.id : '';
+        form.reset({
+            ...editingAppointment,
+            date: parse(editingAppointment.date, "d MMMM yyyy", new Date()),
+            doctor: doctorId,
+        });
+        setSelectedDoctor(doctor || null);
+    } else {
+        resetForm();
+    }
+  }, [editingAppointment, form, doctors]);
 
-        let dataToSave: Appointment;
+  async function onSubmit(values: AddAppointmentFormValues) {
+     try {
+        const doctorName = doctors.find(d => d.id === values.doctor)?.name || "Unknown Doctor";
+        
+        const dataToSave = {
+            ...values,
+            date: format(values.date, "d MMMM yyyy"),
+            doctor: doctorName,
+        };
 
         if (isEditing) {
-            const { id, ...restOfData } = appointmentData;
-            dataToSave = {
-                ...restOfData,
-                id: id!,
-                doctor: doctorName,
-            };
+            const { id, ...restOfData } = dataToSave;
             const appointmentRef = doc(db, "appointments", id!);
-            await setDoc(appointmentRef, dataToSave, { merge: true });
+            await setDoc(appointmentRef, restOfData, { merge: true });
 
             setAppointments(prev => {
-                const updatedAppointments = prev.map(apt => apt.id === id ? dataToSave : apt);
-                updateTabCounts(updatedAppointments);
-                return updatedAppointments;
+                return prev.map(apt => apt.id === id ? { ...apt, ...restOfData } : apt);
             });
             toast({
                 title: "Appointment Rescheduled",
-                description: `Appointment for ${dataToSave.patientName} has been updated.`,
+                description: `Appointment for ${restOfData.patientName} has been updated.`,
             });
         } else {
             const newAppointmentRef = doc(collection(db, "appointments"));
             let prefix = '';
-            if (appointmentData.bookedVia === 'Online') prefix = 'A';
-            else if (appointmentData.bookedVia === 'Phone') prefix = 'P';
-            else if (appointmentData.bookedVia === 'Walk-in') prefix = 'W';
-            const tokenNumber = `${prefix}${appointments.length + 1}`;
+            if (values.bookedVia === 'Online') prefix = 'A';
+            else if (values.bookedVia === 'Phone') prefix = 'P';
+            else if (values.bookedVia === 'Walk-in') prefix = 'W';
+            const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3, '0')}`;
             
-            const { id, ...restOfData } = appointmentData;
-            dataToSave = {
+            const { id, ...restOfData } = dataToSave;
+            const newAppointmentData: Appointment = {
                 ...restOfData,
                 id: newAppointmentRef.id,
-                doctor: doctorName,
                 tokenNumber: tokenNumber,
             };
-            await setDoc(newAppointmentRef, dataToSave);
-            setAppointments(prev => {
-                const newAppointments = [...prev, dataToSave];
-                updateTabCounts(newAppointments);
-                return newAppointments;
-            });
+            await setDoc(newAppointmentRef, newAppointmentData);
+            setAppointments(prev => [...prev, newAppointmentData]);
             toast({
                 title: "Appointment Booked",
-                description: `Appointment for ${dataToSave.patientName} has been successfully booked.`,
+                description: `Appointment for ${newAppointmentData.patientName} has been successfully booked.`,
             });
         }
      } catch (error) {
@@ -150,14 +199,95 @@ export default function AppointmentsPage() {
             description: "Failed to save appointment. Please try again.",
         });
      } finally {
-        setIsAddAppointmentOpen(false);
-        setEditingAppointment(null);
+        resetForm();
      }
   }
+
+  const onDoctorChange = (doctorId: string) => {
+    form.setValue("doctor", doctorId);
+    const doctor = doctors.find(d => d.id === doctorId);
+    if (doctor) {
+        setSelectedDoctor(doctor);
+        form.setValue("department", doctor.department || "");
+        form.setValue("date", undefined, { shouldValidate: true });
+        form.setValue("time", undefined, { shouldValidate: true });
+    } else {
+        setSelectedDoctor(null);
+        form.setValue("department", "");
+    }
+  }
+
+  const selectedDate = form.watch("date");
+
+  const availableDaysOfWeek = useMemo(() => {
+    if (!selectedDoctor?.availabilitySlots) return [];
+    const dayNames = selectedDoctor.availabilitySlots.map(s => s.day);
+    return daysOfWeek.reduce((acc, day, index) => {
+        if (dayNames.includes(day)) {
+            acc.push(index);
+        }
+        return acc;
+    }, [] as number[]);
+  }, [selectedDoctor]);
+  
+  const leaveDates = useMemo(() => {
+      return (selectedDoctor?.leaveSlots || [])
+          .filter(ls => ls.slots.length > 0)
+          .map(ls => parse(ls.date, 'yyyy-MM-dd', new Date()));
+  }, [selectedDoctor?.leaveSlots]);
+
+
+  const timeSlots = useMemo(() => {
+    if (!selectedDate || !selectedDoctor || !selectedDoctor.availabilitySlots || !selectedDoctor.averageConsultingTime) {
+      return [];
+    }
+
+    const dayOfWeek = daysOfWeek[getDay(selectedDate)];
+    const availabilityForDay = selectedDoctor.availabilitySlots.find(s => s.day === dayOfWeek);
+    if (!availabilityForDay) return [];
+    
+    const formattedDate = format(selectedDate, "d MMMM yyyy");
+    // Filter out the current appointment being edited from the check
+    const otherAppointments = appointments.filter(apt => !(isEditing && apt.id === editingAppointment?.id));
+    const bookedSlotsForDay = otherAppointments
+      .filter(apt => apt.doctor === selectedDoctor.name && apt.date === formattedDate)
+      .map(apt => apt.time);
+
+    const slots: { time: string; disabled: boolean }[] = [];
+    const avgTime = selectedDoctor.averageConsultingTime;
+    
+    const leaveForDate = selectedDoctor.leaveSlots?.find(ls => isSameDay(parse(ls.date, 'yyyy-MM-dd', new Date()), selectedDate));
+    const leaveTimeSlots = leaveForDate ? leaveForDate.slots : [];
+
+    availabilityForDay.timeSlots.forEach(ts => {
+      let currentTime = parseDateFns(ts.from, 'HH:mm', selectedDate);
+      const endTime = parseDateFns(ts.to, 'HH:mm', selectedDate);
+
+      while (currentTime < endTime) {
+        const slotTime = format(currentTime, "hh:mm a");
+        
+        const isLeave = leaveTimeSlots.some(leaveSlot => {
+           const leaveStart = parseDateFns(leaveSlot.from, 'HH:mm', selectedDate);
+           const leaveEnd = parseDateFns(leaveSlot.to, 'HH:mm', selectedDate);
+           return currentTime >= leaveStart && currentTime < leaveEnd;
+        });
+
+        if (!isLeave) {
+            slots.push({
+              time: slotTime,
+              disabled: bookedSlotsForDay.includes(slotTime),
+            });
+        }
+
+        currentTime.setMinutes(currentTime.getMinutes() + avgTime);
+      }
+    });
+
+    return slots;
+  }, [selectedDate, selectedDoctor, appointments, isEditing, editingAppointment]);
   
   const handleOpenReschedule = (appointment: Appointment) => {
     setEditingAppointment(appointment);
-    setIsAddAppointmentOpen(true);
   }
 
   const isAppointmentOnLeave = (appointment: Appointment): boolean => {
@@ -183,184 +313,249 @@ export default function AppointmentsPage() {
   return (
     <>
       <TopNav />
-      <div className="flex flex-col">
-        <AppointmentsHeader onAddAppointment={() => { setEditingAppointment(null); setIsAddAppointmentOpen(true); }} />
-        <main className="flex-1 p-4 sm:p-6">
-          <Tabs defaultValue="all">
-            <TabsList>
-              <TabsTrigger value="all">All ({tabCounts.all})</TabsTrigger>
-              <TabsTrigger value="confirmed">Confirmed ({tabCounts.confirmed})</TabsTrigger>
-              <TabsTrigger value="pending">Pending ({tabCounts.pending})</TabsTrigger>
-              <TabsTrigger value="cancelled">Cancelled ({tabCounts.cancelled})</TabsTrigger>
-            </TabsList>
-            <TabsContent value="all">
-              <Card>
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-[40px]">
-                            <Checkbox />
-                          </TableHead>
-                          <TableHead>
-                            <Button variant="ghost" size="sm">
-                              Name <ArrowUpDown className="ml-2 h-4 w-4" />
-                            </Button>
-                          </TableHead>
-                           <TableHead>
-                            <Button variant="ghost" size="sm">
-                              Token <ArrowUpDown className="ml-2 h-4 w-4" />
-                            </Button>
-                          </TableHead>
-                          <TableHead>
-                            <Button variant="ghost" size="sm">
-                              Date <ArrowUpDown className="ml-2 h-4 w-4" />
-                            </Button>
-                          </TableHead>
-                          <TableHead>
-                            <Button variant="ghost" size="sm">
-                              Time <ArrowUpDown className="ml-2 h-4 w-4" />
-                            </Button>
-                          </TableHead>
-                          <TableHead>
-                            <Button variant="ghost" size="sm">
-                              Doctor <ArrowUpDown className="ml-2 h-4 w-4" />
-                            </Button>
-                          </TableHead>
-                          <TableHead>
-                            <Button variant="ghost" size="sm">
-                              Booked Via <ArrowUpDown className="ml-2 h-4 w-4" />
-                            </Button>
-                          </TableHead>
-                          <TableHead>
-                            <Button variant="ghost" size="sm">
-                              Status <ArrowUpDown className="ml-2 h-4 w-4" />
-                            </Button>
-                          </TableHead>
-                          <TableHead>Action</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
+      <div className="flex flex-col h-[calc(100vh-4rem)]">
+        <header className="sticky top-16 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:px-6">
+          <h1 className="text-xl font-semibold md:text-2xl">Appointments</h1>
+          <Button onClick={resetForm} variant="outline" className="ml-auto">
+            <PlusCircle className="mr-2 h-4 w-4" />
+            New Appointment
+          </Button>
+        </header>
+
+        <main className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 overflow-hidden">
+          {/* Form Column */}
+          <div className="lg:col-span-2">
+            <Card className="h-full">
+              <CardHeader>
+                <CardTitle>{isEditing ? "Reschedule Appointment" : "Book New Appointment"}</CardTitle>
+                <CardDescription>
+                  {isEditing ? "Update the details for this appointment." : "Fill in the details below to book a new appointment."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="h-[calc(100%-7rem)]">
+                <ScrollArea className="h-full pr-4">
+                  <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                        {/* Patient Details Column */}
+                        <div className="space-y-4">
+                          <h3 className="text-lg font-medium border-b pb-2">Patient Details</h3>
+                          <FormField control={form.control} name="patientName" render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Patient Name</FormLabel>
+                                <FormControl><Input placeholder="John Doe" {...field} /></FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField control={form.control} name="age" render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Age</FormLabel>
+                                <FormControl><Input type="number" placeholder="35" {...field} /></FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField control={form.control} name="gender" render={({ field }) => (
+                              <FormItem className="space-y-3">
+                                <FormLabel>Gender</FormLabel>
+                                <FormControl>
+                                  <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4">
+                                    <FormItem className="flex items-center space-x-2 space-y-0">
+                                      <FormControl><RadioGroupItem value="Male" /></FormControl>
+                                      <FormLabel className="font-normal">Male</FormLabel>
+                                    </FormItem>
+                                    <FormItem className="flex items-center space-x-2 space-y-0">
+                                      <FormControl><RadioGroupItem value="Female" /></FormControl>
+                                      <FormLabel className="font-normal">Female</FormLabel>
+                                    </FormItem>
+                                    <FormItem className="flex items-center space-x-2 space-y-0">
+                                      <FormControl><RadioGroupItem value="Other" /></FormControl>
+                                      <FormLabel className="font-normal">Other</FormLabel>
+                                    </FormItem>
+                                  </RadioGroup>
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField control={form.control} name="phone" render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Phone Number</FormLabel>
+                                <FormControl><Input placeholder="123-456-7890" {...field} /></FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField control={form.control} name="place" render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Place</FormLabel>
+                                <FormControl><Input placeholder="e.g. New York, USA" {...field} /></FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField control={form.control} name="treatment" render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Treatment</FormLabel>
+                                <FormControl><Input placeholder="e.g. Routine Check-up" {...field} /></FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                           <FormField control={form.control} name="status" render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Status</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                  <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="Pending">Pending</SelectItem>
+                                    <SelectItem value="Confirmed">Confirmed</SelectItem>
+                                    <SelectItem value="Cancelled">Cancelled</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                           <FormField control={form.control} name="bookedVia" render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Booked Via</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                  <FormControl><SelectTrigger><SelectValue placeholder="Select booking channel" /></SelectTrigger></FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="Online">Online</SelectItem>
+                                    <SelectItem value="Phone">Phone</SelectItem>
+                                    <SelectItem value="Walk-in">Walk-in</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                        {/* Appointment/Doctor Details Column */}
+                        <div className="space-y-4">
+                          <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
+                          <FormField control={form.control} name="doctor" render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Doctor</FormLabel>
+                                <Select onValueChange={onDoctorChange} value={field.value}>
+                                  <FormControl><SelectTrigger><SelectValue placeholder="Select a doctor" /></SelectTrigger></FormControl>
+                                  <SelectContent>
+                                    {doctors.map(doc => (
+                                      <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          {selectedDoctor && (
+                            <>
+                              <FormField control={form.control} name="date" render={({ field }) => (
+                                  <FormItem className="flex flex-col">
+                                    <FormLabel>Select Date</FormLabel>
+                                    <Calendar
+                                      mode="single" selected={field.value} onSelect={field.onChange}
+                                      disabled={(date) => date < new Date(new Date().setHours(0,0,0,0)) || !availableDaysOfWeek.includes(getDay(date)) || leaveDates.some(leaveDate => isSameDay(date, leaveDate))}
+                                      initialFocus className="rounded-md border"
+                                      modifiers={{ available: { dayOfWeek: availableDaysOfWeek }, leave: leaveDates }}
+                                      modifiersStyles={{ available: { backgroundColor: 'hsl(var(--primary)/0.1)', color: 'hsl(var(--primary))' }, leave: { color: 'red', textDecoration: 'line-through' } }}
+                                    />
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              {selectedDate && (
+                                <FormField control={form.control} name="time" render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Select Time Slot</FormLabel>
+                                      <div className="grid grid-cols-4 gap-2">
+                                        {timeSlots.length > 0 ? timeSlots.map(slot => (
+                                          <Button
+                                            key={slot.time} type="button"
+                                            variant={field.value === slot.time ? "default" : "outline"}
+                                            onClick={() => field.onChange(slot.time)}
+                                            disabled={slot.disabled}
+                                            className={cn(slot.disabled && "line-through")}
+                                          >{slot.time}</Button>
+                                        )) : <p className="text-sm text-muted-foreground col-span-4">No available slots for this day.</p>}
+                                      </div>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2 pt-4">
+                        {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
+                        <Button type="submit">{isEditing ? "Save Changes" : "Book Appointment"}</Button>
+                      </div>
+                    </form>
+                  </Form>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Appointments List Column */}
+          <div className="lg:col-span-1">
+            <Card className="h-full">
+              <CardHeader>
+                <CardTitle>Upcoming Appointments</CardTitle>
+              </CardHeader>
+              <CardContent className="h-[calc(100%-4rem)]">
+                <ScrollArea className="h-full">
+                    <div className="space-y-3">
                         {loading ? (
-                          Array.from({ length: 10 }).map((_, i) => (
-                            <TableRow key={i}>
-                              <TableCell><Skeleton className="h-4 w-4" /></TableCell>
-                              <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                              <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                              <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                              <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                              <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                              <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                              <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                              <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                            </TableRow>
-                          ))
+                           Array.from({ length: 10 }).map((_, i) => (
+                              <div key={i} className="p-3 rounded-lg border bg-muted animate-pulse h-20"></div>
+                           ))
                         ) : (
-                          appointments.map((appointment) => (
-                            <TableRow key={appointment.id} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
-                              <TableCell>
-                                <Checkbox />
-                              </TableCell>
-                              <TableCell className="font-medium">
-                                {appointment.patientName}
-                              </TableCell>
-                              <TableCell>{appointment.tokenNumber}</TableCell>
-                              <TableCell>{appointment.date}</TableCell>
-                              <TableCell>{appointment.time}</TableCell>
-                              <TableCell>{appointment.doctor}</TableCell>
-                              <TableCell>{appointment.bookedVia}</TableCell>
-                              <TableCell>
-                                <Badge
-                                  variant={
-                                    appointment.status === "Confirmed"
-                                      ? "success"
-                                      : appointment.status === "Pending"
-                                      ? "warning"
-                                      : "destructive"
-                                  }
-                                >
-                                  {appointment.status}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex gap-2">
-                                  <Button variant="link" className="p-0 h-auto text-primary" onClick={() => handleOpenReschedule(appointment)}>
-                                    Reschedule
-                                  </Button>
-                                  <Button variant="link" className="p-0 h-auto text-muted-foreground">
-                                    Cancel
-                                  </Button>
+                          appointments
+                            .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                            .map((appointment) => (
+                            <div key={appointment.id} className={cn("p-3 rounded-lg border", isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30 border-red-300")}>
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <p className="font-semibold text-sm">{appointment.patientName}</p>
+                                        <p className="text-xs text-muted-foreground">with {appointment.doctor}</p>
+                                    </div>
+                                    <Badge
+                                      variant={
+                                        appointment.status === "Confirmed" ? "success"
+                                        : appointment.status === "Pending" ? "warning"
+                                        : "destructive"
+                                      }
+                                    >{appointment.status}</Badge>
                                 </div>
-                              </TableCell>
-                            </TableRow>
+                                <div className="flex justify-between items-end mt-2">
+                                     <div>
+                                        <p className="text-xs text-muted-foreground">{appointment.date}</p>
+                                        <p className="text-xs font-medium">{appointment.time}</p>
+                                    </div>
+                                    <Button variant="link" size="sm" className="p-0 h-auto text-primary" onClick={() => handleOpenReschedule(appointment)}>
+                                        Reschedule
+                                    </Button>
+                                </div>
+                            </div>
                           ))
                         )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-          <div className="flex items-center justify-between mt-4">
-            <div className="text-sm text-muted-foreground">
-              Showing{" "}
-              <Select defaultValue="13">
-                <SelectTrigger className="inline-flex w-auto h-auto p-1 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="13">13</SelectItem>
-                  <SelectItem value="25">25</SelectItem>
-                  <SelectItem value="50">50</SelectItem>
-                </SelectContent>
-              </Select>{" "}
-              out of {appointments.length}
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon">
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button variant="outline" size="icon" className="bg-primary/10 text-primary">
-                1
-              </Button>
-              <Button variant="outline" size="icon">
-                2
-              </Button>
-              <Button variant="outline" size="icon">
-                3
-              </Button>
-              <span className="text-muted-foreground">...</span>
-              <Button variant="outline" size="icon">
-                10
-              </Button>
-              <Button variant="outline" size="icon">
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
+                    </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
           </div>
         </main>
       </div>
-       <AddAppointmentForm
-        isOpen={isAddAppointmentOpen}
-        setIsOpen={(isOpen) => {
-            if (!isOpen) {
-                setEditingAppointment(null);
-            }
-            setIsAddAppointmentOpen(isOpen);
-        }}
-        onSave={handleSaveAppointment}
-        doctors={doctors}
-        appointments={appointments}
-        appointment={editingAppointment}
-      />
     </>
   );
 }
-
-    
-
-    
 
     
