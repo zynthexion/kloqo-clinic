@@ -28,7 +28,7 @@ export default function OnboardingDemoPage() {
       <SidebarInset>
         <main className="flex-1 p-4 sm:p-6">
           {step === 1 && <AddDepartmentStep onDepartmentsAdded={handleDepartmentsAdded} />}
-          {step === 2 && selectedDepartments.length > 0 && <AddDoctorStep department={selectedDepartments[0]} onDoctorAdded={handleDoctorAdded} />}
+          {step === 2 && selectedDepartments.length > 0 && <AddDoctorStep departments={selectedDepartments} onDoctorAdded={handleDoctorAdded} />}
           {step === 3 && (
              <div className="flex flex-col items-center justify-center h-full text-center bg-background p-8 rounded-lg">
                 <h1 className="text-3xl font-bold text-primary mb-4">Onboarding Complete!</h1>

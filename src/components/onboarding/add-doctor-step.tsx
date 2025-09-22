@@ -14,7 +14,7 @@ import { Users, CalendarDays, Edit, Trash, MoreHorizontal } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
 
 
-export function AddDoctorStep({ department, onDoctorAdded }: { department: Department, onDoctorAdded: (doctor: Doctor) => void }) {
+export function AddDoctorStep({ departments, onDoctorAdded }: { departments: Department[], onDoctorAdded: (doctor: Doctor) => void }) {
   const [isAddDoctorOpen, setIsAddDoctorOpen] = useState(false);
   const [addedDoctor, setAddedDoctor] = useState<Doctor | null>(null);
   const { toast } = useToast();
@@ -106,6 +106,7 @@ export function AddDoctorStep({ department, onDoctorAdded }: { department: Depar
         isOpen={isAddDoctorOpen}
         setIsOpen={setIsAddDoctorOpen}
         doctor={null}
+        departments={departments}
       />
     </div>
   );
