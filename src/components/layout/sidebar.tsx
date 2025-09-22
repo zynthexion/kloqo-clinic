@@ -1,4 +1,5 @@
 
+
 "use client";
 import Link from "next/link";
 import {
@@ -11,7 +12,8 @@ import {
   PlusCircle,
   HelpCircle,
   ClipboardList,
-  Users
+  Users,
+  Smartphone
 } from "lucide-react";
 import {
   Sidebar,
@@ -60,6 +62,11 @@ const menuItems = [
     icon: Activity,
     label: "Live Status",
   },
+  {
+    href: "/mobile-app",
+    icon: Smartphone,
+    label: "Mobile App",
+  }
 ];
 
 export function AppSidebar() {

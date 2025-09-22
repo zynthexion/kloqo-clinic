@@ -1,5 +1,6 @@
 
 
+
 export type TimeSlot = {
   from: string;
   to: string;
@@ -96,10 +97,15 @@ export type LiveStatus = {
     returnTime?: string;
 };
     
-
+export type MobileApp = {
+    id: string;
+    username: string;
+    password?: string;
+}
     
 
     
 
     
+
 
