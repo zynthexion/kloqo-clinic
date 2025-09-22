@@ -20,7 +20,7 @@ export function DashboardHeader() {
        <Button size="sm" className="gap-1 rounded-full">
           <CalendarIcon className="h-4 w-4" />
           <span className="sm:whitespace-nowrap">
-            Aug - Des 2021
+            Aug - Dec 2021
           </span>
         </Button>
     </header>
