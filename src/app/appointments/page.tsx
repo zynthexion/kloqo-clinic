@@ -526,7 +526,7 @@ export default function AppointmentsPage() {
                     <ClipboardList className="h-8 w-8" />
                 </Button>
             </SheetTrigger>
-            <SheetContent className="w-full sm:w-3/4 lg:w-1/2 p-0">
+            <SheetContent className="w-full md:w-1/2 p-0">
                 <SheetHeader className="p-6 border-b">
                     <SheetTitle>Upcoming Appointments</SheetTitle>
                     <SheetDescription>A list of all scheduled appointments.</SheetDescription>
@@ -574,5 +574,3 @@ export default function AppointmentsPage() {
     </div>
   );
 }
-
-    
