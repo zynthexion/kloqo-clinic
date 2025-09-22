@@ -87,14 +87,13 @@ export function OnboardingSidebar({ step }: { step: number }) {
                   isActive={isActive}
                   disabled={isDisabled}
                   className={cn(
+                    "data-[active=false]:bg-transparent data-[active=false]:hover:bg-sidebar-accent data-[active=false]:hover:text-sidebar-accent-foreground",
                     isDisabled && "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-sidebar-foreground",
                   )}
                 >
-                  <Link href={item.href} legacyBehavior>
-                      <a className={isDisabled ? "pointer-events-none" : ""}>
-                          <item.icon />
-                          <span>{item.label}</span>
-                      </a>
+                  <Link href={item.href} className={isDisabled ? "pointer-events-none" : ""}>
+                    <item.icon />
+                    <span>{item.label}</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
