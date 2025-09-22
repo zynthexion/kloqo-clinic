@@ -34,8 +34,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PlusCircle, Trash, Copy, Upload } from "lucide-react";
-import { departments } from "@/lib/data";
-import type { Doctor } from "@/lib/types";
+import type { Doctor, Department } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "../ui/scroll-area";
 import Image from "next/image";
@@ -72,11 +71,12 @@ type AddDoctorFormProps = {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
   doctor: Doctor | null;
+  departments: Department[];
 };
 
 const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
-export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor }: AddDoctorFormProps) {
+export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }: AddDoctorFormProps) {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const { toast } = useToast();
   const isEditMode = !!doctor;
@@ -435,7 +435,3 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor }: AddDoctorFo
     </Dialog>
   );
 }
-
-    
-
-    

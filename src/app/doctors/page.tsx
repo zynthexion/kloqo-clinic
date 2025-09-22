@@ -151,7 +151,7 @@ export default function DoctorsPage() {
     fetchDepartments();
   }, []);
 
-  const handleSaveDoctor = async (doctorData: Omit<Doctor, 'id' | 'avatar' | 'schedule' | 'preferences' | 'historicalData' | 'availability'> & { photo?: File; id?: string }) => {
+  const handleSaveDoctor = async (doctorData: Omit<Doctor, 'id' | 'avatar' | 'schedule' | 'preferences' | 'historicalData' | 'availability' | 'totalPatients' | 'todaysAppointments'> & { photo?: File; id?: string }) => {
     try {
       let photoUrl = doctorData.id ? doctors.find(d => d.id === doctorData.id)?.avatar : `https://picsum.photos/seed/new-doc-${new Date().getTime()}/100/100`;
 
@@ -323,6 +323,7 @@ export default function DoctorsPage() {
                       }
                   }}
                   doctor={editingDoctor}
+                  departments={departments}
               />
               </div>
 
