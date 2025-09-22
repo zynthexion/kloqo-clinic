@@ -40,8 +40,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { PlusCircle, ClipboardList } from "lucide-react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription } from "@/components/ui/sheet";
+import { PlusCircle, ClipboardList, ChevronRight } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -353,11 +352,11 @@ export default function AppointmentsPage() {
   return (
     <div className="flex flex-col h-screen">
       <TopNav />
-        <header className="sticky top-16 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:px-6">
-          <h1 className="text-xl font-semibold md:text-2xl">Appointments</h1>
-        </header>
-
-        <main className="flex-1 p-6 pr-24 overflow-auto">
+      <header className="sticky top-16 z-10 flex h-14 items-center gap-4 border-b bg-background px-4 sm:px-6">
+        <h1 className="text-xl font-semibold md:text-2xl">Appointments</h1>
+      </header>
+      <div className="flex-1 flex overflow-hidden">
+        <main className={cn("flex-1 p-6 overflow-auto transition-all duration-300 ease-in-out", isDrawerOpen ? 'md:w-2/3' : 'w-full')}>
             <Card className="h-full">
               <CardHeader>
                 <CardTitle>{isEditing ? "Reschedule Appointment" : "Book New Appointment"}</CardTitle>
@@ -369,7 +368,6 @@ export default function AppointmentsPage() {
                 <Form {...form}>
                   <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4">
-                      {/* Patient Details Column */}
                       <div className="space-y-4">
                         <h3 className="text-lg font-medium border-b pb-2">Patient Details</h3>
                         <FormField control={form.control} name="patientName" render={({ field }) => (
@@ -425,7 +423,6 @@ export default function AppointmentsPage() {
                         />
                       </div>
 
-                      {/* Calendar Column */}
                       <div className="space-y-4">
                         <h3 className="text-lg font-medium border-b pb-2">Select Date</h3>
                         <FormField control={form.control} name="date" render={({ field }) => (
@@ -450,7 +447,6 @@ export default function AppointmentsPage() {
                         />
                       </div>
                       
-                      {/* Appointment/Doctor Details Column */}
                       <div className="space-y-4">
                         <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
                         <FormField control={form.control} name="doctor" render={({ field }) => (
@@ -528,71 +524,79 @@ export default function AppointmentsPage() {
             </Card>
         </main>
         
-        <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
-            <SheetTrigger asChild>
-                <div className="fixed right-0 top-1/2 -translate-y-1/2 mr-4">
-                    <Button className="relative h-16 w-16 rounded-full shadow-lg animate-wave" size="icon">
-                        <ClipboardList className="h-8 w-8" />
-                    </Button>
-                </div>
-            </SheetTrigger>
-            <SheetContent className="w-full sm:max-w-none md:w-2/3 p-0">
-                <SheetHeader className="p-6 border-b">
-                    <SheetTitle>Upcoming Appointments</SheetTitle>
-                    <SheetDescription>A list of all scheduled appointments.</SheetDescription>
-                </SheetHeader>
-                <ScrollArea className="h-[calc(100vh-80px)]">
-                    {loading ? (
-                        <div className="p-6">
-                            {Array.from({ length: 10 }).map((_, i) => (
-                                <div key={i} className="p-3 rounded-lg border bg-muted animate-pulse h-20 mb-3"></div>
-                            ))}
-                        </div>
-                    ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Patient</TableHead>
-                                    <TableHead>Appointment</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead></TableHead>
+        <aside className={cn(
+            "h-full bg-background border-l transition-all duration-300 ease-in-out overflow-hidden",
+            isDrawerOpen ? 'w-full md:w-1/3' : 'w-0'
+        )}>
+            <div className="p-6 border-b">
+                <CardTitle>Upcoming Appointments</CardTitle>
+                <CardDescription>A list of all scheduled appointments.</CardDescription>
+            </div>
+            <ScrollArea className="h-[calc(100%-80px)]">
+                {loading ? (
+                    <div className="p-6">
+                        {Array.from({ length: 10 }).map((_, i) => (
+                            <div key={i} className="p-3 rounded-lg border bg-muted animate-pulse h-20 mb-3"></div>
+                        ))}
+                    </div>
+                ) : (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Patient</TableHead>
+                                <TableHead>Appointment</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead></TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {appointments
+                                .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                                .map((appointment) => (
+                                <TableRow key={appointment.id} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
+                                    <TableCell>
+                                        <div className="font-medium">{appointment.patientName}</div>
+                                        <div className="text-xs text-muted-foreground">with {appointment.doctor}</div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div>{appointment.date}</div>
+                                        <div className="text-xs text-muted-foreground">{appointment.time}</div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge
+                                          variant={
+                                            appointment.status === "Confirmed" ? "success"
+                                            : appointment.status === "Pending" ? "warning"
+                                            : "destructive"
+                                          }
+                                        >{appointment.status}</Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <Button variant="link" size="sm" className="p-0 h-auto text-primary" onClick={() => {
+                                            setEditingAppointment(appointment);
+                                            setIsDrawerOpen(false);
+                                        }}>
+                                            Reschedule
+                                        </Button>
+                                    </TableCell>
                                 </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {appointments
-                                    .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-                                    .map((appointment) => (
-                                    <TableRow key={appointment.id} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
-                                        <TableCell>
-                                            <div className="font-medium">{appointment.patientName}</div>
-                                            <div className="text-xs text-muted-foreground">with {appointment.doctor}</div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div>{appointment.date}</div>
-                                            <div className="text-xs text-muted-foreground">{appointment.time}</div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge
-                                              variant={
-                                                appointment.status === "Confirmed" ? "success"
-                                                : appointment.status === "Pending" ? "warning"
-                                                : "destructive"
-                                              }
-                                            >{appointment.status}</Badge>
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <Button variant="link" size="sm" className="p-0 h-auto text-primary" onClick={() => handleOpenReschedule(appointment)}>
-                                                Reschedule
-                                            </Button>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    )}
-                </ScrollArea>
-            </SheetContent>
-        </Sheet>
+                            ))}
+                        </TableBody>
+                    </Table>
+                )}
+            </ScrollArea>
+        </aside>
+
+         <div className="fixed right-0 top-1/2 -translate-y-1/2 z-20">
+              <Button 
+                className="relative h-24 w-8 rounded-l-lg rounded-r-none shadow-lg" 
+                size="icon" 
+                onClick={() => setIsDrawerOpen(!isDrawerOpen)}
+              >
+                  <ChevronRight className={cn("h-6 w-6 transition-transform duration-300", isDrawerOpen && "rotate-180")} />
+              </Button>
+          </div>
+      </div>
     </div>
   );
 }
