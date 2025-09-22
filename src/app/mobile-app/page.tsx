@@ -29,6 +29,7 @@ import { collection, getDocs, setDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { MobileApp } from "@/lib/types";
 import { TopNav } from "@/components/layout/top-nav";
+import { Eye, EyeOff } from "lucide-react";
 
 const formSchema = z.object({
   username: z.string().min(2, "Username must be at least 2 characters."),
@@ -40,6 +41,7 @@ type FormValues = z.infer<typeof formSchema>;
 export default function MobileAppPage() {
   const [loading, setLoading] = useState(true);
   const [credentials, setCredentials] = useState<MobileApp | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const { toast } = useToast();
 
   const form = useForm<FormValues>({
@@ -138,9 +140,29 @@ export default function MobileAppPage() {
                         <FormLabel>
                           {credentials ? "New Password" : "Password"}
                         </FormLabel>
-                        <FormControl>
-                          <Input type="password" placeholder="••••••••" {...field} />
-                        </FormControl>
+                        <div className="relative">
+                          <FormControl>
+                            <Input
+                              type={showPassword ? "text" : "password"}
+                              placeholder="••••••••"
+                              {...field}
+                              className="pr-10"
+                            />
+                          </FormControl>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground"
+                            onClick={() => setShowPassword(!showPassword)}
+                          >
+                            {showPassword ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -159,5 +181,3 @@ export default function MobileAppPage() {
     </div>
   );
 }
-
-    
