@@ -29,7 +29,7 @@ import { collection, getDocs, setDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { MobileApp } from "@/lib/types";
 import { TopNav } from "@/components/layout/top-nav";
-import { Eye, EyeOff, UserCircle } from "lucide-react";
+import { Eye, EyeOff, UserCircle, KeyRound } from "lucide-react";
 
 const formSchema = z.object({
   username: z.string().min(2, "Username must be at least 2 characters."),
@@ -42,6 +42,7 @@ export default function MobileAppPage() {
   const [loading, setLoading] = useState(true);
   const [credentials, setCredentials] = useState<MobileApp | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [showSavedPassword, setShowSavedPassword] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const { toast } = useToast();
 
@@ -93,6 +94,7 @@ export default function MobileAppPage() {
           password: "",
       });
       setIsEditing(false);
+      setShowSavedPassword(false);
 
       toast({
         title: "Credentials Saved",
@@ -203,10 +205,10 @@ export default function MobileAppPage() {
                 <CardHeader>
                     <CardTitle>Current Credentials</CardTitle>
                     <CardDescription>
-                        This is the username for the mobile token management app.
+                        This is the login information for the mobile token management app.
                     </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-4">
                     <div className="flex items-center gap-4 rounded-lg border p-4 bg-muted/40">
                         <UserCircle className="h-10 w-10 text-muted-foreground" />
                         <div>
@@ -214,8 +216,26 @@ export default function MobileAppPage() {
                             <p className="text-lg font-semibold">{credentials.username}</p>
                         </div>
                     </div>
+                     <div className="flex items-center gap-4 rounded-lg border p-4 bg-muted/40">
+                        <KeyRound className="h-10 w-10 text-muted-foreground" />
+                        <div>
+                            <p className="text-sm text-muted-foreground">Password</p>
+                            {showSavedPassword ? (
+                                <p className="text-lg font-semibold">{credentials.password}</p>
+                            ) : (
+                                <p className="text-lg font-semibold">••••••••</p>
+                            )}
+                        </div>
+                    </div>
+                     <CardDescription className="text-xs text-center">
+                        The password shown is the last one saved to the database.
+                    </CardDescription>
                 </CardContent>
-                <CardFooter>
+                <CardFooter className="flex justify-end gap-2">
+                    <Button variant="secondary" onClick={() => setShowSavedPassword(prev => !prev)}>
+                        {showSavedPassword ? <EyeOff className="mr-2"/> : <Eye className="mr-2"/>}
+                        {showSavedPassword ? 'Hide' : 'Reveal'} Password
+                    </Button>
                     <Button onClick={() => setIsEditing(true)}>Update Credentials</Button>
                 </CardFooter>
                 </>
