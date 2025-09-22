@@ -350,241 +350,246 @@ export default function AppointmentsPage() {
       <header className="sticky top-16 z-10 flex h-14 items-center gap-4 border-b bg-background px-4 sm:px-6">
         <h1 className="text-xl font-semibold md:text-2xl">Appointments</h1>
       </header>
-      <div className="relative flex-1 flex overflow-hidden p-6 gap-6">
-        <main className={cn("flex-shrink-0 overflow-auto transition-all duration-300 ease-in-out", isDrawerOpen ? 'w-2/3' : 'w-full')}>
-            <Card className="h-full">
-              <CardHeader>
-                <CardTitle>{isEditing ? "Reschedule Appointment" : "Book New Appointment"}</CardTitle>
-                <CardDescription>
-                  {isEditing ? "Update the details for this appointment." : "Fill in the details below to book a new appointment."}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4">
-                      <div className="space-y-4">
-                        <h3 className="text-lg font-medium border-b pb-2">Patient Details</h3>
-                        <FormField control={form.control} name="patientName" render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Patient Name</FormLabel>
-                              <FormControl><Input placeholder="John Doe" {...field} /></FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField control={form.control} name="age" render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Age</FormLabel>
-                              <FormControl><Input type="number" placeholder="35" {...field} /></FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField control={form.control} name="gender" render={({ field }) => (
-                            <FormItem className="space-y-3">
-                              <FormLabel>Gender</FormLabel>
-                              <FormControl>
-                                <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4">
-                                  <FormItem className="flex items-center space-x-2 space-y-0">
-                                    <FormControl><RadioGroupItem value="Male" /></FormControl>
-                                    <FormLabel className="font-normal">Male</FormLabel>
-                                  </FormItem>
-                                  <FormItem className="flex items-center space-x-2 space-y-0">
-                                    <FormControl><RadioGroupItem value="Female" /></FormControl>
-                                    <FormLabel className="font-normal">Female</FormLabel>
-                                  </FormItem>
-                                </RadioGroup>
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField control={form.control} name="phone" render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Phone Number</FormLabel>
-                              <FormControl><Input placeholder="123-456-7890" {...field} /></FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField control={form.control} name="treatment" render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Treatment</FormLabel>
-                              <FormControl><Input placeholder="e.g. Routine Check-up" {...field} /></FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
+      <div className="relative flex flex-1 overflow-hidden">
+        <div className="flex flex-1 gap-6 p-6">
+            <main className={cn("flex-shrink-0 overflow-auto transition-all duration-300 ease-in-out", isDrawerOpen ? 'w-2/3' : 'w-full')}>
+                <Card className="h-full">
+                  <CardHeader>
+                    <CardTitle>{isEditing ? "Reschedule Appointment" : "Book New Appointment"}</CardTitle>
+                    <CardDescription>
+                      {isEditing ? "Update the details for this appointment." : "Fill in the details below to book a new appointment."}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Form {...form}>
+                      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                        <div className={cn("grid grid-cols-1 gap-x-8 gap-y-4", isDrawerOpen ? 'md:grid-cols-2' : 'md:grid-cols-3')}>
+                          <div className={cn("space-y-4", !isDrawerOpen && "md:col-span-1")}>
+                            <h3 className="text-lg font-medium border-b pb-2">Patient Details</h3>
+                            <FormField control={form.control} name="patientName" render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Patient Name</FormLabel>
+                                  <FormControl><Input placeholder="John Doe" {...field} /></FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField control={form.control} name="age" render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Age</FormLabel>
+                                  <FormControl><Input type="number" placeholder="35" {...field} /></FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField control={form.control} name="gender" render={({ field }) => (
+                                <FormItem className="space-y-3">
+                                  <FormLabel>Gender</FormLabel>
+                                  <FormControl>
+                                    <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4">
+                                      <FormItem className="flex items-center space-x-2 space-y-0">
+                                        <FormControl><RadioGroupItem value="Male" /></FormControl>
+                                        <FormLabel className="font-normal">Male</FormLabel>
+                                      </FormItem>
+                                      <FormItem className="flex items-center space-x-2 space-y-0">
+                                        <FormControl><RadioGroupItem value="Female" /></FormControl>
+                                        <FormLabel className="font-normal">Female</FormLabel>
+                                      </FormItem>
+                                    </RadioGroup>
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField control={form.control} name="phone" render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Phone Number</FormLabel>
+                                  <FormControl><Input placeholder="123-456-7890" {...field} /></FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField control={form.control} name="treatment" render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Treatment</FormLabel>
+                                  <FormControl><Input placeholder="e.g. Routine Check-up" {...field} /></FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
 
-                      <div className="space-y-4">
-                        <h3 className="text-lg font-medium border-b pb-2">Select Date</h3>
-                        <FormField control={form.control} name="date" render={({ field }) => (
-                            <FormItem className="flex flex-col">
-                              <Calendar
-                                mode="single" selected={field.value} onSelect={field.onChange}
-                                disabled={(date) => date < new Date(new Date().setHours(0,0,0,0)) || (!!selectedDoctor && !availableDaysOfWeek.includes(getDay(date)))}
-                                initialFocus
-                                className="rounded-md border"
-                                modifiers={{ 
-                                  available: selectedDoctor ? { dayOfWeek: availableDaysOfWeek } : {},
-                                  leave: leaveDates 
-                                }}
-                                modifiersStyles={{ 
-                                    available: { backgroundColor: 'hsl(var(--primary)/0.1)', color: 'hsl(var(--primary))' },
-                                    leave: { color: 'red', textDecoration: 'line-through' } 
-                                }}
-                              />
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                      
-                      <div className="space-y-4">
-                        <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
-                        <FormField control={form.control} name="doctor" render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Doctor</FormLabel>
-                              <Select onValueChange={onDoctorChange} value={field.value} disabled={!selectedDate}>
-                                <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder={selectedDate ? "Select an available doctor" : "Select a date first"} />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {availableDoctorsForDate.map(doc => (
-                                    <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        {selectedDoctor && selectedDate && (
-                          <FormField control={form.control} name="time" render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Select Time Slot</FormLabel>
-                                <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-2">
-                                  {timeSlots.length > 0 ? timeSlots.map(slot => (
-                                    <Button
-                                      key={slot.time} type="button"
-                                      variant={field.value === slot.time ? "default" : "outline"}
-                                      onClick={() => field.onChange(slot.time)}
-                                      disabled={slot.disabled}
-                                      className={cn("text-xs", slot.disabled && "line-through")}
-                                    >{slot.time}</Button>
-                                  )) : <p className="text-sm text-muted-foreground col-span-2">No available slots for this day.</p>}
-                                </div>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        )}
-                         <FormField control={form.control} name="status" render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Status</FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value}>
-                                <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl>
-                                <SelectContent>
-                                  <SelectItem value="Pending">Pending</SelectItem>
-                                  <SelectItem value="Confirmed">Confirmed</SelectItem>
-                                  <SelectItem value="Cancelled">Cancelled</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center pt-4">
-                        <div className="flex gap-2">
-                             <Button onClick={resetForm} variant="outline">
-                                <PlusCircle className="mr-2 h-4 w-4" />
-                                New Appointment
-                            </Button>
-                        </div>
-                        <div className="flex justify-end gap-2">
-                            {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
-                            <Button type="submit">{isEditing ? "Save Changes" : "Book Appointment"}</Button>
-                        </div>
-                    </div>
-                  </form>
-                </Form>
-              </CardContent>
-            </Card>
-        </main>
-        
-        <aside className={cn(
-            "flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden",
-            isDrawerOpen ? 'w-1/3' : 'w-0'
-        )}>
-            <Card className="h-full rounded-2xl">
-                <CardHeader className="p-6 border-b">
-                    <CardTitle>Upcoming Appointments</CardTitle>
-                    <CardDescription>A list of all scheduled appointments.</CardDescription>
-                </CardHeader>
-                <CardContent className="p-0">
-                    <ScrollArea className="h-[calc(100vh-19rem)]">
-                        {loading ? (
-                            <div className="p-6">
-                                {Array.from({ length: 10 }).map((_, i) => (
-                                    <div key={i} className="p-3 rounded-lg border bg-muted animate-pulse h-20 mb-3"></div>
-                                ))}
+                          <div className={cn("space-y-4", !isDrawerOpen && "md:col-span-2")}>
+                            <h3 className="text-lg font-medium border-b pb-2">Select Date</h3>
+                            <FormField control={form.control} name="date" render={({ field }) => (
+                                <FormItem className="flex flex-col">
+                                  <Calendar
+                                    mode="single" selected={field.value} onSelect={field.onChange}
+                                    disabled={(date) => date < new Date(new Date().setHours(0,0,0,0)) || (!!selectedDoctor && !availableDaysOfWeek.includes(getDay(date)))}
+                                    initialFocus
+                                    className="rounded-md border"
+                                    pagedNavigation
+                                    modifiers={{ 
+                                      available: selectedDoctor ? { dayOfWeek: availableDaysOfWeek } : {},
+                                      leave: leaveDates 
+                                    }}
+                                    modifiersStyles={{ 
+                                        available: { backgroundColor: 'hsl(var(--primary)/0.1)', color: 'hsl(var(--primary))' },
+                                        leave: { color: 'red', textDecoration: 'line-through' } 
+                                    }}
+                                  />
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                          
+                          <div className={cn("space-y-4", !isDrawerOpen && "md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-8")}>
+                            <div className="space-y-4">
+                                <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
+                                <FormField control={form.control} name="doctor" render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Doctor</FormLabel>
+                                      <Select onValueChange={onDoctorChange} value={field.value} disabled={!selectedDate}>
+                                        <FormControl>
+                                          <SelectTrigger>
+                                            <SelectValue placeholder={selectedDate ? "Select an available doctor" : "Select a date first"} />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                          {availableDoctorsForDate.map(doc => (
+                                            <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField control={form.control} name="status" render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Status</FormLabel>
+                                      <Select onValueChange={field.onChange} value={field.value}>
+                                        <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl>
+                                        <SelectContent>
+                                          <SelectItem value="Pending">Pending</SelectItem>
+                                          <SelectItem value="Confirmed">Confirmed</SelectItem>
+                                          <SelectItem value="Cancelled">Cancelled</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
                             </div>
-                        ) : (
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Patient</TableHead>
-                                        <TableHead>Appointment</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead></TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {appointments
-                                        .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-                                        .map((appointment) => (
-                                        <TableRow key={appointment.id} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
-                                            <TableCell>
-                                                <div className="font-medium">{appointment.patientName}</div>
-                                                <div className="text-xs text-muted-foreground">with {appointment.doctor}</div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div>{appointment.date}</div>
-                                                <div className="text-xs text-muted-foreground">{appointment.time}</div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge
-                                                  variant={
-                                                    appointment.status === "Confirmed" ? "success"
-                                                    : appointment.status === "Pending" ? "warning"
-                                                    : "destructive"
-                                                  }
-                                                >{appointment.status}</Badge>
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <Button variant="link" size="sm" className="p-0 h-auto text-primary" onClick={() => {
-                                                    setEditingAppointment(appointment);
-                                                    setIsDrawerOpen(false);
-                                                }}>
-                                                    Reschedule
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
+
+                            {selectedDoctor && selectedDate && (
+                              <FormField control={form.control} name="time" render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Select Time Slot</FormLabel>
+                                    <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-2">
+                                      {timeSlots.length > 0 ? timeSlots.map(slot => (
+                                        <Button
+                                          key={slot.time} type="button"
+                                          variant={field.value === slot.time ? "default" : "outline"}
+                                          onClick={() => field.onChange(slot.time)}
+                                          disabled={slot.disabled}
+                                          className={cn("text-xs", slot.disabled && "line-through")}
+                                        >{slot.time}</Button>
+                                      )) : <p className="text-sm text-muted-foreground col-span-2">No available slots for this day.</p>}
+                                    </div>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-center pt-4">
+                            <div className="flex gap-2">
+                                 <Button onClick={resetForm} variant="outline">
+                                    <PlusCircle className="mr-2 h-4 w-4" />
+                                    New Appointment
+                                </Button>
+                            </div>
+                            <div className="flex justify-end gap-2">
+                                {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
+                                <Button type="submit">{isEditing ? "Save Changes" : "Book Appointment"}</Button>
+                            </div>
+                        </div>
+                      </form>
+                    </Form>
+                  </CardContent>
+                </Card>
+            </main>
+            
+            <aside className={cn(
+                "flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden",
+                isDrawerOpen ? 'w-1/3' : 'w-0'
+            )}>
+                <Card className="h-full rounded-2xl">
+                    <CardHeader className="p-6 border-b">
+                        <CardTitle>Upcoming Appointments</CardTitle>
+                        <CardDescription>A list of all scheduled appointments.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                        <ScrollArea className="h-[calc(100vh-19rem)]">
+                            {loading ? (
+                                <div className="p-6">
+                                    {Array.from({ length: 10 }).map((_, i) => (
+                                        <div key={i} className="p-3 rounded-lg border bg-muted animate-pulse h-20 mb-3"></div>
                                     ))}
-                                </TableBody>
-                            </Table>
-                        )}
-                    </ScrollArea>
-                </CardContent>
-            </Card>
-        </aside>
+                                </div>
+                            ) : (
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Patient</TableHead>
+                                            <TableHead>Appointment</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead></TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {appointments
+                                            .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                                            .map((appointment) => (
+                                            <TableRow key={appointment.id} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
+                                                <TableCell>
+                                                    <div className="font-medium">{appointment.patientName}</div>
+                                                    <div className="text-xs text-muted-foreground">with {appointment.doctor}</div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div>{appointment.date}</div>
+                                                    <div className="text-xs text-muted-foreground">{appointment.time}</div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge
+                                                      variant={
+                                                        appointment.status === "Confirmed" ? "success"
+                                                        : appointment.status === "Pending" ? "warning"
+                                                        : "destructive"
+                                                      }
+                                                    >{appointment.status}</Badge>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <Button variant="link" size="sm" className="p-0 h-auto text-primary" onClick={() => {
+                                                        setEditingAppointment(appointment);
+                                                        setIsDrawerOpen(false);
+                                                    }}>
+                                                        Reschedule
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            )}
+                        </ScrollArea>
+                    </CardContent>
+                </Card>
+            </aside>
+        </div>
 
          <div className="fixed right-6 top-1/2 -translate-y-1/2 z-20">
               <Button 
