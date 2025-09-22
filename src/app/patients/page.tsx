@@ -39,6 +39,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { parse } from 'date-fns';
+import Link from "next/link";
 
 export default function PatientsPage() {
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -59,26 +60,28 @@ export default function PatientsPage() {
         const patientMap = new Map<string, Patient>();
 
         appointmentsList.forEach((apt) => {
-          const patientId = `${apt.patientName}-${apt.phone}`;
+          const patientId = encodeURIComponent(`${apt.patientName}-${apt.phone}`);
           const appointmentDate = parse(apt.date, 'd MMMM yyyy', new Date());
 
           if (patientMap.has(patientId)) {
             const existingPatient = patientMap.get(patientId)!;
-            const existingDate = parse(existingPatient.lastVisit, 'd MMMM yyyy', new Date());
-
-            if (appointmentDate > existingDate) {
-               patientMap.set(patientId, {
-                ...existingPatient,
-                lastVisit: apt.date,
-                doctor: apt.doctor,
-                totalAppointments: existingPatient.totalAppointments + 1,
-              });
-            } else {
-                 patientMap.set(patientId, {
-                ...existingPatient,
-                totalAppointments: existingPatient.totalAppointments + 1,
-              });
+            
+            let lastVisitDate = existingPatient.lastVisit;
+            try {
+                const existingDate = parse(existingPatient.lastVisit, 'd MMMM yyyy', new Date());
+                if (appointmentDate > existingDate) {
+                    lastVisitDate = apt.date;
+                }
+            } catch (e) {
+                // Ignore if existing date is invalid
             }
+
+            patientMap.set(patientId, {
+              ...existingPatient,
+              lastVisit: lastVisitDate,
+              totalAppointments: existingPatient.totalAppointments + 1,
+            });
+
           } else {
             patientMap.set(patientId, {
               id: patientId,
@@ -270,7 +273,9 @@ export default function PatientsPage() {
                         <TableCell>{patient.lastVisit}</TableCell>
                         <TableCell>{patient.doctor}</TableCell>
                         <TableCell>
-                          <Button variant="link" className="p-0 h-auto text-primary">View History</Button>
+                          <Button asChild variant="link" className="p-0 h-auto text-primary">
+                            <Link href={`/patients/${patient.id}`}>View History</Link>
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))
