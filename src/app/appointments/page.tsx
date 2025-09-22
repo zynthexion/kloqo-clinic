@@ -413,7 +413,6 @@ export default function AppointmentsPage() {
                                     modifiersStyles={{
                                         available: { backgroundColor: '#D4EDDA', color: '#155724' },
                                         leave: { backgroundColor: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' },
-                                        selected: { backgroundColor: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))' }
                                     }}
                                   />
                                   <FormMessage />

@@ -54,7 +54,6 @@ function Calendar({
         cell: cn(
           "text-center p-0 relative rounded-lg",
           "[&:has([aria-selected].day-range-end)]:rounded-r-lg [&:has([aria-selected].day-outside)]:bg-blue-50/50 dark:[&:has([aria-selected].day-outside)]:bg-blue-900/20",
-          "[&:has([aria-selected])]:bg-blue-100 dark:[&:has([aria-selected])]:bg-blue-900/40",
           "first:[&:has([aria-selected])]:rounded-l-lg last:[&:has([aria-selected])]:rounded-r-lg",
           "focus-within:relative focus-within:z-20",
            compact ? "h-9 w-9 text-xs" : "h-12 w-12 text-sm"
@@ -69,30 +68,28 @@ function Calendar({
         ),
         day_range_end: "day-range-end",
         day_selected: cn(
-          "bg-blue-600 dark:bg-blue-500 text-white font-semibold shadow-md",
-          "hover:bg-blue-700 dark:hover:bg-blue-600 hover:text-white",
-          "focus:bg-blue-700 dark:focus:bg-blue-600 focus:text-white",
-          "border-2 border-blue-600 dark:border-blue-500"
+          "bg-primary text-primary-foreground font-semibold shadow-md",
+          "hover:bg-primary/90 hover:text-primary-foreground",
+          "focus:bg-primary/90 focus:text-primary-foreground",
         ),
         day_today: cn(
-          "bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300",
-          "border-2 border-amber-400 dark:border-amber-600 font-semibold",
-          "hover:bg-amber-200 dark:hover:bg-amber-900/60"
+          "bg-slate-900 dark:bg-slate-200 text-white dark:text-slate-900",
+          "border-2 border-blue-500 font-semibold",
+          "hover:bg-slate-800 dark:hover:bg-slate-300"
         ),
         day_outside: cn(
-          "day-outside text-slate-300 dark:text-slate-600 opacity-50",
-          "aria-selected:bg-blue-100/50 dark:aria-selected:bg-blue-900/20",
-          "aria-selected:text-slate-400 dark:aria-selected:text-slate-500",
+          "day-outside text-slate-400 dark:text-slate-600 opacity-50",
+          "aria-selected:bg-slate-100/50 dark:aria-selected:bg-slate-800/50",
+          "aria-selected:text-slate-500",
           "aria-selected:opacity-30"
         ),
         day_disabled: cn(
-          "text-slate-300 dark:text-slate-600 opacity-40",
-          "bg-slate-50 dark:bg-slate-800/50 cursor-not-allowed",
-          "line-through"
+          "text-slate-400 dark:text-slate-600",
+          "bg-slate-100 dark:bg-slate-800/50 cursor-not-allowed",
         ),
         day_range_middle: cn(
-          "aria-selected:bg-blue-100 dark:aria-selected:bg-blue-900/40",
-          "aria-selected:text-blue-700 dark:aria-selected:text-blue-300"
+          "aria-selected:bg-slate-100 dark:aria-selected:bg-slate-800",
+          "aria-selected:text-slate-900 dark:aria-selected:text-slate-200"
         ),
         day_hidden: "invisible",
         ...classNames,
