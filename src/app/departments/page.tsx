@@ -14,6 +14,9 @@ import {
   ChevronLeft,
   ChevronRight,
   PlusCircle,
+  MoreHorizontal,
+  Edit,
+  Trash,
 } from "lucide-react";
 import {
   Select,
@@ -22,9 +25,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type { Department, Doctor } from "@/lib/types";
 import React, { useState, useEffect } from "react";
-import { collection, getDocs, doc, setDoc } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { DepartmentDoctorsDialog } from "@/components/departments/department-doctors-dialog";
@@ -50,6 +69,8 @@ export default function DepartmentsPage() {
   const [isAddDepartmentOpen, setIsAddDepartmentOpen] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
   const [isDoctorsDialogOpen, setIsDoctorsDialogOpen] = useState(false);
+  const [deletingDepartment, setDeletingDepartment] = useState<Department | null>(null);
+
 
   useEffect(() => {
     const fetchDepartments = async () => {
@@ -75,23 +96,43 @@ export default function DepartmentsPage() {
     return doctor ? doctor.avatar : "https://picsum.photos/seed/generic-doctor/100/100";
   }
 
-  const DepartmentCard = ({ department, onSeeDetail }: { department: Department, onSeeDetail: (department: Department) => void }) => (
+  const DepartmentCard = ({ department, onSeeDetail, onDelete }: { department: Department, onSeeDetail: (department: Department) => void, onDelete: (department: Department) => void }) => (
       <Card className="overflow-hidden flex flex-col">
-          <CardContent className="p-0 flex-grow">
-              <div className="relative h-40 w-full">
-                  <Image
-                      src={department.image}
-                      alt={department.name}
-                      fill
-                      style={{objectFit: "cover"}}
-                      data-ai-hint={department.imageHint}
-                  />
-              </div>
-              <div className="p-4">
-                  <h3 className="text-lg font-semibold">{department.name}</h3>
-                  <p className="text-sm text-muted-foreground mt-1 h-10 overflow-hidden">
-                      {department.description}
-                  </p>
+          <div className="relative h-40 w-full">
+              <Image
+                  src={department.image}
+                  alt={department.name}
+                  fill
+                  style={{objectFit: "cover"}}
+                  data-ai-hint={department.imageHint}
+              />
+          </div>
+          <CardContent className="p-4 flex-grow">
+              <div className="flex justify-between items-start">
+                <div>
+                    <h3 className="text-lg font-semibold">{department.name}</h3>
+                    <p className="text-sm text-muted-foreground mt-1 h-10 overflow-hidden">
+                        {department.description}
+                    </p>
+                </div>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0">
+                            <span className="sr-only">Open menu</span>
+                            <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem onSelect={() => { /* Handle Edit */}}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => onDelete(department)} className="text-red-600">
+                            <Trash className="mr-2 h-4 w-4" />
+                            Delete
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
               </div>
           </CardContent>
           <CardFooter className="bg-muted/30 px-4 py-3 flex items-center justify-between">
@@ -124,15 +165,11 @@ export default function DepartmentsPage() {
     try {
         const promises = selectedDepts.map(dept => {
             const deptRef = doc(db, "departments", dept.id);
-            // We're setting the document with its own ID, which is fine for this case.
-            // This will create or overwrite the department.
             return setDoc(deptRef, dept, { merge: true });
         });
         
         await Promise.all(promises);
 
-        // This is a simple way to refresh the list. For a more optimized approach,
-        // you might only add the new departments to the state.
         const departmentsCollection = collection(db, "departments");
         const departmentsSnapshot = await getDocs(departmentsCollection);
         const departmentsList = departmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Department));
@@ -149,6 +186,27 @@ export default function DepartmentsPage() {
             title: "Error",
             description: "Failed to save departments. Please try again.",
         });
+    }
+  }
+
+  const handleDeleteDepartment = async () => {
+    if (!deletingDepartment) return;
+    try {
+      await deleteDoc(doc(db, "departments", deletingDepartment.id));
+      setDepartments(prev => prev.filter(d => d.id !== deletingDepartment.id));
+      toast({
+        title: "Department Deleted",
+        description: `${deletingDepartment.name} has been removed.`,
+      });
+    } catch (error) {
+      console.error("Error deleting department:", error);
+       toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to delete department. Please try again.",
+      });
+    } finally {
+        setDeletingDepartment(null);
     }
   }
   
@@ -178,7 +236,7 @@ export default function DepartmentsPage() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {departments.map((dept) => (
-                  <DepartmentCard key={dept.id} department={dept} onSeeDetail={handleSeeDetail} />
+                  <DepartmentCard key={dept.id} department={dept} onSeeDetail={handleSeeDetail} onDelete={() => setDeletingDepartment(dept)} />
               ))}
           </div>
           <div className="flex items-center justify-between mt-6">
@@ -217,6 +275,22 @@ export default function DepartmentsPage() {
             allDoctors={doctors}
           />
         )}
+
+        <AlertDialog open={!!deletingDepartment} onOpenChange={(open) => !open && setDeletingDepartment(null)}>
+              <AlertDialogContent>
+                  <AlertDialogHeader>
+                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                      This action cannot be undone. This will permanently delete the {deletingDepartment?.name} department and remove its data from our servers.
+                  </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDeleteDepartment} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
+                  </AlertDialogFooter>
+              </AlertDialogContent>
+        </AlertDialog>
+
         <footer className="text-center text-sm text-muted-foreground p-4">
             Copyright &copy; 2024 Peterdraw &nbsp;&middot;&nbsp; Privacy Policy &nbsp;&middot;&nbsp; Term and conditions &nbsp;&middot;&nbsp; Contact
         </footer>
@@ -224,3 +298,5 @@ export default function DepartmentsPage() {
     </>
   );
 }
+
+    
