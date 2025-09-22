@@ -405,18 +405,14 @@ export default function AppointmentsPage() {
                                         leaveDates.some(leaveDate => isSameDay(date, leaveDate))
                                     }
                                     initialFocus
-                                    className="rounded-md border"
-                                    pagedNavigation
                                     compact={isDrawerOpen}
                                     modifiers={{ 
                                       available: selectedDoctor ? { dayOfWeek: availableDaysOfWeek } : {},
                                       leave: leaveDates,
-                                      selected: field.value
                                     }}
                                     modifiersStyles={{ 
-                                        available: { backgroundColor: 'hsl(210 40% 96.1%)', color: 'hsl(222.2 47.4% 11.2%)' },
-                                        leave: { color: 'white', backgroundColor: 'hsl(var(--destructive))' },
-                                        selected: { backgroundColor: 'hsl(var(--primary))', color: 'black' }
+                                        leave: { backgroundColor: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' },
+                                        selected: { backgroundColor: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))' }
                                     }}
                                   />
                                   <FormMessage />
@@ -591,3 +587,5 @@ export default function AppointmentsPage() {
     </div>
   );
 }
+
+    
