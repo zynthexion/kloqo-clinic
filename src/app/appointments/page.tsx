@@ -429,6 +429,7 @@ export default function AppointmentsPage() {
                                     initialFocus
                                     className="rounded-md border"
                                     pagedNavigation
+                                    compact={isDrawerOpen}
                                     modifiers={{ 
                                       available: selectedDoctor ? { dayOfWeek: availableDaysOfWeek } : {},
                                       leave: leaveDates 
@@ -608,3 +609,5 @@ export default function AppointmentsPage() {
     </div>
   );
 }
+
+    
