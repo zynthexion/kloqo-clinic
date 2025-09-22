@@ -42,6 +42,14 @@ import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PlusCircle, ClipboardList } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription } from "@/components/ui/sheet";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -526,48 +534,60 @@ export default function AppointmentsPage() {
                     <ClipboardList className="h-8 w-8" />
                 </Button>
             </SheetTrigger>
-            <SheetContent className="w-full md:w-1/2 p-0">
+            <SheetContent className="w-full md:w-1/3 p-0">
                 <SheetHeader className="p-6 border-b">
                     <SheetTitle>Upcoming Appointments</SheetTitle>
                     <SheetDescription>A list of all scheduled appointments.</SheetDescription>
                 </SheetHeader>
                 <ScrollArea className="h-[calc(100vh-80px)]">
-                    <div className="p-6 space-y-3">
-                        {loading ? (
-                           Array.from({ length: 10 }).map((_, i) => (
-                              <div key={i} className="p-3 rounded-lg border bg-muted animate-pulse h-20"></div>
-                           ))
-                        ) : (
-                          appointments
-                            .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-                            .map((appointment) => (
-                            <div key={appointment.id} className={cn("p-3 rounded-lg border", isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30 border-red-300")}>
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <p className="font-semibold text-sm">{appointment.patientName}</p>
-                                        <p className="text-xs text-muted-foreground">with {appointment.doctor}</p>
-                                    </div>
-                                    <Badge
-                                      variant={
-                                        appointment.status === "Confirmed" ? "success"
-                                        : appointment.status === "Pending" ? "warning"
-                                        : "destructive"
-                                      }
-                                    >{appointment.status}</Badge>
-                                </div>
-                                <div className="flex justify-between items-end mt-2">
-                                     <div>
-                                        <p className="text-xs text-muted-foreground">{appointment.date}</p>
-                                        <p className="text-xs font-medium">{appointment.time}</p>
-                                    </div>
-                                    <Button variant="link" size="sm" className="p-0 h-auto text-primary" onClick={() => handleOpenReschedule(appointment)}>
-                                        Reschedule
-                                    </Button>
-                                </div>
-                            </div>
-                          ))
-                        )}
-                    </div>
+                    {loading ? (
+                        <div className="p-6">
+                            {Array.from({ length: 10 }).map((_, i) => (
+                                <div key={i} className="p-3 rounded-lg border bg-muted animate-pulse h-20 mb-3"></div>
+                            ))}
+                        </div>
+                    ) : (
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Patient</TableHead>
+                                    <TableHead>Appointment</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead></TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {appointments
+                                    .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                                    .map((appointment) => (
+                                    <TableRow key={appointment.id} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
+                                        <TableCell>
+                                            <div className="font-medium">{appointment.patientName}</div>
+                                            <div className="text-xs text-muted-foreground">with {appointment.doctor}</div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div>{appointment.date}</div>
+                                            <div className="text-xs text-muted-foreground">{appointment.time}</div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge
+                                              variant={
+                                                appointment.status === "Confirmed" ? "success"
+                                                : appointment.status === "Pending" ? "warning"
+                                                : "destructive"
+                                              }
+                                            >{appointment.status}</Badge>
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <Button variant="link" size="sm" className="p-0 h-auto text-primary" onClick={() => handleOpenReschedule(appointment)}>
+                                                Reschedule
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    )}
                 </ScrollArea>
             </SheetContent>
         </Sheet>
