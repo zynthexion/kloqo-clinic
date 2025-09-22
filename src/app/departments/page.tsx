@@ -66,8 +66,8 @@ export default function DepartmentsPage() {
   }
 
   const DepartmentCard = ({ department, onSeeDetail }: { department: Department, onSeeDetail: (department: Department) => void }) => (
-      <Card className="overflow-hidden">
-          <CardContent className="p-0">
+      <Card className="overflow-hidden flex flex-col">
+          <CardContent className="p-0 flex-grow">
               <div className="relative h-40 w-full">
                   <Image
                       src={department.image}
@@ -82,30 +82,30 @@ export default function DepartmentsPage() {
                   <p className="text-sm text-muted-foreground mt-1 h-10 overflow-hidden">
                       {department.description}
                   </p>
-                  <div className="flex items-center mt-4">
-                      <div className="flex -space-x-2">
-                          {department.doctors && department.doctors.slice(0, 5).map((doctorName, index) => (
-                              <Image
-                                  key={index}
-                                  src={getDoctorAvatar(doctorName)}
-                                  alt={doctorName}
-                                  width={32}
-                                  height={32}
-                                  className="rounded-full border-2 border-white"
-                                  data-ai-hint="doctor portrait"
-                              />
-                          ))}
-                      </div>
-                      {department.doctors && department.doctors.length > 5 && (
-                          <span className="text-xs text-muted-foreground ml-2">
-                              + {department.doctors.length - 5} others
-                          </span>
-                      )}
-                  </div>
               </div>
           </CardContent>
-          <CardFooter className="bg-muted/30 px-4 py-3">
-               <Button variant="link" className="ml-auto p-0 h-auto" onClick={() => onSeeDetail(department)}>See Detail</Button>
+          <CardFooter className="bg-muted/30 px-4 py-3 flex items-center justify-between">
+               <div className="flex items-center">
+                  <div className="flex -space-x-2">
+                      {department.doctors && department.doctors.slice(0, 3).map((doctorName, index) => (
+                          <Image
+                              key={index}
+                              src={getDoctorAvatar(doctorName)}
+                              alt={doctorName}
+                              width={32}
+                              height={32}
+                              className="rounded-full border-2 border-white object-cover"
+                              data-ai-hint="doctor portrait"
+                          />
+                      ))}
+                  </div>
+                  {department.doctors && department.doctors.length > 3 && (
+                      <span className="text-xs text-muted-foreground ml-2">
+                          + {department.doctors.length - 3} others
+                      </span>
+                  )}
+              </div>
+               <Button variant="link" className="p-0 h-auto" onClick={() => onSeeDetail(department)}>See Doctors</Button>
           </CardFooter>
       </Card>
   );
