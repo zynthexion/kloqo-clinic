@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useTransition } from "react";
@@ -803,14 +804,14 @@ export default function DoctorDetailPage() {
                                 <User className="w-5 h-5 text-muted-foreground" />
                                 <div>
                                     <p className="text-sm text-muted-foreground">Total Patients</p>
-                                    <p className="font-semibold">{doctor.totalPatients ?? "0"}</p>
+                                    <p className="font-semibold">{doctor.totalPatients ?? "N/A"}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-3">
                                 <BriefcaseMedical className="w-5 h-5 text-muted-foreground" />
                                 <div>
                                     <p className="text-sm text-muted-foreground">Today's Appointments</p>
-                                    <p className="font-semibold">{doctor.todaysAppointments ?? "0"}</p>
+                                    <p className="font-semibold">{doctor.todaysAppointments ?? "N/A"}</p>
                                 </div>
                             </div>
                         </CardContent>
@@ -890,5 +891,6 @@ export default function DoctorDetailPage() {
     </div>
   );
 }
+
 
 
