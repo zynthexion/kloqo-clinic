@@ -2,10 +2,9 @@ import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
 import { SidebarProvider } from '@/components/ui/sidebar';
-import { AppSidebar } from '@/components/layout/sidebar';
 
 export const metadata: Metadata = {
-  title: 'Peterdraw',
+  title: 'Dashyat',
   description: 'AI-powered medical dashboard.',
 };
 

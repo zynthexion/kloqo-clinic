@@ -12,16 +12,16 @@ export function PeterdrawLogo(props: SVGProps<SVGSVGElement>) {
     >
       <defs>
         <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="rgb(192, 38, 211)" />
-          <stop offset="100%" stopColor="rgb(139, 92, 246)" />
+          <stop offset="0%" stopColor="hsl(var(--primary))" />
+          <stop offset="100%" stopColor="hsl(var(--primary))" />
         </linearGradient>
       </defs>
       <path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zM8.5 7H12c1.933 0 3.5 1.567 3.5 3.5S13.933 14 12 14h-1.5v3.5h-2V7h-2V5h4v2zM12 12H8.5V9H12c.552 0 1 .448 1 1s-.448 1-1 1z"
+        d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20Z"
         fill="url(#grad1)"
+        fillOpacity="0.3"
       />
+      <path d="M12 6C8.69 6 6 8.69 6 12C6 15.31 8.69 18 12 18C15.31 18 18 15.31 18 12C18 8.69 15.31 6 12 6ZM12 16C9.79 16 8 14.21 8 12C8 9.79 9.79 8 12 8C14.21 8 16 9.79 16 12C16 14.21 14.21 16 12 16Z" fill="url(#grad1)" />
     </svg>
   );
 }

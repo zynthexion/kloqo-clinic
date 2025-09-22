@@ -183,9 +183,6 @@ export default function AppointmentsPage() {
             </div>
           </div>
         </main>
-        <footer className="text-center text-sm text-muted-foreground p-4">
-            Copyright &copy; 2024 Peterdraw &nbsp;&middot;&nbsp; Privacy Policy &nbsp;&middot;&nbsp; Term and conditions &nbsp;&middot;&nbsp; Contact
-        </footer>
       </SidebarInset>
     </>
   );

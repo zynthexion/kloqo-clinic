@@ -2,17 +2,14 @@
 import Link from "next/link";
 import {
   Home,
-  Users,
-  BriefcaseMedical,
   Settings,
-  Calendar,
-  Wallet,
-  Inbox,
-  MessageSquare,
   Stethoscope,
   Building2,
   LogOut,
   Activity,
+  PlusCircle,
+  HelpCircle,
+  ClipboardList
 } from "lucide-react";
 import {
   Sidebar,
@@ -38,23 +35,23 @@ const menuItems = [
   },
   {
     href: "/appointments",
-    icon: Calendar,
-    label: "Appointments",
+    icon: ClipboardList,
+    label: "Projects",
   },
   {
     href: "/doctors",
     icon: Stethoscope,
-    label: "Doctors",
+    label: "Tasks",
   },
   {
     href: "/departments",
-    icon: Building2,
-    label: "Departments",
+    icon: Settings,
+    label: "Settings",
   },
   {
     href: "/live-status",
-    icon: Activity,
-    label: "Live Status",
+    icon: HelpCircle,
+    label: "Help",
   },
 ];
 
@@ -72,7 +69,7 @@ export function AppSidebar() {
                 state === "collapsed" ? "hidden" : ""
               }`}
             >
-              Peterdraw
+              Dashyat
             </span>
         </div>
       </SidebarHeader>
@@ -94,18 +91,16 @@ export function AppSidebar() {
             </SidebarMenuItem>
           ))}
         </SidebarMenu>
-        <div className="mt-auto">
-            <SidebarSeparator className="my-2"/>
-            <SidebarMenu>
-                <SidebarMenuItem>
-                    <SidebarMenuButton tooltip="Logout">
-                        <LogOut />
-                        <span>Logout</span>
-                    </SidebarMenuButton>
-                </SidebarMenuItem>
-            </SidebarMenu>
-        </div>
+        
       </SidebarContent>
+      <SidebarFooter className={state === "collapsed" ? "hidden" : ""}>
+        <div className="p-4">
+          <Button className="w-full">
+            <PlusCircle />
+            <span>Add New Project</span>
+          </Button>
+        </div>
+      </SidebarFooter>
     </Sidebar>
   );
 }
