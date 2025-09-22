@@ -2,8 +2,6 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { SidebarInset } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/layout/sidebar";
 import { DashboardHeader } from "@/components/layout/header";
 import {
   Card,
@@ -40,6 +38,7 @@ import {
 } from "@/components/ui/select";
 import { parse } from 'date-fns';
 import Link from "next/link";
+import { TopNav } from "@/components/layout/top-nav";
 
 export default function PatientsPage() {
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -192,9 +191,9 @@ export default function PatientsPage() {
 
 
   return (
-    <div className="flex">
-      <AppSidebar />
-      <SidebarInset>
+    <div className="flex flex-col">
+      <TopNav />
+      <div>
         <DashboardHeader />
         <main className="flex-1 p-6 bg-background">
           <Card>
@@ -310,7 +309,9 @@ export default function PatientsPage() {
             </CardContent>
           </Card>
         </main>
-      </SidebarInset>
+      </div>
     </div>
   );
 }
+
+    

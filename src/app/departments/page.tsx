@@ -3,7 +3,6 @@
 
 import Image from "next/image";
 import { DepartmentsHeader } from "@/components/layout/header";
-import { SidebarInset } from "@/components/ui/sidebar";
 import {
   Card,
   CardContent,
@@ -47,8 +46,8 @@ import { collection, getDocs, doc, setDoc, deleteDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { DepartmentDoctorsDialog } from "@/components/departments/department-doctors-dialog";
-import { AppSidebar } from "@/components/layout/sidebar";
 import { SelectDepartmentDialog } from "@/components/onboarding/select-department-dialog";
+import { TopNav } from "@/components/layout/top-nav";
 
 const superAdminDepartments: Department[] = [
     { id: 'dept-01', name: 'General Medicine', description: 'Comprehensive primary care.', image: 'https://picsum.photos/seed/gm/600/400', imageHint: 'stethoscope pills', doctors: [] },
@@ -214,8 +213,8 @@ export default function DepartmentsPage() {
 
   return (
     <>
-      <AppSidebar />
-      <SidebarInset>
+      <TopNav />
+      <div className="flex flex-col">
         <DepartmentsHeader />
         <main className="flex-1 p-4 sm:p-6">
           <div className="flex justify-end mb-4">
@@ -290,9 +289,11 @@ export default function DepartmentsPage() {
         <footer className="text-center text-sm text-muted-foreground p-4">
             Copyright &copy; 2024 Peterdraw &nbsp;&middot;&nbsp; Privacy Policy &nbsp;&middot;&nbsp; Term and conditions &nbsp;&middot;&nbsp; Contact
         </footer>
-      </SidebarInset>
+      </div>
     </>
   );
 }
+
+    
 
     

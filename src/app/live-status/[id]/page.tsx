@@ -2,7 +2,6 @@
 "use client"
 
 import { useParams } from "next/navigation";
-import { SidebarInset } from "@/components/ui/sidebar";
 import { LiveStatusDetailHeader } from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -10,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { liveStatuses } from "@/lib/data";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CheckCircle, Clock } from "lucide-react";
-import { AppSidebar } from "@/components/layout/sidebar";
+import { TopNav } from "@/components/layout/top-nav";
 
 // Dummy data for token details
 const completedTokens = ["A001", "A002"];
@@ -46,21 +45,21 @@ export default function LiveStatusDetailPage() {
   if (!statusData) {
     return (
         <>
-            <AppSidebar />
-            <SidebarInset>
+            <TopNav />
+            <div className="flex flex-col">
                 <LiveStatusDetailHeader />
                 <main className="flex-1 p-4 sm:p-6 flex items-center justify-center">
                     <p>Doctor not found.</p>
                 </main>
-            </SidebarInset>
+            </div>
         </>
     );
   }
 
   return (
     <>
-      <AppSidebar />
-      <SidebarInset>
+      <TopNav />
+      <div className="flex flex-col">
         <LiveStatusDetailHeader />
         <main className="flex-1 p-4 sm:p-6">
           <Card className="mb-6">
@@ -114,7 +113,9 @@ export default function LiveStatusDetailPage() {
           </Card>
 
         </main>
-      </SidebarInset>
+      </div>
     </>
   );
 }
+
+    

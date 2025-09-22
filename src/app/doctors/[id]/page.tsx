@@ -24,8 +24,6 @@ import {
 } from "@/components/ui/table";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
-import { AppSidebar } from "@/components/layout/sidebar";
-import { SidebarInset } from "@/components/ui/sidebar";
 import { DoctorsHeader } from "@/components/layout/header";
 import { doc, getDoc, updateDoc, collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -50,6 +48,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { TopNav } from "@/components/layout/top-nav";
 
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -394,24 +393,20 @@ export default function DoctorDetailPage() {
 
   if (loading) {
     return (
-        <div className="flex">
-            <AppSidebar />
-            <SidebarInset>
-                <DoctorsHeader />
-                <div className="flex items-center justify-center h-full">Loading...</div>
-            </SidebarInset>
+        <div className="flex flex-col">
+            <TopNav />
+            <DoctorsHeader />
+            <div className="flex items-center justify-center h-full">Loading...</div>
         </div>
     );
   }
 
   if (!doctor) {
     return (
-        <div className="flex">
-            <AppSidebar />
-            <SidebarInset>
-                <DoctorsHeader />
-                <div className="flex items-center justify-center h-full">Doctor not found.</div>
-            </SidebarInset>
+        <div className="flex flex-col">
+            <TopNav />
+            <DoctorsHeader />
+            <div className="flex items-center justify-center h-full">Doctor not found.</div>
         </div>
     );
   }
@@ -419,9 +414,8 @@ export default function DoctorDetailPage() {
   const isDoctorOnLeave = selectedDate ? leaveDates.some(d => isSameDay(d, selectedDate)) : false;
 
   return (
-    <div className="flex">
-      <AppSidebar />
-      <SidebarInset>
+    <div className="flex flex-col">
+      <TopNav />
         <DoctorsHeader />
         <main className="flex-1 p-6 bg-background">
           <Card className="mb-6">
@@ -838,7 +832,9 @@ export default function DoctorDetailPage() {
             </TabsContent>
           </Tabs>
         </main>
-      </SidebarInset>
     </div>
   );
 }
+
+
+    

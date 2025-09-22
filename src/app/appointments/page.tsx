@@ -3,7 +3,6 @@
 
 import { useEffect, useState } from "react";
 import { AppointmentsHeader } from "@/components/layout/header";
-import { SidebarInset } from "@/components/ui/sidebar";
 import {
   Card,
   CardContent,
@@ -33,7 +32,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { AppSidebar } from "@/components/layout/sidebar";
 import { collection, getDocs, addDoc, setDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -41,6 +39,7 @@ import { AddAppointmentForm } from "@/components/appointments/add-appointment-fo
 import { useToast } from "@/hooks/use-toast";
 import { parse, isSameDay, parse as parseDateFns } from "date-fns";
 import { cn } from "@/lib/utils";
+import { TopNav } from "@/components/layout/top-nav";
 
 
 export default function AppointmentsPage() {
@@ -183,8 +182,8 @@ export default function AppointmentsPage() {
 
   return (
     <>
-      <AppSidebar />
-      <SidebarInset>
+      <TopNav />
+      <div className="flex flex-col">
         <AppointmentsHeader onAddAppointment={() => { setEditingAppointment(null); setIsAddAppointmentOpen(true); }} />
         <main className="flex-1 p-4 sm:p-6">
           <Tabs defaultValue="all">
@@ -342,7 +341,7 @@ export default function AppointmentsPage() {
             </div>
           </div>
         </main>
-      </SidebarInset>
+      </div>
        <AddAppointmentForm
         isOpen={isAddAppointmentOpen}
         setIsOpen={(isOpen) => {
@@ -359,5 +358,7 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
 
     

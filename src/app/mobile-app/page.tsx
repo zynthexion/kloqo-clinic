@@ -5,8 +5,6 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { SidebarInset } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/layout/sidebar";
 import { MobileAppHeader } from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import { collection, getDocs, setDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { MobileApp } from "@/lib/types";
+import { TopNav } from "@/components/layout/top-nav";
 
 const formSchema = z.object({
   username: z.string().min(2, "Username must be at least 2 characters."),
@@ -103,9 +102,9 @@ export default function MobileAppPage() {
   };
 
   return (
-    <div className="flex">
-      <AppSidebar />
-      <SidebarInset>
+    <div className="flex flex-col">
+      <TopNav />
+      <div>
         <MobileAppHeader />
         <main className="flex-1 p-6 bg-background">
           <Card className="max-w-2xl mx-auto">
@@ -156,7 +155,9 @@ export default function MobileAppPage() {
             </Form>
           </Card>
         </main>
-      </SidebarInset>
+      </div>
     </div>
   );
 }
+
+    

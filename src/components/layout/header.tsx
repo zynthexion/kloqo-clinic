@@ -1,6 +1,5 @@
 
 
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Bell, Search, Settings, UserPlus, Calendar as CalendarIcon, Plus, Maximize, Minus, ZoomIn, ZoomOut, Activity, ChevronLeft } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -31,7 +30,7 @@ export function DashboardHeader() {
 export function DoctorsHeader() {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
-      <SidebarTrigger className="sm:hidden" />
+      
       <h1 className="text-xl font-semibold md:text-2xl">Doctors</h1>
       <div className="ml-auto flex items-center gap-2">
         <Button variant="ghost" size="icon" className="rounded-full">
@@ -76,7 +75,7 @@ export function DoctorsHeader() {
 export function AppointmentsHeader({ onAddAppointment }: { onAddAppointment: () => void }) {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static smh-auto sm:border-0 sm:bg-transparent sm:px-6">
-      <SidebarTrigger className="sm:hidden" />
+      
       <h1 className="text-xl font-semibold md:text-2xl">Appointments</h1>
       <div className="ml-auto flex items-center gap-4">
          <div className="relative flex-1 md:grow-0">
@@ -140,7 +139,7 @@ export function AppointmentsHeader({ onAddAppointment }: { onAddAppointment: () 
 export function DepartmentsHeader() {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static smh-auto sm:border-0 sm:bg-transparent sm:px-6">
-      <SidebarTrigger className="sm:hidden" />
+      
       <h1 className="text-xl font-semibold md:text-2xl">Departments</h1>
       <div className="relative ml-auto flex-1 md:grow-0">
         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -196,7 +195,7 @@ export function DepartmentsHeader() {
 export function LiveStatusHeader() {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static smh-auto sm:border-0 sm:bg-transparent sm:px-6">
-      <SidebarTrigger className="sm:hidden" />
+      
       <h1 className="text-xl font-semibold md:text-2xl flex items-center gap-2">
         <Activity /> Live Token Status
       </h1>
@@ -246,7 +245,7 @@ export function LiveStatusHeader() {
 export function LiveStatusDetailHeader() {
     return (
       <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
-        <SidebarTrigger className="sm:hidden" />
+        
         <Link href="/live-status">
             <Button variant="outline" size="icon" className="h-7 w-7">
                 <ChevronLeft className="h-4 w-4" />
@@ -302,7 +301,7 @@ export function LiveStatusDetailHeader() {
 export function MobileAppHeader() {
     return (
       <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
-        <SidebarTrigger className="sm:hidden" />
+        
         <h1 className="text-xl font-semibold md:text-2xl">Mobile App Credentials</h1>
         <div className="ml-auto flex items-center gap-2">
           <Button variant="ghost" size="icon" className="rounded-full">

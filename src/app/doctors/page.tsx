@@ -1,7 +1,6 @@
 
 "use client";
 
-import { SidebarInset } from "@/components/ui/sidebar";
 import { DoctorsHeader } from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import {
@@ -49,8 +48,8 @@ import { collection, getDocs, addDoc, doc, setDoc, deleteDoc, updateDoc } from "
 import { db, storage } from "@/lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useToast } from "@/hooks/use-toast";
-import { AppSidebar } from "@/components/layout/sidebar";
 import Link from 'next/link';
+import { TopNav } from "@/components/layout/top-nav";
 
 const DoctorCard = ({ doctor, onEdit, onDelete }: { doctor: Doctor, onEdit: (doctor: Doctor) => void, onDelete: (doctor: Doctor) => void }) => (
     <Card className="flex flex-col h-full group">
@@ -344,8 +343,8 @@ export default function DoctorsPage() {
 
   return (
     <>
-      <AppSidebar />
-      <SidebarInset>
+      <TopNav />
+      <div className="flex flex-col">
         <DoctorsHeader />
         <main className="flex flex-1 flex-col gap-6 p-4 sm:p-6">
           <div className="flex flex-col gap-4">
@@ -461,7 +460,10 @@ export default function DoctorsPage() {
                   </AlertDialogFooter>
               </AlertDialogContent>
           </AlertDialog>
-      </SidebarInset>
+      </div>
     </>
   );
 }
+
+
+    

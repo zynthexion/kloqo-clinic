@@ -1,8 +1,6 @@
 
 'use client';
 
-import { AppSidebar } from "@/components/layout/sidebar";
-import { SidebarInset } from "@/components/ui/sidebar";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +16,7 @@ import {
 import { Line, LineChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import type { ChartConfig } from "@/components/ui/chart";
+import { TopNav } from "@/components/layout/top-nav";
 
 function DashboardHeader() {
   return (
@@ -270,9 +269,9 @@ function OnboardingTask() {
 
 export default function Home() {
   return (
-    <div className="flex">
-      <AppSidebar />
-      <SidebarInset>
+    <div className="flex flex-col">
+      <TopNav />
+      <div>
         <DashboardHeader />
         <main className="flex-1 p-6 bg-background">
           <div className="grid grid-cols-1 lg:grid-cols-4 xl:grid-cols-5 gap-6">
@@ -294,7 +293,9 @@ export default function Home() {
 
           </div>
         </main>
-      </SidebarInset>
+      </div>
     </div>
   );
 }
+
+    

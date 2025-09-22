@@ -6,8 +6,6 @@ import { useParams } from "next/navigation";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Appointment, Patient } from "@/lib/types";
-import { SidebarInset } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/layout/sidebar";
 import { DashboardHeader } from "@/components/layout/header";
 import {
   Card,
@@ -29,6 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { TopNav } from "@/components/layout/top-nav";
 
 export default function PatientHistoryPage() {
   const params = useParams();
@@ -103,9 +102,9 @@ export default function PatientHistoryPage() {
   }, [patientId]);
 
   return (
-    <div className="flex">
-      <AppSidebar />
-      <SidebarInset>
+    <div className="flex flex-col">
+      <TopNav />
+      <div>
         <DashboardHeader />
         <main className="flex-1 p-6 bg-background">
           <div className="flex items-center gap-4 mb-6">
@@ -205,7 +204,9 @@ export default function PatientHistoryPage() {
             </Card>
           )}
         </main>
-      </SidebarInset>
+      </div>
     </div>
   );
 }
+
+    
