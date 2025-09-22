@@ -91,20 +91,20 @@ export default function AppointmentsPage() {
         const doctorName = doctors.find(d => d.id === appointmentData.doctor)?.name || "Unknown Doctor";
         
         const newAppointmentData: Appointment = {
+            id: newAppointmentRef.id,
             patientName: appointmentData.patientName,
             gender: appointmentData.gender,
             phone: appointmentData.phone,
             age: appointmentData.age,
             date: appointmentData.date,
             time: appointmentData.time,
+            doctor: doctorName,
             department: appointmentData.department,
             status: appointmentData.status,
             treatment: appointmentData.treatment,
+            tokenNumber: tokenNumber,
             bookedVia: appointmentData.bookedVia,
             place: appointmentData.place,
-            id: newAppointmentRef.id,
-            tokenNumber: tokenNumber,
-            doctor: doctorName,
         };
 
         await setDoc(newAppointmentRef, newAppointmentData);
