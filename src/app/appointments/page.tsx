@@ -351,8 +351,8 @@ export default function AppointmentsPage() {
         <h1 className="text-xl font-semibold md:text-2xl">Appointments</h1>
       </header>
       <div className="relative flex flex-1 overflow-hidden">
-        <div className="flex flex-1 gap-6 p-6">
-            <main className={cn("flex-shrink-0 overflow-auto transition-all duration-300 ease-in-out", isDrawerOpen ? 'w-2/3' : 'w-full')}>
+        <div className="flex flex-1 p-6 gap-6">
+            <main className={cn("flex-shrink-0 overflow-auto transition-all duration-300 ease-in-out", isDrawerOpen ? 'w-2/3 pr-6' : 'w-full')}>
                 <Card className="h-full">
                   <CardHeader>
                     <CardTitle>{isEditing ? "Reschedule Appointment" : "Book New Appointment"}</CardTitle>
@@ -419,7 +419,7 @@ export default function AppointmentsPage() {
                             />
                           </div>
 
-                          <div className={cn("space-y-4", !isDrawerOpen && "md:col-span-2")}>
+                           <div className={cn("space-y-4", isDrawerOpen ? "md:col-span-1" : "md:col-span-1")}>
                             <h3 className="text-lg font-medium border-b pb-2">Select Date</h3>
                             <FormField control={form.control} name="date" render={({ field }) => (
                                 <FormItem className="flex flex-col">
@@ -444,9 +444,9 @@ export default function AppointmentsPage() {
                             />
                           </div>
                           
-                          <div className={cn("space-y-4", !isDrawerOpen && "md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-8")}>
+                          <div className={cn("space-y-4", !isDrawerOpen && "md:col-span-1")}>
+                            <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
                             <div className="space-y-4">
-                                <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
                                 <FormField control={form.control} name="doctor" render={({ field }) => (
                                     <FormItem>
                                       <FormLabel>Doctor</FormLabel>
@@ -524,7 +524,7 @@ export default function AppointmentsPage() {
             </main>
             
             <aside className={cn(
-                "flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden",
+                "flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden bg-background",
                 isDrawerOpen ? 'w-1/3' : 'w-0'
             )}>
                 <Card className="h-full rounded-2xl">
@@ -614,5 +614,7 @@ export default function AppointmentsPage() {
     </div>
   );
 }
+
+    
 
     
