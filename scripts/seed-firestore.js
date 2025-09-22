@@ -1,6 +1,7 @@
 
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
+const { format } = require('date-fns');
 
 const doctors = [
   {
@@ -236,6 +237,228 @@ const departments = [
   }
 ];
 
+const today = new Date();
+const currentYear = today.getFullYear();
+const currentMonth = today.getMonth();
+const currentDay = today.getDate();
+
+const formatDate = (day) => {
+    const date = new Date(currentYear, currentMonth, day);
+    return format(date, 'd MMMM yyyy');
+};
+
+const appointments = [
+  {
+    id: 'APT001',
+    patientName: 'Caren G. Simpson',
+    gender: 'Female',
+    phone: '123-456-7890',
+    age: 34,
+    date: formatDate(currentDay),
+    time: '09:00 AM',
+    doctor: 'Dr. Petra Winsburry',
+    treatment: 'Routine Check-Up',
+    status: 'Confirmed',
+    department: 'General Medicine',
+    tokenNumber: 'TKN001',
+    bookedVia: 'Online',
+    place: 'New York, USA',
+  },
+  {
+    id: 'APT002',
+    patientName: 'Edgar Warrow',
+    gender: 'Male',
+    phone: '234-567-8901',
+    age: 45,
+    date: formatDate(currentDay),
+    time: '10:30 AM',
+    doctor: 'Dr. Olivia Martinez',
+    treatment: 'Cardiac Consultation',
+    status: 'Confirmed',
+    department: 'Cardiology',
+    tokenNumber: 'TKN002',
+    bookedVia: 'Phone',
+    place: 'London, UK',
+  },
+  {
+    id: 'APT003',
+    patientName: 'Ocean Jane Lupre',
+    gender: 'Female',
+    phone: '345-678-9012',
+    age: 28,
+    date: formatDate(currentDay),
+    time: '11:00 AM',
+    doctor: 'Dr. Damian Sanchez',
+    treatment: 'Pediatric Check-Up',
+    status: 'Pending',
+    department: 'Pediatrics',
+    tokenNumber: 'TKN003',
+    bookedVia: 'Walk-in',
+    place: 'Tokyo, Japan',
+  },
+  {
+    id: 'APT004',
+    patientName: 'Shane Riddick',
+    gender: 'Male',
+    phone: '456-789-0123',
+    age: 52,
+    date: formatDate(currentDay + 1),
+    time: '01:00 PM',
+    doctor: 'Dr. Chloe Harrington',
+    treatment: 'Skin Allergy',
+    status: 'Cancelled',
+    department: 'Dermatology',
+    tokenNumber: 'TKN004',
+    bookedVia: 'Online',
+    place: 'Sydney, Australia',
+  },
+  {
+    id: 'APT005',
+    patientName: 'Queen Lawnston',
+    gender: 'Female',
+    phone: '567-890-1234',
+    age: 61,
+    date: formatDate(currentDay + 1),
+    time: '02:30 PM',
+    doctor: 'Dr. Petra Winsburry',
+    treatment: 'Follow-Up Visit',
+    status: 'Confirmed',
+    department: 'General Medicine',
+    tokenNumber: 'TKN005',
+    bookedVia: 'Phone',
+    place: 'Paris, France',
+  },
+  {
+    id: 'APT006',
+    patientName: 'Alice Mitchell',
+    gender: 'Female',
+    phone: '678-901-2345',
+    age: 29,
+    date: formatDate(currentDay + 2),
+    time: '09:00 AM',
+    doctor: 'Dr. Emily Smith',
+    treatment: 'Routine Check-Up',
+    status: 'Confirmed',
+    department: 'General Medicine',
+    tokenNumber: 'TKN006',
+    bookedVia: 'Online',
+    place: 'Berlin, Germany',
+  },
+  {
+    id: 'APT007',
+    patientName: 'Mikhail Morozov',
+    gender: 'Male',
+    phone: '789-012-3456',
+    age: 58,
+    date: formatDate(currentDay + 2),
+    time: '10:30 AM',
+    doctor: 'Dr. Samuel Thompson',
+    treatment: 'Cardiac Consultation',
+    status: 'Confirmed',
+    department: 'Cardiology',
+    tokenNumber: 'TKN007',
+    bookedVia: 'Phone',
+    place: 'Moscow, Russia',
+  },
+  {
+    id: 'APT008',
+    patientName: 'Mateus Fernandes',
+    gender: 'Male',
+    phone: '890-123-4567',
+    age: 7,
+    date: formatDate(currentDay + 3),
+    time: '11:00 AM',
+    doctor: 'Dr. Sarah Johnson',
+    treatment: 'Pediatric Check-Up',
+    status: 'Pending',
+    department: 'Pediatrics',
+    tokenNumber: 'TKN008',
+    bookedVia: 'Walk-in',
+    place: 'Rio de Janeiro, Brazil',
+  },
+  {
+    id: 'APT009',
+    patientName: 'Pari Desai',
+    gender: 'Female',
+    phone: '901-234-5678',
+    age: 41,
+    date: formatDate(currentDay + 3),
+    time: '01:00 PM',
+    doctor: 'Dr. Luke Harrison',
+    treatment: 'Skin Allergy',
+    status: 'Cancelled',
+    department: 'Dermatology',
+    tokenNumber: 'TKN009',
+    bookedVia: 'Online',
+    place: 'Mumbai, India',
+  },
+  {
+    id: 'APT010',
+    patientName: 'Omar Ali',
+    gender: 'Male',
+    phone: '012-345-6789',
+    age: 33,
+    date: formatDate(currentDay + 4),
+    time: '02:30 PM',
+    doctor: 'Dr. Andrew Peterson',
+    treatment: 'Follow-Up Visit',
+    status: 'Confirmed',
+    department: 'Internal Medicine',
+    tokenNumber: 'TKN010',
+    bookedVia: 'Phone',
+    place: 'Cairo, Egypt',
+  },
+  {
+    id: 'APT011',
+    patientName: 'Camila Alvarez',
+    gender: 'Female',
+    phone: '112-233-4455',
+    age: 68,
+    date: formatDate(currentDay),
+    time: '03:00 PM',
+    doctor: 'Dr. Olivia Martinez',
+    treatment: 'Cardiac Check-Up',
+    status: 'Confirmed',
+    department: 'Cardiology',
+    tokenNumber: 'TKN011',
+    bookedVia: 'Online',
+    place: 'Mexico City, Mexico',
+  },
+  {
+    id: 'APT012',
+    patientName: 'Thabo van Rooyen',
+    gender: 'Male',
+    phone: '223-344-5566',
+    age: 5,
+    date: formatDate(currentDay + 1),
+    time: '04:00 PM',
+    doctor: 'Dr. William Carter',
+    treatment: 'Pediatric Check-Up',
+    status: 'Pending',
+    department: 'Pediatrics',
+    tokenNumber: 'TKN012',
+    bookedVia: 'Walk-in',
+    place: 'Cape Town, South Africa',
+  },
+  {
+    id: 'APT013',
+    patientName: 'Chance Geidt',
+    gender: 'Male',
+    phone: '334-455-6677',
+    age: 50,
+    date: formatDate(currentDay + 2),
+    time: '04:30 PM',
+    doctor: 'Dr. Samuel Thompson',
+    treatment: 'Follow-Up Visit',
+    status: 'Confirmed',
+    department: 'Cardiology',
+    tokenNumber: 'TKN013',
+    bookedVia: 'Phone',
+    place: 'Toronto, Canada',
+  }
+];
+
+
 // Initialize Firebase Admin SDK
 // Make sure to have your service account key file in the root directory
 // and update the GOOGLE_APPLICATION_CREDENTIALS environment variable
@@ -250,7 +473,7 @@ async function seedCollection(collectionName, data, idField) {
   const promises = data.map(async (item) => {
     const docRef = collectionRef.doc(item[idField]);
     await docRef.set(item);
-    console.log(`Added ${collectionName} ${item.name || item[idField]} with ID: ${item[idField]}`);
+    console.log(`Added ${collectionName} ${item.name || item.patientName || item[idField]} with ID: ${item[idField]}`);
   });
 
   await Promise.all(promises);
@@ -260,10 +483,8 @@ async function seedCollection(collectionName, data, idField) {
 async function main() {
     await seedCollection('doctors', doctors, 'id');
     await seedCollection('departments', departments, 'id');
+    await seedCollection('appointments', appointments, 'id');
 }
 
 
 main().catch(console.error);
-
-    
-    

@@ -1,12 +1,12 @@
 
+"use client";
+
+import { useEffect, useState } from "react";
 import { AppointmentsHeader } from "@/components/layout/header";
 import { SidebarInset } from "@/components/ui/sidebar";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -20,12 +20,10 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { appointments } from "@/lib/data";
+import type { Appointment } from "@/lib/types";
 import {
   ChevronLeft,
   ChevronRight,
-  MoreHorizontal,
-  Plus,
   ArrowUpDown,
 } from "lucide-react";
 import {
@@ -35,15 +33,42 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { AppSidebar } from "@/components/layout/sidebar";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function AppointmentsPage() {
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [tabCounts, setTabCounts] = useState({ all: 0, confirmed: 0, pending: 0, cancelled: 0 });
+
+  useEffect(() => {
+    const fetchAppointments = async () => {
+      try {
+        const appointmentsCollection = collection(db, "appointments");
+        const appointmentsSnapshot = await getDocs(appointmentsCollection);
+        const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ ...doc.data() } as Appointment));
+        setAppointments(appointmentsList);
+
+        const counts = appointmentsList.reduce((acc, apt) => {
+          acc.all++;
+          if (apt.status === "Confirmed") acc.confirmed++;
+          else if (apt.status === "Pending") acc.pending++;
+          else if (apt.status === "Cancelled") acc.cancelled++;
+          return acc;
+        }, { all: 0, confirmed: 0, pending: 0, cancelled: 0 });
+        setTabCounts(counts);
+
+      } catch (error) {
+        console.error("Error fetching appointments:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAppointments();
+  }, []);
+
   return (
     <>
       <AppSidebar />
@@ -52,10 +77,10 @@ export default function AppointmentsPage() {
         <main className="flex-1 p-4 sm:p-6">
           <Tabs defaultValue="all">
             <TabsList>
-              <TabsTrigger value="all">All (128)</TabsTrigger>
-              <TabsTrigger value="confirmed">Confirmed (98)</TabsTrigger>
-              <TabsTrigger value="pending">Pending (18)</TabsTrigger>
-              <TabsTrigger value="cancelled">Cancelled (12)</TabsTrigger>
+              <TabsTrigger value="all">All ({tabCounts.all})</TabsTrigger>
+              <TabsTrigger value="confirmed">Confirmed ({tabCounts.confirmed})</TabsTrigger>
+              <TabsTrigger value="pending">Pending ({tabCounts.pending})</TabsTrigger>
+              <TabsTrigger value="cancelled">Cancelled ({tabCounts.cancelled})</TabsTrigger>
             </TabsList>
             <TabsContent value="all">
               <Card>
@@ -70,6 +95,11 @@ export default function AppointmentsPage() {
                           <TableHead>
                             <Button variant="ghost" size="sm">
                               Name <ArrowUpDown className="ml-2 h-4 w-4" />
+                            </Button>
+                          </TableHead>
+                           <TableHead>
+                            <Button variant="ghost" size="sm">
+                              Token <ArrowUpDown className="ml-2 h-4 w-4" />
                             </Button>
                           </TableHead>
                           <TableHead>
@@ -89,7 +119,7 @@ export default function AppointmentsPage() {
                           </TableHead>
                           <TableHead>
                             <Button variant="ghost" size="sm">
-                              Treatment <ArrowUpDown className="ml-2 h-4 w-4" />
+                              Booked Via <ArrowUpDown className="ml-2 h-4 w-4" />
                             </Button>
                           </TableHead>
                           <TableHead>
@@ -101,43 +131,60 @@ export default function AppointmentsPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {appointments.map((appointment) => (
-                          <TableRow key={appointment.id}>
-                            <TableCell>
-                              <Checkbox />
-                            </TableCell>
-                            <TableCell className="font-medium">
-                              {appointment.patientName}
-                            </TableCell>
-                            <TableCell>{appointment.date}</TableCell>
-                            <TableCell>{appointment.time}</TableCell>
-                            <TableCell>{appointment.doctor}</TableCell>
-                            <TableCell>{appointment.treatment}</TableCell>
-                            <TableCell>
-                              <Badge
-                                variant={
-                                  appointment.status === "Confirmed"
-                                    ? "success"
-                                    : appointment.status === "Pending"
-                                    ? "warning"
-                                    : "outline"
-                                }
-                              >
-                                {appointment.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-2">
-                                <Button variant="link" className="p-0 h-auto text-primary">
-                                  Reschedule
-                                </Button>
-                                <Button variant="link" className="p-0 h-auto text-muted-foreground">
-                                  Cancel
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {loading ? (
+                          Array.from({ length: 10 }).map((_, i) => (
+                            <TableRow key={i}>
+                              <TableCell><Skeleton className="h-4 w-4" /></TableCell>
+                              <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                              <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                              <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                              <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                              <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                              <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                              <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                              <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          appointments.map((appointment) => (
+                            <TableRow key={appointment.id}>
+                              <TableCell>
+                                <Checkbox />
+                              </TableCell>
+                              <TableCell className="font-medium">
+                                {appointment.patientName}
+                              </TableCell>
+                              <TableCell>{appointment.tokenNumber}</TableCell>
+                              <TableCell>{appointment.date}</TableCell>
+                              <TableCell>{appointment.time}</TableCell>
+                              <TableCell>{appointment.doctor}</TableCell>
+                              <TableCell>{appointment.bookedVia}</TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant={
+                                    appointment.status === "Confirmed"
+                                      ? "success"
+                                      : appointment.status === "Pending"
+                                      ? "warning"
+                                      : "destructive"
+                                  }
+                                >
+                                  {appointment.status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex gap-2">
+                                  <Button variant="link" className="p-0 h-auto text-primary">
+                                    Reschedule
+                                  </Button>
+                                  <Button variant="link" className="p-0 h-auto text-muted-foreground">
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
                       </TableBody>
                     </Table>
                   </div>
@@ -158,7 +205,7 @@ export default function AppointmentsPage() {
                   <SelectItem value="50">50</SelectItem>
                 </SelectContent>
               </Select>{" "}
-              out of 128
+              out of {appointments.length}
             </div>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="icon">

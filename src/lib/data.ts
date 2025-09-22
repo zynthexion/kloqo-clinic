@@ -33,6 +33,9 @@ export const appointments: Appointment[] = [
     treatment: 'Routine Check-Up',
     status: 'Confirmed',
     department: 'General Medicine',
+    tokenNumber: 'TKN001',
+    bookedVia: 'Online',
+    place: 'New York, USA',
   },
   {
     id: 'APT002',
@@ -46,6 +49,9 @@ export const appointments: Appointment[] = [
     treatment: 'Cardiac Consultation',
     status: 'Confirmed',
     department: 'Cardiology',
+    tokenNumber: 'TKN002',
+    bookedVia: 'Phone',
+    place: 'London, UK',
   },
   {
     id: 'APT003',
@@ -59,6 +65,9 @@ export const appointments: Appointment[] = [
     treatment: 'Pediatric Check-Up',
     status: 'Pending',
     department: 'Pediatrics',
+    tokenNumber: 'TKN003',
+    bookedVia: 'Walk-in',
+    place: 'Tokyo, Japan',
   },
   {
     id: 'APT004',
@@ -72,6 +81,9 @@ export const appointments: Appointment[] = [
     treatment: 'Skin Allergy',
     status: 'Cancelled',
     department: 'Dermatology',
+    tokenNumber: 'TKN004',
+    bookedVia: 'Online',
+    place: 'Sydney, Australia',
   },
   {
     id: 'APT005',
@@ -85,6 +97,9 @@ export const appointments: Appointment[] = [
     treatment: 'Follow-Up Visit',
     status: 'Confirmed',
     department: 'General Medicine',
+    tokenNumber: 'TKN005',
+    bookedVia: 'Phone',
+    place: 'Paris, France',
   },
   {
     id: 'APT006',
@@ -98,6 +113,9 @@ export const appointments: Appointment[] = [
     treatment: 'Routine Check-Up',
     status: 'Confirmed',
     department: 'General Medicine',
+    tokenNumber: 'TKN006',
+    bookedVia: 'Online',
+    place: 'Berlin, Germany',
   },
   {
     id: 'APT007',
@@ -111,6 +129,9 @@ export const appointments: Appointment[] = [
     treatment: 'Cardiac Consultation',
     status: 'Confirmed',
     department: 'Cardiology',
+    tokenNumber: 'TKN007',
+    bookedVia: 'Phone',
+    place: 'Moscow, Russia',
   },
   {
     id: 'APT008',
@@ -124,6 +145,9 @@ export const appointments: Appointment[] = [
     treatment: 'Pediatric Check-Up',
     status: 'Pending',
     department: 'Pediatrics',
+    tokenNumber: 'TKN008',
+    bookedVia: 'Walk-in',
+    place: 'Rio de Janeiro, Brazil',
   },
   {
     id: 'APT009',
@@ -137,6 +161,9 @@ export const appointments: Appointment[] = [
     treatment: 'Skin Allergy',
     status: 'Cancelled',
     department: 'Dermatology',
+    tokenNumber: 'TKN009',
+    bookedVia: 'Online',
+    place: 'Mumbai, India',
   },
   {
     id: 'APT010',
@@ -150,6 +177,9 @@ export const appointments: Appointment[] = [
     treatment: 'Follow-Up Visit',
     status: 'Confirmed',
     department: 'Internal Medicine',
+    tokenNumber: 'TKN010',
+    bookedVia: 'Phone',
+    place: 'Cairo, Egypt',
   },
   {
     id: 'APT011',
@@ -163,6 +193,9 @@ export const appointments: Appointment[] = [
     treatment: 'Cardiac Check-Up',
     status: 'Confirmed',
     department: 'Cardiology',
+    tokenNumber: 'TKN011',
+    bookedVia: 'Online',
+    place: 'Mexico City, Mexico',
   },
   {
     id: 'APT012',
@@ -176,6 +209,9 @@ export const appointments: Appointment[] = [
     treatment: 'Pediatric Check-Up',
     status: 'Pending',
     department: 'Pediatrics',
+    tokenNumber: 'TKN012',
+    bookedVia: 'Walk-in',
+    place: 'Cape Town, South Africa',
   },
   {
     id: 'APT013',
@@ -189,6 +225,9 @@ export const appointments: Appointment[] = [
     treatment: 'Follow-Up Visit',
     status: 'Confirmed',
     department: 'Cardiology',
+    tokenNumber: 'TKN013',
+    bookedVia: 'Phone',
+    place: 'Toronto, Canada',
   }
 ];
 

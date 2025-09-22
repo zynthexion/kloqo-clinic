@@ -44,6 +44,9 @@ export type Appointment = {
   department: string;
   status: 'Confirmed' | 'Pending' | 'Cancelled';
   treatment: string;
+  tokenNumber: string;
+  bookedVia: 'Online' | 'Phone' | 'Walk-in';
+  place?: string;
 };
 
 export type Activity = {
