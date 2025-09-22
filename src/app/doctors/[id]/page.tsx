@@ -41,6 +41,14 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { z } from "zod";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -62,6 +70,19 @@ const formSchema = z.object({
 });
 
 type WeeklyAvailabilityFormValues = z.infer<typeof formSchema>;
+
+const generateTimeOptions = () => {
+    const options = [];
+    for (let h = 0; h < 24; h++) {
+        for (let m = 0; m < 60; m += 30) {
+            const hour = String(h).padStart(2, '0');
+            const minute = String(m).padStart(2, '0');
+            options.push(`${hour}:${minute}`);
+        }
+    }
+    return options;
+};
+const timeOptions = generateTimeOptions();
 
 
 export default function DoctorDetailPage() {
@@ -424,7 +445,16 @@ export default function DoctorDetailPage() {
                                                               render={({ field }) => (
                                                                   <FormItem className="flex-grow">
                                                                       <FormLabel className="text-xs">From</FormLabel>
-                                                                      <FormControl><Input {...field} placeholder="HH:MM" /></FormControl>
+                                                                        <Select onValueChange={field.onChange} value={field.value}>
+                                                                            <FormControl>
+                                                                                <SelectTrigger>
+                                                                                    <SelectValue placeholder="HH:MM" />
+                                                                                </SelectTrigger>
+                                                                            </FormControl>
+                                                                            <SelectContent>
+                                                                                {timeOptions.map(option => <SelectItem key={option} value={option}>{option}</SelectItem>)}
+                                                                            </SelectContent>
+                                                                        </Select>
                                                                   </FormItem>
                                                               )}
                                                           />
@@ -434,7 +464,16 @@ export default function DoctorDetailPage() {
                                                               render={({ field }) => (
                                                                   <FormItem className="flex-grow">
                                                                       <FormLabel className="text-xs">To</FormLabel>
-                                                                      <FormControl><Input {...field} placeholder="HH:MM" /></FormControl>
+                                                                       <Select onValueChange={field.onChange} value={field.value}>
+                                                                            <FormControl>
+                                                                                <SelectTrigger>
+                                                                                    <SelectValue placeholder="HH:MM" />
+                                                                                </SelectTrigger>
+                                                                            </FormControl>
+                                                                            <SelectContent>
+                                                                                {timeOptions.map(option => <SelectItem key={option} value={option}>{option}</SelectItem>)}
+                                                                            </SelectContent>
+                                                                        </Select>
                                                                   </FormItem>
                                                               )}
                                                           />
@@ -630,3 +669,5 @@ export default function DoctorDetailPage() {
     </div>
   );
 }
+
+    
