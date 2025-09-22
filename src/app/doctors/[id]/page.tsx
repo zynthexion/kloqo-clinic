@@ -30,7 +30,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Doctor, Appointment } from "@/lib/types";
 import { appointments as dummyAppointments } from "@/lib/data";
-import { format } from "date-fns";
+import { format, parse } from "date-fns";
 import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info } from "lucide-react";
 
 export default function DoctorDetailPage() {
@@ -70,20 +70,18 @@ export default function DoctorDetailPage() {
 
   const filteredAppointments = useMemo(() => {
     if (!selectedDate) return appointments;
-    
-    // The dummy data date format is '20 July 2028', which needs to be parsed.
-    // We will compare formatted dates to avoid timezone issues.
+
     const selectedDay = format(selectedDate, "yyyy-MM-dd");
 
     return appointments.filter((appointment) => {
         try {
-            // Handle multiple potential date formats
-            const parsedDate = new Date(appointment.date.replace(/-/g, ' '));
+            // The dummy data uses "dd MMMM yyyy" format.
+            const parsedDate = parse(appointment.date, 'd MMMM yyyy', new Date());
             if (isNaN(parsedDate.getTime())) return false; // Invalid date
             const appointmentDay = format(parsedDate, "yyyy-MM-dd");
             return appointmentDay === selectedDay;
         } catch (e) {
-            // Handle potential invalid date formats in dummy data gracefully
+            console.error("Error parsing date:", e);
             return false;
         }
     });
