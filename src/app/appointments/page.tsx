@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -243,10 +244,24 @@ export default function AppointmentsPage() {
   }, [selectedDoctor]);
   
   const leaveDates = useMemo(() => {
-      return (selectedDoctor?.leaveSlots || [])
-          .filter(ls => ls.slots.length > 0)
-          .map(ls => parse(ls.date, 'yyyy-MM-dd', new Date()));
-  }, [selectedDoctor?.leaveSlots]);
+    if (!selectedDoctor?.leaveSlots || !selectedDoctor.availabilitySlots) return [];
+
+    return selectedDoctor.leaveSlots
+      .filter(leaveSlot => {
+        const leaveDate = parse(leaveSlot.date, 'yyyy-MM-dd', new Date());
+        const dayName = daysOfWeek[getDay(leaveDate)];
+        
+        const availabilityForDay = selectedDoctor.availabilitySlots?.find(s => s.day === dayName);
+        if (!availabilityForDay) return false; // Not a working day anyway
+        
+        const totalSlotsForDay = availabilityForDay.timeSlots.length;
+        const leaveSlotsCount = leaveSlot.slots.length;
+        
+        // Mark as a full leave day only if all slots are on leave
+        return leaveSlotsCount >= totalSlotsForDay;
+      })
+      .map(ls => parse(ls.date, 'yyyy-MM-dd', new Date()));
+  }, [selectedDoctor?.leaveSlots, selectedDoctor?.availabilitySlots]);
 
 
   const timeSlots = useMemo(() => {
@@ -591,3 +606,4 @@ export default function AppointmentsPage() {
     
 
     
+
