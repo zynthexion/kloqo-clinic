@@ -15,7 +15,7 @@ service cloud.firestore {
     match /appointments/{appointmentId} {
       allow read, write: if true;
     }
-    
+
     // Allow public read and write access for development
     match /mobile-app/{credentialId} {
       allow read, write: if true;
