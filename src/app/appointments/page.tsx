@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Appointment, Doctor } from "@/lib/types";
-import { collection, getDocs, addDoc, setDoc, doc } from "firebase/firestore";
+import { collection, getDocs, setDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { parse, isSameDay, parse as parseDateFns, format, getDay } from "date-fns";
@@ -40,7 +40,8 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { PlusCircle } from "lucide-react";
+import { PlusCircle, ClipboardList } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription } from "@/components/ui/sheet";
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -72,6 +73,7 @@ export default function AppointmentsPage() {
   const [loading, setLoading] = useState(true);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const { toast } = useToast();
 
   const isEditing = !!editingAppointment;
@@ -193,7 +195,8 @@ export default function AppointmentsPage() {
 
         if (isEditing) {
             const { id, ...restOfData } = dataToSave;
-            const appointmentRef = doc(db, "appointments", id!);
+            if (!id) throw new Error("Editing an appointment without an ID.");
+            const appointmentRef = doc(db, "appointments", id);
             await setDoc(appointmentRef, restOfData, { merge: true });
 
             setAppointments(prev => {
@@ -204,20 +207,20 @@ export default function AppointmentsPage() {
                 description: `Appointment for ${restOfData.patientName} has been updated.`,
             });
         } else {
-            const newAppointmentRef = doc(collection(db, "appointments"));
+            const appointmentId = `APT-${Date.now()}`;
             let prefix = '';
             if (values.bookedVia === 'Online') prefix = 'A';
             else if (values.bookedVia === 'Phone') prefix = 'P';
             else if (values.bookedVia === 'Walk-in') prefix = 'W';
             const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3, '0')}`;
             
-            const { id, ...restOfData } = dataToSave;
             const newAppointmentData: Appointment = {
-                ...restOfData,
-                id: newAppointmentRef.id,
+                ...dataToSave,
+                id: appointmentId,
                 tokenNumber: tokenNumber,
             };
-            await setDoc(newAppointmentRef, newAppointmentData);
+            const appointmentRef = doc(db, "appointments", appointmentId);
+            await setDoc(appointmentRef, newAppointmentData);
             setAppointments(prev => [...prev, newAppointmentData]);
             toast({
                 title: "Appointment Booked",
@@ -316,6 +319,7 @@ export default function AppointmentsPage() {
   
   const handleOpenReschedule = (appointment: Appointment) => {
     setEditingAppointment(appointment);
+    setIsDrawerOpen(false);
   }
 
   const isAppointmentOnLeave = (appointment: Appointment): boolean => {
@@ -339,20 +343,13 @@ export default function AppointmentsPage() {
   };
 
   return (
-    <>
+    <div className="flex flex-col h-screen">
       <TopNav />
-      <div className="flex flex-col h-[calc(100vh-4rem)]">
         <header className="sticky top-16 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:px-6">
           <h1 className="text-xl font-semibold md:text-2xl">Appointments</h1>
-          <Button onClick={resetForm} variant="outline" className="ml-auto">
-            <PlusCircle className="mr-2 h-4 w-4" />
-            New Appointment
-          </Button>
         </header>
 
-        <main className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 overflow-hidden">
-          {/* Form Column */}
-          <div className="lg:col-span-2">
+        <main className="flex-1 p-6 overflow-auto">
             <Card className="h-full">
               <CardHeader>
                 <CardTitle>{isEditing ? "Reschedule Appointment" : "Book New Appointment"}</CardTitle>
@@ -505,25 +502,37 @@ export default function AppointmentsPage() {
                         />
                       </div>
                     </div>
-                    <div className="flex justify-end gap-2 pt-4">
-                      {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
-                      <Button type="submit">{isEditing ? "Save Changes" : "Book Appointment"}</Button>
+                    <div className="flex justify-between items-center pt-4">
+                        <div className="flex gap-2">
+                             <Button onClick={resetForm} variant="outline">
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                New Appointment
+                            </Button>
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
+                            <Button type="submit">{isEditing ? "Save Changes" : "Book Appointment"}</Button>
+                        </div>
                     </div>
                   </form>
                 </Form>
               </CardContent>
             </Card>
-          </div>
-
-          {/* Appointments List Column */}
-          <div className="lg:col-span-1">
-            <Card className="h-full">
-              <CardHeader>
-                <CardTitle>Upcoming Appointments</CardTitle>
-              </CardHeader>
-              <CardContent className="h-[calc(100%-4rem)]">
-                <ScrollArea className="h-full">
-                    <div className="space-y-3">
+        </main>
+        
+        <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+            <SheetTrigger asChild>
+                <Button className="fixed right-6 bottom-6 h-16 w-16 rounded-full shadow-lg" size="icon">
+                    <ClipboardList className="h-8 w-8" />
+                </Button>
+            </SheetTrigger>
+            <SheetContent className="w-full sm:w-3/4 lg:w-1/2 p-0">
+                <SheetHeader className="p-6 border-b">
+                    <SheetTitle>Upcoming Appointments</SheetTitle>
+                    <SheetDescription>A list of all scheduled appointments.</SheetDescription>
+                </SheetHeader>
+                <ScrollArea className="h-[calc(100vh-80px)]">
+                    <div className="p-6 space-y-3">
                         {loading ? (
                            Array.from({ length: 10 }).map((_, i) => (
                               <div key={i} className="p-3 rounded-lg border bg-muted animate-pulse h-20"></div>
@@ -560,12 +569,9 @@ export default function AppointmentsPage() {
                         )}
                     </div>
                 </ScrollArea>
-              </CardContent>
-            </Card>
-          </div>
-        </main>
-      </div>
-    </>
+            </SheetContent>
+        </Sheet>
+    </div>
   );
 }
 
