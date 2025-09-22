@@ -52,8 +52,13 @@ export function TimeSlots({ selectedDate, availabilitySlots, leaveSlots, appoint
 
     return appointments.filter(apt => {
         if (apt.date !== formattedDate) return false;
-        const aptTime = parseDateFns(apt.time, 'hh:mm a', selectedDate);
-        return aptTime.getTime() === slotStart.getTime();
+        try {
+            const aptTime = parseDateFns(apt.time, 'hh:mm a', selectedDate);
+            return aptTime.getTime() === slotStart.getTime();
+        } catch (e) {
+            console.error("Error parsing appointment time", apt.time, e);
+            return false;
+        }
     }).length;
   }
 
@@ -107,7 +112,7 @@ export function TimeSlots({ selectedDate, availabilitySlots, leaveSlots, appoint
               >
                 <span>{ts.from} - {ts.to}</span>
                 {appointmentCount > 0 && (
-                    <Badge variant="secondary" className={cn(isMarked && "bg-white/20")}>
+                    <Badge variant="secondary" className={cn("text-foreground", isMarked && "bg-white/20 text-white")}>
                         <Users className="w-3 h-3 mr-1" />
                         {appointmentCount}
                     </Badge>
@@ -127,3 +132,4 @@ export function TimeSlots({ selectedDate, availabilitySlots, leaveSlots, appoint
     </div>
   );
 }
+
