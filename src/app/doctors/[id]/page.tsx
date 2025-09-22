@@ -38,7 +38,7 @@ export default function DoctorDetailPage() {
   const id = params.id as string;
   const [doctor, setDoctor] = useState<Doctor | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -59,12 +59,8 @@ export default function DoctorDetailPage() {
           setAppointments(doctorAppointments);
 
           if (doctorAppointments.length > 0) {
-            try {
               const firstAptDate = parse(doctorAppointments[0].date, 'd MMMM yyyy', new Date());
               setSelectedDate(firstAptDate);
-            } catch (e) {
-              setSelectedDate(new Date());
-            }
           } else {
              setSelectedDate(new Date());
           }
@@ -79,15 +75,27 @@ export default function DoctorDetailPage() {
     }
   }, [id]);
 
+  useEffect(() => {
+    if (appointments.length > 0 && !selectedDate) {
+        const firstAptDate = parse(appointments[0].date, 'd MMMM yyyy', new Date());
+        if (!isNaN(firstAptDate.getTime())) {
+            setSelectedDate(firstAptDate);
+        } else {
+            setSelectedDate(new Date());
+        }
+    }
+  }, [appointments, selectedDate]);
+
+
   const filteredAppointments = useMemo(() => {
-    if (!selectedDate) return appointments;
+    if (!selectedDate) return [];
 
     const selectedDay = format(selectedDate, "yyyy-MM-dd");
 
     return appointments.filter((appointment) => {
         try {
             const parsedDate = parse(appointment.date, 'd MMMM yyyy', new Date());
-            if (isNaN(parsedDate.getTime())) return false; // Invalid date
+            if (isNaN(parsedDate.getTime())) return false;
             const appointmentDay = format(parsedDate, "yyyy-MM-dd");
             return appointmentDay === selectedDay;
         } catch (e) {
@@ -231,6 +239,7 @@ export default function DoctorDetailPage() {
                                     selected={selectedDate}
                                     onSelect={setSelectedDate}
                                     className="w-full"
+                                    defaultMonth={selectedDate}
                                 />
                             </CardContent>
                         </Card>
@@ -286,3 +295,5 @@ export default function DoctorDetailPage() {
     </div>
   );
 }
+
+    
