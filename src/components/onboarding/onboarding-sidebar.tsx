@@ -19,6 +19,7 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { PeterdrawLogo } from "@/components/icons";
+import { cn } from "@/lib/utils";
 
 export function OnboardingSidebar({ step }: { step: number }) {
   const { state } = useSidebar();
@@ -28,31 +29,31 @@ export function OnboardingSidebar({ step }: { step: number }) {
       href: "/onboarding-demo",
       icon: Home,
       label: "Dashboard",
-      disabled: true,
+      step: -1, 
     },
     {
       href: "/onboarding-demo",
       icon: Calendar,
       label: "Appointments",
-      disabled: true,
+      step: -1,
     },
     {
       href: "/onboarding-demo",
       icon: Stethoscope,
       label: "Doctors",
-      disabled: step < 2,
+      step: 2,
     },
     {
       href: "/onboarding-demo",
       icon: Building2,
       label: "Departments",
-      disabled: false,
+      step: 1,
     },
     {
       href: "/onboarding-demo",
       icon: Activity,
       label: "Live Status",
-      disabled: true,
+      step: -1,
     },
   ];
 
@@ -62,9 +63,10 @@ export function OnboardingSidebar({ step }: { step: number }) {
         <div className="flex items-center gap-2">
            <PeterdrawLogo className="w-8 h-8" />
             <span
-              className={`font-bold text-lg ${
-                state === "collapsed" ? "hidden" : ""
-              }`}
+              className={cn(
+                "font-bold text-lg",
+                state === "collapsed" && "hidden"
+              )}
             >
               Peterdraw
             </span>
@@ -72,30 +74,39 @@ export function OnboardingSidebar({ step }: { step: number }) {
       </SidebarHeader>
       <SidebarContent>
         <SidebarMenu>
-          {menuItems.map((item) => (
-            <SidebarMenuItem key={item.label}>
-              <SidebarMenuButton
-                asChild
-                tooltip={item.label}
-                isActive={(item.label === "Departments" && step === 1) || (item.label === "Doctors" && step === 2)}
-                disabled={item.disabled}
-                className={item.disabled ? "cursor-not-allowed" : ""}
-              >
-                <Link href={item.href} legacyBehavior>
-                    <a className={item.disabled ? "pointer-events-none" : ""}>
-                        <item.icon />
-                        <span>{item.label}</span>
-                    </a>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
+          {menuItems.map((item) => {
+            const isActive = item.step === step;
+            const isDisabled = item.step > step || item.step === -1;
+
+            return (
+              <SidebarMenuItem key={item.label}>
+                <SidebarMenuButton
+                  asChild
+                  tooltip={item.label}
+                  isActive={isActive}
+                  disabled={isDisabled}
+                  className={cn(
+                    "transition-colors duration-300",
+                    isDisabled && "cursor-not-allowed opacity-50 hover:bg-transparent",
+                    isActive && "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
+                  )}
+                >
+                  <Link href={item.href} legacyBehavior>
+                      <a className={isDisabled ? "pointer-events-none" : ""}>
+                          <item.icon />
+                          <span>{item.label}</span>
+                      </a>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )
+          })}
         </SidebarMenu>
         <div className="mt-auto">
             <SidebarSeparator className="my-2"/>
             <SidebarMenu>
                 <SidebarMenuItem>
-                    <SidebarMenuButton tooltip="Logout" disabled>
+                    <SidebarMenuButton tooltip="Logout" disabled className="cursor-not-allowed opacity-50 hover:bg-transparent">
                         <LogOut />
                         <span>Logout</span>
                     </SidebarMenuButton>
