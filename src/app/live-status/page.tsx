@@ -10,6 +10,7 @@ import { liveStatuses } from "@/lib/data";
 import type { LiveStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Maximize, ZoomIn, ZoomOut } from "lucide-react";
+import { AppSidebar } from "@/components/layout/sidebar";
 
 const DoctorStatusCard = ({ data }: { data: LiveStatus }) => (
   <Link href={`/live-status/${data.id}`}>
@@ -66,16 +67,19 @@ const ZoomControls = () => (
 
 export default function LiveStatusPage() {
   return (
-    <SidebarInset>
-      <LiveStatusHeader />
-      <main className="flex-1 p-4 sm:p-6 relative">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {liveStatuses.map((status) => (
-            <DoctorStatusCard key={status.id} data={status} />
-          ))}
-        </div>
-        <ZoomControls />
-      </main>
-    </SidebarInset>
+    <>
+      <AppSidebar />
+      <SidebarInset>
+        <LiveStatusHeader />
+        <main className="flex-1 p-4 sm:p-6 relative">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {liveStatuses.map((status) => (
+              <DoctorStatusCard key={status.id} data={status} />
+            ))}
+          </div>
+          <ZoomControls />
+        </main>
+      </SidebarInset>
+    </>
   );
 }

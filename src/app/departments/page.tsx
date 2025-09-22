@@ -30,6 +30,7 @@ import { db, storage } from "@/lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useToast } from "@/hooks/use-toast";
 import { DepartmentDoctorsDialog } from "@/components/departments/department-doctors-dialog";
+import { AppSidebar } from "@/components/layout/sidebar";
 
 
 export default function DepartmentsPage() {
@@ -154,67 +155,68 @@ export default function DepartmentsPage() {
 
 
   return (
-    <SidebarInset>
-      <DepartmentsHeader />
-      <main className="flex-1 p-4 sm:p-6">
-        <div className="flex justify-end mb-4">
-             <Button onClick={() => setIsAddDepartmentOpen(true)}>
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Add Department
-            </Button>
-             <AddDepartmentForm 
-                onSave={handleSaveDepartment}
-                isOpen={isAddDepartmentOpen}
-                setIsOpen={setIsAddDepartmentOpen}
-                department={null}
-            />
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {departments.map((dept) => (
-                <DepartmentCard key={dept.id} department={dept} onSeeDetail={handleSeeDetail} />
-            ))}
-        </div>
-        <div className="flex items-center justify-between mt-6">
-            <div className="text-sm text-muted-foreground">
-                Showing{" "}
-                <Select defaultValue="9">
-                <SelectTrigger className="inline-flex w-auto h-auto p-1 text-sm">
-                    <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="9">9</SelectItem>
-                    <SelectItem value="18">18</SelectItem>
-                    <SelectItem value="27">27</SelectItem>
-                </SelectContent>
-                </Select>{" "}
-                out of {departments.length}
-            </div>
-            <div className="flex items-center gap-2">
-                <Button variant="outline" size="icon" disabled>
-                    <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Button variant="outline" size="icon" className="bg-primary/10 text-primary">
-                1
-                </Button>
-                <Button variant="outline" size="icon" disabled>
-                    <ChevronRight className="h-4 w-4" />
-                </Button>
-            </div>
-        </div>
-      </main>
-      {selectedDepartment && (
-        <DepartmentDoctorsDialog
-          isOpen={isDoctorsDialogOpen}
-          setIsOpen={setIsDoctorsDialogOpen}
-          department={selectedDepartment}
-          allDoctors={doctors}
-        />
-      )}
-       <footer className="text-center text-sm text-muted-foreground p-4">
-          Copyright &copy; 2024 Peterdraw &nbsp;&middot;&nbsp; Privacy Policy &nbsp;&middot;&nbsp; Term and conditions &nbsp;&middot;&nbsp; Contact
-      </footer>
-    </SidebarInset>
+    <>
+      <AppSidebar />
+      <SidebarInset>
+        <DepartmentsHeader />
+        <main className="flex-1 p-4 sm:p-6">
+          <div className="flex justify-end mb-4">
+              <Button onClick={() => setIsAddDepartmentOpen(true)}>
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Add Department
+              </Button>
+              <AddDepartmentForm 
+                  onSave={handleSaveDepartment}
+                  isOpen={isAddDepartmentOpen}
+                  setIsOpen={setIsAddDepartmentOpen}
+                  department={null}
+              />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {departments.map((dept) => (
+                  <DepartmentCard key={dept.id} department={dept} onSeeDetail={handleSeeDetail} />
+              ))}
+          </div>
+          <div className="flex items-center justify-between mt-6">
+              <div className="text-sm text-muted-foreground">
+                  Showing{" "}
+                  <Select defaultValue="9">
+                  <SelectTrigger className="inline-flex w-auto h-auto p-1 text-sm">
+                      <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                      <SelectItem value="9">9</SelectItem>
+                      <SelectItem value="18">18</SelectItem>
+                      <SelectItem value="27">27</SelectItem>
+                  </SelectContent>
+                  </Select>{" "}
+                  out of {departments.length}
+              </div>
+              <div className="flex items-center gap-2">
+                  <Button variant="outline" size="icon" disabled>
+                      <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" size="icon" className="bg-primary/10 text-primary">
+                  1
+                  </Button>
+                  <Button variant="outline" size="icon" disabled>
+                      <ChevronRight className="h-4 w-4" />
+                  </Button>
+              </div>
+          </div>
+        </main>
+        {selectedDepartment && (
+          <DepartmentDoctorsDialog
+            isOpen={isDoctorsDialogOpen}
+            setIsOpen={setIsDoctorsDialogOpen}
+            department={selectedDepartment}
+            allDoctors={doctors}
+          />
+        )}
+        <footer className="text-center text-sm text-muted-foreground p-4">
+            Copyright &copy; 2024 Peterdraw &nbsp;&middot;&nbsp; Privacy Policy &nbsp;&middot;&nbsp; Term and conditions &nbsp;&middot;&nbsp; Contact
+        </footer>
+      </SidebarInset>
+    </>
   );
 }
-
-    

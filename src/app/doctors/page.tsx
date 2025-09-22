@@ -49,6 +49,7 @@ import { collection, getDocs, addDoc, doc, setDoc, deleteDoc, updateDoc } from "
 import { db, storage } from "@/lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useToast } from "@/hooks/use-toast";
+import { AppSidebar } from "@/components/layout/sidebar";
 
 const DoctorCard = ({ doctor, onEdit, onDelete }: { doctor: Doctor, onEdit: (doctor: Doctor) => void, onDelete: (doctor: Doctor) => void }) => (
     <Card>
@@ -161,7 +162,7 @@ export default function DoctorsPage() {
       }
       
       const scheduleString = doctorData.availabilitySlots
-        .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${ts.from}-${ts.to}`).join(', ')}`)
+        ?.map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${ts.from}-${ts.to}`).join(', ')}`)
         .join('; ');
       
       const dataToSave: any = { ...doctorData };
@@ -182,16 +183,16 @@ export default function DoctorsPage() {
         });
       } else { // Adding new doctor
         const newDoctorRef = doc(collection(db, "doctors"));
-        const newDoctorData: Doctor = {
+        const newDoctorData = {
             ...dataToSave,
             id: newDoctorRef.id,
             avatar: photoUrl,
-            schedule: scheduleString,
+            schedule: scheduleString || 'Not set',
             preferences: 'Not set',
             historicalData: 'No data',
         };
         await setDoc(newDoctorRef, newDoctorData);
-        setDoctors(prev => [...prev, newDoctorData]);
+        setDoctors(prev => [...prev, newDoctorData as Doctor]);
         toast({
           title: "Doctor Added",
           description: `${newDoctorData.name} has been successfully added.`,
@@ -257,128 +258,128 @@ export default function DoctorsPage() {
 
 
   return (
-    <SidebarInset>
-      <DoctorsHeader />
-      <main className="flex flex-1 flex-col gap-6 p-4 sm:p-6">
-        <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-4">
-            <div className="relative flex-1">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                type="search"
-                placeholder="Search name, ID, specialty, etc."
-                className="w-full rounded-lg bg-background pl-8"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                />
-            </div>
-            <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-                <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Department" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="All">All Departments</SelectItem>
-                    {departments.map(dept => (
-                        <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
-            <Select value={specialtyFilter} onValueChange={setSpecialtyFilter}>
-                <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Specialist" />
-                </SelectTrigger>
-                <SelectContent>
-                     {uniqueSpecialties.map(specialty => (
-                        <SelectItem key={specialty} value={specialty}>
-                            {specialty === 'All' ? 'All Specialties' : specialty}
-                        </SelectItem>
-                     ))}
-                </SelectContent>
-            </Select>
-            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as any)}>
-                <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="All">All Statuses</SelectItem>
-                    <SelectItem value="Available">Available</SelectItem>
-                    <SelectItem value="Unavailable">Unavailable</SelectItem>
-                </SelectContent>
-            </Select>
-            <AddDoctorForm 
-                onSave={handleSaveDoctor}
-                isOpen={isAddDoctorOpen || !!editingDoctor}
-                setIsOpen={(open) => {
-                    if (!open) {
-                        setIsAddDoctorOpen(false);
-                        setEditingDoctor(null);
-                    } else {
-                        setIsAddDoctorOpen(true);
-                    }
-                }}
-                doctor={editingDoctor}
-            />
-            </div>
+    <>
+      <AppSidebar />
+      <SidebarInset>
+        <DoctorsHeader />
+        <main className="flex flex-1 flex-col gap-6 p-4 sm:p-6">
+          <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-4">
+              <div className="relative flex-1">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                  type="search"
+                  placeholder="Search name, ID, specialty, etc."
+                  className="w-full rounded-lg bg-background pl-8"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+              </div>
+              <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+                  <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                      <SelectItem value="All">All Departments</SelectItem>
+                      {departments.map(dept => (
+                          <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
+                      ))}
+                  </SelectContent>
+              </Select>
+              <Select value={specialtyFilter} onValueChange={setSpecialtyFilter}>
+                  <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Specialist" />
+                  </SelectTrigger>
+                  <SelectContent>
+                      {uniqueSpecialties.map(specialty => (
+                          <SelectItem key={specialty} value={specialty}>
+                              {specialty === 'All' ? 'All Specialties' : specialty}
+                          </SelectItem>
+                      ))}
+                  </SelectContent>
+              </Select>
+              <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as any)}>
+                  <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                      <SelectItem value="All">All Statuses</SelectItem>
+                      <SelectItem value="Available">Available</SelectItem>
+                      <SelectItem value="Unavailable">Unavailable</SelectItem>
+                  </SelectContent>
+              </Select>
+              <AddDoctorForm 
+                  onSave={handleSaveDoctor}
+                  isOpen={isAddDoctorOpen || !!editingDoctor}
+                  setIsOpen={(open) => {
+                      if (!open) {
+                          setIsAddDoctorOpen(false);
+                          setEditingDoctor(null);
+                      } else {
+                          setIsAddDoctorOpen(true);
+                      }
+                  }}
+                  doctor={editingDoctor}
+              />
+              </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {filteredDoctors.map((doctor) => (
-                    <DoctorCard 
-                        key={doctor.id} 
-                        doctor={doctor} 
-                        onEdit={() => setEditingDoctor(doctor)}
-                        onDelete={() => setDeletingDoctor(doctor)}
-                    />
-                ))}
-            </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {filteredDoctors.map((doctor) => (
+                      <DoctorCard 
+                          key={doctor.id} 
+                          doctor={doctor} 
+                          onEdit={() => setEditingDoctor(doctor)}
+                          onDelete={() => setDeletingDoctor(doctor)}
+                      />
+                  ))}
+              </div>
 
-            <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>Showing</span>
-                <Select defaultValue="12">
-                <SelectTrigger className="w-[70px]">
-                    <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="12">12</SelectItem>
-                    <SelectItem value="24">24</SelectItem>
-                    <SelectItem value="48">48</SelectItem>
-                </SelectContent>
-                </Select>
-                <span>out of {filteredDoctors.length}</span>
-            </div>
-            <div className="flex items-center gap-2">
-                <Button variant="outline" size="icon">
-                <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Button variant="outline" size="icon" className="bg-primary/10 text-primary">1</Button>
-                <Button variant="outline" size="icon">2</Button>
-                <Button variant="outline" size="icon">3</Button>
-                <Button variant="outline" size="icon">4</Button>
-                <Button variant="outline" size="icon">5</Button>
-                <Button variant="outline" size="icon">
-                <ChevronRight className="h-4 w-4" />
-                </Button>
-            </div>
-            </div>
-        </div>
-      </main>
-        <AlertDialog open={!!deletingDoctor} onOpenChange={(open) => !open && setDeletingDoctor(null)}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                <AlertDialogDescription>
-                    This action cannot be undone. This will permanently delete Dr. {deletingDoctor?.name} and remove their data from our servers.
-                </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDeleteDoctor} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
-    </SidebarInset>
+              <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>Showing</span>
+                  <Select defaultValue="12">
+                  <SelectTrigger className="w-[70px]">
+                      <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                      <SelectItem value="12">12</SelectItem>
+                      <SelectItem value="24">24</SelectItem>
+                      <SelectItem value="48">48</SelectItem>
+                  </SelectContent>
+                  </Select>
+                  <span>out of {filteredDoctors.length}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                  <Button variant="outline" size="icon">
+                  <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" size="icon" className="bg-primary/10 text-primary">1</Button>
+                  <Button variant="outline" size="icon">2</Button>
+                  <Button variant="outline" size="icon">3</Button>
+                  <Button variant="outline" size="icon">4</Button>
+                  <Button variant="outline" size="icon">5</Button>
+                  <Button variant="outline" size="icon">
+                  <ChevronRight className="h-4 w-4" />
+                  </Button>
+              </div>
+              </div>
+          </div>
+        </main>
+          <AlertDialog open={!!deletingDoctor} onOpenChange={(open) => !open && setDeletingDoctor(null)}>
+              <AlertDialogContent>
+                  <AlertDialogHeader>
+                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                      This action cannot be undone. This will permanently delete Dr. {deletingDoctor?.name} and remove their data from our servers.
+                  </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDeleteDoctor} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
+                  </AlertDialogFooter>
+              </AlertDialogContent>
+          </AlertDialog>
+      </SidebarInset>
+    </>
   );
 }
-
-    
-    
