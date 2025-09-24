@@ -19,13 +19,13 @@ import type { DateRange } from "react-day-picker";
 import { cn } from "@/lib/utils";
 
 
-const iconMap = {
-    "Total Patients": Users,
-    "Total Doctors": Stethoscope,
-    "Cancelled": XCircle,
-    "Completed Appointments": CheckCircle,
-    "Total Revenue": DollarSign,
-    "Upcoming": CalendarClock,
+const iconMap: { [key: string]: { component: React.ElementType, color: string } } = {
+    "Total Patients": { component: Users, color: "text-cyan-500" },
+    "Total Doctors": { component: Stethoscope, color: "text-fuchsia-500" },
+    "Cancelled": { component: XCircle, color: "text-red-500" },
+    "Completed Appointments": { component: CheckCircle, color: "text-green-500" },
+    "Total Revenue": { component: DollarSign, color: "text-blue-500" },
+    "Upcoming": { component: CalendarClock, color: "text-amber-500" },
 };
 
 
@@ -175,12 +175,12 @@ export default function OverviewStats({ dateRange }: OverviewStatsProps) {
   return (
     <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
       {stats.map((stat) => {
-        const Icon = iconMap[stat.icon as keyof typeof iconMap] || Users;
+        const { component: Icon, color } = iconMap[stat.icon as keyof typeof iconMap] || { component: Users, color: "text-muted-foreground" };
         return (
-            <Card key={stat.title}>
+            <Card key={stat.title} className="shadow-lg shadow-[#dcf2eb]">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
-                <Icon className="h-4 w-4 text-muted-foreground" />
+                <Icon className={cn("h-4 w-4", color)} />
             </CardHeader>
             <CardContent>
                 <div className="text-2xl font-bold">{stat.value}</div>
