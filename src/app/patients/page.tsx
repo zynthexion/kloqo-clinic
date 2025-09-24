@@ -38,7 +38,6 @@ import {
 } from "@/components/ui/select";
 import { parse } from 'date-fns';
 import Link from "next/link";
-import { TopNav } from "@/components/layout/top-nav";
 
 export default function PatientsPage() {
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -192,7 +191,6 @@ export default function PatientsPage() {
 
   return (
     <>
-      <TopNav />
       <div>
         <DashboardHeader />
         <main className="flex-1 p-6 bg-background">

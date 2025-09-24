@@ -47,7 +47,6 @@ import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { DepartmentDoctorsDialog } from "@/components/departments/department-doctors-dialog";
 import { SelectDepartmentDialog } from "@/components/onboarding/select-department-dialog";
-import { TopNav } from "@/components/layout/top-nav";
 
 const superAdminDepartments: Department[] = [
     { id: 'dept-01', name: 'General Medicine', description: 'Comprehensive primary care.', image: 'https://picsum.photos/seed/gm/600/400', imageHint: 'stethoscope pills', doctors: [] },
@@ -213,7 +212,6 @@ export default function DepartmentsPage() {
 
   return (
     <>
-      <TopNav />
       <div className="flex flex-col">
         <DepartmentsHeader />
         <main className="flex-1 p-4 sm:p-6">

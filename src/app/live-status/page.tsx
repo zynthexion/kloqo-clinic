@@ -9,7 +9,6 @@ import { liveStatuses } from "@/lib/data";
 import type { LiveStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Maximize, ZoomIn, ZoomOut } from "lucide-react";
-import { TopNav } from "@/components/layout/top-nav";
 
 const DoctorStatusCard = ({ data }: { data: LiveStatus }) => (
   <Link href={`/live-status/${data.id}`}>
@@ -67,7 +66,6 @@ const ZoomControls = () => (
 export default function LiveStatusPage() {
   return (
     <>
-      <TopNav />
       <div className="flex flex-col">
         <LiveStatusHeader />
         <main className="flex-1 p-4 sm:p-6 relative">

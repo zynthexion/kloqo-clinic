@@ -48,7 +48,6 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { TopNav } from "@/components/layout/top-nav";
 
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -394,7 +393,6 @@ export default function DoctorDetailPage() {
   if (loading) {
     return (
         <>
-            <TopNav />
             <DoctorsHeader />
             <div className="flex items-center justify-center h-full">Loading...</div>
         </>
@@ -404,7 +402,6 @@ export default function DoctorDetailPage() {
   if (!doctor) {
     return (
         <>
-            <TopNav />
             <DoctorsHeader />
             <div className="flex items-center justify-center h-full">Doctor not found.</div>
         </>
@@ -415,7 +412,6 @@ export default function DoctorDetailPage() {
 
   return (
     <>
-      <TopNav />
         <DoctorsHeader />
         <main className="flex-1 p-6 bg-background">
           <Card className="mb-6">

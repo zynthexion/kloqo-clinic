@@ -28,7 +28,6 @@ import { useToast } from "@/hooks/use-toast";
 import { collection, getDocs, setDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { MobileApp } from "@/lib/types";
-import { TopNav } from "@/components/layout/top-nav";
 import { Eye, EyeOff, UserCircle, KeyRound } from "lucide-react";
 
 const formSchema = z.object({
@@ -122,7 +121,6 @@ export default function MobileAppPage() {
 
   return (
     <>
-      <TopNav />
       <div>
         <MobileAppHeader />
         <main className="flex-1 p-6 bg-background">

@@ -21,7 +21,6 @@ import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { parse, isSameDay, parse as parseDateFns, format, getDay } from "date-fns";
 import { cn } from "@/lib/utils";
-import { TopNav } from "@/components/layout/top-nav";
 import {
   Form,
   FormControl,
@@ -334,7 +333,6 @@ export default function AppointmentsPage() {
 
   return (
     <>
-      <TopNav />
       <header className="flex h-14 items-center gap-4 border-b bg-background px-4 sm:px-6">
         <h1 className="text-xl font-semibold md:text-2xl">Appointments</h1>
       </header>

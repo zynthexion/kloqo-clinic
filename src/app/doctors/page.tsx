@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useTransition } from "react";
@@ -46,7 +47,6 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { TopNav } from "@/components/layout/top-nav";
 import Link from 'next/link';
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -505,7 +505,6 @@ export default function DoctorsPage() {
 
   return (
     <>
-      <TopNav />
       <main className="flex-1 overflow-hidden bg-[#bcddef]/30">
         <div className="h-full grid grid-cols-12 gap-6 p-6">
           {/* Left Column: Doctor List */}

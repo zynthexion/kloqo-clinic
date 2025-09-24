@@ -2,7 +2,6 @@
 "use client";
 
 import React, { useState } from "react";
-import { TopNav } from "@/components/layout/top-nav";
 import { AddDepartmentStep } from "@/components/onboarding/add-department-step";
 import { AddDoctorStep } from "@/components/onboarding/add-doctor-step";
 import { Department, Doctor } from "@/lib/types";
@@ -24,7 +23,6 @@ export default function OnboardingDemoPage() {
 
   return (
     <>
-      <TopNav />
       <main className="flex-1 p-4 sm:p-6">
         {step === 1 && <AddDepartmentStep onDepartmentsAdded={handleDepartmentsAdded} />}
         {step === 2 && selectedDepartments.length > 0 && <AddDoctorStep departments={selectedDepartments} onDoctorAdded={handleDoctorAdded} />}

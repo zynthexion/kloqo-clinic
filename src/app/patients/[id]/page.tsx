@@ -27,7 +27,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { TopNav } from "@/components/layout/top-nav";
 
 export default function PatientHistoryPage() {
   const params = useParams();
@@ -103,7 +102,6 @@ export default function PatientHistoryPage() {
 
   return (
     <>
-      <TopNav />
       <div>
         <DashboardHeader />
         <main className="flex-1 p-6 bg-background">

@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { liveStatuses } from "@/lib/data";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CheckCircle, Clock } from "lucide-react";
-import { TopNav } from "@/components/layout/top-nav";
 
 // Dummy data for token details
 const completedTokens = ["A001", "A002"];
@@ -45,7 +44,6 @@ export default function LiveStatusDetailPage() {
   if (!statusData) {
     return (
         <>
-            <TopNav />
             <div className="flex flex-col">
                 <LiveStatusDetailHeader />
                 <main className="flex-1 p-4 sm:p-6 flex items-center justify-center">
@@ -58,7 +56,6 @@ export default function LiveStatusDetailPage() {
 
   return (
     <>
-      <TopNav />
       <div className="flex flex-col">
         <LiveStatusDetailHeader />
         <main className="flex-1 p-4 sm:p-6">

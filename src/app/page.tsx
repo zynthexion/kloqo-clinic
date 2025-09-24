@@ -3,7 +3,6 @@
 
 import { useState } from "react";
 import { format } from "date-fns";
-import { TopNav } from "@/components/layout/top-nav";
 import OverviewStats from "@/components/dashboard/overview-stats";
 import RecentActivity from "@/components/dashboard/recent-activity";
 import DoctorAvailability from "@/components/dashboard/doctor-availability";
@@ -26,7 +25,7 @@ function DashboardHeader({
   onDateRangeChange: (dateRange: DateRange | undefined) => void;
 }) {
   return (
-    <header className="flex h-16 items-center justify-between gap-4 px-6">
+    <header className="flex h-16 items-center justify-between gap-4 px-6 border-b">
       <div>
         <h1 className="text-2xl font-bold">Dashboard</h1>
         <p className="text-sm text-muted-foreground">
@@ -71,7 +70,6 @@ export default function Home() {
 
   return (
     <>
-      <TopNav />
       <DashboardHeader
         dateRange={dateRange}
         onDateRangeChange={setDateRange}
@@ -87,13 +85,13 @@ export default function Home() {
                 <PatientsVsAppointmentsChart dateRange={dateRange} />
             </div>
             <div className="lg:col-span-3">
-               <Card className="h-full flex flex-col bg-[#bcddef]/30">
+               <Card className="h-full flex flex-col bg-[#dcf2eb]">
                   <CardContent className="p-2 flex-grow flex items-center justify-center">
                       <Calendar
                           mode="single"
                           selected={selectedDate}
                           onSelect={handleDateSelect}
-                          className="w-full border-0 shadow-none bg-transparent"
+                          className="w-full border-0 shadow-none bg-transparent [&_button]:text-base [&_caption]:text-lg"
                       />
                   </CardContent>
                 </Card>
