@@ -405,7 +405,6 @@ export default function AppointmentsPage() {
     if (e.key === 'Enter') {
       if (patientSearchResults.length === 0 && patientNameValue.length > 1) {
         e.preventDefault();
-        form.setValue("patientName", patientNameValue);
         setIsPatientPopoverOpen(false);
       }
     }
@@ -726,3 +725,4 @@ export default function AppointmentsPage() {
   );
 }
 
+    
