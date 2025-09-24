@@ -18,7 +18,7 @@ import type { Appointment, Doctor, Patient } from "@/lib/types";
 import { collection, getDocs, setDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
-import { parse, isSameDay, parse as parseDateFns, format, getDay } from "date-fns";
+import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
   Form,
@@ -52,6 +52,7 @@ import WeeklyDoctorAvailability from "@/components/dashboard/weekly-doctor-avail
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -90,6 +91,7 @@ export default function AppointmentsPage() {
   const [isDrawerExpanded, setIsDrawerExpanded] = useState(false);
   const [drawerSearchTerm, setDrawerSearchTerm] = useState("");
   const [filterAvailableDoctors, setFilterAvailableDoctors] = useState(false);
+  const [activeTab, setActiveTab] = useState("upcoming");
 
 
   const { toast } = useToast();
@@ -458,8 +460,21 @@ export default function AppointmentsPage() {
       );
     }
     
+    // Tab filtering
+    if (activeTab === 'upcoming') {
+        filtered = filtered.filter(apt => {
+            const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
+            return (apt.status === 'Confirmed' || apt.status === 'Pending') && (isFuture(aptDate) || isToday(aptDate));
+        });
+    } else if (activeTab === 'completed') {
+        filtered = filtered.filter(apt => {
+            const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
+            return apt.status === 'Confirmed' && isPast(aptDate) && !isToday(aptDate);
+        });
+    }
+
     return filtered.sort((a,b) => new Date(`${a.date} ${a.time}`).getTime() - new Date(`${b.date} ${b.time}`).getTime());
-  }, [appointments, drawerSearchTerm, filterAvailableDoctors, doctors]);
+  }, [appointments, drawerSearchTerm, filterAvailableDoctors, doctors, activeTab]);
 
 
   return (
@@ -749,13 +764,21 @@ export default function AppointmentsPage() {
                 </Button>
                 <Card className="h-full rounded-2xl">
                     <CardHeader className="p-4 border-b">
-                        <div className="flex items-center gap-2">
-                            {isDrawerExpanded && (
-                                <Button variant="outline" size="icon" onClick={() => setIsDrawerExpanded(false)}>
-                                    <ChevronLeft className="h-4 w-4" />
-                                </Button>
-                            )}
-                            <CardTitle>Appointment Details</CardTitle>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                {isDrawerExpanded && (
+                                    <Button variant="outline" size="icon" onClick={() => setIsDrawerExpanded(false)}>
+                                        <ChevronLeft className="h-4 w-4" />
+                                    </Button>
+                                )}
+                                <CardTitle>Appointment Details</CardTitle>
+                            </div>
+                             <Tabs value={activeTab} onValueChange={setActiveTab}>
+                                <TabsList>
+                                    <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
+                                    <TabsTrigger value="completed">Completed</TabsTrigger>
+                                </TabsList>
+                            </Tabs>
                         </div>
                         <div className="flex items-center gap-2 mt-2">
                            <div className="relative flex-1">
