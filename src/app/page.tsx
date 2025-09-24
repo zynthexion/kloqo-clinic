@@ -15,6 +15,7 @@ import type { DateRange } from "react-day-picker";
 import { subDays } from 'date-fns';
 import { Button } from "@/components/ui/button";
 import { Printer, FileDown } from "lucide-react";
+import AppointmentStatusChart from "@/components/dashboard/appointment-status-chart";
 
 function DashboardHeader({
   dateRange,
@@ -79,15 +80,7 @@ export default function Home() {
           <OverviewStats dateRange={dateRange} />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-1">
-                <Card className="h-full flex flex-col">
-                  <CardHeader>
-                      <CardTitle>Appointment Overview</CardTitle>
-                      <CardDescription>Appointments, cancelled, rescheduled, skipped.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex-grow flex items-center justify-center">
-                      <p className="text-sm text-muted-foreground">Graph will be here</p>
-                  </CardContent>
-                </Card>
+                <AppointmentStatusChart dateRange={dateRange} />
             </div>
             <div className="lg:col-span-1">
                <Card className="h-full flex flex-col">
