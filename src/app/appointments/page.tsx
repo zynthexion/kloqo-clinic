@@ -85,10 +85,8 @@ export default function AppointmentsPage() {
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [patientSearchTerm, setPatientSearchTerm] = useState("");
   const [patientSearchResults, setPatientSearchResults] = useState<Patient[]>([]);
   const [isPatientPopoverOpen, setIsPatientPopoverOpen] = useState(false);
-  const patientInputRef = useRef<HTMLInputElement>(null);
 
   const { toast } = useToast();
 
@@ -111,6 +109,8 @@ export default function AppointmentsPage() {
       bookedVia: "Online",
     },
   });
+  
+  const patientSearchTerm = form.watch("patientName");
 
   useEffect(() => {
     const fetchAppointmentsAndPatients = async () => {
@@ -186,7 +186,6 @@ export default function AppointmentsPage() {
       date: undefined, time: undefined, department: "", treatment: "",
       place: "", status: "Pending", bookedVia: "Online",
     });
-    setPatientSearchTerm("");
   }
 
   useEffect(() => {
@@ -199,7 +198,6 @@ export default function AppointmentsPage() {
                 doctor: doctor.id,
             });
             setSelectedDoctorId(doctor.id);
-            setPatientSearchTerm(editingAppointment.patientName);
         }
     } else {
         resetForm();
@@ -207,7 +205,7 @@ export default function AppointmentsPage() {
   }, [editingAppointment, form, doctors]);
 
   useEffect(() => {
-    if (patientSearchTerm.length > 1) {
+    if (patientSearchTerm && patientSearchTerm.length > 1) {
       const results = allPatients.filter(p => p.name.toLowerCase().includes(patientSearchTerm.toLowerCase()));
       setPatientSearchResults(results);
       if (results.length > 0) {
@@ -301,7 +299,6 @@ export default function AppointmentsPage() {
     form.setValue("gender", patient.gender);
     form.setValue("phone", patient.phone);
     form.setValue("place", patient.place || "");
-    setPatientSearchTerm(patient.name);
     setIsPatientPopoverOpen(false);
   }
 
@@ -434,13 +431,7 @@ export default function AppointmentsPage() {
                                       <FormControl>
                                         <Input 
                                           placeholder="John Doe" 
-                                          {...field} 
-                                          ref={patientInputRef}
-                                          onChange={(e) => {
-                                              field.onChange(e);
-                                              setPatientSearchTerm(e.target.value);
-                                          }}
-                                          value={patientSearchTerm}
+                                          {...field}
                                         />
                                       </FormControl>
                                     </PopoverTrigger>
