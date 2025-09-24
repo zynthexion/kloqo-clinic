@@ -68,8 +68,6 @@ const formSchema = z.object({
   bookedVia: z.enum(["Online", "Phone", "Walk-in"]),
   place: z.string().min(2, { message: "Place must be at least 2 characters." }),
   tokenNumber: z.string().optional(),
-  status: z.enum(["Confirmed", "Pending", "Cancelled"]).optional(),
-  treatment: z.string().optional(),
 });
 
 type AddAppointmentFormValues = z.infer<typeof formSchema>;
@@ -244,7 +242,7 @@ export default function AppointmentsPage() {
      try {
         const doctorName = doctors.find(d => d.id === values.doctor)?.name || "Unknown Doctor";
         
-        const dataToSave: Omit<AddAppointmentFormValues, 'date' | 'status' | 'treatment'> & { date: string, status: 'Confirmed' | 'Pending' | 'Cancelled', treatment: string } = {
+        const dataToSave: Omit<AddAppointmentFormValues, 'date'> & { date: string, status: 'Confirmed' | 'Pending' | 'Cancelled', treatment: string } = {
             ...values,
             date: format(values.date, "d MMMM yyyy"),
             doctor: doctorName,
@@ -724,7 +722,7 @@ export default function AppointmentsPage() {
             
             <aside className={cn(
               "flex-shrink-0 overflow-hidden relative transition-all duration-300 ease-in-out",
-              isDrawerExpanded ? "w-full" : "w-1/3"
+              isDrawerExpanded ? "w-2/3" : "w-1/3"
             )}>
                 <Button 
                     variant="outline" 
@@ -883,7 +881,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
-    
-
-    
