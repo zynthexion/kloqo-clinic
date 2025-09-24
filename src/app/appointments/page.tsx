@@ -498,7 +498,7 @@ export default function AppointmentsPage() {
                 <Button 
                     variant="outline" 
                     size="icon" 
-                    className="absolute top-1/2 -right-5 z-20 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
+                    className="absolute top-1/2 -right-4 z-20 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
                     onClick={(e) => {
                         e.stopPropagation();
                         setIsDrawerExpanded(false);
@@ -752,7 +752,7 @@ export default function AppointmentsPage() {
                     variant="outline" 
                     size="icon" 
                     className={cn(
-                        "absolute top-1/2 -left-5 z-20 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground",
+                        "absolute top-1/2 -left-4 z-20 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground",
                         isDrawerExpanded && "hidden"
                     )}
                     onClick={(e) => {
@@ -923,5 +923,7 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
 
     
