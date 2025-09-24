@@ -553,15 +553,55 @@ export default function DoctorsPage() {
                     data-ai-hint="doctor portrait"
                 />
                 <div className="flex-grow text-white space-y-1.5">
-                    <p className="font-bold text-2xl">{selectedDoctor.name}</p>
-                    <p className="text-md opacity-90">
-                        {selectedDoctor.degrees?.join(", ")} - {selectedDoctor.department}
-                    </p>
+                    {isEditingDetails ? (
+                       <>
+                        <div className="flex items-center gap-2">
+                            <Input 
+                                value={newName} 
+                                onChange={(e) => setNewName(e.target.value)} 
+                                className="text-2xl font-bold h-10 bg-transparent border-white/50"
+                                disabled={isPending}
+                            />
+                        </div>
+                         <div className="flex items-center gap-2 mt-1">
+                            <Input 
+                                value={newSpecialty} 
+                                onChange={(e) => setNewSpecialty(e.target.value)} 
+                                className="text-md h-9 bg-transparent border-white/50"
+                                disabled={isPending}
+                            />
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                            <Select onValueChange={setNewDepartment} value={newDepartment}>
+                                <SelectTrigger className="w-[200px] h-9 bg-transparent border-white/50">
+                                    <SelectValue placeholder="Select department" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {departments.map(dept => (
+                                        <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                       </>
+                    ) : (
+                       <>
+                        <p className="font-bold text-2xl">{selectedDoctor.name}</p>
+                        <p className="text-md opacity-90">
+                            {selectedDoctor.degrees?.join(", ")} - {selectedDoctor.department}
+                        </p>
+                       </>
+                    )}
                     <p className="text-md opacity-90">{selectedDoctor.experience} Years of experience</p>
                     <div className="flex items-center gap-2">
                         <StarRating rating={selectedDoctor.rating || 0} />
                         <span className="text-md opacity-90">({selectedDoctor.reviews}+ Reviews)</span>
                     </div>
+                </div>
+                <div className="flex flex-col gap-2 self-start">
+                    <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" onClick={() => setIsEditingDetails(prev => !prev)}>
+                        <Edit className="h-5 w-5" />
+                    </Button>
                 </div>
                 <div className="flex flex-col gap-2">
                     
@@ -587,7 +627,24 @@ export default function DoctorsPage() {
                         <Clock className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{selectedDoctor.averageConsultingTime || 0} min</div>
+                        {isEditingTime ? (
+                            <div className="flex items-center gap-2 mt-1">
+                                <Input 
+                                    type="number" 
+                                    value={newAvgTime} 
+                                    onChange={(e) => setNewAvgTime(e.target.value)} 
+                                    className="w-20 h-8"
+                                    disabled={isPending}
+                                />
+                                <Button size="icon" className="h-8 w-8" onClick={handleTimeSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
+                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => {setIsEditingTime(false); setNewAvgTime(selectedDoctor.averageConsultingTime || "")}} disabled={isPending}><X className="h-4 w-4"/></Button>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2">
+                                <p className="text-2xl font-bold">{selectedDoctor.averageConsultingTime || 0} min</p>
+                                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingTime(true)}><Edit className="h-3 w-3"/></Button>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
                 <Card>
