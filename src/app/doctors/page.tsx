@@ -873,7 +873,6 @@ export default function DoctorsPage() {
             <Tabs defaultValue="details" onValueChange={setActiveTab}>
                 <TabsList>
                     <TabsTrigger value="details">Doctor Details</TabsTrigger>
-                    <TabsTrigger value="appointments">Appointments</TabsTrigger>
                     <TabsTrigger value="analytics">Analytics</TabsTrigger>
                     <TabsTrigger value="reviews">Reviews</TabsTrigger>
                 </TabsList>
@@ -982,7 +981,9 @@ export default function DoctorsPage() {
                                                                 const currentDays = field.value || [];
                                                                 const newDays = checked
                                                                 ? [...currentDays, day]
-                                                                : currentDays.filter((value) => value !== day);
+                                                                : currentDays.filter(
+                                                                    (value) => value !== day
+                                                                  );
                                                                 field.onChange(newDays);
 
                                                                 const dayIndex = fields.findIndex(f => f.day === day);
@@ -1104,72 +1105,6 @@ export default function DoctorsPage() {
                     </div>
                 </div>
                 </TabsContent>
-                <TabsContent value="appointments" className="mt-4">
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div>
-                            <Card>
-                                <CardContent className="p-2">
-                                    <Calendar
-                                        mode="single"
-                                        selected={selectedDate}
-                                        onSelect={setSelectedDate}
-                                        className="w-full"
-                                        defaultMonth={selectedDate}
-                                        disabled={(date) => leaveDates.some(leaveDate => isSameDay(date, leaveDate))}
-                                        modifiers={{ leave: leaveDates }}
-                                        modifiersStyles={{ 
-                                        leave: { color: 'red', textDecoration: 'line-through' },
-                                        }}
-                                    />
-                                </CardContent>
-                            </Card>
-                        </div>
-                        <div className="lg:col-span-2">
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Appointments for {selectedDate ? format(selectedDate, "MMMM d, yyyy") : 'all time'}</CardTitle>
-                                    <CardDescription>
-                                        {isDoctorOnLeave 
-                                            ? "The doctor is on leave on this day."
-                                            : "A list of scheduled appointments for the selected date."}
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Patient</TableHead>
-                                                <TableHead>Age</TableHead>
-                                                <TableHead>Gender</TableHead>
-                                                <TableHead>Booked Via</TableHead>
-                                                <TableHead>Token Number</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {filteredAppointments.length > 0 && !isDoctorOnLeave ? (
-                                                filteredAppointments.map((apt) => (
-                                                    <TableRow key={apt.id} className={cn(isAppointmentOnLeave(apt) && "bg-red-100 dark:bg-red-900/30")}>
-                                                        <TableCell className="font-medium">{apt.patientName}</TableCell>
-                                                        <TableCell>{apt.age}</TableCell>
-                                                        <TableCell>{apt.gender}</TableCell>
-                                                        <TableCell>{apt.bookedVia}</TableCell>
-                                                        <TableCell>{apt.tokenNumber}</TableCell>
-                                                    </TableRow>
-                                                ))
-                                            ) : (
-                                                <TableRow>
-                                                    <TableCell colSpan={5} className="text-center h-24">
-                                                        {isDoctorOnLeave ? "Doctor on leave." : "No appointments for this day."}
-                                                    </TableCell>
-                                                </TableRow>
-                                            )}
-                                        </TableBody>
-                                    </Table>
-                                </CardContent>
-                            </Card>
-                        </div>
-                    </div>
-                </TabsContent>
                 <TabsContent value="analytics" className="mt-4 space-y-6">
                     <div className="flex justify-between items-center">
                         <p className="text-sm text-muted-foreground">
@@ -1227,3 +1162,6 @@ export default function DoctorsPage() {
 
 
 
+
+
+    
