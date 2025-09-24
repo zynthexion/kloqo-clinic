@@ -118,10 +118,7 @@ const DoctorListItem = ({ doctor, onSelect, isSelected }: { doctor: Doctor, onSe
         </div>
         <div className="flex-grow">
             <p className="font-bold text-base text-gray-800">{doctor.name}</p>
-            <p className="text-sm text-gray-500">{doctor.specialty}</p>
-            <Link href={`/doctors/${doctor.id}`} onClick={(e) => e.stopPropagation()} className="text-sm text-teal-600 hover:underline font-semibold mt-1 inline-block">
-                View Profile
-            </Link>
+            <p className="text-sm text-gray-500">{doctor.department}</p>
         </div>
     </div>
 );
