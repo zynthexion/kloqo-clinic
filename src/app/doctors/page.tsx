@@ -53,6 +53,9 @@ import PatientsVsAppointmentsChart from "@/components/dashboard/patients-vs-appo
 import { DateRange } from "react-day-picker";
 import { subDays } from 'date-fns';
 import { AddDoctorForm } from "@/components/doctors/add-doctor-form";
+import OverviewStats from "@/components/dashboard/overview-stats";
+import AppointmentStatusChart from "@/components/dashboard/appointment-status-chart";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -1162,16 +1165,28 @@ export default function DoctorsPage() {
                         </div>
                     </div>
                 </TabsContent>
-                <TabsContent value="analytics" className="mt-4">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Doctor Analytics</CardTitle>
-                            <CardDescription>Performance metrics for Dr. {selectedDoctor.name}.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <PatientsVsAppointmentsChart dateRange={dateRange} />
-                        </CardContent>
-                    </Card>
+                <TabsContent value="analytics" className="mt-4 space-y-6">
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <h2 className="text-2xl font-bold">Analytics for Dr. {selectedDoctor.name}</h2>
+                            <p className="text-sm text-muted-foreground">
+                            {dateRange?.from ? 
+                                dateRange.to ? `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}`
+                                : format(dateRange.from, "LLL dd, y")
+                                : "Select a date range"
+                            }
+                            </p>
+                        </div>
+                        <DateRangePicker 
+                            onDateChange={setDateRange}
+                            initialDateRange={dateRange}
+                        />
+                    </div>
+                    <OverviewStats dateRange={dateRange} doctorId={selectedDoctor.id} />
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <AppointmentStatusChart dateRange={dateRange} doctorId={selectedDoctor.id} />
+                        <PatientsVsAppointmentsChart dateRange={dateRange} />
+                    </div>
                 </TabsContent>
                 <TabsContent value="reviews" className="mt-4">
                     <Card>

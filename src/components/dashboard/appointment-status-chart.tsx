@@ -1,10 +1,11 @@
 
+
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Appointment } from "@/lib/types";
+import type { Appointment, Doctor } from "@/lib/types";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import type { DateRange } from "react-day-picker";
@@ -29,10 +30,12 @@ const statusLabels: { [key: string]: string } = {
 
 type AppointmentStatusChartProps = {
   dateRange: DateRange | undefined;
+  doctorId?: string;
 };
 
-export default function AppointmentStatusChart({ dateRange }: AppointmentStatusChartProps) {
+export default function AppointmentStatusChart({ dateRange, doctorId }: AppointmentStatusChartProps) {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -42,6 +45,12 @@ export default function AppointmentStatusChart({ dateRange }: AppointmentStatusC
       const appointmentsSnapshot = await getDocs(appointmentsCollection);
       const appointmentsList = appointmentsSnapshot.docs.map(doc => doc.data() as Appointment);
       setAppointments(appointmentsList);
+      
+      const doctorsCollection = collection(db, "doctors");
+      const doctorsSnapshot = await getDocs(doctorsCollection);
+      const doctorsList = doctorsSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}) as Doctor);
+      setDoctors(doctorsList);
+
       setLoading(false);
     };
     fetchAppointments();
@@ -50,10 +59,19 @@ export default function AppointmentStatusChart({ dateRange }: AppointmentStatusC
   const chartData = useMemo(() => {
     if (!dateRange?.from) return [];
 
+    let filteredAppointments = appointments;
+
+    if (doctorId) {
+        const doctor = doctors.find(d => d.id === doctorId);
+        if (doctor) {
+            filteredAppointments = appointments.filter(apt => apt.doctor === doctor.name);
+        }
+    }
+
     const from = startOfDay(dateRange.from);
     const to = dateRange.to ? startOfDay(dateRange.to) : from;
 
-    const rangeAppointments = appointments.filter(apt => {
+    const rangeAppointments = filteredAppointments.filter(apt => {
       try {
         const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
         return isWithinInterval(aptDate, { start: from, end: to });
@@ -74,7 +92,7 @@ export default function AppointmentStatusChart({ dateRange }: AppointmentStatusC
       { name: "didNotShow", value: didNotShow },
     ].filter(item => item.value > 0);
 
-  }, [appointments, dateRange]);
+  }, [appointments, dateRange, doctorId, doctors]);
   
   if (loading) {
     return (

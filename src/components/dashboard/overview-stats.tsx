@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -31,6 +32,7 @@ const iconMap: { [key: string]: { component: React.ElementType, color: string } 
 
 type OverviewStatsProps = {
   dateRange: DateRange | undefined;
+  doctorId?: string;
 };
 
 type Stat = {
@@ -42,7 +44,7 @@ type Stat = {
 }
 
 
-export default function OverviewStats({ dateRange }: OverviewStatsProps) {
+export default function OverviewStats({ dateRange, doctorId }: OverviewStatsProps) {
   const [stats, setStats] = useState<Stat[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -55,8 +57,15 @@ export default function OverviewStats({ dateRange }: OverviewStatsProps) {
           getDocs(collection(db, "doctors")),
         ]);
 
-        const allAppointments = appointmentsSnapshot.docs.map(doc => doc.data() as Appointment);
-        const allDoctors = doctorsSnapshot.docs.map(doc => doc.data() as Doctor);
+        let allAppointments = appointmentsSnapshot.docs.map(doc => doc.data() as Appointment);
+        const allDoctors = doctorsSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}) as Doctor);
+
+        if (doctorId) {
+            const doctor = allDoctors.find(d => d.id === doctorId);
+            if (doctor) {
+                allAppointments = allAppointments.filter(apt => apt.doctor === doctor.name);
+            }
+        }
 
         // --- Period Calculation ---
         const now = new Date();
@@ -96,7 +105,7 @@ export default function OverviewStats({ dateRange }: OverviewStatsProps) {
             return `${change.toFixed(0)}%`;
         };
         
-        const upcomingAppointments = allAppointments.filter(apt => isFuture(parse(apt.date, 'd MMMM yyyy', new Date()))).length;
+        const upcomingAppointments = allAppointments.filter(apt => (apt.status === 'Confirmed' || apt.status === 'Pending') && isFuture(parse(apt.date, 'd MMMM yyyy', new Date()))).length;
 
         const allStats: Stat[] = [
           { 
@@ -106,11 +115,11 @@ export default function OverviewStats({ dateRange }: OverviewStatsProps) {
               change: calculateChange(currentStats.totalPatients, previousStats.totalPatients),
               changeType: currentStats.totalPatients >= previousStats.totalPatients ? 'increase' : 'decrease'
           },
-          { 
+          ...(!doctorId ? [{ 
               title: "Total Doctors", 
               value: allDoctors.length, 
               icon: "Total Doctors" 
-          },
+          }] : []),
           { 
               title: "Completed Appointments", 
               value: currentStats.completedAppointments, 
@@ -151,7 +160,7 @@ export default function OverviewStats({ dateRange }: OverviewStatsProps) {
     if (dateRange) {
       fetchStats();
     }
-  }, [dateRange]);
+  }, [dateRange, doctorId]);
   
   if (loading) {
       return (
@@ -173,7 +182,7 @@ export default function OverviewStats({ dateRange }: OverviewStatsProps) {
   }
 
   return (
-    <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+    <div className={cn("grid gap-6 sm:grid-cols-2 md:grid-cols-3", doctorId ? "lg:grid-cols-3 xl:grid-cols-5" : "lg:grid-cols-4 xl:grid-cols-6")}>
       {stats.map((stat) => {
         const { component: Icon, color } = iconMap[stat.icon as keyof typeof iconMap] || { component: Users, color: "text-muted-foreground" };
         return (
