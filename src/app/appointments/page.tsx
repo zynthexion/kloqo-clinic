@@ -762,12 +762,16 @@ export default function AppointmentsPage() {
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead>Patient</TableHead>
+                                            <TableHead>Age</TableHead>
+                                            <TableHead>Gender</TableHead>
                                             <TableHead>Phone</TableHead>
                                             <TableHead>Place</TableHead>
                                             <TableHead>Doctor</TableHead>
                                             <TableHead>Department</TableHead>
                                             <TableHead>Date</TableHead>
                                             <TableHead>Time</TableHead>
+                                            <TableHead>Booked Via</TableHead>
+                                            <TableHead>Token</TableHead>
                                             <TableHead className="text-right">Actions</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -775,12 +779,16 @@ export default function AppointmentsPage() {
                                         {filteredAppointments.map(appointment => (
                                             <TableRow key={appointment.id} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
                                                 <TableCell className="font-medium">{appointment.patientName}</TableCell>
+                                                <TableCell>{appointment.age}</TableCell>
+                                                <TableCell>{appointment.gender}</TableCell>
                                                 <TableCell>{appointment.phone}</TableCell>
                                                 <TableCell>{appointment.place}</TableCell>
                                                 <TableCell>{appointment.doctor}</TableCell>
                                                 <TableCell>{appointment.department}</TableCell>
                                                 <TableCell>{format(parse(appointment.date, "d MMMM yyyy", new Date()), "MMM d, yy")}</TableCell>
                                                 <TableCell>{appointment.time}</TableCell>
+                                                <TableCell>{appointment.bookedVia}</TableCell>
+                                                <TableCell>{appointment.tokenNumber}</TableCell>
                                                 <TableCell className="text-right">
                                                     <DropdownMenu>
                                                         <DropdownMenuTrigger asChild>
