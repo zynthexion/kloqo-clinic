@@ -568,7 +568,7 @@ export default function DoctorsPage() {
                     </div>
                 </div>
                 <div className="flex flex-col gap-2">
-                    <Button variant="secondary" size="sm"><LinkIcon className="mr-2 h-4 w-4"/> View Full Profile</Button>
+                    
                     <div className="flex items-center space-x-2 bg-black/20 p-2 rounded-md">
                       <Switch
                         id="status-switch"
@@ -933,4 +933,3 @@ export default function DoctorsPage() {
     </>
   );
 }
-
