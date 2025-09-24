@@ -39,7 +39,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, FileDown, Filter, Printer, Search, MoreHorizontal, Eye, Edit, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileDown, Filter, Printer, Search, MoreHorizontal, Eye, Edit, Trash2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -472,9 +472,19 @@ export default function AppointmentsPage() {
       <div className="relative flex flex-1 overflow-hidden">
         <div className="flex flex-1 p-6 gap-6">
             <main className={cn(
-              "flex-shrink-0 overflow-auto pr-6 transition-all duration-300 ease-in-out",
-              isDrawerExpanded ? "w-1/3 -ml-[33.333%]" : "w-2/3 -ml-0"
+              "flex-shrink-0 overflow-visible relative transition-all duration-300 ease-in-out",
+              isDrawerExpanded ? "w-1/3 -ml-[calc(33.333%-4rem)]" : "w-2/3 -ml-0"
             )}>
+               {isDrawerExpanded && (
+                  <Button 
+                      variant="outline" 
+                      size="icon" 
+                      className="absolute top-1/2 -right-10 z-10 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
+                      onClick={() => setIsDrawerExpanded(false)}
+                  >
+                      <ChevronRight className="h-5 w-5" />
+                  </Button>
+                )}
                 <Card className="h-full">
                   <CardHeader>
                     <CardTitle>{isEditing ? "Reschedule Appointment" : "Book New Appointment"}</CardTitle>
