@@ -481,18 +481,7 @@ export default function AppointmentsPage() {
       <header className="flex h-14 items-center gap-4 border-b bg-background px-4 sm:px-6">
         <h1 className="text-xl font-semibold md:text-2xl">Appointments</h1>
       </header>
-      <div className="relative flex flex-1 overflow-hidden">
-        <Button
-          variant="outline"
-          size="icon"
-          className="absolute top-1/2 -left-4 z-20 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsDrawerExpanded(!isDrawerExpanded);
-          }}
-        >
-          <ChevronRight className="h-5 w-5" />
-        </Button>
+      <div className="flex flex-1 items-start overflow-hidden">
         <main
           onClick={() => {
             if (isDrawerExpanded) {
@@ -664,7 +653,7 @@ export default function AppointmentsPage() {
                                       leave: leaveDates,
                                   }}
                                   modifiersStyles={{
-                                      available: { backgroundColor: '#D4EDDA', color: '#155724' },
+                                      available: { backgroundColor: 'hsl(var(--accent))', color: 'hsl(var(--accent-foreground))' },
                                       leave: { backgroundColor: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' },
                                   }}
                                   />
@@ -741,6 +730,19 @@ export default function AppointmentsPage() {
             </CardContent>
           </Card>
         </main>
+        <div className="flex h-full items-center justify-center z-20 px-2 bg-background">
+          <Button
+            variant="outline"
+            size="icon"
+            className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsDrawerExpanded(!isDrawerExpanded);
+            }}
+          >
+            {isDrawerExpanded ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
+          </Button>
+        </div>
         <aside className={cn(
             "relative flex-shrink-0 p-6 pl-0 transition-all duration-300 ease-in-out",
             isDrawerExpanded ? "w-9/12" : "w-1/3"
@@ -749,11 +751,6 @@ export default function AppointmentsPage() {
             <CardHeader className="p-4 border-b">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  {isDrawerExpanded && (
-                    <Button variant="outline" size="icon" onClick={() => setIsDrawerExpanded(false)}>
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  )}
                   <CardTitle>Appointment Details</CardTitle>
                 </div>
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -905,5 +902,7 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
 
     
