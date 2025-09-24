@@ -21,12 +21,10 @@ import type { DateRange } from "react-day-picker";
 
 
 const iconMap = {
-    "Total Appointments": BriefcaseMedical,
     "Total Patients": Users,
     "Total Doctors": Stethoscope,
     "Cancelled": XCircle,
-    "Rescheduled": Repeat,
-    "Completed": CheckCircle,
+    "Completed Appointments": CheckCircle,
     "Total Revenue": DollarSign,
     "Upcoming": CalendarClock,
 };
@@ -62,15 +60,12 @@ export default function OverviewStats({ dateRange }: OverviewStatsProps) {
             }
         }) : allAppointments;
 
-        const totalAppointments = appointments.length;
-
         const uniquePatients = new Set(appointments.map(apt => apt.patientName + apt.phone));
         const totalPatients = uniquePatients.size;
         
         const totalDoctors = allDoctors.length;
         
         const cancelledAppointments = appointments.filter(apt => apt.status === 'Cancelled').length;
-        const rescheduledAppointments = 0; 
         const completedAppointments = appointments.filter(apt => {
             try {
                return apt.status === 'Confirmed' && isPast(parse(apt.date, 'd MMMM yyyy', new Date()))
@@ -90,14 +85,12 @@ export default function OverviewStats({ dateRange }: OverviewStatsProps) {
         }).length;
 
         const allStats = [
-          { title: "Total Appointments", value: totalAppointments, icon: "Total Appointments" },
           { title: "Total Patients", value: totalPatients, icon: "Total Patients" },
           { title: "Total Doctors", value: totalDoctors, icon: "Total Doctors" },
-          { title: "Cancelled", value: cancelledAppointments, icon: "Cancelled" },
-          { title: "Rescheduled", value: rescheduledAppointments, icon: "Rescheduled" },
-          { title: "Completed", value: completedAppointments, icon: "Completed" },
-          { title: "Total Revenue", value: totalRevenue, icon: "Total Revenue" },
           { title: "Upcoming", value: upcomingAppointments, icon: "Upcoming" },
+          { title: "Completed Appointments", value: completedAppointments, icon: "Completed Appointments" },
+          { title: "Cancelled", value: cancelledAppointments, icon: "Cancelled" },
+          { title: "Total Revenue", value: totalRevenue, icon: "Total Revenue" },
         ];
 
         setStats(allStats);
@@ -115,7 +108,7 @@ export default function OverviewStats({ dateRange }: OverviewStatsProps) {
   if (loading) {
       return (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
-              {Array.from({ length: 8 }).map((_, i) => (
+              {Array.from({ length: 6 }).map((_, i) => (
                   <Card key={i} className="animate-pulse">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                           <div className="h-4 bg-muted rounded w-2/4"></div>
@@ -149,3 +142,4 @@ export default function OverviewStats({ dateRange }: OverviewStatsProps) {
     </div>
   );
 }
+
