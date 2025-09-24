@@ -373,12 +373,12 @@ export default function AppointmentsPage() {
 
 
   const timeSlots = useMemo(() => {
-    if (!selectedDate || !selectedDoctor || !selectedDoctor.availabilitySlots || !selectedDoctor.averageConsultingTime) {
+    if (!selectedDate || !selectedDoctor || !selectedDoctor.averageConsultingTime) {
       return [];
     }
 
     const dayOfWeek = daysOfWeek[getDay(selectedDate)];
-    const availabilityForDay = selectedDoctor.availabilitySlots.find(s => s.day === dayOfWeek);
+    const availabilityForDay = selectedDoctor.availabilitySlots?.find(s => s.day === dayOfWeek);
     if (!availabilityForDay) return [];
     
     const formattedDate = format(selectedDate, "d MMMM yyyy");
@@ -729,7 +729,10 @@ export default function AppointmentsPage() {
                 <Button 
                     variant="outline" 
                     size="icon" 
-                    className="absolute top-1/2 -left-5 z-10 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground animate-wave"
+                    className={cn(
+                        "absolute top-1/2 -left-5 z-10 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground",
+                        isDrawerExpanded && "hidden"
+                    )}
                     onClick={() => setIsDrawerExpanded(!isDrawerExpanded)}
                 >
                     <ChevronLeft className={cn("h-5 w-5 transition-transform duration-300", isDrawerExpanded && "rotate-180")} />
@@ -880,5 +883,7 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
 
     
