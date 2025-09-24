@@ -25,6 +25,7 @@ import {
   Mail,
   Phone,
   Cake,
+  Star,
 } from "lucide-react";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +48,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+const StarRating = ({ rating }: { rating: number }) => (
+  <div className="flex items-center">
+    {[...Array(5)].map((_, i) => (
+      <Star
+        key={i}
+        className={cn("h-3 w-3", i < rating ? "text-yellow-400 fill-yellow-400" : "text-gray-300")}
+      />
+    ))}
+  </div>
+);
+
+
 const DoctorListItem = ({ doctor, onSelect, isSelected }: { doctor: Doctor, onSelect: () => void, isSelected: boolean }) => (
     <Card
       className={cn(
@@ -68,7 +81,10 @@ const DoctorListItem = ({ doctor, onSelect, isSelected }: { doctor: Doctor, onSe
                 <div className="flex-grow">
                     <p className={cn("font-bold text-md", isSelected && "text-primary")}>{doctor.name}</p>
                     <p className="text-sm text-muted-foreground">{doctor.specialty}</p>
-                    <p className="text-xs text-muted-foreground">{doctor.department}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                        <StarRating rating={4} />
+                        <span className="text-xs text-muted-foreground">(120 Reviews)</span>
+                    </div>
                 </div>
             </div>
             <div className="mt-4 flex justify-between items-center text-xs text-muted-foreground">
@@ -358,7 +374,7 @@ export default function DoctorsPage() {
                                </div>
                                <div className="flex items-center justify-between gap-3">
                                   <p className="text-muted-foreground">Avg. Consulting Time</p>
-                                  <p className="font-semibold">{selectedDoctor.averageConsultingTime ?? 'N/A'} min</p>
+                                  <p className="font-semibold">{selectedDoctor.averageConsultingTime ?? 'NA'} min</p>
                                </div>
                             </div>
                         </div>
@@ -381,5 +397,7 @@ export default function DoctorsPage() {
     </>
   );
 }
+
+    
 
     
