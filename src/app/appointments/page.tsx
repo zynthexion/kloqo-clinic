@@ -700,7 +700,7 @@ export default function AppointmentsPage() {
                 </Button>
                 <Card className="h-full rounded-2xl">
                     <CardHeader className="p-6 border-b">
-                        <CardTitle>Upcoming Appointments</CardTitle>
+                        <CardTitle>Appointment Details</CardTitle>
                         <CardDescription>A list of all scheduled appointments.</CardDescription>
                     </CardHeader>
                     <CardContent className="p-0">
@@ -765,6 +765,8 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
 
     
 
