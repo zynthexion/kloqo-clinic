@@ -206,10 +206,14 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     if (patientSearchTerm && patientSearchTerm.length > 1) {
-      const results = allPatients.filter(p => p.name.toLowerCase().includes(patientSearchTerm.toLowerCase()));
+      const results = allPatients.filter(p => 
+        p.name.toLowerCase().replace(/\s/g, "").includes(patientSearchTerm.toLowerCase().replace(/\s/g, ""))
+      );
       setPatientSearchResults(results);
       if (results.length > 0) {
         setIsPatientPopoverOpen(true);
+      } else {
+        setIsPatientPopoverOpen(false);
       }
     } else {
       setPatientSearchResults([]);
