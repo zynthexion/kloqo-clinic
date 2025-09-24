@@ -9,6 +9,8 @@ import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { ScrollArea } from "../ui/scroll-area";
 import { getDay, format } from "date-fns";
+import { Button } from "../ui/button";
+import Link from "next/link";
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -59,9 +61,17 @@ export default function DoctorAvailability({ selectedDate }: DoctorAvailabilityP
                             className="rounded-full"
                             data-ai-hint="doctor portrait"
                         />
-                        <div>
+                        <div className="flex-grow">
                             <p className="font-semibold text-sm">{doctor.name}</p>
                             <p className="text-xs text-muted-foreground">{doctor.specialty}</p>
+                        </div>
+                        <div className="flex gap-2">
+                           <Button asChild variant="outline" size="sm">
+                               <Link href={`/doctors/${doctor.id}`}>View Profile</Link>
+                           </Button>
+                           <Button asChild variant="default" size="sm">
+                                <Link href="/appointments">Book Appt.</Link>
+                           </Button>
                         </div>
                     </div>
                 ))
