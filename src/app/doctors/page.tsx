@@ -19,13 +19,10 @@ import {
   Search,
   Users,
   CalendarDays,
-  Clock,
-  User,
-  BriefcaseMedical,
+  Star,
   Mail,
   Phone,
   Cake,
-  Star,
 } from "lucide-react";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
@@ -36,17 +33,8 @@ import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import Link from 'next/link';
 import { TopNav } from "@/components/layout/top-nav";
-import { Calendar } from "@/components/ui/calendar";
-import { format, isSameDay, parse, getDay, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
 import { cn } from "@/lib/utils";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+
 
 const StarRating = ({ rating }: { rating: number }) => (
   <div className="flex items-center">
@@ -113,10 +101,8 @@ const DoctorListItem = ({ doctor, onSelect, isSelected }: { doctor: Doctor, onSe
 export default function DoctorsPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
   
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
 
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
@@ -128,10 +114,9 @@ export default function DoctorsPage() {
   useEffect(() => {
     const fetchAllData = async () => {
       try {
-        const [doctorsSnapshot, departmentsSnapshot, appointmentsSnapshot] = await Promise.all([
+        const [doctorsSnapshot, departmentsSnapshot] = await Promise.all([
           getDocs(collection(db, "doctors")),
           getDocs(collection(db, "departments")),
-          getDocs(collection(db, "appointments")),
         ]);
 
         const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
@@ -142,9 +127,6 @@ export default function DoctorsPage() {
 
         const departmentsList = departmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Department));
         setDepartments(departmentsList);
-
-        const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ ...doc.data() } as Appointment));
-        setAppointments(appointmentsList);
 
       } catch (error) {
         console.error("Error fetching data:", error);
@@ -179,21 +161,6 @@ export default function DoctorsPage() {
       (currentPage - 1) * doctorsPerPage,
       currentPage * doctorsPerPage
   );
-
-  const doctorAppointments = useMemo(() => {
-    if (!selectedDoctor) return [];
-    return appointments.filter(apt => apt.doctor === selectedDoctor.name);
-  }, [selectedDoctor, appointments]);
-
-  const appointmentsOnSelectedDate = useMemo(() => {
-    if (!selectedDate || !doctorAppointments) return [];
-    return doctorAppointments.filter(apt => isSameDay(parse(apt.date, 'd MMMM yyyy', new Date()), selectedDate));
-  }, [selectedDate, doctorAppointments]);
-
-  const leaveDates = useMemo(() => {
-    if (!selectedDoctor?.leaveSlots) return [];
-    return selectedDoctor.leaveSlots.map(ls => parse(ls.date, 'yyyy-MM-dd', new Date()));
-  }, [selectedDoctor?.leaveSlots]);
 
 
   return (
@@ -254,79 +221,8 @@ export default function DoctorsPage() {
              </Card>
           </div>
 
-          {/* Middle Column: Calendar and Appointments */}
-          <div className="col-span-12 lg:col-span-5 h-full">
-            <Card className="h-full flex flex-col">
-                <CardHeader>
-                    <CardTitle>Schedule</CardTitle>
-                </CardHeader>
-                <CardContent className="flex-grow flex flex-col">
-                    <Calendar
-                        mode="single"
-                        selected={selectedDate}
-                        onSelect={setSelectedDate}
-                        className="rounded-md border"
-                        month={selectedDate}
-                        onMonthChange={(month) => setSelectedDate(month)}
-                        modifiers={{ leave: leaveDates }}
-                        modifiersStyles={{ 
-                            leave: { color: 'red', textDecoration: 'line-through' },
-                        }}
-                        components={{
-                            DayContent: ({ date }) => {
-                                const appointmentsForDay = doctorAppointments.filter(apt => isSameDay(parse(apt.date, 'd MMMM yyyy', new Date()), date)).length;
-                                return (
-                                    <div className="relative w-full h-full flex items-center justify-center">
-                                        <span>{format(date, 'd')}</span>
-                                        {appointmentsForDay > 0 && <span className="absolute bottom-1 right-1 w-1.5 h-1.5 bg-primary rounded-full"></span>}
-                                    </div>
-                                );
-                            },
-                        }}
-                    />
-                    <div className="mt-4 flex-grow overflow-hidden">
-                       <h3 className="font-semibold text-md mb-2">Appointments on {selectedDate ? format(selectedDate, "MMM d, yyyy") : ''}</h3>
-                       <div className="overflow-y-auto h-[calc(100%-2rem)]">
-                        {appointmentsOnSelectedDate.length > 0 ? (
-                             <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Patient</TableHead>
-                                        <TableHead>Time</TableHead>
-                                        <TableHead>Status</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {appointmentsOnSelectedDate.map(apt => (
-                                        <TableRow key={apt.id}>
-                                            <TableCell className="font-medium">{apt.patientName}</TableCell>
-                                            <TableCell>{apt.time}</TableCell>
-                                            <TableCell>
-                                               <Badge
-                                                  variant={
-                                                    apt.status === "Confirmed" ? "success"
-                                                    : apt.status === "Pending" ? "warning"
-                                                    : "destructive"
-                                                  }
-                                                >
-                                                  {apt.status}
-                                                </Badge>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        ) : (
-                            <div className="text-center text-sm text-muted-foreground py-10">No appointments for this day.</div>
-                        )}
-                       </div>
-                    </div>
-                </CardContent>
-            </Card>
-          </div>
-
           {/* Right Column: Doctor Details */}
-          <div className="col-span-12 lg:col-span-4 h-full">
+          <div className="col-span-12 lg:col-span-9 h-full overflow-y-auto">
             {selectedDoctor ? (
                 <Card className="h-full flex flex-col">
                     <CardContent className="p-6 flex flex-col items-center text-center flex-grow">
@@ -397,7 +293,3 @@ export default function DoctorsPage() {
     </>
   );
 }
-
-    
-
-    
