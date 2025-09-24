@@ -473,7 +473,7 @@ export default function AppointmentsPage() {
         <div className="flex flex-1 p-6 gap-6">
             <main className={cn(
               "flex-shrink-0 overflow-auto pr-6 transition-all duration-300 ease-in-out",
-              isDrawerExpanded ? "w-1/3" : "w-2/3"
+              isDrawerExpanded ? "w-1/3 -ml-[33.333%]" : "w-2/3 -ml-0"
             )}>
                 <Card className="h-full">
                   <CardHeader>
@@ -714,7 +714,7 @@ export default function AppointmentsPage() {
             
             <aside className={cn(
               "flex-shrink-0 overflow-hidden relative transition-all duration-300 ease-in-out",
-              isDrawerExpanded ? "w-2/3" : "w-1/3"
+              isDrawerExpanded ? "w-full" : "w-1/3"
             )}>
                 <Button 
                     variant="outline" 
@@ -870,3 +870,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
