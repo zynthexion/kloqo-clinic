@@ -64,11 +64,11 @@ const formSchema = z.object({
   }),
   time: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]\s(AM|PM)$/, "Invalid time format"),
   department: z.string().min(1, { message: "Please select a department." }),
-  status: z.enum(["Confirmed", "Pending", "Cancelled"]),
-  treatment: z.string().min(2, { message: "Treatment must be at least 2 characters." }),
   bookedVia: z.enum(["Online", "Phone", "Walk-in"]),
   place: z.string().min(2, { message: "Place must be at least 2 characters." }),
   tokenNumber: z.string().optional(),
+  status: z.enum(["Confirmed", "Pending", "Cancelled"]).optional(),
+  treatment: z.string().optional(),
 });
 
 type AddAppointmentFormValues = z.infer<typeof formSchema>;
@@ -239,10 +239,12 @@ export default function AppointmentsPage() {
      try {
         const doctorName = doctors.find(d => d.id === values.doctor)?.name || "Unknown Doctor";
         
-        const dataToSave = {
+        const dataToSave: Omit<AddAppointmentFormValues, 'date'> & { date: string } = {
             ...values,
             date: format(values.date, "d MMMM yyyy"),
             doctor: doctorName,
+            status: values.status || "Pending",
+            treatment: values.treatment || "General Consultation",
         };
 
         if (isEditing) {
@@ -424,8 +426,15 @@ export default function AppointmentsPage() {
   const handlePopoverOpenChange = (open: boolean) => {
     setIsPatientPopoverOpen(open);
     if (!open) {
-      // When popover closes, ensure the form value is set to whatever is in the input
       form.setValue("patientName", patientSearchTerm);
+    }
+  };
+
+  const handleCommandKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter" && patientSearchResults.length === 0) {
+      e.preventDefault();
+      form.setValue("patientName", patientSearchTerm);
+      setIsPatientPopoverOpen(false);
     }
   };
 
@@ -464,16 +473,12 @@ export default function AppointmentsPage() {
                                                 placeholder="Start typing patient name..."
                                                 value={patientSearchTerm}
                                                 onChange={handlePatientNameChange}
-                                                onBlur={() => {
-                                                    // This ensures that if the user clicks away, the form value is set.
-                                                    field.onChange(patientSearchTerm);
-                                                }}
                                             />
                                         </FormControl>
                                         </PopoverTrigger>
                                         <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                                        <Command>
-                                            <CommandInput placeholder="Search patient..." value={patientSearchTerm} onValueChange={setPatientSearchTerm} />
+                                        <Command onKeyDown={handleCommandKeyDown}>
+                                            <CommandInput placeholder="Search patient..." />
                                             <CommandList>
                                                 <CommandEmpty>
                                                     <div className="p-4 text-sm">
@@ -550,14 +555,6 @@ export default function AppointmentsPage() {
                                 <FormItem>
                                   <FormLabel>Place</FormLabel>
                                   <FormControl><Input placeholder="New York, USA" {...field} /></FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <FormField control={form.control} name="treatment" render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Treatment</FormLabel>
-                                  <FormControl><Input placeholder="e.g. Routine Check-up" {...field} /></FormControl>
                                   <FormMessage />
                                 </FormItem>
                               )}
@@ -744,3 +741,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
