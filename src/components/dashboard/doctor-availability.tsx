@@ -11,8 +11,9 @@ import { ScrollArea } from "../ui/scroll-area";
 import { getDay, format, isSameDay, parse } from "date-fns";
 import { Button } from "../ui/button";
 import Link from "next/link";
-import { Star, Users } from "lucide-react";
+import { Star, Users, Clock } from "lucide-react";
 import { Badge } from "../ui/badge";
+import { cn } from "@/lib/utils";
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -95,6 +96,7 @@ export default function DoctorAvailability({ selectedDate }: DoctorAvailabilityP
             {availableDoctors.length > 0 ? (
                 availableDoctors.map((doctor) => {
                     const appointmentCount = getAppointmentsForDoctorOnDate(doctor.id);
+                    const tendsToRunLate = doctor.historicalData?.toLowerCase().includes('late');
                     return (
                         <Card key={doctor.id} className="p-4 hover:bg-muted/50 transition-colors">
                             <div className="flex items-start justify-between">
@@ -114,10 +116,21 @@ export default function DoctorAvailability({ selectedDate }: DoctorAvailabilityP
                                     </div>
                                 </div>
                                 {appointmentCount > 0 && (
-                                 <Badge variant="secondary">
+                                 <Badge variant="secondary" className="font-semibold">
                                     <Users className="h-3 w-3 mr-1.5" />
-                                    {appointmentCount} {appointmentCount > 1 ? 'appointments' : 'appointment'}
+                                    {appointmentCount} {appointmentCount > 1 ? 'apps' : 'app'}
                                 </Badge>
+                               )}
+                            </div>
+                            <div className="flex items-center gap-2 mt-3">
+                               <Badge variant={doctor.availability === 'Available' ? 'success' : 'destructive'} className="text-xs">
+                                  {doctor.availability === 'Available' ? 'In' : 'Out'}
+                                </Badge>
+                               {tendsToRunLate && (
+                                  <Badge variant="warning" className="text-xs">
+                                      <Clock className="h-3 w-3 mr-1" />
+                                      Runs Late
+                                  </Badge>
                                )}
                             </div>
                         </Card>
