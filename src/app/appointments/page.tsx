@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useMemo, useRef } from "react";
@@ -482,6 +483,28 @@ export default function AppointmentsPage() {
         <h1 className="text-xl font-semibold md:text-2xl">Appointments</h1>
       </header>
       <div className="relative flex flex-1 overflow-hidden">
+        <Button 
+            variant="outline" 
+            size="icon" 
+            className="absolute top-1/2 -left-4 z-30 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
+            onClick={(e) => {
+                e.stopPropagation();
+                setIsDrawerExpanded(!isDrawerExpanded);
+            }}
+        >
+            <ChevronLeft className="h-5 w-5" />
+        </Button>
+         <Button 
+            variant="outline" 
+            size="icon" 
+            className="absolute top-1/2 -right-4 z-30 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
+            onClick={(e) => {
+                e.stopPropagation();
+                setIsDrawerExpanded(!isDrawerExpanded);
+            }}
+        >
+            <ChevronRight className="h-5 w-5" />
+        </Button>
         <main
             onClick={() => {
               if (isDrawerExpanded) {
@@ -637,7 +660,7 @@ export default function AppointmentsPage() {
                             <FormField control={form.control} name="date" render={({ field }) => (
                                 <FormItem className="flex flex-col">
                                     <Calendar
-                                    className="bg-primary text-primary-foreground rounded-md [&_button:hover]:bg-primary/80 [&_.rdp-day_today]:bg-primary-foreground/20 [&_.rdp-day_today]:text-primary-foreground [&_button]:text-white"
+                                    className="bg-primary text-primary-foreground rounded-md [&_button:hover]:bg-primary/80 [&_.rdp-day_today]:bg-primary-foreground/20 [&_.rdp-day_today]:text-primary-foreground"
                                     mode="single" selected={field.value} onSelect={field.onChange}
                                     disabled={(date) => 
                                         date < new Date(new Date().setHours(0,0,0,0)) || 
@@ -729,19 +752,6 @@ export default function AppointmentsPage() {
                 </CardContent>
             </Card>
         </main>
-        {!isDrawerExpanded && (
-            <Button 
-                variant="outline" 
-                size="icon" 
-                className="absolute top-1/2 -left-4 z-20 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
-                onClick={(e) => {
-                    e.stopPropagation();
-                    setIsDrawerExpanded(!isDrawerExpanded);
-                }}
-            >
-                <ChevronLeft className="h-5 w-5" />
-            </Button>
-        )}
         <aside className={cn(
             "relative flex-shrink-0 transition-all duration-300 ease-in-out p-6",
             isDrawerExpanded ? "w-9/12" : "w-1/3"
