@@ -64,7 +64,6 @@ export default function Home() {
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {
       setSelectedDate(date);
-      setDateRange({ from: date, to: date });
     }
   };
 
@@ -100,7 +99,7 @@ export default function Home() {
                 <RecentActivity />
             </div>
             <div className="lg:col-span-1">
-                <DoctorAvailability />
+                <DoctorAvailability selectedDate={selectedDate} />
             </div>
           </div>
         </div>
