@@ -50,7 +50,7 @@ export function DepartmentDoctorsDialog({ isOpen, setIsOpen, department, allDoct
                 departmentDoctors.map(doctor => (
                 <div key={doctor.id} className="flex items-center gap-4 p-2 rounded-lg hover:bg-muted/50">
                     <Avatar>
-                        <AvatarImage src={doctor.avatar} alt={doctor.name} data-ai-hint="doctor portrait"/>
+                        <AvatarImage src={doctor.avatar} alt={doctor.name} />
                         <AvatarFallback>{doctor.name.charAt(0)}</AvatarFallback>
                     </Avatar>
                     <div className="flex-grow">
@@ -70,3 +70,5 @@ export function DepartmentDoctorsDialog({ isOpen, setIsOpen, department, allDoct
     </Dialog>
   );
 }
+
+    

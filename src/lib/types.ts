@@ -1,6 +1,5 @@
 
 
-
 export type TimeSlot = {
   from: string;
   to: string;
@@ -82,7 +81,6 @@ export type Department = {
     name: string;
     description: string;
     image: string;
-    imageHint: string;
     doctors: string[];
 }
 
@@ -102,10 +100,5 @@ export type MobileApp = {
     username: string;
     password?: string;
 }
-    
 
     
-
-    
-
-

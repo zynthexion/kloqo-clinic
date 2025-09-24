@@ -254,7 +254,6 @@ export const departments: Department[] = [
     name: 'General Medicine',
     description: 'Provides comprehensive healthcare services including routine check-ups, preventive care, and treatment for a wide range of illnesses.',
     image: getImageUrl('general_medicine'),
-    imageHint: 'stethoscope pills',
     doctors: ['Dr. Petra Winsburry', 'Dr. Emily Smith', 'Dr. Samuel Thompson', 'Dr. Sarah Johnson', 'Dr. Luke Harrison', 'Dr. Andrew Peterson', 'Dr. William Carter', 'Dr. Mark Wilson', 'Dr. Thomas Brown', 'Dr. Olivia Martinez', 'Dr. Damian Sanchez', 'Dr. Chloe Harrington'],
   },
   {
@@ -262,7 +261,6 @@ export const departments: Department[] = [
     name: 'Cardiology',
     description: 'Specializes in the diagnosis and treatment of heart-related conditions, offering advanced cardiac care and preventive services.',
     image: getImageUrl('cardiology'),
-    imageHint: 'heart model',
     doctors: ['Dr. Olivia Martinez', 'Dr. Samuel Thompson', 'Dr. Emily Smith', 'Dr. Sarah Johnson', 'Dr. Luke Harrison', 'Dr. Andrew Peterson', 'Dr. William Carter', 'Dr. Mark Wilson'],
   },
   {
@@ -270,7 +268,6 @@ export const departments: Department[] = [
     name: 'Pediatrics',
     description: 'Dedicated to the health and well-being of children, providing specialized care for infants, children, and adolescents.',
     image: getImageUrl('pediatrics'),
-    imageHint: 'doctor baby',
     doctors: ['Dr. Damian Sanchez', 'Dr. Sarah Johnson', 'Dr. William Carter', 'Dr. Petra Winsburry', 'Dr. Emily Smith', 'Dr. Samuel Thompson', 'Dr. Luke Harrison'],
   },
   {
@@ -278,7 +275,6 @@ export const departments: Department[] = [
     name: 'Dermatology',
     description: 'Focuses on the treatment of skin conditions, offering medical and cosmetic dermatology services to improve skin health and appearance.',
     image: getImageUrl('dermatology'),
-    imageHint: 'skin care',
     doctors: ['Dr. Chloe Harrington', 'Dr. Luke Harrison', 'Dr. Petra Winsburry', 'Dr. Emily Smith', 'Dr. Samuel Thompson'],
   },
   {
@@ -286,7 +282,6 @@ export const departments: Department[] = [
     name: 'Internal Medicine',
     description: 'Provides primary care for adults, focusing on the prevention, diagnosis, and treatment of adult diseases.',
     image: getImageUrl('internal_medicine'),
-    imageHint: 'anatomical model',
     doctors: ['Dr. Andrew Peterson', 'Dr. Petra Winsburry', 'Dr. Olivia Martinez', 'Dr. Samuel Thompson', 'Dr. Mark Wilson', 'Dr. Thomas Brown', 'Dr. Chloe Harrington', 'Dr. Damian Sanchez', 'Dr. Sarah Johnson', 'Dr. William Carter', 'Dr. Emily Smith', 'Dr. Luke Harrison'],
   },
   {
@@ -294,7 +289,6 @@ export const departments: Department[] = [
     name: 'Orthopedics',
     description: 'Specializes in the treatment of musculoskeletal system disorders, including bones, joints, ligaments, tendons, and muscles.',
     image: getImageUrl('orthopedics'),
-    imageHint: 'joint brace',
     doctors: ['Dr. Mark Wilson', 'Dr. Petra Winsburry', 'Dr. Olivia Martinez', 'Dr. Samuel Thompson', 'Dr. Andrew Peterson', 'Dr. Thomas Brown', 'Dr. Chloe Harrington', 'Dr. Damian Sanchez'],
   },
     {
@@ -302,7 +296,6 @@ export const departments: Department[] = [
     name: 'Neurology',
     description: 'Deals with disorders of the nervous system, offering expert care for conditions affecting the brain, spinal cord, and nerves.',
     image: getImageUrl('neurology'),
-    imageHint: 'brain model',
     doctors: ['Dr. Thomas Brown', 'Dr. Olivia Martinez', 'Dr. Samuel Thompson', 'Dr. Andrew Peterson', 'Dr. Mark Wilson', 'Dr. Chloe Harrington'],
   },
   {
@@ -310,7 +303,6 @@ export const departments: Department[] = [
     name: 'Oncology',
     description: 'Focuses on the diagnosis and treatment of cancer, providing comprehensive cancer care and support services.',
     image: getImageUrl('oncology'),
-    imageHint: 'awareness ribbon',
     doctors: ['Dr. Emily Smith', 'Dr. Petra Winsburry', 'Dr. Olivia Martinez', 'Dr. Samuel Thompson', 'Dr. Andrew Peterson', 'Dr. Mark Wilson', 'Dr. Thomas Brown'],
   },
   {
@@ -318,7 +310,6 @@ export const departments: Department[] = [
     name: 'Obstetrics and Gynecology (OB/GYN)',
     description: 'Provides care for women\'s health, including pregnancy, childbirth, and reproductive health.',
     image: getImageUrl('obgyn'),
-    imageHint: 'pregnant woman',
     doctors: ['Dr. Sarah Johnson', 'Dr. Petra Winsburry', 'Dr. Olivia Martinez', 'Dr. Samuel Thompson', 'Dr. Andrew Peterson', 'Dr. Mark Wilson', 'Dr. Thomas Brown', 'Dr. Chloe Harrington', 'Dr. Damian Sanchez', 'Dr. William Carter', 'Dr. Emily Smith'],
   }
 ];
@@ -378,3 +369,5 @@ export const liveStatuses: LiveStatus[] = [
     status: 'available',
   },
 ];
+
+    

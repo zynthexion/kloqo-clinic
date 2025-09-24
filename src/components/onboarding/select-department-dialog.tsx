@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -94,7 +95,7 @@ export function SelectDepartmentDialog({ isOpen, setIsOpen, departments, onDepar
                     width={48}
                     height={48}
                     className="rounded-md object-cover"
-                    data-ai-hint={dept.imageHint}
+                    
                     />
                     <div className="flex-grow">
                     <p className="font-semibold text-sm">{dept.name}</p>
@@ -117,3 +118,5 @@ export function SelectDepartmentDialog({ isOpen, setIsOpen, departments, onDepar
     </Dialog>
   );
 }
+
+    
