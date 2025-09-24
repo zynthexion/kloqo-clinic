@@ -78,7 +78,7 @@ export default function DoctorAvailability({ selectedDate }: DoctorAvailabilityP
   );
 
   return (
-    <Card className="h-full flex flex-col">
+    <Card className="h-full flex flex-col bg-[#edeefe]">
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
           <CardTitle>Available Doctors</CardTitle>
