@@ -1,6 +1,7 @@
 
 
 
+
 import { Bell, Search, Settings, UserPlus, Calendar as CalendarIcon, Plus, Maximize, Minus, ZoomIn, ZoomOut, Activity, ChevronLeft } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
