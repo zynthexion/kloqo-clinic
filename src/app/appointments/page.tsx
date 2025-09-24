@@ -491,14 +491,14 @@ export default function AppointmentsPage() {
                 }
               }}
               className={cn(
-              "flex-shrink-0 overflow-visible relative transition-all duration-300 ease-in-out p-6",
-              isDrawerExpanded ? "w-3/12" : "w-2/3"
+              "flex-shrink-0 overflow-visible relative transition-all duration-300 ease-in-out",
+              isDrawerExpanded ? "w-3/12 p-6" : "w-2/3 p-6"
             )}>
               {isDrawerExpanded && (
                 <Button 
                     variant="outline" 
                     size="icon" 
-                    className="absolute top-1/2 -right-5 z-10 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
+                    className="absolute top-1/2 -right-5 z-20 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
                     onClick={(e) => {
                         e.stopPropagation();
                         setIsDrawerExpanded(false);
@@ -752,7 +752,7 @@ export default function AppointmentsPage() {
                     variant="outline" 
                     size="icon" 
                     className={cn(
-                        "absolute top-1/2 -left-5 z-10 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground",
+                        "absolute top-1/2 -left-5 z-20 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground",
                         isDrawerExpanded && "hidden"
                     )}
                     onClick={(e) => {
@@ -923,3 +923,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
