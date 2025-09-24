@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useTransition } from "react";
@@ -178,6 +179,7 @@ export default function DoctorsPage() {
   const [newFee, setNewFee] = useState<number | string>("");
 
   const [isEditingDetails, setIsEditingDetails] = useState(false);
+  const [isEditingBio, setIsEditingBio] = useState(false);
   const [newName, setNewName] = useState("");
   const [newBio, setNewBio] = useState("");
   const [newSpecialty, setNewSpecialty] = useState("");
@@ -255,6 +257,7 @@ export default function DoctorsPage() {
         availabilitySlots: selectedDoctor.availabilitySlots || [],
       });
       setIsEditingDetails(false);
+      setIsEditingBio(false);
       setIsEditingAvailability(false);
       setIsEditingTime(false);
       setIsEditingFee(false);
@@ -425,7 +428,6 @@ export default function DoctorsPage() {
                     name: newName,
                     specialty: newSpecialty,
                     department: newDepartment,
-                    bio: newBio 
                 };
                 await updateDoc(doctorRef, updatedData);
                 const updatedDoctor = { ...selectedDoctor, ...updatedData };
@@ -439,6 +441,28 @@ export default function DoctorsPage() {
             } catch (error) {
                 console.error("Error updating details:", error);
                 toast({ variant: "destructive", title: "Update Failed", description: "Could not update doctor details." });
+            }
+        });
+    };
+    
+    const handleBioSave = async () => {
+        if (!selectedDoctor) return;
+        
+        startTransition(async () => {
+            const doctorRef = doc(db, "doctors", selectedDoctor.id);
+            try {
+                await updateDoc(doctorRef, { bio: newBio });
+                const updatedDoctor = { ...selectedDoctor, bio: newBio };
+                setSelectedDoctor(updatedDoctor);
+                setDoctors(prev => prev.map(d => d.id === selectedDoctor.id ? updatedDoctor : d));
+                setIsEditingBio(false);
+                toast({
+                    title: "Bio Updated",
+                    description: `Dr. ${selectedDoctor.name}'s bio has been updated.`,
+                });
+            } catch (error) {
+                console.error("Error updating bio:", error);
+                toast({ variant: "destructive", title: "Update Failed", description: "Could not update doctor's bio." });
             }
         });
     };
@@ -735,11 +759,21 @@ export default function DoctorsPage() {
                         <StarRating rating={selectedDoctor.rating || 0} />
                         <span className="text-md opacity-90">({selectedDoctor.reviews}+ Reviews)</span>
                     </div>
+                     {isEditingDetails && (
+                        <div className="flex justify-start gap-2 pt-2">
+                            <Button size="sm" variant="ghost" className="text-white hover:bg-white/20" onClick={() => {setIsEditingDetails(false); setNewName(selectedDoctor.name); setNewSpecialty(selectedDoctor.specialty); setNewDepartment(selectedDoctor.department || "");}} disabled={isPending}>Cancel</Button>
+                            <Button size="sm" className="bg-white text-primary hover:bg-white/90" onClick={handleDetailsSave} disabled={isPending}>
+                                {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Saving...</> : <><Save className="mr-2 h-4 w-4" /> Save</>}
+                            </Button>
+                        </div>
+                    )}
                 </div>
                 <div className="flex flex-col items-end justify-between h-full">
-                    <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" onClick={() => setIsEditingDetails(prev => !prev)}>
-                        <Edit className="h-5 w-5" />
-                    </Button>
+                    {!isEditingDetails && (
+                        <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" onClick={() => setIsEditingDetails(true)}>
+                            <Edit className="h-5 w-5" />
+                        </Button>
+                    )}
                     <div className="flex items-center space-x-2 bg-primary p-2 rounded-md">
                       <Switch
                         id="status-switch"
@@ -839,11 +873,18 @@ export default function DoctorsPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="lg:col-span-2 space-y-6">
                         <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2"><Info className="w-5 h-5" /> Bio</CardTitle>
+                            <CardHeader className="flex flex-row items-center justify-between">
+                                <div className="space-y-1.5">
+                                   <CardTitle className="flex items-center gap-2"><Info className="w-5 h-5" /> Bio</CardTitle>
+                                </div>
+                                {!isEditingBio && (
+                                    <Button variant="outline" size="sm" onClick={() => setIsEditingBio(true)}>
+                                        <Edit className="mr-2 h-4 w-4" /> Edit
+                                    </Button>
+                                )}
                             </CardHeader>
                             <CardContent>
-                            {isEditingDetails ? (
+                            {isEditingBio ? (
                                     <div className="space-y-2">
                                         <Textarea 
                                             value={newBio} 
@@ -856,13 +897,13 @@ export default function DoctorsPage() {
                                     <p className="text-muted-foreground">{selectedDoctor.bio || "No biography available."}</p>
                                 )}
                             </CardContent>
-                            {isEditingDetails && (
-                                <CardContent className="flex justify-end gap-2">
-                                    <Button variant="ghost" onClick={() => {setIsEditingDetails(false); setNewName(selectedDoctor.name); setNewSpecialty(selectedDoctor.specialty); setNewDepartment(selectedDoctor.department || ""); setNewBio(selectedDoctor.bio || "");}} disabled={isPending}>Cancel</Button>
-                                    <Button onClick={handleDetailsSave} disabled={isPending}>
-                                        {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Saving...</> : <><Save className="mr-2 h-4 w-4" /> Save Details</>}
+                            {isEditingBio && (
+                                <CardFooter className="flex justify-end gap-2">
+                                    <Button variant="ghost" onClick={() => {setIsEditingBio(false); setNewBio(selectedDoctor.bio || "");}} disabled={isPending}>Cancel</Button>
+                                    <Button onClick={handleBioSave} disabled={isPending}>
+                                        {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Saving...</> : <><Save className="mr-2 h-4 w-4" /> Save Bio</>}
                                     </Button>
-                                </CardContent>
+                                </CardFooter>
                             )}
                         </Card>
                         <Card>
@@ -1164,3 +1205,4 @@ export default function DoctorsPage() {
     </>
   );
 }
+
