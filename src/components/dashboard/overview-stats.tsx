@@ -10,9 +10,6 @@ import {
     Users, 
     BriefcaseMedical, 
     Stethoscope, 
-    PersonStanding,
-    Phone,
-    Computer,
     XCircle,
     Repeat,
     CheckCircle,
@@ -27,9 +24,6 @@ const iconMap = {
     "Total Appointments": BriefcaseMedical,
     "Total Patients": Users,
     "Total Doctors": Stethoscope,
-    "Walk-in": PersonStanding,
-    "Phone": Phone,
-    "Online": Computer,
     "Cancelled": XCircle,
     "Rescheduled": Repeat,
     "Completed": CheckCircle,
@@ -74,10 +68,6 @@ export default function OverviewStats({ dateRange }: OverviewStatsProps) {
         const totalPatients = uniquePatients.size;
         
         const totalDoctors = allDoctors.length;
-
-        const walkInAppointments = appointments.filter(apt => apt.bookedVia === 'Walk-in').length;
-        const phoneAppointments = appointments.filter(apt => apt.bookedVia === 'Phone').length;
-        const onlineAppointments = appointments.filter(apt => apt.bookedVia === 'Online').length;
         
         const cancelledAppointments = appointments.filter(apt => apt.status === 'Cancelled').length;
         const rescheduledAppointments = 0; 
@@ -103,9 +93,6 @@ export default function OverviewStats({ dateRange }: OverviewStatsProps) {
           { title: "Total Appointments", value: totalAppointments, icon: "Total Appointments" },
           { title: "Total Patients", value: totalPatients, icon: "Total Patients" },
           { title: "Total Doctors", value: totalDoctors, icon: "Total Doctors" },
-          { title: "Walk-in", value: walkInAppointments, icon: "Walk-in" },
-          { title: "Phone", value: phoneAppointments, icon: "Phone" },
-          { title: "Online", value: onlineAppointments, icon: "Online" },
           { title: "Cancelled", value: cancelledAppointments, icon: "Cancelled" },
           { title: "Rescheduled", value: rescheduledAppointments, icon: "Rescheduled" },
           { title: "Completed", value: completedAppointments, icon: "Completed" },
@@ -128,7 +115,7 @@ export default function OverviewStats({ dateRange }: OverviewStatsProps) {
   if (loading) {
       return (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
-              {Array.from({ length: 11 }).map((_, i) => (
+              {Array.from({ length: 8 }).map((_, i) => (
                   <Card key={i} className="animate-pulse">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                           <div className="h-4 bg-muted rounded w-2/4"></div>
