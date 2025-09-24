@@ -949,7 +949,7 @@ export default function DoctorsPage() {
                         <Card>
                             <CardHeader className="flex flex-row items-center justify-between">
                                 <div className="space-y-1.5">
-                                    <CardTitle className="flex items-center gap-2"><CalendarIcon className="w-5 h-5" /> Weekly Availability</CardTitle>
+                                    <CardTitle className="flex items-center gap-2"><CalendarIcon className="w-5 h-5" /> Schedule</CardTitle>
                                     <CardDescription>Recurring weekly schedule.</CardDescription>
                                 </div>
                                 {!isEditingAvailability && (
@@ -1222,6 +1222,7 @@ export default function DoctorsPage() {
     </>
   );
 }
+
 
 
 
