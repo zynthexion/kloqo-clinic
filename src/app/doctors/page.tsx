@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/table";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
-import { doc, getDoc, updateDoc, collection, getDocs } from "firebase/firestore";
+import { doc, updateDoc, collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Doctor, Appointment, LeaveSlot, Department } from "@/lib/types";
 import { format, parse, isSameDay, getDay, parse as parseDateFns } from "date-fns";
@@ -661,7 +661,7 @@ export default function DoctorsPage() {
                                         leave: leaveDates,
                                     }}
                                     modifiersStyles={{ 
-                                        available: { backgroundColor: 'hsl(var(--primary)/0.1)', color: 'hsl(var(--primary))' },
+                                        available: { backgroundColor: '#D4EDDA', color: '#155724' },
                                         leave: { color: 'red', fontWeight: 'bold' } 
                                     }}
                                 />
@@ -959,3 +959,5 @@ export default function DoctorsPage() {
     </>
   );
 }
+
+    
