@@ -23,11 +23,12 @@ import {
 } from "@/components/ui/table";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
-import { doc, updateDoc, collection, getDocs } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { doc, updateDoc, collection, getDocs, setDoc } from "firebase/firestore";
+import { db, storage } from "@/lib/firebase";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import type { Doctor, Appointment, LeaveSlot, Department } from "@/lib/types";
 import { format, parse, isSameDay, getDay, parse as parseDateFns } from "date-fns";
-import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon } from "lucide-react";
+import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon, PlusCircle } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -50,6 +51,7 @@ import Link from 'next/link';
 import PatientsVsAppointmentsChart from "@/components/dashboard/patients-vs-appointments-chart";
 import { DateRange } from "react-day-picker";
 import { subDays } from 'date-fns';
+import { AddDoctorForm } from "@/components/doctors/add-doctor-form";
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -62,6 +64,21 @@ const availabilitySlotSchema = z.object({
   day: z.string(),
   timeSlots: z.array(timeSlotSchema).min(1, "At least one time slot is required."),
 });
+
+const addDoctorFormSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
+  specialty: z.string().min(2, { message: "Specialty must be at least 2 characters." }),
+  department: z.string().min(1, { message: "Please select a department." }),
+  bio: z.string().min(10, { message: "Bio must be at least 10 characters." }),
+  averageConsultingTime: z.coerce.number().min(5, "Must be at least 5 minutes."),
+  availableDays: z.array(z.string()).refine((value) => value.some((item) => item), {
+    message: "You have to select at least one day.",
+  }),
+  availabilitySlots: z.array(availabilitySlotSchema),
+  photo: z.any().optional(),
+});
+type AddDoctorFormValues = z.infer<typeof addDoctorFormSchema>;
 
 const formSchema = z.object({
   availableDays: z.array(z.string()).refine((value) => value.some((item) => item), {
@@ -170,6 +187,8 @@ export default function DoctorsPage() {
   const [departmentFilter, setDepartmentFilter] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
   const [doctorsPerPage, setDoctorsPerPage] = useState(10);
+  const [isAddDoctorOpen, setIsAddDoctorOpen] = useState(false);
+  const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
 
 
   useEffect(() => {
@@ -235,6 +254,67 @@ export default function DoctorsPage() {
       setIsEditingTime(false);
     }
   }, [selectedDoctor, appointments, form]);
+
+    const handleSaveDoctor = async (doctorData: AddDoctorFormValues) => {
+    startTransition(async () => {
+      try {
+        let photoUrl = doctorData.id ? doctors.find(d => d.id === doctorData.id)?.avatar : `https://picsum.photos/seed/new-doc-${Date.now()}/100/100`;
+
+        if (doctorData.photo instanceof File) {
+          const storageRef = ref(storage, `doctor_avatars/${Date.now()}_${doctorData.photo.name}`);
+          await uploadBytes(storageRef, doctorData.photo);
+          photoUrl = await getDownloadURL(storageRef);
+        }
+
+        const scheduleString = doctorData.availabilitySlots
+          ?.sort((a, b) => daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day))
+          .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${ts.from}-${ts.to}`).join(', ')}`)
+          .join('; ');
+
+        const doctorToSave: Omit<Doctor, 'id'> = {
+          name: doctorData.name,
+          specialty: doctorData.specialty,
+          department: doctorData.department,
+          avatar: photoUrl!,
+          schedule: scheduleString || "Not set",
+          preferences: 'Not set',
+          historicalData: 'No data',
+          availability: 'Available',
+          bio: doctorData.bio,
+          averageConsultingTime: doctorData.averageConsultingTime,
+          availabilitySlots: doctorData.availabilitySlots,
+        };
+
+        const docId = doctorData.id || `doc-${Date.now()}`;
+        await setDoc(doc(db, "doctors", docId), doctorToSave, { merge: true });
+        
+        const updatedDoctors = await getDocs(collection(db, "doctors"));
+        const doctorsList = updatedDoctors.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
+        setDoctors(doctorsList);
+
+        if (!doctorData.id) {
+            setSelectedDoctor(doctorsList.find(d => d.name === doctorData.name) || null);
+        } else {
+            setSelectedDoctor(prev => prev && prev.id === docId ? { ...prev, ...doctorToSave, id: docId } : prev);
+        }
+
+        toast({
+          title: `Doctor ${doctorData.id ? "Updated" : "Added"}`,
+          description: `${doctorData.name} has been successfully ${doctorData.id ? "updated" : "added"}.`,
+        });
+      } catch (error) {
+        console.error("Error saving doctor:", error);
+        toast({
+          variant: "destructive",
+          title: "Save Failed",
+          description: "Could not save doctor details.",
+        });
+      } finally {
+        setIsAddDoctorOpen(false);
+        setEditingDoctor(null);
+      }
+    });
+  };
 
     const handleStatusChange = async (newStatus: 'Available' | 'Unavailable') => {
         if (!selectedDoctor) return;
@@ -487,6 +567,11 @@ export default function DoctorsPage() {
       currentPage * doctorsPerPage
   );
 
+  const openAddDoctorDialog = () => {
+    setEditingDoctor(null);
+    setIsAddDoctorOpen(true);
+  };
+
 
   return (
     <>
@@ -496,7 +581,12 @@ export default function DoctorsPage() {
           <div className="h-full md:col-span-1">
              <Card className="h-full flex flex-col">
                 <CardHeader>
-                  <CardTitle>Doctors</CardTitle>
+                  <div className="flex justify-between items-center">
+                    <CardTitle>Doctors</CardTitle>
+                    <Button variant="ghost" size="icon" onClick={openAddDoctorDialog}>
+                      <PlusCircle className="h-5 w-5" />
+                    </Button>
+                  </div>
                    <div className="relative mt-2">
                       <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                       <Input
@@ -550,14 +640,16 @@ export default function DoctorsPage() {
             {selectedDoctor ? (
             <>
             <div className="bg-primary text-primary-foreground rounded-lg p-4 flex items-start gap-6 mb-6">
-                <Image
-                    src={selectedDoctor.avatar}
-                    alt={selectedDoctor.name}
-                    width={112}
-                    height={112}
-                    className="rounded-md object-cover"
-                    data-ai-hint="doctor portrait"
-                />
+                <div className="relative flex-shrink-0">
+                    <Image
+                        src={selectedDoctor.avatar}
+                        alt={selectedDoctor.name}
+                        width={112}
+                        height={112}
+                        className="rounded-md object-cover"
+                        data-ai-hint="doctor portrait"
+                    />
+                </div>
                 <div className="flex-grow text-white space-y-1.5">
                     {isEditingDetails ? (
                        <>
@@ -995,6 +1087,15 @@ export default function DoctorsPage() {
           </div>
         </div>
       </main>
+
+      <AddDoctorForm
+        onSave={handleSaveDoctor}
+        isOpen={isAddDoctorOpen}
+        setIsOpen={setIsAddDoctorOpen}
+        doctor={editingDoctor}
+        departments={departments}
+      />
     </>
   );
 }
+

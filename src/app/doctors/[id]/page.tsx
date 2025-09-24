@@ -831,3 +831,4 @@ export default function DoctorDetailPage() {
     </>
   );
 }
+
