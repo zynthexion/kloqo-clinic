@@ -13,6 +13,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import type { DateRange } from "react-day-picker";
 import { subDays } from 'date-fns';
+import { Button } from "@/components/ui/button";
+import { Printer, FileDown } from "lucide-react";
 
 function DashboardHeader({
   dateRange,
@@ -38,6 +40,14 @@ function DashboardHeader({
             onDateChange={onDateRangeChange}
             initialDateRange={dateRange}
          />
+         <Button variant="outline" size="icon">
+            <Printer className="h-4 w-4" />
+            <span className="sr-only">Print</span>
+         </Button>
+         <Button variant="outline" size="icon">
+            <FileDown className="h-4 w-4" />
+            <span className="sr-only">Download PDF</span>
+         </Button>
       </div>
     </header>
   );
