@@ -543,7 +543,7 @@ export default function DoctorsPage() {
           <div className="h-full overflow-y-auto pr-2 md:col-span-2">
             {selectedDoctor ? (
             <>
-            <div className="bg-primary/70 text-primary-foreground rounded-lg p-4 flex items-center gap-6 mb-6">
+            <div className="bg-primary text-primary-foreground rounded-lg p-4 flex items-center gap-6 mb-6">
                 <div className="relative flex-shrink-0">
                     <div className="bg-white p-1 rounded-md">
                         <Image
