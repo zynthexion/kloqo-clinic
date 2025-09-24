@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useEffect, useMemo, useTransition } from "react";
@@ -517,7 +516,7 @@ export default function DoctorsPage() {
                       </SelectContent>
                   </Select>
                 </CardHeader>
-                <CardContent className="flex-grow overflow-y-auto pr-2 grid grid-cols-1 gap-4">
+                <CardContent className="flex-grow overflow-y-auto pr-2 grid grid-cols-1 gap-4 px-6 pt-0">
                     {currentDoctors.map(doctor => (
                         <DoctorListItem 
                             key={doctor.id}
@@ -972,3 +971,5 @@ export default function DoctorsPage() {
     </>
   );
 }
+
+    
