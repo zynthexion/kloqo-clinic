@@ -8,7 +8,7 @@ import OverviewStats from "@/components/dashboard/overview-stats";
 import RecentActivity from "@/components/dashboard/recent-activity";
 import DoctorAvailability from "@/components/dashboard/doctor-availability";
 import TodaysAppointments from "@/components/dashboard/todays-appointments";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Calendar } from "@/components/ui/calendar";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import type { DateRange } from "react-day-picker";
@@ -78,7 +78,18 @@ export default function Home() {
         <div className="space-y-6">
           <OverviewStats dateRange={dateRange} />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-1">
+                <Card className="h-full flex flex-col">
+                  <CardHeader>
+                      <CardTitle>Appointment Overview</CardTitle>
+                      <CardDescription>Appointments, cancelled, rescheduled, skipped.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex-grow flex items-center justify-center">
+                      <p className="text-sm text-muted-foreground">Graph will be here</p>
+                  </CardContent>
+                </Card>
+            </div>
+            <div className="lg:col-span-1">
                <Card className="h-full flex flex-col">
                   <CardContent className="p-2 flex-grow flex items-center justify-center">
                       <Calendar
