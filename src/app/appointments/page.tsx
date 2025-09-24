@@ -461,7 +461,6 @@ export default function AppointmentsPage() {
       );
     }
     
-    // Tab filtering
     if (activeTab === 'upcoming') {
         filtered = filtered.filter(apt => {
             const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
@@ -652,7 +651,7 @@ export default function AppointmentsPage() {
                             <FormField control={form.control} name="date" render={({ field }) => (
                                 <FormItem className="flex flex-col">
                                     <Calendar
-                                    className="bg-muted rounded-md"
+                                    className="bg-primary/90 text-primary-foreground rounded-md [&_button:hover]:bg-primary/80 [&_.rdp-day_today]:bg-primary-foreground/20 [&_.rdp-day_today]:text-primary-foreground"
                                     mode="single" selected={field.value} onSelect={field.onChange}
                                     disabled={(date) => 
                                         date < new Date(new Date().setHours(0,0,0,0)) || 
