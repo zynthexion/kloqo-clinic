@@ -39,7 +39,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, ChevronRight, FileDown, Filter, Printer, Search, MoreHorizontal, Eye, Edit, Trash2 } from "lucide-react";
+import { ChevronLeft, FileDown, Filter, Printer, Search, MoreHorizontal, Eye, Edit, Trash2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -470,19 +470,9 @@ export default function AppointmentsPage() {
       <div className="relative flex flex-1 overflow-hidden">
         <div className="flex flex-1">
             <main className={cn(
-              "flex-shrink-0 overflow-visible relative transition-all duration-300 ease-in-out p-6 pr-3",
-              isDrawerExpanded ? "w-1/3 -ml-[calc(33.333%-4rem)]" : "w-2/3 -ml-0"
+              "flex-shrink-0 overflow-visible relative transition-all duration-300 ease-in-out",
+              isDrawerExpanded ? "w-0 p-0 hidden" : "w-2/3 p-6"
             )}>
-               {isDrawerExpanded && (
-                  <Button 
-                      variant="outline" 
-                      size="icon" 
-                      className="absolute top-1/2 -right-10 z-10 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
-                      onClick={() => setIsDrawerExpanded(false)}
-                  >
-                      <ChevronRight className="h-5 w-5" />
-                  </Button>
-                )}
                 <Card className="h-full">
                   <CardHeader>
                     <CardTitle>{isEditing ? "Reschedule Appointment" : "Book New Appointment"}</CardTitle>
@@ -721,8 +711,8 @@ export default function AppointmentsPage() {
             </main>
             
             <aside className={cn(
-              "flex-shrink-0 overflow-hidden relative transition-all duration-300 ease-in-out p-6 pl-3",
-              isDrawerExpanded ? "w-2/3" : "w-1/3"
+              "flex-shrink-0 overflow-hidden relative transition-all duration-300 ease-in-out p-6",
+              isDrawerExpanded ? "w-full" : "w-1/3"
             )}>
                 <Button 
                     variant="outline" 
@@ -737,7 +727,14 @@ export default function AppointmentsPage() {
                 </Button>
                 <Card className="h-full rounded-2xl">
                     <CardHeader className="p-4 border-b">
-                        <CardTitle>Appointment Details</CardTitle>
+                        <div className="flex items-center gap-2">
+                            {isDrawerExpanded && (
+                                <Button variant="outline" size="icon" onClick={() => setIsDrawerExpanded(false)}>
+                                    <ChevronLeft className="h-4 w-4" />
+                                </Button>
+                            )}
+                            <CardTitle>Appointment Details</CardTitle>
+                        </div>
                         <div className="flex items-center gap-2 mt-2">
                            <div className="relative flex-1">
                                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -881,3 +878,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
