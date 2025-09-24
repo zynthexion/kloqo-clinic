@@ -39,7 +39,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, FileDown, Filter, Printer, Search } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -89,6 +89,9 @@ export default function AppointmentsPage() {
   const [isPatientPopoverOpen, setIsPatientPopoverOpen] = useState(false);
   const [isNewPatient, setIsNewPatient] = useState(false);
   const [isDrawerExpanded, setIsDrawerExpanded] = useState(false);
+  const [drawerSearchTerm, setDrawerSearchTerm] = useState("");
+  const [filterAvailableDoctors, setFilterAvailableDoctors] = useState(false);
+
 
   const { toast } = useToast();
 
@@ -332,10 +335,10 @@ export default function AppointmentsPage() {
 
   const handleCommandKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Enter" && patientSearchResults.length === 0) {
-        e.preventDefault();
-        form.setValue("patientName", patientSearchTerm);
-        setIsPatientPopoverOpen(false);
-        patientInputRef.current?.blur();
+      e.preventDefault();
+      form.setValue("patientName", patientSearchTerm);
+      setIsPatientPopoverOpen(false);
+      patientInputRef.current?.blur();
     }
   };
 
@@ -437,6 +440,30 @@ export default function AppointmentsPage() {
           return aptTime >= leaveStart && aptTime < leaveEnd;
       });
   };
+
+  const filteredAppointments = useMemo(() => {
+    const searchTermLower = drawerSearchTerm.toLowerCase();
+    
+    let filtered = appointments;
+
+    if (filterAvailableDoctors) {
+        const availableDoctorNames = doctors
+            .filter(d => d.availability === 'Available')
+            .map(d => d.name);
+        filtered = filtered.filter(apt => availableDoctorNames.includes(apt.doctor));
+    }
+
+    if (searchTermLower) {
+      filtered = filtered.filter(apt =>
+        apt.patientName.toLowerCase().includes(searchTermLower) ||
+        apt.doctor.toLowerCase().includes(searchTermLower) ||
+        apt.department.toLowerCase().includes(searchTermLower)
+      );
+    }
+    
+    return filtered.sort((a,b) => new Date(`${a.date} ${a.time}`).getTime() - new Date(`${b.date} ${b.time}`).getTime());
+  }, [appointments, drawerSearchTerm, filterAvailableDoctors, doctors]);
+
 
   return (
     <>
@@ -699,9 +726,29 @@ export default function AppointmentsPage() {
                     <ChevronLeft className={cn("h-5 w-5 transition-transform duration-300", isDrawerExpanded && "rotate-180")} />
                 </Button>
                 <Card className="h-full rounded-2xl">
-                    <CardHeader className="p-6 border-b">
+                    <CardHeader className="p-4 border-b">
                         <CardTitle>Appointment Details</CardTitle>
-                        <CardDescription>A list of all scheduled appointments.</CardDescription>
+                        <div className="flex items-center gap-2 mt-2">
+                           <div className="relative flex-1">
+                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    type="search"
+                                    placeholder="Search by patient, doctor, department..."
+                                    className="w-full rounded-lg bg-background pl-8 h-9"
+                                    value={drawerSearchTerm}
+                                    onChange={(e) => setDrawerSearchTerm(e.target.value)}
+                                />
+                            </div>
+                            <Button variant={filterAvailableDoctors ? "default" : "outline"} size="icon" onClick={() => setFilterAvailableDoctors(prev => !prev)}>
+                                <Filter className="h-4 w-4" />
+                            </Button>
+                            <Button variant="outline" size="icon">
+                                <Printer className="h-4 w-4" />
+                            </Button>
+                             <Button variant="outline" size="icon">
+                                <FileDown className="h-4 w-4" />
+                            </Button>
+                        </div>
                     </CardHeader>
                     <CardContent className="p-0">
                         <ScrollArea className="h-[calc(100vh-19rem)]">
@@ -722,8 +769,7 @@ export default function AppointmentsPage() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {appointments
-                                            .sort((a,b) => new Date(`${a.date} ${b.time}`).getTime() - new Date(`${b.date} ${b.time}`).getTime())
+                                        {filteredAppointments
                                             .map((appointment) => (
                                             <TableRow key={appointment.id} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
                                                 <TableCell>
@@ -765,6 +811,8 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
 
     
 
