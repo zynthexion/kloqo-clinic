@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useEffect, useMemo, useTransition } from "react";
@@ -48,6 +47,9 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import Link from 'next/link';
+import PatientsVsAppointmentsChart from "@/components/dashboard/patients-vs-appointments-chart";
+import { DateRange } from "react-day-picker";
+import { subDays } from 'date-fns';
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -125,6 +127,10 @@ const DoctorListItem = ({ doctor, onSelect, isSelected }: { doctor: Doctor, onSe
 
 export default function DoctorsPage() {
   const [isPending, startTransition] = useTransition();
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: subDays(new Date(), 29),
+    to: new Date(),
+  });
 
   const form = useForm<WeeklyAvailabilityFormValues>({
     defaultValues: {
@@ -669,8 +675,10 @@ export default function DoctorsPage() {
             
             <Tabs defaultValue="details">
                 <TabsList>
-                <TabsTrigger value="details">Doctor Details</TabsTrigger>
-                <TabsTrigger value="appointments">Appointments</TabsTrigger>
+                    <TabsTrigger value="details">Doctor Details</TabsTrigger>
+                    <TabsTrigger value="appointments">Appointments</TabsTrigger>
+                    <TabsTrigger value="analytics">Analytics</TabsTrigger>
+                    <TabsTrigger value="reviews">Reviews</TabsTrigger>
                 </TabsList>
                 <TabsContent value="details" className="mt-4">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -958,6 +966,28 @@ export default function DoctorsPage() {
                         </div>
                     </div>
                 </TabsContent>
+                <TabsContent value="analytics" className="mt-4">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Doctor Analytics</CardTitle>
+                            <CardDescription>Performance metrics for Dr. {selectedDoctor.name}.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <PatientsVsAppointmentsChart dateRange={dateRange} />
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+                <TabsContent value="reviews" className="mt-4">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Patient Reviews</CardTitle>
+                            <CardDescription>What patients are saying about Dr. {selectedDoctor.name}.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-muted-foreground">Review functionality coming soon.</p>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
             </Tabs>
             </>
             ) : (
@@ -971,3 +1001,5 @@ export default function DoctorsPage() {
     </>
   );
 }
+
+    
