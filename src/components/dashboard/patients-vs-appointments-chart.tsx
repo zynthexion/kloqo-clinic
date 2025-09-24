@@ -2,9 +2,6 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import type { Appointment } from "@/lib/types";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "../ui/skeleton";
 import type { DateRange } from "react-day-picker";
@@ -18,61 +15,30 @@ import {
     ResponsiveContainer, 
     Legend 
 } from 'recharts';
-import { eachMonthOfInterval, format, isWithinInterval, parse, startOfDay } from 'date-fns';
 
 type ChartProps = {
   dateRange: DateRange | undefined;
 };
 
-const CHART_DATA_POINTS = 12; // Show 12 months for year view
+const DUMMY_DATA = [
+    { month: "Jan", patients: 120, appointments: 98, revenue: 14700 },
+    { month: "Feb", patients: 140, appointments: 120, revenue: 18000 },
+    { month: "Mar", patients: 160, appointments: 135, revenue: 20250 },
+    { month: "Apr", patients: 150, appointments: 140, revenue: 21000 },
+    { month: "May", patients: 180, appointments: 160, revenue: 24000 },
+    { month: "Jun", patients: 170, appointments: 155, revenue: 23250 },
+    { month: "Jul", patients: 190, appointments: 170, revenue: 25500 },
+    { month: "Aug", patients: 210, appointments: 180, revenue: 27000 },
+    { month: "Sep", patients: 200, appointments: 175, revenue: 26250 },
+    { month: "Oct", patients: 220, appointments: 190, revenue: 28500 },
+    { month: "Nov", patients: 230, appointments: 200, revenue: 30000 },
+    { month: "Dec", patients: 250, appointments: 210, revenue: 31500 },
+];
+
 
 export default function PatientsVsAppointmentsChart({ dateRange }: ChartProps) {
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchAppointments = async () => {
-      setLoading(true);
-      const appointmentsCollection = collection(db, "appointments");
-      const appointmentsSnapshot = await getDocs(appointmentsCollection);
-      const appointmentsList = appointmentsSnapshot.docs.map(doc => doc.data() as Appointment);
-      setAppointments(appointmentsList);
-      setLoading(false);
-    };
-    fetchAppointments();
-  }, []);
-
-  const chartData = useMemo(() => {
-    if (!dateRange?.from || !dateRange.to) return [];
-
-    const from = startOfDay(dateRange.from);
-    const to = startOfDay(dateRange.to);
-
-    const months = eachMonthOfInterval({ start: from, end: to });
-
-    return months.map(monthStart => {
-        const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
-        const monthAppointments = appointments.filter(apt => {
-            try {
-                const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
-                return isWithinInterval(aptDate, { start: monthStart, end: monthEnd });
-            } catch { return false; }
-        });
-
-        const uniquePatients = new Set(monthAppointments.map(a => a.patientName + a.phone));
-        const confirmedAppointments = monthAppointments.filter(a => a.status === 'Confirmed').length;
-
-        // Assuming a fixed revenue per appointment for demonstration
-        const revenue = confirmedAppointments * 150; 
-
-        return {
-            month: format(monthStart, "MMM"),
-            patients: uniquePatients.size,
-            appointments: confirmedAppointments,
-            revenue: revenue,
-        };
-    });
-  }, [appointments, dateRange]);
+  const [loading, setLoading] = useState(false); // No longer loading data
+  const chartData = DUMMY_DATA;
   
   if (loading) {
     return (
