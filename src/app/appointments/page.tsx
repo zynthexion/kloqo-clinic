@@ -110,7 +110,7 @@ export default function AppointmentsPage() {
     },
   });
   
-  const patientSearchTerm = form.watch("patientName");
+  const patientNameValue = form.watch("patientName");
 
   useEffect(() => {
     const fetchAppointmentsAndPatients = async () => {
@@ -122,8 +122,7 @@ export default function AppointmentsPage() {
 
         const patientMap = new Map<string, Patient>();
         appointmentsList.forEach((apt) => {
-          const patientId = `${apt.patientName.toLowerCase().replace(/\s/g, "")}-${apt.phone}`;
-          
+          const patientId = encodeURIComponent(`${apt.patientName}-${apt.phone}`);
           const appointmentDate = parse(apt.date, 'd MMMM yyyy', new Date());
 
           if (patientMap.has(patientId)) {
@@ -151,7 +150,7 @@ export default function AppointmentsPage() {
               age: apt.age,
               gender: apt.gender,
               phone: apt.phone,
-              place: apt.place || '',
+              place: apt.place,
               lastVisit: apt.date,
               doctor: apt.doctor,
               totalAppointments: 1
@@ -205,21 +204,15 @@ export default function AppointmentsPage() {
   }, [editingAppointment, form, doctors]);
 
   useEffect(() => {
-    if (patientSearchTerm && patientSearchTerm.length > 1) {
+    if (patientNameValue && patientNameValue.length > 1) {
       const results = allPatients.filter(p => 
-        p.name.toLowerCase().replace(/\s/g, "").includes(patientSearchTerm.toLowerCase().replace(/\s/g, ""))
+        p.name.toLowerCase().replace(/\s/g, "").includes(patientNameValue.toLowerCase().replace(/\s/g, ""))
       );
       setPatientSearchResults(results);
-      if (results.length > 0) {
-        setIsPatientPopoverOpen(true);
-      } else {
-        setIsPatientPopoverOpen(false);
-      }
     } else {
       setPatientSearchResults([]);
-      setIsPatientPopoverOpen(false);
     }
-  }, [patientSearchTerm, allPatients]);
+  }, [patientNameValue, allPatients]);
 
 
   const selectedDoctor = useMemo(() => {
@@ -406,6 +399,15 @@ export default function AppointmentsPage() {
       });
   };
 
+  const handleCommandKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Enter') {
+      if (patientSearchResults.length === 0 && patientNameValue.length > 1) {
+        e.preventDefault();
+        setIsPatientPopoverOpen(false);
+      }
+    }
+  }
+
   return (
     <>
       <header className="flex h-14 items-center gap-4 border-b bg-background px-4 sm:px-6">
@@ -436,13 +438,21 @@ export default function AppointmentsPage() {
                                         <Input 
                                           placeholder="John Doe" 
                                           {...field}
+                                          onChange={(e) => {
+                                            field.onChange(e);
+                                            if (e.target.value.length > 1) {
+                                              setIsPatientPopoverOpen(true);
+                                            } else {
+                                              setIsPatientPopoverOpen(false);
+                                            }
+                                          }}
                                         />
                                       </FormControl>
                                     </PopoverTrigger>
                                     <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                                      <Command>
+                                      <Command onKeyDown={handleCommandKeyDown}>
                                         <CommandInput placeholder="Search patient..." className="h-9" />
-                                        <CommandEmpty>No patient found.</CommandEmpty>
+                                        <CommandEmpty>No patient found. Press Enter to add.</CommandEmpty>
                                         <CommandGroup>
                                           <ScrollArea className="h-48">
                                             {patientSearchResults.map((patient) => (
@@ -712,5 +722,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
-    
