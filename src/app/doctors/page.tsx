@@ -1167,16 +1167,13 @@ export default function DoctorsPage() {
                 </TabsContent>
                 <TabsContent value="analytics" className="mt-4 space-y-6">
                     <div className="flex justify-between items-center">
-                        <div>
-                            <h2 className="text-2xl font-bold">Analytics for Dr. {selectedDoctor.name}</h2>
-                            <p className="text-sm text-muted-foreground">
-                            {dateRange?.from ? 
-                                dateRange.to ? `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}`
-                                : format(dateRange.from, "LLL dd, y")
-                                : "Select a date range"
-                            }
-                            </p>
-                        </div>
+                        <p className="text-sm text-muted-foreground">
+                        {dateRange?.from ? 
+                            dateRange.to ? `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}`
+                            : format(dateRange.from, "LLL dd, y")
+                            : "Select a date range"
+                        }
+                        </p>
                         <DateRangePicker 
                             onDateChange={setDateRange}
                             initialDateRange={dateRange}
@@ -1220,4 +1217,5 @@ export default function DoctorsPage() {
     </>
   );
 }
+
 
