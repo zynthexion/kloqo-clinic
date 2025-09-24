@@ -39,7 +39,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, FileDown, Filter, Printer, Search } from "lucide-react";
+import { ChevronLeft, FileDown, Filter, Printer, Search, MoreHorizontal, Eye, Edit, Trash2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -51,6 +51,7 @@ import {
 import WeeklyDoctorAvailability from "@/components/dashboard/weekly-doctor-availability";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -765,7 +766,8 @@ export default function AppointmentsPage() {
                                             <TableHead>Place</TableHead>
                                             <TableHead>Doctor</TableHead>
                                             <TableHead>Department</TableHead>
-                                            <TableHead>Date & Time</TableHead>
+                                            <TableHead>Date</TableHead>
+                                            <TableHead>Time</TableHead>
                                             <TableHead className="text-right">Actions</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -777,14 +779,31 @@ export default function AppointmentsPage() {
                                                 <TableCell>{appointment.place}</TableCell>
                                                 <TableCell>{appointment.doctor}</TableCell>
                                                 <TableCell>{appointment.department}</TableCell>
-                                                <TableCell>
-                                                    <div>{appointment.date}</div>
-                                                    <div className="text-xs text-muted-foreground">{appointment.time}</div>
-                                                </TableCell>
+                                                <TableCell>{format(parse(appointment.date, "d MMMM yyyy", new Date()), "MMM d, yy")}</TableCell>
+                                                <TableCell>{appointment.time}</TableCell>
                                                 <TableCell className="text-right">
-                                                    <Button variant="link" size="sm" className="p-0 h-auto text-primary" onClick={() => setEditingAppointment(appointment)}>
-                                                        Reschedule
-                                                    </Button>
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button variant="ghost" className="h-8 w-8 p-0">
+                                                                <span className="sr-only">Open menu</span>
+                                                                <MoreHorizontal className="h-4 w-4" />
+                                                            </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                            <DropdownMenuItem>
+                                                                <Eye className="mr-2 h-4 w-4" />
+                                                                View
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => setEditingAppointment(appointment)}>
+                                                                <Edit className="mr-2 h-4 w-4" />
+                                                                Edit
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem className="text-red-600">
+                                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                                Delete
+                                                            </DropdownMenuItem>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
                                                 </TableCell>
                                             </TableRow>
                                         ))}
