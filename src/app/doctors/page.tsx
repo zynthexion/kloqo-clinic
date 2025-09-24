@@ -154,6 +154,7 @@ export default function DoctorsPage() {
     from: subDays(new Date(), 29),
     to: new Date(),
   });
+  const [activeTab, setActiveTab] = useState("details");
 
   const form = useForm<WeeklyAvailabilityFormValues>({
     defaultValues: {
@@ -792,82 +793,84 @@ export default function DoctorsPage() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Avg. Consulting Time</CardTitle>
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        {isEditingTime ? (
-                            <div className="flex items-center gap-2 mt-1">
-                                <Input 
-                                    type="number" 
-                                    value={newAvgTime} 
-                                    onChange={(e) => setNewAvgTime(e.target.value)} 
-                                    className="w-20 h-8"
-                                    disabled={isPending}
-                                />
-                                <Button size="icon" className="h-8 w-8" onClick={handleTimeSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
-                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => {setIsEditingTime(false); setNewAvgTime(selectedDoctor.averageConsultingTime || "")}} disabled={isPending}><X className="h-4 w-4"/></Button>
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-2">
-                                <p className="text-2xl font-bold">{selectedDoctor.averageConsultingTime || 0} min</p>
-                                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingTime(true)}><Edit className="h-3 w-3"/></Button>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Consultation Fee</CardTitle>
-                        <DollarSign className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        {isEditingFee ? (
-                            <div className="flex items-center gap-2 mt-1">
-                                <Input 
-                                    type="number" 
-                                    value={newFee} 
-                                    onChange={(e) => setNewFee(e.target.value)} 
-                                    className="w-20 h-8"
-                                    disabled={isPending}
-                                />
-                                <Button size="icon" className="h-8 w-8" onClick={handleFeeSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
-                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => {setIsEditingFee(false); setNewFee(selectedDoctor.consultationFee || "")}} disabled={isPending}><X className="h-4 w-4"/></Button>
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-2">
-                                <p className="text-2xl font-bold">${selectedDoctor.consultationFee || 0}</p>
-                                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingFee(true)}><Edit className="h-3 w-3"/></Button>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Patients</CardTitle>
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{selectedDoctor.totalPatients || 0}</div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Today's Appointments</CardTitle>
-                        <CalendarDays className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{selectedDoctor.todaysAppointments || 0}</div>
-                    </CardContent>
-                </Card>
-            </div>
+            {activeTab !== 'analytics' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                  <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                          <CardTitle className="text-sm font-medium">Avg. Consulting Time</CardTitle>
+                          <Clock className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                          {isEditingTime ? (
+                              <div className="flex items-center gap-2 mt-1">
+                                  <Input 
+                                      type="number" 
+                                      value={newAvgTime} 
+                                      onChange={(e) => setNewAvgTime(e.target.value)} 
+                                      className="w-20 h-8"
+                                      disabled={isPending}
+                                  />
+                                  <Button size="icon" className="h-8 w-8" onClick={handleTimeSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
+                                  <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => {setIsEditingTime(false); setNewAvgTime(selectedDoctor.averageConsultingTime || "")}} disabled={isPending}><X className="h-4 w-4"/></Button>
+                              </div>
+                          ) : (
+                              <div className="flex items-center gap-2">
+                                  <p className="text-2xl font-bold">{selectedDoctor.averageConsultingTime || 0} min</p>
+                                  <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingTime(true)}><Edit className="h-3 w-3"/></Button>
+                              </div>
+                          )}
+                      </CardContent>
+                  </Card>
+                  <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                          <CardTitle className="text-sm font-medium">Consultation Fee</CardTitle>
+                          <DollarSign className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                          {isEditingFee ? (
+                              <div className="flex items-center gap-2 mt-1">
+                                  <Input 
+                                      type="number" 
+                                      value={newFee} 
+                                      onChange={(e) => setNewFee(e.target.value)} 
+                                      className="w-20 h-8"
+                                      disabled={isPending}
+                                  />
+                                  <Button size="icon" className="h-8 w-8" onClick={handleFeeSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
+                                  <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => {setIsEditingFee(false); setNewFee(selectedDoctor.consultationFee || "")}} disabled={isPending}><X className="h-4 w-4"/></Button>
+                              </div>
+                          ) : (
+                              <div className="flex items-center gap-2">
+                                  <p className="text-2xl font-bold">${selectedDoctor.consultationFee || 0}</p>
+                                  <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingFee(true)}><Edit className="h-3 w-3"/></Button>
+                              </div>
+                          )}
+                      </CardContent>
+                  </Card>
+                  <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                          <CardTitle className="text-sm font-medium">Total Patients</CardTitle>
+                          <Users className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                          <div className="text-2xl font-bold">{selectedDoctor.totalPatients || 0}</div>
+                      </CardContent>
+                  </Card>
+                  <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                          <CardTitle className="text-sm font-medium">Today's Appointments</CardTitle>
+                          <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                          <div className="text-2xl font-bold">{selectedDoctor.todaysAppointments || 0}</div>
+                      </CardContent>
+                  </Card>
+              </div>
+            )}
             
             <hr className="my-6" />
 
-            <Tabs defaultValue="details">
+            <Tabs defaultValue="details" onValueChange={setActiveTab}>
                 <TabsList>
                     <TabsTrigger value="details">Doctor Details</TabsTrigger>
                     <TabsTrigger value="appointments">Appointments</TabsTrigger>
@@ -1219,6 +1222,7 @@ export default function DoctorsPage() {
     </>
   );
 }
+
 
 
 
