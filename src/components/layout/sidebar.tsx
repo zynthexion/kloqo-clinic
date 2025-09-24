@@ -41,8 +41,8 @@ export function Sidebar() {
         <div className="flex h-20 items-center justify-center p-4 shrink-0">
           <Link href="/" className="flex items-center gap-3">
             <PeterdrawLogo className="h-10 w-10 text-sidebar-primary" />
-            <span className="text-xl font-bold opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100 whitespace-nowrap">
-              Dashyat
+            <span className="text-xl font-bold opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100 whitespace-nowrap font-headline">
+              Kloqo
             </span>
           </Link>
         </div>
