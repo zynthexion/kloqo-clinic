@@ -13,7 +13,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Form,
@@ -199,12 +198,6 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
             setPhotoPreview(null);
         }
     }}>
-      <DialogTrigger asChild>
-        <Button onClick={() => setIsOpen(true)}>
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Add Doctor
-        </Button>
-      </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{isEditMode ? "Edit Doctor" : "Add New Doctor"}</DialogTitle>
@@ -462,5 +455,3 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
     </Dialog>
   );
 }
-
-    
