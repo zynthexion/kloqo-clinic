@@ -98,25 +98,31 @@ const StarRating = ({ rating }: { rating: number }) => (
 const DoctorListItem = ({ doctor, onSelect, isSelected }: { doctor: Doctor, onSelect: () => void, isSelected: boolean }) => (
     <div
       className={cn(
-        "bg-white rounded-full p-1.5 flex items-center gap-3 cursor-pointer transition-all duration-300 border hover:border-primary/50",
-        isSelected ? "ring-2 ring-primary border-transparent" : "border-gray-200"
+        "bg-white rounded-lg p-4 flex items-center gap-4 cursor-pointer transition-all duration-200 border-2",
+        isSelected ? "border-teal-500 bg-teal-50/50" : "border-gray-200 hover:border-gray-300 hover:shadow-md"
       )}
       onClick={onSelect}
     >
-        <Image
-            src={doctor.avatar}
-            alt={doctor.name}
-            width={48}
-            height={48}
-            className="rounded-full object-cover"
-            data-ai-hint="doctor portrait"
-        />
+        <div className="relative">
+            <Image
+                src={doctor.avatar}
+                alt={doctor.name}
+                width={56}
+                height={56}
+                className="rounded-full object-cover"
+                data-ai-hint="doctor portrait"
+            />
+            <span className={cn(
+                "absolute bottom-0 right-0 block h-3.5 w-3.5 rounded-full border-2 border-white",
+                doctor.availability === 'Available' ? 'bg-green-500' : 'bg-gray-400'
+            )}></span>
+        </div>
         <div className="flex-grow">
-            <p className={cn("font-bold text-base text-gray-800", isSelected && "text-primary")}>{doctor.name}</p>
-            <div className="text-sm text-gray-600">
-                <span>{doctor.specialty}</span>
-                <div className="w-10 h-0.5 bg-yellow-400 mt-1"></div>
-            </div>
+            <p className="font-bold text-base text-gray-800">{doctor.name}</p>
+            <p className="text-sm text-gray-500">{doctor.specialty}</p>
+            <Link href={`/doctors/${doctor.id}`} onClick={(e) => e.stopPropagation()} className="text-sm text-teal-600 hover:underline font-semibold mt-1 inline-block">
+                View Profile
+            </Link>
         </div>
     </div>
 );
@@ -966,5 +972,3 @@ export default function DoctorsPage() {
     </>
   );
 }
-
-    
