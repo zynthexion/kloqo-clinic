@@ -48,30 +48,49 @@ import {
 } from "@/components/ui/table";
 
 const DoctorListItem = ({ doctor, onSelect, isSelected }: { doctor: Doctor, onSelect: () => void, isSelected: boolean }) => (
-    <div
+    <Card
       className={cn(
-        "flex items-center gap-4 p-3 rounded-lg cursor-pointer transition-colors",
-        isSelected ? "bg-primary/10" : "hover:bg-muted/50"
+        "cursor-pointer transition-all hover:shadow-md",
+        isSelected ? "ring-2 ring-primary" : "hover:bg-muted/50"
       )}
       onClick={onSelect}
     >
-        <Image
-            src={doctor.avatar}
-            alt={doctor.name}
-            width={40}
-            height={40}
-            className="rounded-full object-cover"
-            data-ai-hint="doctor portrait"
-        />
-        <div className="flex-grow">
-            <p className={cn("font-semibold text-sm", isSelected && "text-primary")}>{doctor.name}</p>
-            <p className="text-xs text-muted-foreground">{doctor.specialty}</p>
-        </div>
-        <Badge
-            variant={doctor.availability === "Available" ? "success" : "danger"}
-            className="h-2 w-2 p-0 rounded-full"
-        />
-    </div>
+        <CardContent className="p-4">
+            <div className="flex items-center gap-4">
+                <Image
+                    src={doctor.avatar}
+                    alt={doctor.name}
+                    width={56}
+                    height={56}
+                    className="rounded-full object-cover border-2 border-primary/20"
+                    data-ai-hint="doctor portrait"
+                />
+                <div className="flex-grow">
+                    <p className={cn("font-bold text-md", isSelected && "text-primary")}>{doctor.name}</p>
+                    <p className="text-sm text-muted-foreground">{doctor.specialty}</p>
+                    <p className="text-xs text-muted-foreground">{doctor.department}</p>
+                </div>
+            </div>
+            <div className="mt-4 flex justify-between items-center text-xs text-muted-foreground">
+                <div className="flex items-center gap-1">
+                    <Users className="h-3 w-3" />
+                    <span>{doctor.totalPatients ?? 'N/A'} Patients</span>
+                </div>
+                 <div className="flex items-center gap-1">
+                    <CalendarDays className="h-3 w-3" />
+                    <span>{doctor.todaysAppointments ?? 'N/A'} Today</span>
+                </div>
+            </div>
+        </CardContent>
+        <CardFooter className="p-2 pt-0">
+             <Badge
+                variant={doctor.availability === "Available" ? "success" : "danger"}
+                className="w-full justify-center"
+            >
+                {doctor.availability}
+            </Badge>
+        </CardFooter>
+    </Card>
 );
 
 
@@ -87,7 +106,7 @@ export default function DoctorsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
-  const [doctorsPerPage, setDoctorsPerPage] = useState(8);
+  const [doctorsPerPage, setDoctorsPerPage] = useState(6);
 
 
   useEffect(() => {
@@ -193,7 +212,7 @@ export default function DoctorsPage() {
                       </SelectContent>
                   </Select>
                 </CardHeader>
-                <CardContent className="flex-grow overflow-y-auto pr-2 space-y-1">
+                <CardContent className="flex-grow overflow-y-auto pr-2 grid grid-cols-1 gap-4">
                     {currentDoctors.map(doctor => (
                         <DoctorListItem 
                             key={doctor.id}
@@ -362,3 +381,5 @@ export default function DoctorsPage() {
     </>
   );
 }
+
+    
