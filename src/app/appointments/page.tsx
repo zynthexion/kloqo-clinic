@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import type { Appointment, Doctor } from "@/lib/types";
+import type { Appointment, Doctor, Patient } from "@/lib/types";
 import { collection, getDocs, setDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
@@ -50,6 +50,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import WeeklyDoctorAvailability from "@/components/dashboard/weekly-doctor-availability";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -78,10 +79,16 @@ const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Fri
 export default function AppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [allPatients, setAllPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [patientSearchTerm, setPatientSearchTerm] = useState("");
+  const [patientSearchResults, setPatientSearchResults] = useState<Patient[]>([]);
+  const [isPatientPopoverOpen, setIsPatientPopoverOpen] = useState(false);
+  const patientInputRef = useRef<HTMLInputElement>(null);
+
   const { toast } = useToast();
 
   const isEditing = !!editingAppointment;
@@ -105,15 +112,36 @@ export default function AppointmentsPage() {
   });
 
   useEffect(() => {
-    const fetchAppointments = async () => {
+    const fetchAppointmentsAndPatients = async () => {
       try {
         const appointmentsCollection = collection(db, "appointments");
         const appointmentsSnapshot = await getDocs(appointmentsCollection);
         const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ ...doc.data() } as Appointment));
         setAppointments(appointmentsList);
 
+        const patientMap = new Map<string, Patient>();
+        appointmentsList.forEach((apt) => {
+          const patientId = `${apt.patientName.toLowerCase()}-${apt.phone}`;
+          if (!patientMap.has(patientId)) {
+            patientMap.set(patientId, {
+              id: patientId,
+              name: apt.patientName,
+              age: apt.age,
+              gender: apt.gender,
+              phone: apt.phone,
+              place: apt.place || '',
+              // these fields are not used in this context but required by type
+              lastVisit: '',
+              doctor: '',
+              totalAppointments: 0
+            });
+          }
+        });
+        setAllPatients(Array.from(patientMap.values()));
+
+
       } catch (error) {
-        console.error("Error fetching appointments:", error);
+        console.error("Error fetching data:", error);
       } finally {
         setLoading(false);
       }
@@ -126,7 +154,7 @@ export default function AppointmentsPage() {
       setDoctors(doctorsList);
     };
 
-    fetchAppointments();
+    fetchAppointmentsAndPatients();
     fetchDoctors();
   }, []);
 
@@ -138,6 +166,7 @@ export default function AppointmentsPage() {
       date: undefined, time: undefined, department: "", treatment: "",
       place: "", status: "Pending", bookedVia: "Online",
     });
+    setPatientSearchTerm("");
   }
 
   useEffect(() => {
@@ -150,11 +179,26 @@ export default function AppointmentsPage() {
                 doctor: doctor.id,
             });
             setSelectedDoctorId(doctor.id);
+            setPatientSearchTerm(editingAppointment.patientName);
         }
     } else {
         resetForm();
     }
   }, [editingAppointment, form, doctors]);
+
+  useEffect(() => {
+    if (patientSearchTerm.length > 1) {
+      const results = allPatients.filter(p => p.name.toLowerCase().includes(patientSearchTerm.toLowerCase()));
+      setPatientSearchResults(results);
+      if (results.length > 0) {
+        setIsPatientPopoverOpen(true);
+      }
+    } else {
+      setPatientSearchResults([]);
+      setIsPatientPopoverOpen(false);
+    }
+  }, [patientSearchTerm, allPatients]);
+
 
   const selectedDoctor = useMemo(() => {
     return doctors.find(d => d.id === selectedDoctorId) || null;
@@ -229,6 +273,16 @@ export default function AppointmentsPage() {
     } else {
         form.setValue("department", "");
     }
+  }
+
+  const handlePatientSelect = (patient: Patient) => {
+    form.setValue("patientName", patient.name);
+    form.setValue("age", patient.age);
+    form.setValue("gender", patient.gender);
+    form.setValue("phone", patient.phone);
+    form.setValue("place", patient.place || "");
+    setPatientSearchTerm(patient.name);
+    setIsPatientPopoverOpen(false);
   }
 
   const availableDaysOfWeek = useMemo(() => {
@@ -355,7 +409,42 @@ export default function AppointmentsPage() {
                             <FormField control={form.control} name="patientName" render={({ field }) => (
                                 <FormItem>
                                   <FormLabel>Patient Name</FormLabel>
-                                  <FormControl><Input placeholder="John Doe" {...field} /></FormControl>
+                                  <Popover open={isPatientPopoverOpen} onOpenChange={setIsPatientPopoverOpen}>
+                                    <PopoverTrigger asChild>
+                                      <FormControl>
+                                        <Input 
+                                          placeholder="John Doe" 
+                                          {...field} 
+                                          ref={patientInputRef}
+                                          onChange={(e) => {
+                                              field.onChange(e);
+                                              setPatientSearchTerm(e.target.value);
+                                          }}
+                                          value={patientSearchTerm}
+                                        />
+                                      </FormControl>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                                      <Command>
+                                        <CommandInput placeholder="Search patient..." className="h-9" />
+                                        <CommandEmpty>No patient found.</CommandEmpty>
+                                        <CommandGroup>
+                                          <ScrollArea className="h-48">
+                                            {patientSearchResults.map((patient) => (
+                                              <CommandItem
+                                                key={patient.id}
+                                                value={patient.name}
+                                                onSelect={() => handlePatientSelect(patient)}
+                                              >
+                                                {patient.name}
+                                                <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
+                                              </CommandItem>
+                                            ))}
+                                          </ScrollArea>
+                                        </CommandGroup>
+                                      </Command>
+                                    </PopoverContent>
+                                  </Popover>
                                   <FormMessage />
                                 </FormItem>
                               )}
@@ -363,7 +452,7 @@ export default function AppointmentsPage() {
                             <FormField control={form.control} name="age" render={({ field }) => (
                                 <FormItem>
                                   <FormLabel>Age</FormLabel>
-                                  <FormControl><Input type="number" placeholder="35" {...field} /></FormControl>
+                                  <FormControl><Input type="number" placeholder="35" {...field} value={field.value || ''} /></FormControl>
                                   <FormMessage />
                                 </FormItem>
                               )}
@@ -391,6 +480,14 @@ export default function AppointmentsPage() {
                                 <FormItem>
                                   <FormLabel>Phone Number</FormLabel>
                                   <FormControl><Input placeholder="123-456-7890" {...field} /></FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                             <FormField control={form.control} name="place" render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Place</FormLabel>
+                                  <FormControl><Input placeholder="New York, USA" {...field} /></FormControl>
                                   <FormMessage />
                                 </FormItem>
                               )}
