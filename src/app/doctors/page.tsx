@@ -96,52 +96,30 @@ const StarRating = ({ rating }: { rating: number }) => (
 
 
 const DoctorListItem = ({ doctor, onSelect, isSelected }: { doctor: Doctor, onSelect: () => void, isSelected: boolean }) => (
-    <Card
+    <div
       className={cn(
-        "cursor-pointer transition-all hover:shadow-md",
-        isSelected ? "ring-2 ring-primary" : "hover:bg-muted/50"
+        "bg-white rounded-full p-2 flex items-center gap-4 cursor-pointer transition-all duration-300 shadow-md hover:shadow-lg",
+        isSelected ? "ring-2 ring-primary" : ""
       )}
       onClick={onSelect}
     >
-        <CardContent className="p-4">
-            <div className="flex items-center gap-4">
-                <Image
-                    src={doctor.avatar}
-                    alt={doctor.name}
-                    width={56}
-                    height={56}
-                    className="rounded-full object-cover border-2 border-primary/20"
-                    data-ai-hint="doctor portrait"
-                />
-                <div className="flex-grow">
-                    <p className={cn("font-bold text-md", isSelected && "text-primary")}>{doctor.name}</p>
-                    <p className="text-sm text-muted-foreground">{doctor.specialty}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                        <StarRating rating={4} />
-                        <span className="text-xs text-muted-foreground">(120 Reviews)</span>
-                    </div>
-                </div>
+        <Image
+            src={doctor.avatar}
+            alt={doctor.name}
+            width={72}
+            height={72}
+            className="rounded-full object-cover border-2 border-primary/20"
+            data-ai-hint="doctor portrait"
+        />
+        <div className="flex-grow">
+            <p className={cn("font-bold text-lg text-gray-800", isSelected && "text-primary")}>{doctor.name}</p>
+            <div className="text-sm text-gray-600">
+                <span>{doctor.specialty}</span>
+                <div className="w-10 h-0.5 bg-yellow-400 mt-1"></div>
             </div>
-            <div className="mt-4 flex justify-between items-center text-xs text-muted-foreground">
-                <div className="flex items-center gap-1">
-                    <Users className="h-3 w-3" />
-                    <span>{doctor.totalPatients ?? 'N/A'} Patients</span>
-                </div>
-                 <div className="flex items-center gap-1">
-                    <CalendarDays className="h-3 w-3" />
-                    <span>{doctor.todaysAppointments ?? 'N/A'} Today</span>
-                </div>
-            </div>
-        </CardContent>
-        <CardFooter className="p-2 pt-0">
-             <Badge
-                variant={doctor.availability === "Available" ? "success" : "danger"}
-                className="w-full justify-center"
-            >
-                {doctor.availability}
-            </Badge>
-        </CardFooter>
-    </Card>
+            <p className="text-xs text-gray-500 mt-2 truncate pr-4">{doctor.bio || 'No bio available.'}</p>
+        </div>
+    </div>
 );
 
 export default function DoctorsPage() {
