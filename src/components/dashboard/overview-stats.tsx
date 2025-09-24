@@ -1,48 +1,149 @@
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Users, Activity, DollarSign, BriefcaseMedical } from "lucide-react";
 
-const stats = [
-  {
-    title: "Total Patients",
-    value: "1,234",
-    change: "+10% from last month",
-    icon: Users,
-  },
-  {
-    title: "Appointments",
-    value: "356",
-    change: "+2% from last month",
-    icon: BriefcaseMedical,
-  },
-  {
-    title: "Avg. Treatment Cost",
-    value: "$2,420",
-    change: "+5% from last month",
-    icon: DollarSign,
-  },
-  {
-    title: "Bed Occupancy",
-    value: "78%",
-    change: "-2% from last month",
-    icon: Activity,
-  },
-];
+"use client";
+
+import { useEffect, useState } from "react";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import type { Appointment, Doctor } from "@/lib/types";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { 
+    Users, 
+    BriefcaseMedical, 
+    Stethoscope, 
+    PersonStanding,
+    Phone,
+    Computer,
+    XCircle,
+    Repeat,
+    CheckCircle,
+    DollarSign,
+    CalendarClock,
+    CalendarCheck
+} from "lucide-react";
+import { format, isSameDay, isFuture, parse } from "date-fns";
+
+const iconMap = {
+    "Today's Appointments": CalendarCheck,
+    "Total Appointments": BriefcaseMedical,
+    "Total Patients": Users,
+    "Total Doctors": Stethoscope,
+    "Walk-in": PersonStanding,
+    "Phone": Phone,
+    "Online": Computer,
+    "Cancelled": XCircle,
+    "Rescheduled": Repeat,
+    "Completed": CheckCircle,
+    "Total Revenue": DollarSign,
+    "Upcoming": CalendarClock,
+};
+
 
 export default function OverviewStats() {
+  const [stats, setStats] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const [appointmentsSnapshot, doctorsSnapshot] = await Promise.all([
+          getDocs(collection(db, "appointments")),
+          getDocs(collection(db, "doctors")),
+        ]);
+
+        const appointments = appointmentsSnapshot.docs.map(doc => doc.data() as Appointment);
+        const doctors = doctorsSnapshot.docs.map(doc => doc.data() as Doctor);
+
+        const today = new Date();
+        const todayStr = format(today, "d MMMM yyyy");
+
+        const todaysAppointments = appointments.filter(apt => apt.date === todayStr).length;
+        const totalAppointments = appointments.length;
+
+        const uniquePatients = new Set(appointments.map(apt => apt.patientName + apt.phone));
+        const totalPatients = uniquePatients.size;
+        
+        const totalDoctors = doctors.length;
+
+        const walkInAppointments = appointments.filter(apt => apt.bookedVia === 'Walk-in').length;
+        const phoneAppointments = appointments.filter(apt => apt.bookedVia === 'Phone').length;
+        const onlineAppointments = appointments.filter(apt => apt.bookedVia === 'Online').length;
+        
+        const cancelledAppointments = appointments.filter(apt => apt.status === 'Cancelled').length;
+        // Assuming 'Rescheduled' would be tracked differently, for now we will use a placeholder.
+        // In a real scenario this might involve checking an audit trail. We'll show a static 0.
+        const rescheduledAppointments = 0; 
+        const completedAppointments = appointments.filter(apt => apt.status === 'Confirmed' && isPast(parse(apt.date, 'd MMMM yyyy', new Date()))).length;
+        
+        // Placeholder for revenue
+        const totalRevenue = "$12,450";
+
+        const upcomingAppointments = appointments.filter(apt => isFuture(parse(apt.date, 'd MMMM yyyy', today)) || (apt.date === todayStr && apt.status !== 'Cancelled')).length;
+
+        const allStats = [
+          { title: "Today's Appointments", value: todaysAppointments, icon: "Today's Appointments" },
+          { title: "Total Appointments", value: totalAppointments, icon: "Total Appointments" },
+          { title: "Total Patients", value: totalPatients, icon: "Total Patients" },
+          { title: "Total Doctors", value: totalDoctors, icon: "Total Doctors" },
+          { title: "Walk-in", value: walkInAppointments, icon: "Walk-in" },
+          { title: "Phone", value: phoneAppointments, icon: "Phone" },
+          { title: "Online", value: onlineAppointments, icon: "Online" },
+          { title: "Cancelled", value: cancelledAppointments, icon: "Cancelled" },
+          { title: "Rescheduled", value: rescheduledAppointments, icon: "Rescheduled" },
+          { title: "Completed", value: completedAppointments, icon: "Completed" },
+          { title: "Total Revenue", value: totalRevenue, icon: "Total Revenue" },
+          { title: "Upcoming", value: upcomingAppointments, icon: "Upcoming" },
+        ];
+
+        setStats(allStats);
+
+      } catch (error) {
+        console.error("Error fetching stats:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, []);
+  
+  if (loading) {
+      return (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+              {Array.from({ length: 12 }).map((_, i) => (
+                  <Card key={i} className="animate-pulse">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                          <div className="h-4 bg-muted rounded w-2/4"></div>
+                          <div className="h-6 w-6 bg-muted rounded-full"></div>
+                      </CardHeader>
+                      <CardContent>
+                          <div className="h-8 bg-muted rounded w-1/3"></div>
+                      </CardContent>
+                  </Card>
+              ))}
+          </div>
+      );
+  }
+
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {stats.map((stat, index) => (
-        <Card key={index}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
-            <stat.icon className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stat.value}</div>
-            <p className="text-xs text-muted-foreground">{stat.change}</p>
-          </CardContent>
-        </Card>
-      ))}
+    <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+      {stats.map((stat, index) => {
+        const Icon = iconMap[stat.icon as keyof typeof iconMap] || Users;
+        return (
+            <Card key={index}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
+                <Icon className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">{stat.value}</div>
+            </CardContent>
+            </Card>
+        );
+      })}
     </div>
   );
+}
+
+function isPast(date: Date) {
+    return date < new Date();
 }
