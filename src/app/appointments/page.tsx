@@ -83,7 +83,6 @@ export default function AppointmentsPage() {
   const [loading, setLoading] = useState(true);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   
   const [patientSearchTerm, setPatientSearchTerm] = useState("");
   const [patientSearchResults, setPatientSearchResults] = useState<Patient[]>([]);
@@ -114,8 +113,9 @@ export default function AppointmentsPage() {
   
   useEffect(() => {
     if (patientSearchTerm.length > 1) {
+      const lowercasedTerm = patientSearchTerm.toLowerCase().replace(/\s+/g, '');
       const results = allPatients.filter(p =>
-        p.name.toLowerCase().includes(patientSearchTerm.toLowerCase())
+        p.name.toLowerCase().replace(/\s+/g, '').includes(lowercasedTerm)
       );
       setPatientSearchResults(results);
       setIsPatientPopoverOpen(true);
@@ -431,10 +431,10 @@ export default function AppointmentsPage() {
   };
 
   const handleCommandKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "Enter" && patientSearchResults.length === 0) {
-      e.preventDefault();
-      form.setValue("patientName", patientSearchTerm);
-      setIsPatientPopoverOpen(false);
+    if (e.key === "Enter") {
+        e.preventDefault();
+        form.setValue("patientName", patientSearchTerm);
+        setIsPatientPopoverOpen(false);
     }
   };
 
@@ -445,7 +445,7 @@ export default function AppointmentsPage() {
       </header>
       <div className="relative flex flex-1 overflow-hidden">
         <div className="flex flex-1 p-6 gap-6">
-            <main className={cn("flex-shrink-0 overflow-auto transition-all duration-300 ease-in-out pr-6", isDrawerOpen ? 'w-2/3' : 'w-full')}>
+            <main className="w-2/3 flex-shrink-0 overflow-auto pr-6">
                 <Card className="h-full">
                   <CardHeader>
                     <CardTitle>{isEditing ? "Reschedule Appointment" : "Book New Appointment"}</CardTitle>
@@ -574,7 +574,7 @@ export default function AppointmentsPage() {
                                         leaveDates.some(leaveDate => isSameDay(date, leaveDate))
                                     }
                                     initialFocus
-                                    compact={isDrawerOpen}
+                                    compact={false}
                                     modifiers={{ 
                                       available: selectedDoctor ? { dayOfWeek: availableDaysOfWeek } : {},
                                       leave: leaveDates,
@@ -649,10 +649,7 @@ export default function AppointmentsPage() {
                 </Card>
             </main>
             
-            <aside className={cn(
-                "flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden",
-                isDrawerOpen ? 'w-1/3' : 'w-0'
-            )}>
+            <aside className="w-1/3 flex-shrink-0 overflow-hidden">
                 <Card className="h-full rounded-2xl">
                     <CardHeader className="p-6 border-b">
                         <CardTitle>Upcoming Appointments</CardTitle>
@@ -678,7 +675,7 @@ export default function AppointmentsPage() {
                                     </TableHeader>
                                     <TableBody>
                                         {appointments
-                                            .sort((a,b) => new Date(`${a.date} ${a.time}`).getTime() - new Date(`${b.date} ${b.time}`).getTime())
+                                            .sort((a,b) => new Date(`${a.date} ${b.time}`).getTime() - new Date(`${b.date} ${b.time}`).getTime())
                                             .map((appointment) => (
                                             <TableRow key={appointment.id} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
                                                 <TableCell>
@@ -701,7 +698,6 @@ export default function AppointmentsPage() {
                                                 <TableCell className="text-right">
                                                     <Button variant="link" size="sm" className="p-0 h-auto text-primary" onClick={() => {
                                                         setEditingAppointment(appointment);
-                                                        setIsDrawerOpen(false);
                                                     }}>
                                                         Reschedule
                                                     </Button>
@@ -716,27 +712,7 @@ export default function AppointmentsPage() {
                 </Card>
             </aside>
         </div>
-
-         <div className="fixed right-6 top-1/2 -translate-y-1/2 z-20">
-              <Button 
-                className={cn("relative h-24 w-8 rounded-lg shadow-lg animate-wave", isDrawerOpen && "hidden")}
-                size="icon" 
-                onClick={() => setIsDrawerOpen(true)}
-              >
-                  <ChevronRight className="h-6 w-6 transition-transform duration-300 -rotate-180" />
-              </Button>
-          </div>
-          <Button 
-            className={cn("fixed top-1/2 -translate-y-1/2 h-24 w-8 rounded-lg shadow-lg animate-wave z-20", 
-                         "transition-all duration-300 ease-in-out",
-                         isDrawerOpen ? "right-[calc(33.33%-1rem)]" : "-right-10"
-            )}
-            size="icon" 
-            onClick={() => setIsDrawerOpen(false)}
-          >
-              <ChevronRight className="h-6 w-6 transition-transform duration-300" />
-          </Button>
-          <WeeklyDoctorAvailability />
+        <WeeklyDoctorAvailability />
       </div>
     </>
   );
