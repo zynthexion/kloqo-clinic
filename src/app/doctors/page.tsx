@@ -483,9 +483,9 @@ export default function DoctorsPage() {
   return (
     <>
       <main className="flex-1 overflow-hidden bg-[#bcddef]/30">
-        <div className="h-full grid grid-cols-1 gap-6 p-6">
+        <div className="h-full grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
           {/* Left Column: Doctor List */}
-          <div className="h-full">
+          <div className="h-full md:col-span-1">
              <Card className="h-full flex flex-col">
                 <CardHeader>
                   <CardTitle>Doctors</CardTitle>
@@ -538,7 +538,7 @@ export default function DoctorsPage() {
           </div>
 
           {/* Right Column: Doctor Details */}
-          <div className="h-full overflow-y-auto pr-2">
+          <div className="h-full overflow-y-auto pr-2 md:col-span-2">
             {selectedDoctor ? (
             <>
             <Card className="mb-6">
