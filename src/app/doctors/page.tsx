@@ -174,6 +174,8 @@ export default function DoctorsPage() {
   
   const [isEditingTime, setIsEditingTime] = useState(false);
   const [newAvgTime, setNewAvgTime] = useState<number | string>("");
+  const [isEditingFee, setIsEditingFee] = useState(false);
+  const [newFee, setNewFee] = useState<number | string>("");
 
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [newName, setNewName] = useState("");
@@ -243,6 +245,7 @@ export default function DoctorsPage() {
       }
       
       setNewAvgTime(selectedDoctor.averageConsultingTime || "");
+      setNewFee(selectedDoctor.consultationFee || "");
       setNewName(selectedDoctor.name);
       setNewBio(selectedDoctor.bio || "");
       setNewSpecialty(selectedDoctor.specialty);
@@ -254,6 +257,7 @@ export default function DoctorsPage() {
       setIsEditingDetails(false);
       setIsEditingAvailability(false);
       setIsEditingTime(false);
+      setIsEditingFee(false);
     }
   }, [selectedDoctor, appointments, form]);
 
@@ -375,6 +379,37 @@ export default function DoctorsPage() {
             }
         });
     }
+
+    const handleFeeSave = async () => {
+        if (!selectedDoctor || newFee === "") return;
+        const feeValue = Number(newFee);
+        if (isNaN(feeValue) || feeValue < 0) {
+             toast({ variant: "destructive", title: "Invalid Fee", description: "Please enter a valid non-negative number." });
+             return;
+        }
+
+        startTransition(async () => {
+            const doctorRef = doc(db, "doctors", selectedDoctor.id);
+            try {
+                await updateDoc(doctorRef, { consultationFee: feeValue });
+                const updatedDoctor = { ...selectedDoctor, consultationFee: feeValue };
+                setSelectedDoctor(updatedDoctor);
+                setDoctors(prev => prev.map(d => d.id === selectedDoctor.id ? updatedDoctor : d));
+                setIsEditingFee(false);
+                toast({
+                    title: "Consultation Fee Updated",
+                    description: `Consultation fee set to $${feeValue}.`,
+                });
+            } catch (error) {
+                console.error("Error updating fee:", error);
+                toast({
+                    variant: "destructive",
+                    title: "Update Failed",
+                    description: "Could not update the consultation fee.",
+                });
+            }
+        });
+    };
 
     const handleDetailsSave = async () => {
         if (!selectedDoctor) return;
@@ -720,7 +755,7 @@ export default function DoctorsPage() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Avg. Consulting Time</CardTitle>
@@ -743,6 +778,32 @@ export default function DoctorsPage() {
                             <div className="flex items-center gap-2">
                                 <p className="text-2xl font-bold">{selectedDoctor.averageConsultingTime || 0} min</p>
                                 <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingTime(true)}><Edit className="h-3 w-3"/></Button>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Consultation Fee</CardTitle>
+                        <DollarSign className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        {isEditingFee ? (
+                            <div className="flex items-center gap-2 mt-1">
+                                <Input 
+                                    type="number" 
+                                    value={newFee} 
+                                    onChange={(e) => setNewFee(e.target.value)} 
+                                    className="w-20 h-8"
+                                    disabled={isPending}
+                                />
+                                <Button size="icon" className="h-8 w-8" onClick={handleFeeSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
+                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => {setIsEditingFee(false); setNewFee(selectedDoctor.consultationFee || "")}} disabled={isPending}><X className="h-4 w-4"/></Button>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2">
+                                <p className="text-2xl font-bold">${selectedDoctor.consultationFee || 0}</p>
+                                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingFee(true)}><Edit className="h-3 w-3"/></Button>
                             </div>
                         )}
                     </CardContent>
