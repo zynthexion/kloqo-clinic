@@ -51,7 +51,7 @@ import {
 } from "@/components/ui/table";
 import WeeklyDoctorAvailability from "@/components/dashboard/weekly-doctor-availability";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "cmdk";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
 
 const formSchema = z.object({
   id: z.string().optional(),
