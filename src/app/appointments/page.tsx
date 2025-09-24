@@ -335,7 +335,7 @@ export default function AppointmentsPage() {
       e.preventDefault();
       form.setValue("patientName", patientSearchTerm);
       setIsPatientPopoverOpen(false);
-      patientInputref.current?.blur();
+      patientInputRef.current?.blur();
     }
   };
 
@@ -471,7 +471,7 @@ export default function AppointmentsPage() {
         <div className="flex flex-1">
             <main className={cn(
               "flex-shrink-0 overflow-visible relative transition-all duration-300 ease-in-out p-6",
-              isDrawerExpanded ? "w-1/3 -ml-[16.666%]" : "w-2/3"
+              isDrawerExpanded ? "w-3/12" : "w-2/3"
             )}>
               {isDrawerExpanded && (
                 <Button 
@@ -722,7 +722,7 @@ export default function AppointmentsPage() {
             
             <aside className={cn(
               "flex-shrink-0 overflow-hidden relative transition-all duration-300 ease-in-out p-6",
-              isDrawerExpanded ? "w-2/3" : "w-1/3"
+              isDrawerExpanded ? "w-9/12" : "w-1/3"
             )}>
                 <Button 
                     variant="outline" 
@@ -888,5 +888,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
-    
