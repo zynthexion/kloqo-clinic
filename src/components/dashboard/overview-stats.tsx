@@ -19,7 +19,7 @@ import {
     DollarSign,
     CalendarClock,
 } from "lucide-react";
-import { format, isFuture, parse, isPast } from "date-fns";
+import { format, isFuture, parse, isPast, isWithinInterval, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns";
 
 const iconMap = {
     "Total Appointments": BriefcaseMedical,
@@ -35,31 +35,54 @@ const iconMap = {
     "Upcoming": CalendarClock,
 };
 
+type FilterRange = "weekly" | "monthly" | "yearly";
 
-export default function OverviewStats() {
+type OverviewStatsProps = {
+  selectedDate: Date;
+  filterRange: FilterRange;
+};
+
+
+export default function OverviewStats({ selectedDate, filterRange }: OverviewStatsProps) {
   const [stats, setStats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
+        setLoading(true);
         const [appointmentsSnapshot, doctorsSnapshot] = await Promise.all([
           getDocs(collection(db, "appointments")),
           getDocs(collection(db, "doctors")),
         ]);
 
-        const appointments = appointmentsSnapshot.docs.map(doc => doc.data() as Appointment);
-        const doctors = doctorsSnapshot.docs.map(doc => doc.data() as Doctor);
+        const allAppointments = appointmentsSnapshot.docs.map(doc => doc.data() as Appointment);
+        const allDoctors = doctorsSnapshot.docs.map(doc => doc.data() as Doctor);
 
-        const today = new Date();
-        const todayStr = format(today, "d MMMM yyyy");
+        let interval;
+        switch (filterRange) {
+          case 'weekly':
+            interval = { start: startOfWeek(selectedDate), end: endOfWeek(selectedDate) };
+            break;
+          case 'monthly':
+            interval = { start: startOfMonth(selectedDate), end: endOfMonth(selectedDate) };
+            break;
+          case 'yearly':
+            interval = { start: startOfYear(selectedDate), end: endOfYear(selectedDate) };
+            break;
+        }
+        
+        const appointments = allAppointments.filter(apt => {
+            const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
+            return isWithinInterval(aptDate, interval);
+        });
 
         const totalAppointments = appointments.length;
 
         const uniquePatients = new Set(appointments.map(apt => apt.patientName + apt.phone));
         const totalPatients = uniquePatients.size;
         
-        const totalDoctors = doctors.length;
+        const totalDoctors = allDoctors.length;
 
         const walkInAppointments = appointments.filter(apt => apt.bookedVia === 'Walk-in').length;
         const phoneAppointments = appointments.filter(apt => apt.bookedVia === 'Phone').length;
@@ -71,7 +94,7 @@ export default function OverviewStats() {
         
         const totalRevenue = "$12,450";
 
-        const upcomingAppointments = appointments.filter(apt => isFuture(parse(apt.date, 'd MMMM yyyy', today)) || (apt.date === todayStr && apt.status !== 'Cancelled')).length;
+        const upcomingAppointments = allAppointments.filter(apt => isFuture(parse(apt.date, 'd MMMM yyyy', new Date()))).length;
 
         const allStats = [
           { title: "Total Appointments", value: totalAppointments, icon: "Total Appointments" },
@@ -97,7 +120,7 @@ export default function OverviewStats() {
     };
 
     fetchStats();
-  }, []);
+  }, [selectedDate, filterRange]);
   
   if (loading) {
       return (

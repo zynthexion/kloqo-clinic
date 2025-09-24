@@ -25,17 +25,18 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "../ui/skeleton";
 
-export default function TodaysAppointments() {
+export default function TodaysAppointments({ selectedDate }: { selectedDate: Date }) {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchAppointments = async () => {
       try {
-        const todayStr = format(new Date(), "d MMMM yyyy");
+        setLoading(true);
+        const dateStr = format(selectedDate, "d MMMM yyyy");
         const q = query(
           collection(db, "appointments"),
-          where("date", "==", todayStr)
+          where("date", "==", dateStr)
         );
         const querySnapshot = await getDocs(q);
         const appts = querySnapshot.docs.map(
@@ -56,13 +57,13 @@ export default function TodaysAppointments() {
       }
     };
     fetchAppointments();
-  }, []);
+  }, [selectedDate]);
 
   return (
     <Card className="h-full flex flex-col">
       <CardHeader>
-        <CardTitle>Today's Appointments</CardTitle>
-        <CardDescription>A list of appointments scheduled for today.</CardDescription>
+        <CardTitle>Appointments for {format(selectedDate, "MMMM d")}</CardTitle>
+        <CardDescription>A list of appointments for the selected day.</CardDescription>
       </CardHeader>
       <CardContent className="flex-grow overflow-hidden">
         <ScrollArea className="h-full">
@@ -112,7 +113,7 @@ export default function TodaysAppointments() {
                     colSpan={4}
                     className="h-24 text-center text-muted-foreground"
                   >
-                    No appointments scheduled for today.
+                    No appointments scheduled for this day.
                   </TableCell>
                 </TableRow>
               )}

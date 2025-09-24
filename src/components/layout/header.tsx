@@ -1,5 +1,6 @@
 
 
+
 import { Bell, Search, Settings, UserPlus, Calendar as CalendarIcon, Plus, Maximize, Minus, ZoomIn, ZoomOut, Activity, ChevronLeft } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,7 @@ export function DashboardHeader() {
        <Button size="sm" className="gap-1 rounded-full">
           <CalendarIcon className="h-4 w-4" />
           <span className="sm:whitespace-nowrap">
-            Aug - Dec 2021
+            Monthly
           </span>
         </Button>
     </header>
