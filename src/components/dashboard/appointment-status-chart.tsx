@@ -6,7 +6,7 @@ import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Appointment } from "@/lib/types";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import type { DateRange } from "react-day-picker";
 import { isWithinInterval, parse, isPast, isFuture, startOfDay } from "date-fns";
 import { Skeleton } from "../ui/skeleton";
@@ -17,6 +17,8 @@ const COLORS = {
   cancelled: "hsl(var(--chart-3))",
   didNotShow: "hsl(var(--destructive))",
 };
+
+const ALL_STATUSES = ["completed", "upcoming", "cancelled", "didNotShow"];
 
 const statusLabels: { [key: string]: string } = {
   completed: "Completed",
@@ -133,10 +135,10 @@ export default function AppointmentStatusChart({ dateRange }: AppointmentStatusC
       {chartData.length > 0 && (
         <CardFooter className="flex-col gap-2 text-sm pt-4">
             <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
-                {chartData.map(entry => (
-                    <div key={entry.name} className="flex items-center gap-2">
-                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: COLORS[entry.name as keyof typeof COLORS] }} />
-                        <span className="text-muted-foreground">{statusLabels[entry.name]}</span>
+                {ALL_STATUSES.map(status => (
+                    <div key={status} className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: COLORS[status as keyof typeof COLORS] }} />
+                        <span className="text-muted-foreground">{statusLabels[status]}</span>
                     </div>
                 ))}
             </div>
