@@ -161,6 +161,13 @@ export default function OverviewStats({ dateRange, doctorId }: OverviewStatsProp
       fetchStats();
     }
   }, [dateRange, doctorId]);
+
+  const getCardClass = (title: string) => {
+    switch (title) {
+        case "Total Patients": return "bg-stat-red";
+        default: return "shadow-lg shadow-[#dcf2eb]";
+    }
+  }
   
   if (loading) {
       return (
@@ -186,7 +193,7 @@ export default function OverviewStats({ dateRange, doctorId }: OverviewStatsProp
       {stats.map((stat) => {
         const { component: Icon, color } = iconMap[stat.icon as keyof typeof iconMap] || { component: Users, color: "text-muted-foreground" };
         return (
-            <Card key={stat.title} className="shadow-lg shadow-[#dcf2eb]">
+            <Card key={stat.title} className={getCardClass(stat.title)}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
                 <Icon className={cn("h-4 w-4", color)} />
