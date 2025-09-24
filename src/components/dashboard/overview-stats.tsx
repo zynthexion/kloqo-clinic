@@ -18,12 +18,10 @@ import {
     CheckCircle,
     DollarSign,
     CalendarClock,
-    CalendarCheck
 } from "lucide-react";
-import { format, isSameDay, isFuture, parse } from "date-fns";
+import { format, isFuture, parse, isPast } from "date-fns";
 
 const iconMap = {
-    "Today's Appointments": CalendarCheck,
     "Total Appointments": BriefcaseMedical,
     "Total Patients": Users,
     "Total Doctors": Stethoscope,
@@ -56,7 +54,6 @@ export default function OverviewStats() {
         const today = new Date();
         const todayStr = format(today, "d MMMM yyyy");
 
-        const todaysAppointments = appointments.filter(apt => apt.date === todayStr).length;
         const totalAppointments = appointments.length;
 
         const uniquePatients = new Set(appointments.map(apt => apt.patientName + apt.phone));
@@ -69,18 +66,14 @@ export default function OverviewStats() {
         const onlineAppointments = appointments.filter(apt => apt.bookedVia === 'Online').length;
         
         const cancelledAppointments = appointments.filter(apt => apt.status === 'Cancelled').length;
-        // Assuming 'Rescheduled' would be tracked differently, for now we will use a placeholder.
-        // In a real scenario this might involve checking an audit trail. We'll show a static 0.
         const rescheduledAppointments = 0; 
         const completedAppointments = appointments.filter(apt => apt.status === 'Confirmed' && isPast(parse(apt.date, 'd MMMM yyyy', new Date()))).length;
         
-        // Placeholder for revenue
         const totalRevenue = "$12,450";
 
         const upcomingAppointments = appointments.filter(apt => isFuture(parse(apt.date, 'd MMMM yyyy', today)) || (apt.date === todayStr && apt.status !== 'Cancelled')).length;
 
         const allStats = [
-          { title: "Today's Appointments", value: todaysAppointments, icon: "Today's Appointments" },
           { title: "Total Appointments", value: totalAppointments, icon: "Total Appointments" },
           { title: "Total Patients", value: totalPatients, icon: "Total Patients" },
           { title: "Total Doctors", value: totalDoctors, icon: "Total Doctors" },
@@ -109,7 +102,7 @@ export default function OverviewStats() {
   if (loading) {
       return (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
-              {Array.from({ length: 12 }).map((_, i) => (
+              {Array.from({ length: 11 }).map((_, i) => (
                   <Card key={i} className="animate-pulse">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                           <div className="h-4 bg-muted rounded w-2/4"></div>
@@ -142,8 +135,4 @@ export default function OverviewStats() {
       })}
     </div>
   );
-}
-
-function isPast(date: Date) {
-    return date < new Date();
 }

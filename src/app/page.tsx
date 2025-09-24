@@ -7,9 +7,9 @@ import { Plus } from "lucide-react";
 import { TopNav } from "@/components/layout/top-nav";
 import OverviewStats from "@/components/dashboard/overview-stats";
 import PatientCharts from "@/components/dashboard/patient-charts";
-import HospitalStatus from "@/components/dashboard/hospital-status";
 import RecentActivity from "@/components/dashboard/recent-activity";
 import DoctorAvailability from "@/components/dashboard/doctor-availability";
+import TodaysAppointments from "@/components/dashboard/todays-appointments";
 
 function DashboardHeader() {
   return (
@@ -41,7 +41,7 @@ export default function Home() {
               <PatientCharts />
             </div>
             <div className="lg:col-span-1">
-              <HospitalStatus />
+              <TodaysAppointments />
             </div>
           </div>
            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
