@@ -16,6 +16,10 @@ const doctors = [
     totalPatients: 150,
     todaysAppointments: 10,
     availability: 'Available',
+    degrees: ['MBBS', 'MD'],
+    experience: 10,
+    rating: 4,
+    reviews: 1250,
   },
   {
     id: 'D002',
@@ -29,6 +33,10 @@ const doctors = [
     totalPatients: 200,
     todaysAppointments: 0,
     availability: 'Unavailable',
+    degrees: ['MBBS', 'MS - Cardiology'],
+    experience: 15,
+    rating: 5,
+    reviews: 2100,
   },
   {
     id: 'D003',
@@ -42,6 +50,10 @@ const doctors = [
     totalPatients: 180,
     todaysAppointments: 12,
     availability: 'Available',
+    degrees: ['MBBS', 'DCH'],
+    experience: 8,
+    rating: 4,
+    reviews: 980,
   },
   {
     id: 'D004',
@@ -55,6 +67,10 @@ const doctors = [
     totalPatients: 120,
     todaysAppointments: 8,
     availability: 'Available',
+    degrees: ['MBBS', 'MD - Dermatology'],
+    experience: 12,
+    rating: 5,
+    reviews: 1500,
   },
     {
     id: 'D005',
@@ -68,6 +84,10 @@ const doctors = [
     totalPatients: 160,
     todaysAppointments: 0,
     availability: 'Unavailable',
+    degrees: ['MBBS', 'MD'],
+    experience: 7,
+    rating: 4,
+    reviews: 800,
   },
   {
     id: 'D006',
@@ -81,6 +101,10 @@ const doctors = [
     totalPatients: 210,
     todaysAppointments: 14,
     availability: 'Available',
+    degrees: ['MBBS', 'DM - Cardiology'],
+    experience: 18,
+    rating: 5,
+    reviews: 2500,
   },
     {
     id: 'D007',
@@ -94,6 +118,10 @@ const doctors = [
     totalPatients: 170,
     todaysAppointments: 0,
     availability: 'Unavailable',
+    degrees: ['MBBS', 'MD - Pediatrics'],
+    experience: 9,
+    rating: 4,
+    reviews: 1100,
   },
   {
     id: 'D008',
@@ -107,6 +135,10 @@ const doctors = [
     totalPatients: 130,
     todaysAppointments: 9,
     availability: 'Available',
+    degrees: ['MBBS', 'MD - Dermatology'],
+    experience: 6,
+    rating: 4,
+    reviews: 750,
   },
   {
     id: 'D009',
@@ -120,6 +152,10 @@ const doctors = [
     totalPatients: 190,
     todaysAppointments: 0,
     availability: 'Unavailable',
+    degrees: ['MBBS', 'MD - Internal Medicine'],
+    experience: 14,
+    rating: 5,
+    reviews: 1800,
   },
   {
     id: 'D010',
@@ -133,6 +169,10 @@ const doctors = [
     totalPatients: 175,
     todaysAppointments: 12,
     availability: 'Available',
+    degrees: ['MBBS', 'MD - Pediatrics'],
+    experience: 11,
+    rating: 4,
+    reviews: 1300,
   },
   {
     id: 'D011',
@@ -146,6 +186,10 @@ const doctors = [
     totalPatients: 140,
     todaysAppointments: 0,
     availability: 'Unavailable',
+    degrees: ['MBBS', 'MS - Orthopedics'],
+    experience: 16,
+    rating: 5,
+    reviews: 1950,
   },
   {
     id: 'D012',
@@ -159,6 +203,10 @@ const doctors = [
     totalPatients: 155,
     todaysAppointments: 11,
     availability: 'Available',
+    degrees: ['MBBS', 'DM - Neurology'],
+    experience: 20,
+    rating: 5,
+    reviews: 3200,
   },
 ];
 
@@ -479,5 +527,3 @@ async function main() {
 
 
 main().catch(console.error);
-
-    

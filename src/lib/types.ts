@@ -31,6 +31,10 @@ export type Doctor = {
   averageConsultingTime?: number;
   availabilitySlots?: AvailabilitySlot[];
   leaveSlots?: LeaveSlot[];
+  degrees?: string[];
+  experience?: number;
+  rating?: number;
+  reviews?: number;
 };
 
 export type Appointment = {
@@ -100,5 +104,3 @@ export type MobileApp = {
     username: string;
     password?: string;
 }
-
-    

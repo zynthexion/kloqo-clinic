@@ -87,38 +87,42 @@ const StarRating = ({ rating }: { rating: number }) => (
     {[...Array(5)].map((_, i) => (
       <Star
         key={i}
-        className={cn("h-3 w-3", i < rating ? "text-yellow-400 fill-yellow-400" : "text-gray-300")}
+        className={cn("h-4 w-4", i < rating ? "text-yellow-400 fill-yellow-400" : "text-gray-300")}
       />
     ))}
   </div>
 );
 
-
 const DoctorListItem = ({ doctor, onSelect, isSelected }: { doctor: Doctor, onSelect: () => void, isSelected: boolean }) => (
     <div
       className={cn(
-        "bg-white rounded-lg p-4 flex items-center gap-4 cursor-pointer transition-all duration-200 border-2",
-        isSelected ? "border-teal-500 bg-teal-50/50" : "border-gray-200 hover:border-gray-300 hover:shadow-md"
+        "bg-primary text-primary-foreground rounded-lg p-3 flex items-center gap-4 cursor-pointer transition-all duration-200 border-2",
+        isSelected ? "border-blue-300 ring-4 ring-blue-200" : "border-primary hover:bg-primary/90"
       )}
       onClick={onSelect}
     >
-        <div className="relative">
-            <Image
-                src={doctor.avatar}
-                alt={doctor.name}
-                width={56}
-                height={56}
-                className="rounded-full object-cover"
-                data-ai-hint="doctor portrait"
-            />
-            <span className={cn(
-                "absolute bottom-0 right-0 block h-3.5 w-3.5 rounded-full border-2 border-white",
-                doctor.availability === 'Available' ? 'bg-green-500' : 'bg-gray-400'
-            )}></span>
+        <div className="relative flex-shrink-0">
+            <div className="bg-white p-1 rounded-md">
+                <Image
+                    src={doctor.avatar}
+                    alt={doctor.name}
+                    width={96}
+                    height={96}
+                    className="rounded-md object-cover"
+                    data-ai-hint="doctor portrait"
+                />
+            </div>
         </div>
-        <div className="flex-grow">
-            <p className="font-bold text-base text-gray-800">{doctor.name}</p>
-            <p className="text-sm text-gray-500">{doctor.department}</p>
+        <div className="flex-grow text-white space-y-1">
+            <p className="font-bold text-xl">{doctor.name}</p>
+            <p className="text-sm opacity-90">
+                {doctor.degrees?.join(", ")} - {doctor.department}
+            </p>
+            <p className="text-sm opacity-90">{doctor.experience} Years Experience Overall</p>
+            <div className="flex items-center gap-2">
+                <StarRating rating={doctor.rating || 0} />
+                <span className="text-sm opacity-90">({doctor.reviews}+ Reviews)</span>
+            </div>
         </div>
     </div>
 );
@@ -968,5 +972,3 @@ export default function DoctorsPage() {
     </>
   );
 }
-
-    
