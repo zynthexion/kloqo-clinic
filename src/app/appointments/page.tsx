@@ -615,21 +615,6 @@ export default function AppointmentsPage() {
                                     </FormItem>
                                   )}
                                 />
-                                <FormField control={form.control} name="status" render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Status</FormLabel>
-                                      <Select onValueChange={field.onChange} value={field.value}>
-                                        <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl>
-                                        <SelectContent>
-                                          <SelectItem value="Pending">Pending</SelectItem>
-                                          <SelectItem value="Confirmed">Confirmed</SelectItem>
-                                          <SelectItem value="Cancelled">Cancelled</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
                             </div>
 
                             {selectedDoctor && selectedDate && (
