@@ -50,7 +50,7 @@ import {
 } from "@/components/ui/table";
 import WeeklyDoctorAvailability from "@/components/dashboard/weekly-doctor-availability";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -84,8 +84,11 @@ export default function AppointmentsPage() {
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  
+  const [patientSearchTerm, setPatientSearchTerm] = useState("");
   const [patientSearchResults, setPatientSearchResults] = useState<Patient[]>([]);
   const [isPatientPopoverOpen, setIsPatientPopoverOpen] = useState(false);
+  const [isNewPatient, setIsNewPatient] = useState(false);
 
   const { toast } = useToast();
 
@@ -109,7 +112,21 @@ export default function AppointmentsPage() {
     },
   });
   
-  const patientNameValue = form.watch("patientName");
+  useEffect(() => {
+    if (patientSearchTerm.length > 1) {
+      const results = allPatients.filter(p =>
+        p.name.toLowerCase().includes(patientSearchTerm.toLowerCase())
+      );
+      setPatientSearchResults(results);
+      setIsPatientPopoverOpen(true);
+      setIsNewPatient(results.length === 0);
+    } else {
+      setPatientSearchResults([]);
+      setIsPatientPopoverOpen(false);
+      setIsNewPatient(false);
+    }
+  }, [patientSearchTerm, allPatients]);
+
 
   useEffect(() => {
     const fetchAppointmentsAndPatients = async () => {
@@ -121,6 +138,7 @@ export default function AppointmentsPage() {
 
         const patientMap = new Map<string, Patient>();
         appointmentsList.forEach((apt) => {
+          if (!apt.patientName || !apt.phone) return;
           const patientId = encodeURIComponent(`${apt.patientName}-${apt.phone}`);
           
           if (!apt.date) return;
@@ -182,6 +200,8 @@ export default function AppointmentsPage() {
   const resetForm = () => {
     setEditingAppointment(null);
     setSelectedDoctorId(null);
+    setPatientSearchTerm("");
+    setIsNewPatient(false);
     form.reset({
       patientName: "", gender: "Male", phone: "", age: 0, doctor: "",
       date: undefined, time: undefined, department: "", treatment: "",
@@ -193,28 +213,20 @@ export default function AppointmentsPage() {
     if (editingAppointment) {
         const doctor = doctors.find(d => d.name === editingAppointment.doctor);
         if (doctor) {
+            const appointmentDate = parse(editingAppointment.date, "d MMMM yyyy", new Date());
             form.reset({
                 ...editingAppointment,
-                date: parse(editingAppointment.date, "d MMMM yyyy", new Date()),
+                date: isNaN(appointmentDate.getTime()) ? undefined : appointmentDate,
                 doctor: doctor.id,
             });
+            setPatientSearchTerm(editingAppointment.patientName);
             setSelectedDoctorId(doctor.id);
+            setIsNewPatient(false);
         }
     } else {
         resetForm();
     }
   }, [editingAppointment, form, doctors]);
-
-  useEffect(() => {
-    if (patientNameValue && patientNameValue.length > 1) {
-      const results = allPatients.filter(p => 
-        p.name.toLowerCase().replace(/\s/g, "").includes(patientNameValue.toLowerCase().replace(/\s/g, ""))
-      );
-      setPatientSearchResults(results);
-    } else {
-      setPatientSearchResults([]);
-    }
-  }, [patientNameValue, allPatients]);
 
 
   const selectedDoctor = useMemo(() => {
@@ -298,7 +310,9 @@ export default function AppointmentsPage() {
     form.setValue("gender", patient.gender);
     form.setValue("phone", patient.phone);
     form.setValue("place", patient.place || "");
+    setPatientSearchTerm(patient.name);
     setIsPatientPopoverOpen(false);
+    setIsNewPatient(false);
   }
 
   const availableDaysOfWeek = useMemo(() => {
@@ -401,14 +415,19 @@ export default function AppointmentsPage() {
       });
   };
 
-  const handleCommandKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'Enter') {
-      if (patientSearchResults.length === 0 && patientNameValue.length > 1) {
-        e.preventDefault();
-        setIsPatientPopoverOpen(false);
-      }
+  const handlePatientNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setPatientSearchTerm(value);
+    form.setValue("patientName", value);
+  };
+  
+  const handlePopoverOpenChange = (open: boolean) => {
+    setIsPatientPopoverOpen(open);
+    if (!open) {
+      // When popover closes, ensure the form value is set to whatever is in the input
+      form.setValue("patientName", patientSearchTerm);
     }
-  }
+  };
 
   return (
     <>
@@ -431,51 +450,67 @@ export default function AppointmentsPage() {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4">
                           <div className="space-y-4 md:col-span-1">
                             <h3 className="text-lg font-medium border-b pb-2">Patient Details</h3>
-                            <FormField control={form.control} name="patientName" render={({ field }) => (
+                            
+                             <FormField
+                                control={form.control}
+                                name="patientName"
+                                render={({ field }) => (
                                 <FormItem>
-                                  <FormLabel>Patient Name</FormLabel>
-                                  <Popover open={isPatientPopoverOpen} onOpenChange={setIsPatientPopoverOpen}>
-                                    <PopoverTrigger asChild>
-                                      <FormControl>
-                                        <Input 
-                                          placeholder="John Doe" 
-                                          {...field}
-                                          onChange={(e) => {
-                                            field.onChange(e);
-                                            if (e.target.value.length > 1) {
-                                              setIsPatientPopoverOpen(true);
-                                            } else {
-                                              setIsPatientPopoverOpen(false);
-                                            }
-                                          }}
-                                        />
-                                      </FormControl>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                                      <Command onKeyDown={handleCommandKeyDown}>
-                                        <CommandInput placeholder="Search patient..." className="h-9" />
-                                        <CommandEmpty>No patient found. Press Enter to add.</CommandEmpty>
-                                        <CommandGroup>
-                                          <ScrollArea className="h-48">
-                                            {patientSearchResults.map((patient) => (
-                                              <CommandItem
-                                                key={patient.id}
-                                                value={patient.name}
-                                                onSelect={() => handlePatientSelect(patient)}
-                                              >
-                                                {patient.name}
-                                                <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
-                                              </CommandItem>
-                                            ))}
-                                          </ScrollArea>
-                                        </CommandGroup>
-                                      </Command>
-                                    </PopoverContent>
-                                  </Popover>
-                                  <FormMessage />
+                                    <FormLabel>Patient Name</FormLabel>
+                                     <Popover open={isPatientPopoverOpen} onOpenChange={handlePopoverOpenChange}>
+                                        <PopoverTrigger asChild>
+                                        <FormControl>
+                                            <Input
+                                                placeholder="Start typing patient name..."
+                                                value={patientSearchTerm}
+                                                onChange={handlePatientNameChange}
+                                                onBlur={() => {
+                                                    // This ensures that if the user clicks away, the form value is set.
+                                                    field.onChange(patientSearchTerm);
+                                                }}
+                                            />
+                                        </FormControl>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                        <Command>
+                                            <CommandInput placeholder="Search patient..." value={patientSearchTerm} onValueChange={setPatientSearchTerm} />
+                                            <CommandList>
+                                                <CommandEmpty>
+                                                    <div className="p-4 text-sm">
+                                                        New Patient: "{patientSearchTerm}"
+                                                    </div>
+                                                </CommandEmpty>
+                                                <CommandGroup>
+                                                    {patientSearchResults.map((patient) => (
+                                                    <CommandItem
+                                                        key={patient.id}
+                                                        value={patient.name}
+                                                        onSelect={() => handlePatientSelect(patient)}
+                                                    >
+                                                        {patient.name}
+                                                        <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
+                                                    </CommandItem>
+                                                    ))}
+                                                </CommandGroup>
+                                            </CommandList>
+                                        </Command>
+                                        </PopoverContent>
+                                    </Popover>
+                                    <FormMessage />
                                 </FormItem>
-                              )}
+                                )}
                             />
+
+                            {patientSearchTerm && (
+                                <div className={`text-sm px-3 py-1 rounded ${
+                                    isNewPatient 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : 'bg-blue-100 text-blue-800'
+                                }`}>
+                                    {isNewPatient ? '✓ New Patient' : '✓ Existing Patient'}
+                                </div>
+                            )}
+
                             <FormField control={form.control} name="age" render={({ field }) => (
                                 <FormItem>
                                   <FormLabel>Age</FormLabel>
@@ -661,7 +696,7 @@ export default function AppointmentsPage() {
                                     </TableHeader>
                                     <TableBody>
                                         {appointments
-                                            .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                                            .sort((a,b) => new Date(`${a.date} ${a.time}`).getTime() - new Date(`${b.date} ${b.time}`).getTime())
                                             .map((appointment) => (
                                             <TableRow key={appointment.id} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
                                                 <TableCell>
@@ -724,5 +759,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
-    
