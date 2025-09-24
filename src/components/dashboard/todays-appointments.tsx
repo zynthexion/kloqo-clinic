@@ -2,12 +2,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   Card,
   CardHeader,
   CardTitle,
   CardContent,
   CardDescription,
+  CardFooter,
 } from "@/components/ui/card";
 import {
   Table,
@@ -24,6 +26,8 @@ import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "../ui/skeleton";
+import { Button } from "../ui/button";
+import { ArrowRight } from "lucide-react";
 
 export default function TodaysAppointments({ selectedDate }: { selectedDate: Date }) {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -121,6 +125,14 @@ export default function TodaysAppointments({ selectedDate }: { selectedDate: Dat
           </Table>
         </ScrollArea>
       </CardContent>
+       <CardFooter className="pt-4 justify-end">
+          <Button asChild variant="link" className="text-primary">
+              <Link href="/appointments">
+                  View All
+                  <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+          </Button>
+      </CardFooter>
     </Card>
   );
 }
