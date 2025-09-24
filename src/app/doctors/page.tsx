@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useTransition } from "react";
@@ -27,7 +28,7 @@ import { doc, getDoc, updateDoc, collection, getDocs } from "firebase/firestore"
 import { db } from "@/lib/firebase";
 import type { Doctor, Appointment, LeaveSlot, Department } from "@/lib/types";
 import { format, parse, isSameDay, getDay, parse as parseDateFns } from "date-fns";
-import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays } from "lucide-react";
+import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -94,37 +95,32 @@ const StarRating = ({ rating }: { rating: number }) => (
 );
 
 const DoctorListItem = ({ doctor, onSelect, isSelected }: { doctor: Doctor, onSelect: () => void, isSelected: boolean }) => (
-    <div
+    <Card
       className={cn(
-        "bg-primary text-primary-foreground rounded-lg p-3 flex items-center gap-4 cursor-pointer transition-all duration-200 border-2",
-        isSelected ? "border-blue-300 ring-4 ring-blue-200" : "border-primary hover:bg-primary/90"
+        "p-3 flex items-center gap-3 cursor-pointer transition-all duration-200 border-2",
+        isSelected ? "border-primary bg-primary/10" : "border-transparent hover:bg-muted/50"
       )}
       onClick={onSelect}
     >
         <div className="relative flex-shrink-0">
-            <div className="bg-white p-1 rounded-md">
-                <Image
-                    src={doctor.avatar}
-                    alt={doctor.name}
-                    width={96}
-                    height={96}
-                    className="rounded-md object-cover"
-                    data-ai-hint="doctor portrait"
-                />
-            </div>
+             <Image
+                src={doctor.avatar}
+                alt={doctor.name}
+                width={40}
+                height={40}
+                className="rounded-full object-cover"
+                data-ai-hint="doctor portrait"
+            />
+            <span className={cn(
+                "absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full border-2 border-white",
+                doctor.availability === "Available" ? "bg-green-500" : "bg-gray-400"
+            )} />
         </div>
-        <div className="flex-grow text-white space-y-1">
-            <p className="font-bold text-xl">{doctor.name}</p>
-            <p className="text-sm opacity-90">
-                {doctor.degrees?.join(", ")} - {doctor.department}
-            </p>
-            <p className="text-sm opacity-90">{doctor.experience} Years Experience Overall</p>
-            <div className="flex items-center gap-2">
-                <StarRating rating={doctor.rating || 0} />
-                <span className="text-sm opacity-90">({doctor.reviews}+ Reviews)</span>
-            </div>
+        <div>
+            <p className="font-semibold text-sm">{doctor.name}</p>
+            <p className="text-xs text-muted-foreground">{doctor.department}</p>
         </div>
-    </div>
+    </Card>
 );
 
 export default function DoctorsPage() {
@@ -167,7 +163,7 @@ export default function DoctorsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
-  const [doctorsPerPage, setDoctorsPerPage] = useState(6);
+  const [doctorsPerPage, setDoctorsPerPage] = useState(10);
 
 
   useEffect(() => {
@@ -488,7 +484,7 @@ export default function DoctorsPage() {
 
   return (
     <>
-      <main className="flex-1 overflow-hidden bg-[#bcddef]/30">
+      <main className="flex-1 overflow-hidden bg-background">
         <div className="h-full grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
           {/* Left Column: Doctor List */}
           <div className="h-full md:col-span-1">
@@ -517,7 +513,7 @@ export default function DoctorsPage() {
                       </SelectContent>
                   </Select>
                 </CardHeader>
-                <CardContent className="flex-grow overflow-y-auto pr-2 grid grid-cols-1 gap-4 px-6 pt-0">
+                <CardContent className="flex-grow overflow-y-auto space-y-2 px-4 pt-0">
                     {currentDoctors.map(doctor => (
                         <DoctorListItem 
                             key={doctor.id}
@@ -547,81 +543,46 @@ export default function DoctorsPage() {
           <div className="h-full overflow-y-auto pr-2 md:col-span-2">
             {selectedDoctor ? (
             <>
-            <Card className="mb-6">
-                <CardHeader className="flex flex-row items-center justify-between">
-                <div className="flex items-start gap-6 flex-grow">
-                    <Image
-                    src={selectedDoctor.avatar}
-                    alt={selectedDoctor.name}
-                    width={128}
-                    height={128}
-                    className="rounded-full border-4 border-primary/20 object-cover"
-                    />
-                    <div className="flex-grow">
-                    {isEditingDetails ? (
-                        <>
-                            <div className="flex items-center gap-2">
-                                <Input 
-                                    value={newName} 
-                                    onChange={(e) => setNewName(e.target.value)} 
-                                    className="text-3xl font-bold h-12"
-                                    disabled={isPending}
-                                />
-                            </div>
-                            <div className="flex items-center gap-2 mt-1">
-                                <Input 
-                                    value={newSpecialty} 
-                                    onChange={(e) => setNewSpecialty(e.target.value)} 
-                                    className="text-lg h-10"
-                                    disabled={isPending}
-                                />
-                            </div>
-                            <div className="flex items-center gap-2 mt-1">
-                                <Select onValueChange={setNewDepartment} value={newDepartment}>
-                                    <SelectTrigger className="w-[200px] h-9">
-                                        <SelectValue placeholder="Select department" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {departments.map(dept => (
-                                            <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </>
-                        ) : (
-                        <>
-                            <div className="flex items-center gap-2">
-                            <h1 className="text-3xl font-bold">{selectedDoctor.name}</h1>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <p className="text-lg text-muted-foreground">{selectedDoctor.specialty}</p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                            <p className="mt-2 text-sm text-muted-foreground">{selectedDoctor.department}</p>
-                            </div>
-                        </>
-                        )}
-                    <div className="flex items-center space-x-2 mt-4">
-                        <Switch
-                            id="status-switch"
-                            checked={selectedDoctor.availability === 'Available'}
-                            onCheckedChange={(checked) => handleStatusChange(checked ? 'Available' : 'Unavailable')}
-                            disabled={isPending}
+            <div className="bg-primary text-primary-foreground rounded-lg p-4 flex items-center gap-6 mb-6">
+                <div className="relative flex-shrink-0">
+                    <div className="bg-white p-1 rounded-md">
+                        <Image
+                            src={selectedDoctor.avatar}
+                            alt={selectedDoctor.name}
+                            width={112}
+                            height={112}
+                            className="rounded-md object-cover"
+                            data-ai-hint="doctor portrait"
                         />
-                        <Label htmlFor="status-switch" className={`font-semibold ${selectedDoctor.availability === 'Available' ? 'text-green-600' : 'text-red-600'}`}>
-                            {selectedDoctor.availability === 'Available' ? 'In' : 'Out'}
-                        </Label>
-                    </div>
                     </div>
                 </div>
-                    {!isEditingDetails && (
-                        <Button variant="outline" size="sm" onClick={() => setIsEditingDetails(true)}>
-                            <Edit className="mr-2 h-4 w-4" /> Edit
-                        </Button>
-                    )}
-                </CardHeader>
-            </Card>
+                <div className="flex-grow text-white space-y-1.5">
+                    <p className="font-bold text-2xl">{selectedDoctor.name}</p>
+                    <p className="text-md opacity-90">
+                        {selectedDoctor.degrees?.join(", ")} - {selectedDoctor.department}
+                    </p>
+                    <p className="text-md opacity-90">{selectedDoctor.experience} Years Experience Overall</p>
+                    <div className="flex items-center gap-2">
+                        <StarRating rating={selectedDoctor.rating || 0} />
+                        <span className="text-md opacity-90">({selectedDoctor.reviews}+ Reviews)</span>
+                    </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                    <Button variant="secondary" size="sm"><LinkIcon className="mr-2 h-4 w-4"/> View Full Profile</Button>
+                    <div className="flex items-center space-x-2 bg-black/20 p-2 rounded-md">
+                      <Switch
+                        id="status-switch"
+                        checked={selectedDoctor.availability === 'Available'}
+                        onCheckedChange={(checked) => handleStatusChange(checked ? 'Available' : 'Unavailable')}
+                        disabled={isPending}
+                        className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-gray-400"
+                      />
+                      <Label htmlFor="status-switch" className="font-semibold text-white">
+                        {selectedDoctor.availability === 'Available' ? 'In' : 'Out'}
+                      </Label>
+                   </div>
+                </div>
+            </div>
             
             <Tabs defaultValue="details">
                 <TabsList>
@@ -972,3 +933,4 @@ export default function DoctorsPage() {
     </>
   );
 }
+
