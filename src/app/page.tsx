@@ -83,6 +83,9 @@ export default function Home() {
                 <AppointmentStatusChart dateRange={dateRange} />
             </div>
             <div className="lg:col-span-1">
+              <TodaysAppointments selectedDate={selectedDate} />
+            </div>
+            <div className="lg:col-span-1">
                <Card className="h-full flex flex-col">
                   <CardContent className="p-2 flex-grow flex items-center justify-center">
                       <Calendar
@@ -93,9 +96,6 @@ export default function Home() {
                       />
                   </CardContent>
                 </Card>
-            </div>
-            <div className="lg:col-span-1">
-              <TodaysAppointments selectedDate={selectedDate} />
             </div>
           </div>
            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
