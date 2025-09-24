@@ -491,7 +491,7 @@ export default function AppointmentsPage() {
                 }
               }}
               className={cn(
-              "flex-shrink-0 overflow-visible relative transition-all duration-300 ease-in-out",
+              "flex-shrink-0 relative transition-all duration-300 ease-in-out",
               isDrawerExpanded ? "w-3/12 p-6" : "w-2/3 p-6"
             )}>
               {isDrawerExpanded && (
@@ -745,10 +745,10 @@ export default function AppointmentsPage() {
             </main>
             
             <aside className={cn(
-              "flex-shrink-0 overflow-hidden relative transition-all duration-300 ease-in-out p-6",
+              "flex-shrink-0 relative transition-all duration-300 ease-in-out p-6",
               isDrawerExpanded ? "w-9/12" : "w-1/3"
             )}>
-                <Button 
+                 <Button 
                     variant="outline" 
                     size="icon" 
                     className={cn(
