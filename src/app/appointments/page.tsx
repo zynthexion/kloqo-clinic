@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useEffect, useState, useMemo, useRef } from "react";
@@ -473,7 +472,7 @@ export default function AppointmentsPage() {
         });
     }
 
-    return filtered.sort((a,b) => new Date(`${a.date} ${a.time}`).getTime() - new Date(`${b.date} ${b.time}`).getTime());
+    return filtered.sort((a,b) => new Date(`${a.date} ${b.time}`).getTime() - new Date(`${b.date} ${b.time}`).getTime());
   }, [appointments, drawerSearchTerm, filterAvailableDoctors, doctors, activeTab]);
 
 
@@ -493,19 +492,6 @@ export default function AppointmentsPage() {
             "relative flex-shrink-0 transition-all duration-300 ease-in-out",
             isDrawerExpanded ? "w-3/12" : "w-2/3"
         )}>
-            {isDrawerExpanded && (
-                <Button 
-                    variant="outline" 
-                    size="icon" 
-                    className="absolute top-1/2 -right-4 z-20 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setIsDrawerExpanded(false);
-                    }}
-                >
-                    <ChevronRight className="h-5 w-5" />
-                </Button>
-              )}
             <Card className="h-full p-6">
                 <CardHeader>
                 <CardTitle>{isEditing ? "Reschedule Appointment" : "Book New Appointment"}</CardTitle>
@@ -651,7 +637,7 @@ export default function AppointmentsPage() {
                             <FormField control={form.control} name="date" render={({ field }) => (
                                 <FormItem className="flex flex-col">
                                     <Calendar
-                                    className="bg-primary text-primary-foreground rounded-md [&_button:hover]:bg-primary/80 [&_.rdp-day_today]:bg-primary-foreground/20 [&_.rdp-day_today]:text-primary-foreground"
+                                    className="bg-primary text-primary-foreground rounded-md [&_button:hover]:bg-primary/80 [&_.rdp-day_today]:bg-primary-foreground/20 [&_.rdp-day_today]:text-primary-foreground [&_button]:text-white"
                                     mode="single" selected={field.value} onSelect={field.onChange}
                                     disabled={(date) => 
                                         date < new Date(new Date().setHours(0,0,0,0)) || 
@@ -743,11 +729,7 @@ export default function AppointmentsPage() {
                 </CardContent>
             </Card>
         </main>
-        <aside className={cn(
-            "relative flex-shrink-0 transition-all duration-300 ease-in-out p-6",
-            isDrawerExpanded ? "w-9/12" : "w-1/3"
-        )}>
-            {!isDrawerExpanded && (
+        {!isDrawerExpanded && (
             <Button 
                 variant="outline" 
                 size="icon" 
@@ -759,14 +741,18 @@ export default function AppointmentsPage() {
             >
                 <ChevronLeft className="h-5 w-5" />
             </Button>
-            )}
+        )}
+        <aside className={cn(
+            "relative flex-shrink-0 transition-all duration-300 ease-in-out p-6",
+            isDrawerExpanded ? "w-9/12" : "w-1/3"
+        )}>
             <Card className="h-full rounded-2xl">
                 <CardHeader className="p-4 border-b">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             {isDrawerExpanded && (
                                 <Button variant="outline" size="icon" onClick={() => setIsDrawerExpanded(false)}>
-                                    <ChevronLeft className="h-4 w-4" />
+                                    <ChevronRight className="h-4 w-4" />
                                 </Button>
                             )}
                             <CardTitle>Appointment Details</CardTitle>
@@ -920,3 +906,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
