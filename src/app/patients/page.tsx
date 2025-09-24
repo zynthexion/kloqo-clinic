@@ -191,7 +191,7 @@ export default function PatientsPage() {
 
 
   return (
-    <div className="flex flex-col">
+    <>
       <TopNav />
       <div>
         <DashboardHeader />
@@ -310,8 +310,6 @@ export default function PatientsPage() {
           </Card>
         </main>
       </div>
-    </div>
+    </>
   );
 }
-
-    

@@ -293,7 +293,3 @@ export default function DepartmentsPage() {
     </>
   );
 }
-
-    
-
-    

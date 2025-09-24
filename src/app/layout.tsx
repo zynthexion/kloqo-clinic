@@ -1,6 +1,7 @@
 import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
+import { Sidebar } from '@/components/layout/sidebar';
 
 export const metadata: Metadata = {
   title: 'Dashyat',
@@ -20,11 +21,14 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased h-full">
-          {children}
+          <div className="flex h-full">
+            <Sidebar />
+            <div className="flex-1 flex flex-col h-full overflow-y-auto">
+              {children}
+            </div>
+          </div>
           <Toaster />
       </body>
     </html>
   );
 }
-
-    

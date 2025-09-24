@@ -333,9 +333,9 @@ export default function AppointmentsPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen">
+    <>
       <TopNav />
-      <header className="sticky top-16 z-10 flex h-14 items-center gap-4 border-b bg-background px-4 sm:px-6">
+      <header className="flex h-14 items-center gap-4 border-b bg-background px-4 sm:px-6">
         <h1 className="text-xl font-semibold md:text-2xl">Appointments</h1>
       </header>
       <div className="relative flex flex-1 overflow-hidden">
@@ -426,8 +426,8 @@ export default function AppointmentsPage() {
                                       leave: leaveDates,
                                     }}
                                     modifiersStyles={{
-                                        available: { backgroundColor: '#D4EDDA', color: '#155724' },
-                                        leave: { backgroundColor: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' },
+                                      available: { backgroundColor: '#D4EDDA', color: '#155724' },
+                                      leave: { backgroundColor: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' },
                                     }}
                                   />
                                   <FormMessage />
@@ -599,11 +599,6 @@ export default function AppointmentsPage() {
           </Button>
           <WeeklyDoctorAvailability />
       </div>
-    </div>
+    </>
   );
 }
-
-    
-
-    
-

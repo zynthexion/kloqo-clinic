@@ -22,7 +22,7 @@ import UpcomingAppointmentsDrawer from "@/components/dashboard/upcoming-appointm
 
 function DashboardHeader() {
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 bg-background/80 px-6 backdrop-blur-sm">
+    <header className="flex h-16 items-center justify-between gap-4 px-6">
       <div>
         <h1 className="text-2xl font-bold">Welcome in, Nixtio</h1>
       </div>
@@ -224,31 +224,29 @@ function OnboardingTask() {
 
 export default function Home() {
   return (
-    <div className="flex flex-col">
+    <>
       <TopNav />
-      <div>
-        <DashboardHeader />
-        <main className="flex-1 p-6 bg-background">
-          <div className="grid grid-cols-1 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-            <div className="lg:col-span-4 xl:col-span-3">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <WelcomeMetrics />
-                <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <ProgressChart />
-                    <UpcomingAppointmentsDrawer />
-                    <Onboarding />
-                </div>
-                 <OnboardingTask />
+      <DashboardHeader />
+      <main className="flex-1 p-6 bg-background">
+        <div className="grid grid-cols-1 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+          <div className="lg:col-span-4 xl:col-span-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <WelcomeMetrics />
+              <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <ProgressChart />
+                  <UpcomingAppointmentsDrawer />
+                  <Onboarding />
               </div>
+               <OnboardingTask />
             </div>
-
-            <div className="lg:col-span-4 xl:col-span-2">
-                <LoraPitersonProfile />
-            </div>
-
           </div>
-        </main>
-      </div>
-    </div>
+
+          <div className="lg:col-span-4 xl:col-span-2">
+              <LoraPitersonProfile />
+          </div>
+
+        </div>
+      </main>
+    </>
   );
 }

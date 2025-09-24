@@ -162,7 +162,7 @@ export default function DoctorsPage() {
 
 
   return (
-    <div className="flex flex-col h-screen">
+    <>
       <TopNav />
       <main className="flex-1 overflow-hidden">
         <div className="h-full grid grid-cols-12 gap-6 p-6">
@@ -359,8 +359,6 @@ export default function DoctorsPage() {
           </div>
         </div>
       </main>
-    </div>
+    </>
   );
 }
-
-    

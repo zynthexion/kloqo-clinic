@@ -393,28 +393,28 @@ export default function DoctorDetailPage() {
 
   if (loading) {
     return (
-        <div className="flex flex-col">
+        <>
             <TopNav />
             <DoctorsHeader />
             <div className="flex items-center justify-center h-full">Loading...</div>
-        </div>
+        </>
     );
   }
 
   if (!doctor) {
     return (
-        <div className="flex flex-col">
+        <>
             <TopNav />
             <DoctorsHeader />
             <div className="flex items-center justify-center h-full">Doctor not found.</div>
-        </div>
+        </>
     );
   }
 
   const isDoctorOnLeave = selectedDate ? leaveDates.some(d => isSameDay(d, selectedDate)) : false;
 
   return (
-    <div className="flex flex-col">
+    <>
       <TopNav />
         <DoctorsHeader />
         <main className="flex-1 p-6 bg-background">
@@ -832,6 +832,6 @@ export default function DoctorDetailPage() {
             </TabsContent>
           </Tabs>
         </main>
-    </div>
+    </>
   );
 }

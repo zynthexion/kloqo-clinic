@@ -121,7 +121,7 @@ export default function MobileAppPage() {
   }
 
   return (
-    <div className="flex flex-col">
+    <>
       <TopNav />
       <div>
         <MobileAppHeader />
@@ -243,6 +243,6 @@ export default function MobileAppPage() {
           </Card>
         </main>
       </div>
-    </div>
+    </>
   );
 }

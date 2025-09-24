@@ -102,7 +102,7 @@ export default function PatientHistoryPage() {
   }, [patientId]);
 
   return (
-    <div className="flex flex-col">
+    <>
       <TopNav />
       <div>
         <DashboardHeader />
@@ -205,8 +205,6 @@ export default function PatientHistoryPage() {
           )}
         </main>
       </div>
-    </div>
+    </>
   );
 }
-
-    

@@ -23,7 +23,7 @@ export default function OnboardingDemoPage() {
   }
 
   return (
-    <div className="flex flex-col">
+    <>
       <TopNav />
       <main className="flex-1 p-4 sm:p-6">
         {step === 1 && <AddDepartmentStep onDepartmentsAdded={handleDepartmentsAdded} />}
@@ -51,6 +51,6 @@ export default function OnboardingDemoPage() {
           </div>
         )}
       </main>
-    </div>
+    </>
   );
 }
