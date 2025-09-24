@@ -545,16 +545,14 @@ export default function DoctorsPage() {
             <>
             <div className="bg-primary text-primary-foreground rounded-lg p-4 flex items-center gap-6 mb-6">
                 <div className="relative flex-shrink-0">
-                    <div className="bg-white p-1 rounded-md">
-                        <Image
-                            src={selectedDoctor.avatar}
-                            alt={selectedDoctor.name}
-                            width={112}
-                            height={112}
-                            className="rounded-md object-cover"
-                            data-ai-hint="doctor portrait"
-                        />
-                    </div>
+                    <Image
+                        src={selectedDoctor.avatar}
+                        alt={selectedDoctor.name}
+                        width={112}
+                        height={112}
+                        className="rounded-md object-cover"
+                        data-ai-hint="doctor portrait"
+                    />
                 </div>
                 <div className="flex-grow text-white space-y-1.5">
                     <p className="font-bold text-2xl">{selectedDoctor.name}</p>
