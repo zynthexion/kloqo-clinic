@@ -865,6 +865,8 @@ export default function DoctorsPage() {
                 </Card>
             </div>
             
+            <hr className="my-6" />
+
             <Tabs defaultValue="details">
                 <TabsList>
                     <TabsTrigger value="details">Doctor Details</TabsTrigger>
@@ -1217,5 +1219,6 @@ export default function DoctorsPage() {
     </>
   );
 }
+
 
 
