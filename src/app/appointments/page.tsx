@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useEffect, useState, useMemo, useRef } from "react";
@@ -123,6 +122,9 @@ export default function AppointmentsPage() {
         const patientMap = new Map<string, Patient>();
         appointmentsList.forEach((apt) => {
           const patientId = encodeURIComponent(`${apt.patientName}-${apt.phone}`);
+          
+          if (!apt.date) return;
+
           const appointmentDate = parse(apt.date, 'd MMMM yyyy', new Date());
 
           if (patientMap.has(patientId)) {
@@ -403,6 +405,7 @@ export default function AppointmentsPage() {
     if (e.key === 'Enter') {
       if (patientSearchResults.length === 0 && patientNameValue.length > 1) {
         e.preventDefault();
+        form.setValue("patientName", patientNameValue);
         setIsPatientPopoverOpen(false);
       }
     }
@@ -723,6 +726,3 @@ export default function AppointmentsPage() {
   );
 }
 
-    
-
-    
