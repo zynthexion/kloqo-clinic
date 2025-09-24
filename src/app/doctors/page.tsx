@@ -28,7 +28,7 @@ import { db, storage } from "@/lib/firebase";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import type { Doctor, Appointment, LeaveSlot, Department } from "@/lib/types";
 import { format, parse, isSameDay, getDay, parse as parseDateFns } from "date-fns";
-import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon, PlusCircle } from "lucide-react";
+import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon, PlusCircle, DollarSign } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -71,6 +71,8 @@ const addDoctorFormSchema = z.object({
   specialty: z.string().min(2, { message: "Specialty must be at least 2 characters." }),
   department: z.string().min(1, { message: "Please select a department." }),
   bio: z.string().min(10, { message: "Bio must be at least 10 characters." }),
+  experience: z.coerce.number().min(0, "Years of experience cannot be negative."),
+  consultationFee: z.coerce.number().min(0, "Consultation fee cannot be negative."),
   averageConsultingTime: z.coerce.number().min(5, "Must be at least 5 minutes."),
   availableDays: z.array(z.string()).refine((value) => value.some((item) => item), {
     message: "You have to select at least one day.",
@@ -281,6 +283,8 @@ export default function DoctorsPage() {
           historicalData: 'No data',
           availability: 'Available',
           bio: doctorData.bio,
+          experience: doctorData.experience,
+          consultationFee: doctorData.consultationFee,
           averageConsultingTime: doctorData.averageConsultingTime,
           availabilitySlots: doctorData.availabilitySlots,
         };
@@ -701,7 +705,7 @@ export default function DoctorsPage() {
                     <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" onClick={() => setIsEditingDetails(prev => !prev)}>
                         <Edit className="h-5 w-5" />
                     </Button>
-                    <div className="flex items-center space-x-2 bg-primary/70 p-2 rounded-md">
+                    <div className="flex items-center space-x-2 bg-primary p-2 rounded-md">
                       <Switch
                         id="status-switch"
                         checked={selectedDoctor.availability === 'Available'}
@@ -815,9 +819,9 @@ export default function DoctorsPage() {
                                         available: { dayOfWeek: availableDaysOfWeek },
                                         leave: leaveDates,
                                     }}
-                                    modifiersStyles={{ 
+                                    modifiersStyles={{
                                         available: { backgroundColor: '#D4EDDA', color: '#155724' },
-                                        leave: { color: 'red', fontWeight: 'bold' } 
+                                        leave: { color: 'red', fontWeight: 'bold' }
                                     }}
                                 />
                                 <TimeSlots

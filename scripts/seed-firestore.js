@@ -20,6 +20,7 @@ const doctors = [
     experience: 10,
     rating: 4,
     reviews: 1250,
+    consultationFee: 150,
   },
   {
     id: 'D002',
@@ -37,6 +38,7 @@ const doctors = [
     experience: 15,
     rating: 5,
     reviews: 2100,
+    consultationFee: 250,
   },
   {
     id: 'D003',
@@ -54,6 +56,7 @@ const doctors = [
     experience: 8,
     rating: 4,
     reviews: 980,
+    consultationFee: 120,
   },
   {
     id: 'D004',
@@ -71,6 +74,7 @@ const doctors = [
     experience: 12,
     rating: 5,
     reviews: 1500,
+    consultationFee: 200,
   },
     {
     id: 'D005',
@@ -88,6 +92,7 @@ const doctors = [
     experience: 7,
     rating: 4,
     reviews: 800,
+    consultationFee: 140,
   },
   {
     id: 'D006',
@@ -105,6 +110,7 @@ const doctors = [
     experience: 18,
     rating: 5,
     reviews: 2500,
+    consultationFee: 275,
   },
     {
     id: 'D007',
@@ -122,6 +128,7 @@ const doctors = [
     experience: 9,
     rating: 4,
     reviews: 1100,
+    consultationFee: 130,
   },
   {
     id: 'D008',
@@ -139,6 +146,7 @@ const doctors = [
     experience: 6,
     rating: 4,
     reviews: 750,
+    consultationFee: 180,
   },
   {
     id: 'D009',
@@ -156,6 +164,7 @@ const doctors = [
     experience: 14,
     rating: 5,
     reviews: 1800,
+    consultationFee: 220,
   },
   {
     id: 'D010',
@@ -173,6 +182,7 @@ const doctors = [
     experience: 11,
     rating: 4,
     reviews: 1300,
+    consultationFee: 135,
   },
   {
     id: 'D011',
@@ -190,6 +200,7 @@ const doctors = [
     experience: 16,
     rating: 5,
     reviews: 1950,
+    consultationFee: 300,
   },
   {
     id: 'D012',
@@ -207,6 +218,7 @@ const doctors = [
     experience: 20,
     rating: 5,
     reviews: 3200,
+    consultationFee: 350,
   },
 ];
 

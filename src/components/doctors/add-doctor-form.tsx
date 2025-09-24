@@ -55,6 +55,8 @@ const formSchema = z.object({
   specialty: z.string().min(2, { message: "Specialty must be at least 2 characters." }),
   department: z.string().min(1, { message: "Please select a department." }),
   bio: z.string().min(10, { message: "Bio must be at least 10 characters." }),
+  experience: z.coerce.number().min(0, "Years of experience cannot be negative."),
+  consultationFee: z.coerce.number().min(0, "Consultation fee cannot be negative."),
   averageConsultingTime: z.coerce.number().min(5, "Must be at least 5 minutes."),
   availableDays: z.array(z.string()).refine((value) => value.some((item) => item), {
     message: "You have to select at least one day.",
@@ -100,6 +102,8 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
       specialty: "",
       department: "",
       bio: "",
+      experience: 0,
+      consultationFee: 0,
       averageConsultingTime: 15,
       availableDays: [],
       availabilitySlots: [],
@@ -114,6 +118,8 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         specialty: doctor.specialty,
         department: doctor.department,
         bio: doctor.bio || "",
+        experience: doctor.experience || 0,
+        consultationFee: doctor.consultationFee || 0,
         averageConsultingTime: doctor.averageConsultingTime || 15,
         availableDays: doctor.availabilitySlots?.map(s => s.day) || [],
         availabilitySlots: doctor.availabilitySlots || [],
@@ -125,6 +131,8 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         specialty: "",
         department: "",
         bio: "",
+        experience: 0,
+        consultationFee: 0,
         averageConsultingTime: 15,
         availableDays: [],
         availabilitySlots: [],
@@ -302,6 +310,32 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                 />
                  <FormField
                   control={form.control}
+                  name="experience"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Years of Experience</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="consultationFee"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Consultation Fee ($)</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                 <FormField
+                  control={form.control}
                   name="averageConsultingTime"
                   render={({ field }) => (
                     <FormItem>
@@ -447,6 +481,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
               </div>
             </ScrollArea>
             <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancel</Button>
               <Button type="submit">{isEditMode ? "Save Changes" : "Save Doctor"}</Button>
             </DialogFooter>
           </form>

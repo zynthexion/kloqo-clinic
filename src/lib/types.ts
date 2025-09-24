@@ -35,6 +35,7 @@ export type Doctor = {
   experience?: number;
   rating?: number;
   reviews?: number;
+  consultationFee?: number;
 };
 
 export type Appointment = {
