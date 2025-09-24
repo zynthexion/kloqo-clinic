@@ -51,7 +51,7 @@ import {
 } from "@/components/ui/table";
 import WeeklyDoctorAvailability from "@/components/dashboard/weekly-doctor-availability";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "cmdk";
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -122,8 +122,29 @@ export default function AppointmentsPage() {
 
         const patientMap = new Map<string, Patient>();
         appointmentsList.forEach((apt) => {
-          const patientId = `${apt.patientName.toLowerCase()}-${apt.phone}`;
-          if (!patientMap.has(patientId)) {
+          const patientId = `${apt.patientName.toLowerCase().replace(/\s/g, "")}-${apt.phone}`;
+          
+          const appointmentDate = parse(apt.date, 'd MMMM yyyy', new Date());
+
+          if (patientMap.has(patientId)) {
+            const existingPatient = patientMap.get(patientId)!;
+            
+            let lastVisitDate = existingPatient.lastVisit;
+            try {
+                const existingDate = parse(existingPatient.lastVisit, 'd MMMM yyyy', new Date());
+                if (appointmentDate > existingDate) {
+                    lastVisitDate = apt.date;
+                }
+            } catch (e) {
+                lastVisitDate = apt.date;
+            }
+
+            patientMap.set(patientId, {
+              ...existingPatient,
+              lastVisit: lastVisitDate,
+              totalAppointments: existingPatient.totalAppointments + 1,
+            });
+          } else {
             patientMap.set(patientId, {
               id: patientId,
               name: apt.patientName,
@@ -131,15 +152,13 @@ export default function AppointmentsPage() {
               gender: apt.gender,
               phone: apt.phone,
               place: apt.place || '',
-              // these fields are not used in this context but required by type
-              lastVisit: '',
-              doctor: '',
-              totalAppointments: 0
+              lastVisit: apt.date,
+              doctor: apt.doctor,
+              totalAppointments: 1
             });
           }
         });
         setAllPatients(Array.from(patientMap.values()));
-
 
       } catch (error) {
         console.error("Error fetching data:", error);
@@ -698,3 +717,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
