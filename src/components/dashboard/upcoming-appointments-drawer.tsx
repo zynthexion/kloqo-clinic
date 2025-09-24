@@ -71,7 +71,7 @@ export default function UpcomingAppointmentsDrawer() {
                         <ScrollArea className="h-full pr-4">
                             <div className="space-y-4">
                                 {isClient && (appointments.length > 0 ? appointments.map((apt) => (
-                                    <div key={apt.id} className="flex items-center gap-4 p-2 rounded-lg hover:bg-muted/50">
+                                    <div key={apt.id || apt.tokenNumber} className="flex items-center gap-4 p-2 rounded-lg hover:bg-muted/50">
                                         <Image
                                             src={getDoctorAvatar(apt.doctor)}
                                             alt={apt.doctor}
