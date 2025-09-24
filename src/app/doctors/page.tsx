@@ -544,16 +544,14 @@ export default function DoctorsPage() {
             {selectedDoctor ? (
             <>
             <div className="bg-primary text-primary-foreground rounded-lg p-4 flex items-center gap-6 mb-6">
-                <div className="relative flex-shrink-0">
-                    <Image
-                        src={selectedDoctor.avatar}
-                        alt={selectedDoctor.name}
-                        width={112}
-                        height={112}
-                        className="rounded-md object-cover"
-                        data-ai-hint="doctor portrait"
-                    />
-                </div>
+                <Image
+                    src={selectedDoctor.avatar}
+                    alt={selectedDoctor.name}
+                    width={112}
+                    height={112}
+                    className="rounded-md object-cover"
+                    data-ai-hint="doctor portrait"
+                />
                 <div className="flex-grow text-white space-y-1.5">
                     <p className="font-bold text-2xl">{selectedDoctor.name}</p>
                     <p className="text-md opacity-90">
@@ -580,6 +578,36 @@ export default function DoctorsPage() {
                       </Label>
                    </div>
                 </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Patients</CardTitle>
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{selectedDoctor.totalPatients || 0}</div>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Today's Appointments</CardTitle>
+                        <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{selectedDoctor.todaysAppointments || 0}</div>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Reviews</CardTitle>
+                        <Star className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{selectedDoctor.reviews || 0}+</div>
+                    </CardContent>
+                </Card>
             </div>
             
             <Tabs defaultValue="details">
