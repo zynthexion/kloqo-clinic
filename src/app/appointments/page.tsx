@@ -325,6 +325,9 @@ export default function AppointmentsPage() {
     const value = e.target.value;
     form.setValue("patientName", value);
     setPatientSearchTerm(value);
+    if (isDrawerExpanded) {
+        setIsDrawerExpanded(false);
+    }
   };
 
   const handleCommandKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -456,7 +459,7 @@ export default function AppointmentsPage() {
                   <CardContent>
                     <Form {...form}>
                       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4">
+                        <div className={cn("grid grid-cols-1 gap-x-8 gap-y-4", !isDrawerExpanded && "md:grid-cols-3")}>
                           <div className="space-y-4 md:col-span-1">
                             <h3 className="text-lg font-medium border-b pb-2">Patient Details</h3>
                             
@@ -583,90 +586,93 @@ export default function AppointmentsPage() {
                                 </FormItem>
                              )} />
                           </div>
-
-                           <div className="space-y-4 md:col-span-1">
-                             <h3 className="text-lg font-medium border-b pb-2">Select Date</h3>
-                            <FormField control={form.control} name="date" render={({ field }) => (
-                                <FormItem className="flex flex-col">
-                                  <Calendar
-                                    mode="single" selected={field.value} onSelect={field.onChange}
-                                    disabled={(date) => 
-                                        date < new Date(new Date().setHours(0,0,0,0)) || 
-                                        !selectedDoctor ||
-                                        !availableDaysOfWeek.includes(getDay(date)) ||
-                                        leaveDates.some(leaveDate => isSameDay(date, leaveDate))
-                                    }
-                                    initialFocus
-                                    compact={false}
-                                    modifiers={{ 
-                                      available: selectedDoctor ? { dayOfWeek: availableDaysOfWeek } : {},
-                                      leave: leaveDates,
-                                    }}
-                                    modifiersStyles={{
-                                      available: { backgroundColor: '#D4EDDA', color: '#155724' },
-                                      leave: { backgroundColor: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' },
-                                    }}
-                                  />
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                          </div>
-
-                          <div className="space-y-4 md:col-span-1">
-                             <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
-                             <div className="space-y-4">
-                                <FormField control={form.control} name="doctor" render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Doctor</FormLabel>
-                                      <Select onValueChange={onDoctorChange} value={field.value}>
-                                        <FormControl>
-                                          <SelectTrigger>
-                                            <SelectValue placeholder="Select a doctor" />
-                                          </SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent>
-                                          {doctors.map(doc => (
-                                            <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
+                          
+                          {!isDrawerExpanded && (
+                            <>
+                               <div className="space-y-4 md:col-span-1">
+                                 <h3 className="text-lg font-medium border-b pb-2">Select Date</h3>
+                                <FormField control={form.control} name="date" render={({ field }) => (
+                                    <FormItem className="flex flex-col">
+                                      <Calendar
+                                        mode="single" selected={field.value} onSelect={field.onChange}
+                                        disabled={(date) => 
+                                            date < new Date(new Date().setHours(0,0,0,0)) || 
+                                            !selectedDoctor ||
+                                            !availableDaysOfWeek.includes(getDay(date)) ||
+                                            leaveDates.some(leaveDate => isSameDay(date, leaveDate))
+                                        }
+                                        initialFocus
+                                        compact={false}
+                                        modifiers={{ 
+                                          available: selectedDoctor ? { dayOfWeek: availableDaysOfWeek } : {},
+                                          leave: leaveDates,
+                                        }}
+                                        modifiersStyles={{
+                                          available: { backgroundColor: '#D4EDDA', color: '#155724' },
+                                          leave: { backgroundColor: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' },
+                                        }}
+                                      />
                                       <FormMessage />
                                     </FormItem>
                                   )}
                                 />
-                                <FormField control={form.control} name="department" render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Department</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="Department" {...field} disabled />
-                                        </FormControl>
-                                    </FormItem>
-                                )} />
-                            </div>
+                              </div>
 
-                            {selectedDoctor && selectedDate && (
-                              <FormField control={form.control} name="time" render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Select Time Slot</FormLabel>
-                                    <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-2">
-                                      {timeSlots.length > 0 ? timeSlots.map(slot => (
-                                        <Button
-                                          key={slot.time} type="button"
-                                          variant={field.value === slot.time ? "default" : "outline"}
-                                          onClick={() => field.onChange(slot.time)}
-                                          disabled={slot.disabled}
-                                          className={cn("text-xs", slot.disabled && "line-through")}
-                                        >{slot.time}</Button>
-                                      )) : <p className="text-sm text-muted-foreground col-span-2">No available slots for this day.</p>}
-                                    </div>
-                                    <FormMessage />
-                                  </FormItem>
+                              <div className="space-y-4 md:col-span-1">
+                                 <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
+                                 <div className="space-y-4">
+                                    <FormField control={form.control} name="doctor" render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel>Doctor</FormLabel>
+                                          <Select onValueChange={onDoctorChange} value={field.value}>
+                                            <FormControl>
+                                              <SelectTrigger>
+                                                <SelectValue placeholder="Select a doctor" />
+                                              </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                              {doctors.map(doc => (
+                                                <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
+                                              ))}
+                                            </SelectContent>
+                                          </Select>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}
+                                    />
+                                    <FormField control={form.control} name="department" render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Department</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="Department" {...field} disabled />
+                                            </FormControl>
+                                        </FormItem>
+                                    )} />
+                                </div>
+
+                                {selectedDoctor && selectedDate && (
+                                  <FormField control={form.control} name="time" render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>Select Time Slot</FormLabel>
+                                        <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-2">
+                                          {timeSlots.length > 0 ? timeSlots.map(slot => (
+                                            <Button
+                                              key={slot.time} type="button"
+                                              variant={field.value === slot.time ? "default" : "outline"}
+                                              onClick={() => field.onChange(slot.time)}
+                                              disabled={slot.disabled}
+                                              className={cn("text-xs", slot.disabled && "line-through")}
+                                            >{slot.time}</Button>
+                                          )) : <p className="text-sm text-muted-foreground col-span-2">No available slots for this day.</p>}
+                                        </div>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
                                 )}
-                              />
-                            )}
-                          </div>
-
+                              </div>
+                            </>
+                          )}
                         </div>
                         <div className="flex justify-end items-center pt-4">
                             <div className="flex justify-end gap-2">
@@ -759,5 +765,7 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
 
     
