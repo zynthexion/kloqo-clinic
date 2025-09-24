@@ -678,32 +678,6 @@ export default function DoctorsPage() {
                     </div>
                     <div className="space-y-6">
                         <Card>
-                            <CardHeader>
-                                <CardTitle>Quick Info</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                
-                                <div className="flex items-center gap-3">
-                                    <User className="w-5 h-5 text-muted-foreground" />
-                                    <div>
-                                        <p className="text-sm text-muted-foreground">Reviews</p>
-                                        <p className="font-semibold">{selectedDoctor.reviews ?? "N/A"}</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                <BriefcaseMedical className="w-5 h-5 text-muted-foreground" />
-                                <div>
-                                    <p className="text-sm text-muted-foreground">Specialty</p>
-                                    {isEditingDetails ? (
-                                        <Input value={newSpecialty} onChange={(e) => setNewSpecialty(e.target.value)} disabled={isPending} />
-                                    ) : (
-                                        <p className="font-semibold">{selectedDoctor.specialty}</p>
-                                    )}
-                                </div>
-                            </div>
-                            </CardContent>
-                        </Card>
-                        <Card>
                             <CardHeader className="flex flex-row items-center justify-between">
                                 <div className="space-y-1.5">
                                     <CardTitle className="flex items-center gap-2"><CalendarIcon className="w-5 h-5" /> Weekly Availability</CardTitle>
