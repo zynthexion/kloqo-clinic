@@ -4,13 +4,15 @@
 import React, { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import type { Doctor } from "@/lib/types";
-import { collection, getDocs } from "firebase/firestore";
+import type { Appointment, Doctor } from "@/lib/types";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { ScrollArea } from "../ui/scroll-area";
-import { getDay, format } from "date-fns";
+import { getDay, format, isSameDay, parse } from "date-fns";
 import { Button } from "../ui/button";
 import Link from "next/link";
+import { MoreHorizontal, Star, Users } from "lucide-react";
+import { Badge } from "../ui/badge";
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -20,6 +22,7 @@ type DoctorAvailabilityProps = {
 
 export default function DoctorAvailability({ selectedDate }: DoctorAvailabilityProps) {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
 
   useEffect(() => {
     const fetchDoctors = async () => {
@@ -28,7 +31,16 @@ export default function DoctorAvailability({ selectedDate }: DoctorAvailabilityP
       const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
       setDoctors(doctorsList);
     };
+
+    const fetchAppointments = async () => {
+        const appointmentsCollection = collection(db, "appointments");
+        const appointmentsSnapshot = await getDocs(appointmentsCollection);
+        const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
+        setAppointments(appointmentsList);
+    };
+
     fetchDoctors();
+    fetchAppointments();
   }, []);
 
   const availableDoctors = useMemo(() => {
@@ -39,42 +51,83 @@ export default function DoctorAvailability({ selectedDate }: DoctorAvailabilityP
     );
   }, [selectedDate, doctors]);
 
+  const getAppointmentsForDoctorOnDate = (doctorId: string) => {
+    const doctor = doctors.find(d => d.id === doctorId);
+    if (!doctor) return 0;
+    
+    return appointments.filter(apt => {
+        try {
+            const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
+            return apt.doctor === doctor.name && isSameDay(aptDate, selectedDate);
+        } catch {
+            return false;
+        }
+    }).length;
+  }
+
+  const StarRating = ({ rating }: { rating: number }) => (
+    <div className="flex items-center">
+      {[...Array(5)].map((_, i) => (
+        <Star
+          key={i}
+          className={`h-4 w-4 ${i < rating ? "text-yellow-400 fill-yellow-400" : "text-gray-300"}`}
+        />
+      ))}
+    </div>
+  );
+
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader>
-        <CardTitle>Available Doctors</CardTitle>
-        <CardDescription>
-          Doctors scheduled for {format(selectedDate, "MMMM d, yyyy")}.
-        </CardDescription>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div>
+          <CardTitle>Available Doctors</CardTitle>
+          <CardDescription>
+            For {format(selectedDate, "MMMM d, yyyy")}.
+          </CardDescription>
+        </div>
+        <Button variant="link" asChild className="text-primary">
+            <Link href="/doctors">See All</Link>
+        </Button>
       </CardHeader>
       <CardContent className="flex-grow overflow-auto">
         <ScrollArea className="h-full">
-            <div className="space-y-4">
+            <div className="space-y-3 pr-3">
             {availableDoctors.length > 0 ? (
-                availableDoctors.map((doctor) => (
-                    <div key={doctor.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50">
-                        <Image
-                            src={doctor.avatar}
-                            alt={doctor.name}
-                            width={40}
-                            height={40}
-                            className="rounded-full"
-                            data-ai-hint="doctor portrait"
-                        />
-                        <div className="flex-grow">
-                            <p className="font-semibold text-sm">{doctor.name}</p>
-                            <p className="text-xs text-muted-foreground">{doctor.specialty}</p>
-                        </div>
-                        <div className="flex gap-2">
-                           <Button asChild variant="outline" size="sm">
-                               <Link href={`/doctors/${doctor.id}`}>View Profile</Link>
-                           </Button>
-                           <Button asChild variant="default" size="sm">
-                                <Link href="/appointments">Book Appt.</Link>
-                           </Button>
-                        </div>
-                    </div>
-                ))
+                availableDoctors.map((doctor) => {
+                    const appointmentCount = getAppointmentsForDoctorOnDate(doctor.id);
+                    return (
+                        <Card key={doctor.id} className="p-4 hover:bg-muted/50 transition-colors">
+                            <div className="flex items-start justify-between">
+                                <div className="flex items-center gap-4">
+                                     <Image
+                                        src={doctor.avatar}
+                                        alt={doctor.name}
+                                        width={40}
+                                        height={40}
+                                        className="rounded-full"
+                                        data-ai-hint="doctor portrait"
+                                    />
+                                    <div>
+                                        <Link href={`/doctors/${doctor.id}`} className="font-semibold text-sm hover:underline">{doctor.name}</Link>
+                                        <p className="text-xs text-muted-foreground">{doctor.specialty}</p>
+                                        <StarRating rating={4} />
+                                    </div>
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                            </div>
+                            <div className="mt-3 flex justify-end">
+                               {appointmentCount > 0 && (
+                                 <Badge variant="secondary">
+                                    <Users className="h-3 w-3 mr-1.5" />
+                                    {appointmentCount} {appointmentCount > 1 ? 'appointments' : 'appointment'}
+                                </Badge>
+                               )}
+                            </div>
+                        </Card>
+                    )
+                })
             ) : (
                 <div className="flex items-center justify-center h-full pt-10">
                     <p className="text-sm text-muted-foreground text-center">No doctors scheduled for this day.</p>
