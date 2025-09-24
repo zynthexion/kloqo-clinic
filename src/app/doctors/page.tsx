@@ -643,9 +643,9 @@ export default function DoctorsPage() {
   return (
     <>
       <main className="flex-1 overflow-hidden bg-background">
-        <div className="h-full grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
+        <div className="h-full grid grid-cols-1 md:grid-cols-12 gap-6 p-6">
           {/* Left Column: Doctor List */}
-          <div className="h-full md:col-span-1">
+          <div className="h-full md:col-span-3">
              <Card className="h-full flex flex-col">
                 <CardHeader>
                   <div className="flex justify-between items-center">
@@ -704,7 +704,7 @@ export default function DoctorsPage() {
           </div>
 
           {/* Right Column: Doctor Details */}
-          <div className="h-full overflow-y-auto pr-2 md:col-span-2">
+          <div className="h-full overflow-y-auto pr-2 md:col-span-9">
             {selectedDoctor ? (
             <>
             <div className="bg-primary text-primary-foreground rounded-lg p-4 flex items-start gap-6 mb-6">
