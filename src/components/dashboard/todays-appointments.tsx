@@ -64,7 +64,7 @@ export default function TodaysAppointments({ selectedDate }: { selectedDate: Dat
   }, [selectedDate]);
 
   return (
-    <Card className="h-full flex flex-col bg-[#bcddef]/50">
+    <Card className="h-full flex flex-col bg-[#bcddef]/30">
       <CardHeader>
         <CardTitle>Appointments for {format(selectedDate, "MMMM d")}</CardTitle>
         <CardDescription>A list of appointments for the selected day.</CardDescription>

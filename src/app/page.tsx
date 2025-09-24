@@ -87,7 +87,7 @@ export default function Home() {
                 <PatientsVsAppointmentsChart dateRange={dateRange} />
             </div>
             <div className="lg:col-span-3">
-               <Card className="h-full flex flex-col bg-[#bcddef]/50">
+               <Card className="h-full flex flex-col bg-[#bcddef]/30">
                   <CardContent className="p-2 flex-grow flex items-center justify-center">
                       <Calendar
                           mode="single"
