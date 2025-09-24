@@ -583,6 +583,15 @@ export default function DoctorsPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Avg. Consulting Time</CardTitle>
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{selectedDoctor.averageConsultingTime || 0} min</div>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Total Patients</CardTitle>
                         <Users className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
@@ -597,15 +606,6 @@ export default function DoctorsPage() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{selectedDoctor.todaysAppointments || 0}</div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Reviews</CardTitle>
-                        <Star className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{selectedDoctor.reviews || 0}+</div>
                     </CardContent>
                 </Card>
             </div>
@@ -682,44 +682,25 @@ export default function DoctorsPage() {
                                 <CardTitle>Quick Info</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <div className="flex items-center gap-3">
-                                    <Clock className="w-5 h-5 text-muted-foreground" />
-                                    <div>
-                                        <p className="text-sm text-muted-foreground">Avg. Consulting Time</p>
-                                        {isEditingTime ? (
-                                            <div className="flex items-center gap-2 mt-1">
-                                                <Input 
-                                                    type="number" 
-                                                    value={newAvgTime} 
-                                                    onChange={(e) => setNewAvgTime(e.target.value)} 
-                                                    className="w-20 h-8"
-                                                    disabled={isPending}
-                                                />
-                                                <Button size="icon" className="h-8 w-8" onClick={handleTimeSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
-                                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => {setIsEditingTime(false); setNewAvgTime(selectedDoctor.averageConsultingTime || "")}} disabled={isPending}><X className="h-4 w-4"/></Button>
-                                            </div>
-                                        ) : (
-                                            <div className="flex items-center gap-2">
-                                                <p className="font-semibold">{selectedDoctor.averageConsultingTime || "N/A"} minutes</p>
-                                                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingTime(true)}><Edit className="h-3 w-3"/></Button>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
+                                
                                 <div className="flex items-center gap-3">
                                     <User className="w-5 h-5 text-muted-foreground" />
                                     <div>
-                                        <p className="text-sm text-muted-foreground">Total Patients</p>
-                                        <p className="font-semibold">{selectedDoctor.totalPatients ?? "N/A"}</p>
+                                        <p className="text-sm text-muted-foreground">Reviews</p>
+                                        <p className="font-semibold">{selectedDoctor.reviews ?? "N/A"}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3">
-                                    <BriefcaseMedical className="w-5 h-5 text-muted-foreground" />
-                                    <div>
-                                        <p className="text-sm text-muted-foreground">Today's Appointments</p>
-                                        <p className="font-semibold">{selectedDoctor.todaysAppointments ?? "N/A"}</p>
-                                    </div>
+                                <BriefcaseMedical className="w-5 h-5 text-muted-foreground" />
+                                <div>
+                                    <p className="text-sm text-muted-foreground">Specialty</p>
+                                    {isEditingDetails ? (
+                                        <Input value={newSpecialty} onChange={(e) => setNewSpecialty(e.target.value)} disabled={isPending} />
+                                    ) : (
+                                        <p className="font-semibold">{selectedDoctor.specialty}</p>
+                                    )}
                                 </div>
+                            </div>
                             </CardContent>
                         </Card>
                         <Card>
@@ -959,5 +940,3 @@ export default function DoctorsPage() {
     </>
   );
 }
-
-    
