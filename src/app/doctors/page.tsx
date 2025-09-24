@@ -117,7 +117,6 @@ const DoctorListItem = ({ doctor, onSelect, isSelected }: { doctor: Doctor, onSe
                 <span>{doctor.specialty}</span>
                 <div className="w-10 h-0.5 bg-yellow-400 mt-1"></div>
             </div>
-            <p className="text-xs text-gray-500 mt-2 truncate pr-4">{doctor.bio || 'No bio available.'}</p>
         </div>
     </div>
 );
@@ -484,9 +483,9 @@ export default function DoctorsPage() {
   return (
     <>
       <main className="flex-1 overflow-hidden bg-[#bcddef]/30">
-        <div className="h-full grid grid-cols-12 gap-6 p-6">
+        <div className="h-full grid grid-cols-1 gap-6 p-6">
           {/* Left Column: Doctor List */}
-          <div className="col-span-12 lg:col-span-3 h-full">
+          <div className="h-full">
              <Card className="h-full flex flex-col">
                 <CardHeader>
                   <CardTitle>Doctors</CardTitle>
@@ -539,7 +538,7 @@ export default function DoctorsPage() {
           </div>
 
           {/* Right Column: Doctor Details */}
-          <div className="col-span-12 lg:col-span-9 h-full overflow-y-auto pr-2">
+          <div className="h-full overflow-y-auto pr-2">
             {selectedDoctor ? (
             <>
             <Card className="mb-6">
