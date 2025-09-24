@@ -108,9 +108,7 @@ export default function AppointmentsPage() {
       date: undefined,
       time: undefined,
       department: "",
-      treatment: "",
       place: "",
-      status: "Pending",
       bookedVia: "Online",
     },
   });
@@ -210,8 +208,8 @@ export default function AppointmentsPage() {
     setIsNewPatient(false);
     form.reset({
       patientName: "", gender: "Male", phone: "", age: 0, doctor: "",
-      date: undefined, time: undefined, department: "", treatment: "",
-      place: "", status: "Pending", bookedVia: "Online",
+      date: undefined, time: undefined, department: "",
+      place: "", bookedVia: "Online",
     });
   }
 
@@ -245,12 +243,12 @@ export default function AppointmentsPage() {
      try {
         const doctorName = doctors.find(d => d.id === values.doctor)?.name || "Unknown Doctor";
         
-        const dataToSave: Omit<AddAppointmentFormValues, 'date'> & { date: string } = {
+        const dataToSave: Omit<AddAppointmentFormValues, 'date' | 'status' | 'treatment'> & { date: string, status: 'Confirmed' | 'Pending' | 'Cancelled', treatment: string } = {
             ...values,
             date: format(values.date, "d MMMM yyyy"),
             doctor: doctorName,
-            status: values.status || "Pending",
-            treatment: values.treatment || "General Consultation",
+            status: "Pending",
+            treatment: "General Consultation",
         };
 
         if (isEditing) {
@@ -758,6 +756,40 @@ export default function AppointmentsPage() {
                                         <div key={i} className="p-3 rounded-lg border bg-muted animate-pulse h-20 mb-3"></div>
                                     ))}
                                 </div>
+                            ) : isDrawerExpanded ? (
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Patient</TableHead>
+                                            <TableHead>Phone</TableHead>
+                                            <TableHead>Place</TableHead>
+                                            <TableHead>Doctor</TableHead>
+                                            <TableHead>Department</TableHead>
+                                            <TableHead>Date & Time</TableHead>
+                                            <TableHead className="text-right">Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {filteredAppointments.map(appointment => (
+                                            <TableRow key={appointment.id} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
+                                                <TableCell className="font-medium">{appointment.patientName}</TableCell>
+                                                <TableCell>{appointment.phone}</TableCell>
+                                                <TableCell>{appointment.place}</TableCell>
+                                                <TableCell>{appointment.doctor}</TableCell>
+                                                <TableCell>{appointment.department}</TableCell>
+                                                <TableCell>
+                                                    <div>{appointment.date}</div>
+                                                    <div className="text-xs text-muted-foreground">{appointment.time}</div>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <Button variant="link" size="sm" className="p-0 h-auto text-primary" onClick={() => setEditingAppointment(appointment)}>
+                                                        Reschedule
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
                             ) : (
                                 <Table>
                                     <TableHeader>
@@ -811,11 +843,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
-    
-
-    
-
-    
-
-    
