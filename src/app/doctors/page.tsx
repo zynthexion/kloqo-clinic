@@ -506,7 +506,7 @@ export default function DoctorsPage() {
   return (
     <>
       <TopNav />
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 overflow-hidden bg-[#bcddef]">
         <div className="h-full grid grid-cols-12 gap-6 p-6">
           {/* Left Column: Doctor List */}
           <div className="col-span-12 lg:col-span-3 h-full">
