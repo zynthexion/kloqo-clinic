@@ -469,7 +469,13 @@ export default function AppointmentsPage() {
       </header>
       <div className="relative flex flex-1 overflow-hidden">
         <div className="flex flex-1">
-            <main className={cn(
+            <main
+              onClick={() => {
+                if (isDrawerExpanded) {
+                  setIsDrawerExpanded(false);
+                }
+              }}
+              className={cn(
               "flex-shrink-0 overflow-visible relative transition-all duration-300 ease-in-out p-6",
               isDrawerExpanded ? "w-3/12" : "w-2/3"
             )}>
@@ -478,7 +484,10 @@ export default function AppointmentsPage() {
                     variant="outline" 
                     size="icon" 
                     className="absolute top-1/2 -right-5 z-10 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
-                    onClick={() => setIsDrawerExpanded(false)}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setIsDrawerExpanded(false);
+                    }}
                 >
                     <ChevronRight className="h-5 w-5" />
                 </Button>
@@ -731,7 +740,10 @@ export default function AppointmentsPage() {
                         "absolute top-1/2 -left-5 z-10 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground",
                         isDrawerExpanded && "hidden"
                     )}
-                    onClick={() => setIsDrawerExpanded(!isDrawerExpanded)}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setIsDrawerExpanded(!isDrawerExpanded);
+                    }}
                 >
                     <ChevronLeft className="h-5 w-5" />
                 </Button>
