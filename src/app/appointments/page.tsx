@@ -485,12 +485,12 @@ export default function AppointmentsPage() {
       <div className="relative flex flex-1 overflow-hidden">
         <main
             onClick={() => {
-            if (isDrawerExpanded) {
+              if (isDrawerExpanded) {
                 setIsDrawerExpanded(false);
-            }
+              }
             }}
             className={cn(
-            "relative flex-shrink-0 transition-all duration-300 ease-in-out p-6",
+            "relative flex-shrink-0 transition-all duration-300 ease-in-out",
             isDrawerExpanded ? "w-3/12" : "w-2/3"
         )}>
             {isDrawerExpanded && (
@@ -506,7 +506,7 @@ export default function AppointmentsPage() {
                     <ChevronRight className="h-5 w-5" />
                 </Button>
               )}
-            <Card className="h-full">
+            <Card className="h-full p-6">
                 <CardHeader>
                 <CardTitle>{isEditing ? "Reschedule Appointment" : "Book New Appointment"}</CardTitle>
                 <CardDescription>
@@ -651,7 +651,7 @@ export default function AppointmentsPage() {
                             <FormField control={form.control} name="date" render={({ field }) => (
                                 <FormItem className="flex flex-col">
                                     <Calendar
-                                    className="bg-primary/90 text-primary-foreground rounded-md [&_button:hover]:bg-primary/80 [&_.rdp-day_today]:bg-primary-foreground/20 [&_.rdp-day_today]:text-primary-foreground"
+                                    className="bg-primary text-primary-foreground rounded-md [&_button:hover]:bg-primary/80 [&_.rdp-day_today]:bg-primary-foreground/20 [&_.rdp-day_today]:text-primary-foreground"
                                     mode="single" selected={field.value} onSelect={field.onChange}
                                     disabled={(date) => 
                                         date < new Date(new Date().setHours(0,0,0,0)) || 
@@ -920,9 +920,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
-    
-
-    
-
-    
