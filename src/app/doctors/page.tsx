@@ -98,21 +98,21 @@ const StarRating = ({ rating }: { rating: number }) => (
 const DoctorListItem = ({ doctor, onSelect, isSelected }: { doctor: Doctor, onSelect: () => void, isSelected: boolean }) => (
     <div
       className={cn(
-        "bg-white rounded-full p-2 flex items-center gap-4 cursor-pointer transition-all duration-300 shadow-md hover:shadow-lg",
-        isSelected ? "ring-2 ring-primary" : ""
+        "bg-white rounded-full p-1.5 flex items-center gap-3 cursor-pointer transition-all duration-300 border hover:border-primary/50",
+        isSelected ? "ring-2 ring-primary border-transparent" : "border-gray-200"
       )}
       onClick={onSelect}
     >
         <Image
             src={doctor.avatar}
             alt={doctor.name}
-            width={72}
-            height={72}
-            className="rounded-full object-cover border-2 border-primary/20"
+            width={48}
+            height={48}
+            className="rounded-full object-cover"
             data-ai-hint="doctor portrait"
         />
         <div className="flex-grow">
-            <p className={cn("font-bold text-lg text-gray-800", isSelected && "text-primary")}>{doctor.name}</p>
+            <p className={cn("font-bold text-base text-gray-800", isSelected && "text-primary")}>{doctor.name}</p>
             <div className="text-sm text-gray-600">
                 <span>{doctor.specialty}</span>
                 <div className="w-10 h-0.5 bg-yellow-400 mt-1"></div>
@@ -966,3 +966,5 @@ export default function DoctorsPage() {
     </>
   );
 }
+
+    
