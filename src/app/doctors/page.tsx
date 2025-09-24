@@ -583,8 +583,9 @@ export default function DoctorsPage() {
                 <CardHeader>
                   <div className="flex justify-between items-center">
                     <CardTitle>Doctors</CardTitle>
-                    <Button variant="ghost" size="icon" onClick={openAddDoctorDialog}>
-                      <PlusCircle className="h-5 w-5" />
+                    <Button onClick={openAddDoctorDialog}>
+                      <PlusCircle className="mr-2 h-4 w-4" />
+                      Add Doctor
                     </Button>
                   </div>
                    <div className="relative mt-2">
@@ -696,11 +697,11 @@ export default function DoctorsPage() {
                         <span className="text-md opacity-90">({selectedDoctor.reviews}+ Reviews)</span>
                     </div>
                 </div>
-                <div className="flex flex-col items-end gap-2">
+                <div className="flex flex-col items-end justify-between h-full">
                     <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" onClick={() => setIsEditingDetails(prev => !prev)}>
                         <Edit className="h-5 w-5" />
                     </Button>
-                    <div className="flex items-center space-x-2 bg-primary/70 p-2 rounded-md mt-auto">
+                    <div className="flex items-center space-x-2 bg-primary/70 p-2 rounded-md">
                       <Switch
                         id="status-switch"
                         checked={selectedDoctor.availability === 'Available'}
@@ -1098,4 +1099,3 @@ export default function DoctorsPage() {
     </>
   );
 }
-
