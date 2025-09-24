@@ -39,7 +39,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronRight } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -88,6 +88,7 @@ export default function AppointmentsPage() {
   const [patientSearchResults, setPatientSearchResults] = useState<Patient[]>([]);
   const [isPatientPopoverOpen, setIsPatientPopoverOpen] = useState(false);
   const [isNewPatient, setIsNewPatient] = useState(false);
+  const [isDrawerExpanded, setIsDrawerExpanded] = useState(false);
 
   const { toast } = useToast();
 
@@ -111,6 +112,8 @@ export default function AppointmentsPage() {
     },
   });
   
+  const patientInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (patientSearchTerm.length > 1) {
       const lowercasedTerm = patientSearchTerm.toLowerCase().replace(/\s+/g, '');
@@ -315,7 +318,23 @@ export default function AppointmentsPage() {
     setPatientSearchTerm(patient.name);
     setIsPatientPopoverOpen(false);
     setIsNewPatient(false);
+    patientInputRef.current?.blur();
   }
+  
+  const handlePatientNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    form.setValue("patientName", value);
+    setPatientSearchTerm(value);
+  };
+
+  const handleCommandKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter" && patientSearchResults.length === 0) {
+        e.preventDefault();
+        form.setValue("patientName", patientSearchTerm);
+        setIsPatientPopoverOpen(false);
+        patientInputRef.current?.blur();
+    }
+  };
 
   const availableDaysOfWeek = useMemo(() => {
     if (!selectedDoctor?.availabilitySlots) return [];
@@ -337,12 +356,11 @@ export default function AppointmentsPage() {
         const dayName = daysOfWeek[getDay(leaveDate)];
         
         const availabilityForDay = selectedDoctor.availabilitySlots?.find(s => s.day === dayName);
-        if (!availabilityForDay) return false; // Not a working day anyway
+        if (!availabilityForDay) return false;
         
         const totalSlotsForDay = availabilityForDay.timeSlots.length;
         const leaveSlotsCount = leaveSlot.slots.length;
         
-        // Mark as a full leave day only if all slots are on leave
         return leaveSlotsCount >= totalSlotsForDay;
       })
       .map(ls => parse(ls.date, 'yyyy-MM-dd', new Date()));
@@ -417,27 +435,6 @@ export default function AppointmentsPage() {
       });
   };
 
-  const handlePatientNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setPatientSearchTerm(value);
-    form.setValue("patientName", value);
-  };
-  
-  const handlePopoverOpenChange = (open: boolean) => {
-    setIsPatientPopoverOpen(open);
-    if (!open) {
-      form.setValue("patientName", patientSearchTerm);
-    }
-  };
-
-  const handleCommandKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "Enter") {
-        e.preventDefault();
-        form.setValue("patientName", patientSearchTerm);
-        setIsPatientPopoverOpen(false);
-    }
-  };
-
   return (
     <>
       <header className="flex h-14 items-center gap-4 border-b bg-background px-4 sm:px-6">
@@ -445,7 +442,10 @@ export default function AppointmentsPage() {
       </header>
       <div className="relative flex flex-1 overflow-hidden">
         <div className="flex flex-1 p-6 gap-6">
-            <main className="w-2/3 flex-shrink-0 overflow-auto pr-6">
+            <main className={cn(
+              "flex-shrink-0 overflow-auto pr-6 transition-all duration-300 ease-in-out",
+              isDrawerExpanded ? "w-1/3" : "w-2/3"
+            )}>
                 <Card className="h-full">
                   <CardHeader>
                     <CardTitle>{isEditing ? "Reschedule Appointment" : "Book New Appointment"}</CardTitle>
@@ -460,50 +460,51 @@ export default function AppointmentsPage() {
                           <div className="space-y-4 md:col-span-1">
                             <h3 className="text-lg font-medium border-b pb-2">Patient Details</h3>
                             
-                             <FormField
-                                control={form.control}
-                                name="patientName"
-                                render={({ field }) => (
+                            <FormField
+                              control={form.control}
+                              name="patientName"
+                              render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Patient Name</FormLabel>
-                                     <Popover open={isPatientPopoverOpen} onOpenChange={handlePopoverOpenChange}>
-                                        <PopoverTrigger asChild>
-                                        <FormControl>
-                                            <Input
-                                                placeholder="Start typing patient name..."
-                                                value={patientSearchTerm}
-                                                onChange={handlePatientNameChange}
-                                            />
-                                        </FormControl>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                                        <Command onKeyDown={handleCommandKeyDown}>
-                                            <CommandInput placeholder="Search patient..." />
-                                            <CommandList>
-                                                <CommandEmpty>
-                                                    <div className="p-4 text-sm">
-                                                        New Patient: "{patientSearchTerm}"
-                                                    </div>
-                                                </CommandEmpty>
-                                                <CommandGroup>
-                                                    {patientSearchResults.map((patient) => (
-                                                    <CommandItem
-                                                        key={patient.id}
-                                                        value={patient.name}
-                                                        onSelect={() => handlePatientSelect(patient)}
-                                                    >
-                                                        {patient.name}
-                                                        <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
-                                                    </CommandItem>
-                                                    ))}
-                                                </CommandGroup>
-                                            </CommandList>
-                                        </Command>
-                                        </PopoverContent>
-                                    </Popover>
-                                    <FormMessage />
+                                  <FormLabel>Patient Name</FormLabel>
+                                  <Popover open={isPatientPopoverOpen} onOpenChange={setIsPatientPopoverOpen}>
+                                    <PopoverTrigger asChild>
+                                      <FormControl>
+                                        <Input
+                                          ref={patientInputRef}
+                                          placeholder="Start typing patient name..."
+                                          value={patientSearchTerm}
+                                          onChange={handlePatientNameChange}
+                                        />
+                                      </FormControl>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                      <Command onKeyDown={handleCommandKeyDown}>
+                                        <CommandInput placeholder="Search patient..." />
+                                        <CommandList>
+                                          <CommandEmpty>
+                                            <div className="p-4 text-sm">
+                                              New Patient: "{patientSearchTerm}"
+                                            </div>
+                                          </CommandEmpty>
+                                          <CommandGroup>
+                                            {patientSearchResults.map((patient) => (
+                                              <CommandItem
+                                                key={patient.id}
+                                                value={patient.name}
+                                                onSelect={() => handlePatientSelect(patient)}
+                                              >
+                                                {patient.name}
+                                                <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
+                                              </CommandItem>
+                                            ))}
+                                          </CommandGroup>
+                                        </CommandList>
+                                      </Command>
+                                    </PopoverContent>
+                                  </Popover>
+                                  <FormMessage />
                                 </FormItem>
-                                )}
+                              )}
                             />
 
                             {patientSearchTerm && (
@@ -559,6 +560,28 @@ export default function AppointmentsPage() {
                                 </FormItem>
                               )}
                             />
+                             <FormField control={form.control} name="bookedVia" render={({ field }) => (
+                                <FormItem className="space-y-3">
+                                    <FormLabel>Booked Via</FormLabel>
+                                    <FormControl>
+                                        <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4">
+                                            <FormItem className="flex items-center space-x-2 space-y-0">
+                                                <FormControl><RadioGroupItem value="Online" /></FormControl>
+                                                <FormLabel className="font-normal">Online</FormLabel>
+                                            </FormItem>
+                                            <FormItem className="flex items-center space-x-2 space-y-0">
+                                                <FormControl><RadioGroupItem value="Phone" /></FormControl>
+                                                <FormLabel className="font-normal">Phone</FormLabel>
+                                            </FormItem>
+                                            <FormItem className="flex items-center space-x-2 space-y-0">
+                                                <FormControl><RadioGroupItem value="Walk-in" /></FormControl>
+                                                <FormLabel className="font-normal">Walk-in</FormLabel>
+                                            </FormItem>
+                                        </RadioGroup>
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                             )} />
                           </div>
 
                            <div className="space-y-4 md:col-span-1">
@@ -612,6 +635,14 @@ export default function AppointmentsPage() {
                                     </FormItem>
                                   )}
                                 />
+                                <FormField control={form.control} name="department" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Department</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="Department" {...field} disabled />
+                                        </FormControl>
+                                    </FormItem>
+                                )} />
                             </div>
 
                             {selectedDoctor && selectedDate && (
@@ -649,7 +680,18 @@ export default function AppointmentsPage() {
                 </Card>
             </main>
             
-            <aside className="w-1/3 flex-shrink-0 overflow-hidden">
+            <aside className={cn(
+              "flex-shrink-0 overflow-hidden relative transition-all duration-300 ease-in-out",
+              isDrawerExpanded ? "w-2/3" : "w-1/3"
+            )}>
+                <Button 
+                    variant="outline" 
+                    size="icon" 
+                    className="absolute top-1/2 -left-5 z-10 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground animate-wave"
+                    onClick={() => setIsDrawerExpanded(!isDrawerExpanded)}
+                >
+                    <ChevronLeft className={cn("h-5 w-5 transition-transform duration-300", isDrawerExpanded && "rotate-180")} />
+                </Button>
                 <Card className="h-full rounded-2xl">
                     <CardHeader className="p-6 border-b">
                         <CardTitle>Upcoming Appointments</CardTitle>
