@@ -468,9 +468,9 @@ export default function AppointmentsPage() {
         <h1 className="text-xl font-semibold md:text-2xl">Appointments</h1>
       </header>
       <div className="relative flex flex-1 overflow-hidden">
-        <div className="flex flex-1 p-6 gap-6">
+        <div className="flex flex-1">
             <main className={cn(
-              "flex-shrink-0 overflow-visible relative transition-all duration-300 ease-in-out",
+              "flex-shrink-0 overflow-visible relative transition-all duration-300 ease-in-out p-6 pr-3",
               isDrawerExpanded ? "w-1/3 -ml-[calc(33.333%-4rem)]" : "w-2/3 -ml-0"
             )}>
                {isDrawerExpanded && (
@@ -721,7 +721,7 @@ export default function AppointmentsPage() {
             </main>
             
             <aside className={cn(
-              "flex-shrink-0 overflow-hidden relative transition-all duration-300 ease-in-out",
+              "flex-shrink-0 overflow-hidden relative transition-all duration-300 ease-in-out p-6 pl-3",
               isDrawerExpanded ? "w-2/3" : "w-1/3"
             )}>
                 <Button 
