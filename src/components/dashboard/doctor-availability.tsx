@@ -11,7 +11,7 @@ import { ScrollArea } from "../ui/scroll-area";
 import { getDay, format, isSameDay, parse } from "date-fns";
 import { Button } from "../ui/button";
 import Link from "next/link";
-import { MoreHorizontal, Star, Users } from "lucide-react";
+import { Star, Users } from "lucide-react";
 import { Badge } from "../ui/badge";
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -113,12 +113,7 @@ export default function DoctorAvailability({ selectedDate }: DoctorAvailabilityP
                                         <StarRating rating={4} />
                                     </div>
                                 </div>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                            </div>
-                            <div className="mt-3 flex justify-end">
-                               {appointmentCount > 0 && (
+                                {appointmentCount > 0 && (
                                  <Badge variant="secondary">
                                     <Users className="h-3 w-3 mr-1.5" />
                                     {appointmentCount} {appointmentCount > 1 ? 'appointments' : 'appointment'}
