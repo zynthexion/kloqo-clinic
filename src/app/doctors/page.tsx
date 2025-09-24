@@ -569,7 +569,7 @@ export default function DoctorsPage() {
                 </div>
                 <div className="flex flex-col gap-2">
                     
-                    <div className="flex items-center space-x-2 bg-black/20 p-2 rounded-md">
+                    <div className="flex items-center space-x-2 bg-primary/70 p-2 rounded-md">
                       <Switch
                         id="status-switch"
                         checked={selectedDoctor.availability === 'Available'}
