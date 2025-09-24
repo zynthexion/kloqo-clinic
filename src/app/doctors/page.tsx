@@ -29,7 +29,7 @@ import { db, storage } from "@/lib/firebase";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import type { Doctor, Appointment, LeaveSlot, Department } from "@/lib/types";
 import { format, parse, isSameDay, getDay, parse as parseDateFns } from "date-fns";
-import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon, PlusCircle, DollarSign } from "lucide-react";
+import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon, PlusCircle, DollarSign, Printer, FileDown } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -794,7 +794,7 @@ export default function DoctorsPage() {
             </div>
 
             {activeTab !== 'analytics' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   <Card>
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                           <CardTitle className="text-sm font-medium">Avg. Consulting Time</CardTitle>
@@ -1114,10 +1114,20 @@ export default function DoctorsPage() {
                             : "Select a date range"
                         }
                         </p>
-                        <DateRangePicker 
-                            onDateChange={setDateRange}
-                            initialDateRange={dateRange}
-                        />
+                        <div className="flex items-center gap-2">
+                            <DateRangePicker 
+                                onDateChange={setDateRange}
+                                initialDateRange={dateRange}
+                            />
+                            <Button variant="outline" size="icon">
+                                <Printer className="h-4 w-4" />
+                                <span className="sr-only">Print</span>
+                            </Button>
+                            <Button variant="outline" size="icon">
+                                <FileDown className="h-4 w-4" />
+                                <span className="sr-only">Download PDF</span>
+                            </Button>
+                        </div>
                     </div>
                     <OverviewStats dateRange={dateRange} doctorId={selectedDoctor.id} />
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1163,5 +1173,7 @@ export default function DoctorsPage() {
 
 
 
+
+    
 
     
