@@ -79,14 +79,14 @@ export default function Home() {
       <main className="flex-1 p-6 bg-background">
         <div className="space-y-6">
           <OverviewStats dateRange={dateRange} />
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-1">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="lg:col-span-3">
                 <AppointmentStatusChart dateRange={dateRange} />
             </div>
-            <div className="lg:col-span-1">
+            <div className="lg:col-span-6">
                 <PatientsVsAppointmentsChart dateRange={dateRange} />
             </div>
-            <div className="lg:col-span-1">
+            <div className="lg:col-span-3">
                <Card className="h-full flex flex-col">
                   <CardContent className="p-2 flex-grow flex items-center justify-center">
                       <Calendar
