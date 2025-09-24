@@ -549,7 +549,7 @@ export default function DoctorsPage() {
           <div className="h-full overflow-y-auto pr-2 md:col-span-2">
             {selectedDoctor ? (
             <>
-            <div className="bg-primary text-primary-foreground rounded-lg p-4 flex items-center gap-6 mb-6">
+            <div className="bg-primary text-primary-foreground rounded-lg p-4 flex items-start gap-6 mb-6">
                 <Image
                     src={selectedDoctor.avatar}
                     alt={selectedDoctor.name}
@@ -604,14 +604,11 @@ export default function DoctorsPage() {
                         <span className="text-md opacity-90">({selectedDoctor.reviews}+ Reviews)</span>
                     </div>
                 </div>
-                <div className="flex flex-col gap-2 self-start">
+                <div className="flex flex-col items-end gap-2">
                     <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" onClick={() => setIsEditingDetails(prev => !prev)}>
                         <Edit className="h-5 w-5" />
                     </Button>
-                </div>
-                <div className="flex flex-col gap-2">
-                    
-                    <div className="flex items-center space-x-2 bg-primary/70 p-2 rounded-md">
+                    <div className="flex items-center space-x-2 bg-primary/70 p-2 rounded-md mt-auto">
                       <Switch
                         id="status-switch"
                         checked={selectedDoctor.availability === 'Available'}
@@ -1001,5 +998,3 @@ export default function DoctorsPage() {
     </>
   );
 }
-
-    
