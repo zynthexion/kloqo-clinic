@@ -561,7 +561,7 @@ export default function DoctorsPage() {
                     <p className="text-md opacity-90">
                         {selectedDoctor.degrees?.join(", ")} - {selectedDoctor.department}
                     </p>
-                    <p className="text-md opacity-90">{selectedDoctor.experience} Years Experience Overall</p>
+                    <p className="text-md opacity-90">{selectedDoctor.experience} Years of experience</p>
                     <div className="flex items-center gap-2">
                         <StarRating rating={selectedDoctor.rating || 0} />
                         <span className="text-md opacity-90">({selectedDoctor.reviews}+ Reviews)</span>
