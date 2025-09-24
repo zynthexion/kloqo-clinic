@@ -113,7 +113,7 @@ const DoctorListItem = ({ doctor, onSelect, isSelected }: { doctor: Doctor, onSe
             />
             <span className={cn(
                 "absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full border-2 border-white",
-                doctor.availability === "Available" ? "bg-green-500" : "bg-gray-400"
+                doctor.availability === "Available" ? "bg-green-500" : "bg-red-500"
             )} />
         </div>
         <div>
@@ -575,7 +575,7 @@ export default function DoctorsPage() {
                         checked={selectedDoctor.availability === 'Available'}
                         onCheckedChange={(checked) => handleStatusChange(checked ? 'Available' : 'Unavailable')}
                         disabled={isPending}
-                        className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-gray-400"
+                        className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500"
                       />
                       <Label htmlFor="status-switch" className="font-semibold text-white">
                         {selectedDoctor.availability === 'Available' ? 'In' : 'Out'}
