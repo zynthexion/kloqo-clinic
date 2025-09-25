@@ -15,9 +15,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PeterdrawLogo } from '@/components/icons';
 import { Eye, EyeOff } from 'lucide-react';
-import Image from 'next/image';
 
-export default function LoginPage() {
+export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
 
   return (
@@ -28,20 +27,30 @@ export default function LoginPage() {
           "url('https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=1920&h=1080&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8bWVkaWNpbmV8ZW58MHx8MHx8fDA%3D')",
       }}
     >
-        <div className="absolute inset-0 bg-primary/80" />
-        <Card className="mx-auto w-[400px] z-10">
-          <CardHeader className="text-center">
-            <div className="flex items-center justify-center gap-2 mb-4">
-              <PeterdrawLogo className="h-8 w-8 text-primary" />
-              <h1 className="text-3xl font-bold font-headline">Kloqo</h1>
-            </div>
-            <CardTitle className="text-3xl font-bold">Welcome Back!</CardTitle>
-            <CardDescription className="text-balance text-muted-foreground">
-              Enter your email below to login to your account
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+      <div className="absolute inset-0 bg-primary/80" />
+      <Card className="mx-auto w-[400px] z-10">
+        <CardHeader className="text-center">
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <PeterdrawLogo className="h-8 w-8 text-primary" />
+            <h1 className="text-3xl font-bold font-headline">Kloqo</h1>
+          </div>
+          <CardTitle className="text-3xl font-bold">Create an Account</CardTitle>
+          <CardDescription className="text-balance text-muted-foreground">
+            Enter your information to create an account
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
           <form className="grid gap-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="first-name">First name</Label>
+                <Input id="first-name" placeholder="Max" required />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="last-name">Last name</Label>
+                <Input id="last-name" placeholder="Robinson" required />
+              </div>
+            </div>
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -52,15 +61,7 @@ export default function LoginPage() {
               />
             </div>
             <div className="grid gap-2">
-              <div className="flex items-center">
-                <Label htmlFor="password">Password</Label>
-                <Link
-                  href="/forgot-password"
-                  className="ml-auto inline-block text-sm underline"
-                >
-                  Forgot your password?
-                </Link>
-              </div>
+              <Label htmlFor="password">Password</Label>
               <div className="relative">
                 <Input
                   id="password"
@@ -83,20 +84,20 @@ export default function LoginPage() {
               </div>
             </div>
             <Button type="submit" className="w-full">
-              Login
+              Create an account
             </Button>
             <Button variant="outline" className="w-full">
-              Login with Google
+              Sign up with Google
             </Button>
           </form>
           <div className="mt-4 text-center text-sm">
-            Don&apos;t have an account?{' '}
-            <Link href="/signup" className="underline">
-              Sign up
+            Already have an account?{' '}
+            <Link href="/login" className="underline">
+              Log in
             </Link>
           </div>
-          </CardContent>
-        </Card>
+        </CardContent>
+      </Card>
     </div>
   );
 }
