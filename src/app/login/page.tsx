@@ -16,9 +16,16 @@ import { Label } from '@/components/ui/label';
 import { PeterdrawLogo } from '@/components/icons';
 import { Eye, EyeOff } from 'lucide-react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
+  const router = useRouter();
+
+  const handleLogin = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    router.push('/');
+  };
 
   return (
     <div
@@ -41,7 +48,7 @@ export default function LoginPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-          <form className="grid gap-4">
+          <form className="grid gap-4" onSubmit={handleLogin}>
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
               <Input
