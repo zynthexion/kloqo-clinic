@@ -61,6 +61,18 @@ export default function SignupPage() {
               />
             </div>
             <div className="grid gap-2">
+              <Label htmlFor="clinic-name">Clinic Name</Label>
+              <Input id="clinic-name" placeholder="Kloqo Clinic" required />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="place">Place</Label>
+              <Input id="place" placeholder="New York, USA" required />
+            </div>
+             <div className="grid gap-2">
+                <Label htmlFor="phone">Phone Number</Label>
+                <Input id="phone" type="tel" placeholder="123-456-7890" required />
+              </div>
+            <div className="grid gap-2">
               <Label htmlFor="password">Password</Label>
               <div className="relative">
                 <Input
