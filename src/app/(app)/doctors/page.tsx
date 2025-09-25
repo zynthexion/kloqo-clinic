@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useTransition } from "react";
@@ -569,7 +570,14 @@ export default function DoctorsPage() {
         const newSlotsMap = new Map(currentFormSlots.map(s => [s.day, s]));
     
         selectedDays.forEach(day => {
-            newSlotsMap.set(day, { day, timeSlots: validSharedTimeSlots });
+            const existingDay = newSlotsMap.get(day);
+            if (existingDay) {
+                const combinedSlots = [...existingDay.timeSlots, ...validSharedTimeSlots];
+                const uniqueSlots = Array.from(new Map(combinedSlots.map(item => [`${item.from}-${item.to}`, item])).values());
+                newSlotsMap.set(day, { day, timeSlots: uniqueSlots });
+            } else {
+                 newSlotsMap.set(day, { day, timeSlots: validSharedTimeSlots });
+            }
         });
     
         const allPossibleDays = [...new Set([...selectedDays, ...currentFormSlots.map(s => s.day)])];
@@ -578,7 +586,6 @@ export default function DoctorsPage() {
             if (newSlotsMap.has(day)) {
                 return newSlotsMap.get(day)!;
             }
-            // This part should technically not be reached if logic is sound.
             return { day, timeSlots: [] };
         }).filter(s => s.timeSlots.length > 0);
         
@@ -1188,5 +1195,7 @@ export default function DoctorsPage() {
     </>
   );
 }
+
+    
 
     
