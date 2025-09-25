@@ -256,10 +256,16 @@ export default function DoctorsPage() {
       form.reset({
         availabilitySlots: selectedDoctor.availabilitySlots?.map(s => ({
             ...s,
-            timeSlots: s.timeSlots.map(ts => ({
-                from: format(parseDateFns(ts.from, 'hh:mm a', new Date()), 'HH:mm'),
-                to: format(parseDateFns(ts.to, 'hh:mm a', new Date()), 'HH:mm')
-            }))
+            timeSlots: s.timeSlots.map(ts => {
+                try {
+                    return {
+                        from: format(parseDateFns(ts.from, 'hh:mm a', new Date()), 'HH:mm'),
+                        to: format(parseDateFns(ts.to, 'hh:mm a', new Date()), 'HH:mm')
+                    }
+                } catch {
+                    return { from: ts.from, to: ts.to }; // already in HH:mm
+                }
+            })
         })) || [],
       });
       setIsEditingDetails(false);
@@ -579,14 +585,10 @@ export default function DoctorsPage() {
         const currentFormSlots = form.getValues('availabilitySlots') || [];
         const newSlotsMap = new Map<string, { day: string; timeSlots: { from: string; to: string }[] }>();
         
-        // Populate map with existing slots that are not in selectedDays
         currentFormSlots.forEach(slot => {
-          if (!selectedDays.includes(slot.day)) {
-            newSlotsMap.set(slot.day, slot);
-          }
+          newSlotsMap.set(slot.day, slot);
         });
 
-        // Add/overwrite slots for selected days
         selectedDays.forEach(day => {
             newSlotsMap.set(day, { day, timeSlots: validSharedTimeSlots });
         });
@@ -1120,7 +1122,7 @@ export default function DoctorsPage() {
                                         .sort((a, b) => daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day))
                                         .map((slot, index) => (
                                             <React.Fragment key={index}>
-                                            <div className="flex">
+                                            <div className="flex items-start">
                                                 <p className="w-24 font-semibold text-sm pt-1">{slot.day}</p>
                                                 <div className="flex flex-wrap gap-2 items-center">
                                                     {slot.timeSlots.map((ts, i) => (
@@ -1211,3 +1213,4 @@ export default function DoctorsPage() {
     </>
   );
 }
+
