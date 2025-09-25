@@ -23,7 +23,7 @@ function DashboardHeader({
   onDateChange,
 }: {
   dateRange: DateRange | undefined;
-  onDateRangeChange: (dateRange: DateRange | undefined) => void;
+  onDateChange: (dateRange: DateRange | undefined) => void;
 }) {
   return (
     <header className="flex items-center justify-between gap-4 px-6 border-b py-6">
@@ -35,16 +35,13 @@ function DashboardHeader({
             onDateChange={onDateChange}
             initialDateRange={dateRange}
          />
-        {dateRange?.from && (
-          <p className="text-sm text-muted-foreground bg-[#E6F0F7] px-3 py-2 rounded-md">
-            {dateRange.to
-              ? `${format(dateRange.from, "LLL dd, y")} - ${format(
-                  dateRange.to,
-                  "LLL dd, y"
-                )}`
-              : format(dateRange.from, "LLL dd, y")}
-          </p>
-        )}
+        <p className="text-sm text-muted-foreground bg-[#E6F0F7] px-3 py-2 rounded-md">
+            {dateRange?.from ? 
+                dateRange.to ? `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}`
+                : format(dateRange.from, "LLL dd, y")
+                : "Select a date range"
+            }
+        </p>
          <div className="flex items-center gap-2">
             <Button variant="outline" size="icon">
                 <Printer className="h-4 w-4" />
@@ -80,7 +77,7 @@ export default function Home() {
     <div className="flex-1 flex flex-col h-full overflow-y-auto">
       <DashboardHeader
         dateRange={dateRange}
-        onDateRangeChange={setDateRange}
+        onDateChange={setDateRange}
       />
       <main className="flex-1 p-6 bg-background">
         <div className="space-y-6">
