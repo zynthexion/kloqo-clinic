@@ -91,10 +91,9 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
     <div className={cn("grid gap-2", className)}>
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                 <Button
+                <Button
                     variant={"outline"}
                     size="icon"
-                    className="bg-[#E6F0F7]"
                 >
                     <CalendarIcon className="h-4 w-4" />
                 </Button>
@@ -109,12 +108,16 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
                 <DropdownMenuSeparator />
                 <Popover open={isCustomPickerOpen} onOpenChange={setIsCustomPickerOpen}>
                     <PopoverTrigger asChild>
-                        <DropdownMenuItem onSelect={e => e.preventDefault()} onClick={() => {
-                            setPreset("custom")
-                            setIsCustomPickerOpen(true)
-                        }}>
-                            <Check className={cn("mr-2 h-4 w-4", preset === 'custom' ? "opacity-100" : "opacity-0")} />
-                             <span>Custom Range</span>
+                        <DropdownMenuItem 
+                            onSelect={e => e.preventDefault()} 
+                            onClick={() => {
+                                setPreset("custom")
+                                setDate(undefined)
+                                setIsCustomPickerOpen(true)
+                            }}
+                        >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            <span>Custom Range</span>
                         </DropdownMenuItem>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
