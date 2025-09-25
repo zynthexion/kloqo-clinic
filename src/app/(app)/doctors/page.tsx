@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useEffect, useMemo, useTransition } from "react";
@@ -585,10 +584,14 @@ export default function DoctorsPage() {
         const currentFormSlots = form.getValues('availabilitySlots') || [];
         const newSlotsMap = new Map<string, { day: string; timeSlots: { from: string; to: string }[] }>();
         
+        // Preserve existing slots that are not in the selected days
         currentFormSlots.forEach(slot => {
-          newSlotsMap.set(slot.day, slot);
+            if (!selectedDays.includes(slot.day)) {
+                newSlotsMap.set(slot.day, slot);
+            }
         });
 
+        // Add or overwrite slots for selected days
         selectedDays.forEach(day => {
             newSlotsMap.set(day, { day, timeSlots: validSharedTimeSlots });
         });
@@ -1084,9 +1087,9 @@ export default function DoctorsPage() {
                                         <Label>Review and save</Label>
                                         <div className="space-y-3 rounded-md border p-3 max-h-48 overflow-y-auto">
                                             {fields.map((field, index) => (
-                                               <div key={field.id} className="flex items-start text-sm">
-                                                  <p className="w-28 font-semibold">{field.day}</p>
-                                                  <div className="flex flex-wrap gap-1">
+                                               <div key={field.id} className="text-sm">
+                                                    <p className="font-semibold">{field.day}</p>
+                                                    <div className="flex flex-wrap gap-1 mt-1">
                                                       {field.timeSlots.map((ts, i) => {
                                                           if (!ts.from || !ts.to) return null;
                                                           try {
@@ -1099,8 +1102,8 @@ export default function DoctorsPage() {
                                                             return <Badge key={i} variant="destructive">Invalid</Badge>;
                                                           }
                                                       })}
-                                                  </div>
-                                               </div>
+                                                    </div>
+                                                </div>
                                             ))}
                                         </div>
                                       </div>
@@ -1115,16 +1118,16 @@ export default function DoctorsPage() {
                                   </form>
                                 </Form>
                             ) : (
-                                <div className="space-y-3">
+                                <div className="space-y-4">
                                     {selectedDoctor.availabilitySlots && selectedDoctor.availabilitySlots.length > 0 ? (
                                         selectedDoctor.availabilitySlots
                                         .slice()
                                         .sort((a, b) => daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day))
                                         .map((slot, index) => (
                                             <React.Fragment key={index}>
-                                            <div className="flex items-start">
-                                                <p className="w-24 font-semibold text-sm pt-1">{slot.day}</p>
-                                                <div className="flex flex-wrap gap-2 items-center">
+                                            <div>
+                                                <p className="font-semibold text-sm">{slot.day}</p>
+                                                <div className="flex flex-wrap gap-2 items-center mt-2">
                                                     {slot.timeSlots.map((ts, i) => (
                                                         <Badge key={i} variant="outline" className="text-sm group relative pr-7">
                                                             {ts.from} - {ts.to}
@@ -1214,3 +1217,5 @@ export default function DoctorsPage() {
   );
 }
 
+
+    
