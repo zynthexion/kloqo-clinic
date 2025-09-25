@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useEffect, useMemo, useTransition } from "react";
@@ -27,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { doc, updateDoc, collection, getDocs, setDoc } from "firebase/firestore";
 import { db, storage } from "@/lib/firebase";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import type { Doctor, Appointment, LeaveSlot, Department } from "@/lib/types";
+import type { Doctor, Appointment, LeaveSlot, Department, TimeSlot } from "@/lib/types";
 import { format, parse, isSameDay, getDay, parse as parseDateFns } from "date-fns";
 import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon, PlusCircle, DollarSign, Printer, FileDown } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
@@ -504,6 +503,39 @@ export default function DoctorsPage() {
             }
         });
     }
+
+    const handleDeleteTimeSlot = async (day: string, timeSlot: TimeSlot) => {
+        if (!selectedDoctor) return;
+    
+        const updatedAvailabilitySlots = selectedDoctor.availabilitySlots?.map(slot => {
+            if (slot.day === day) {
+                const updatedTimeSlots = slot.timeSlots.filter(ts => ts.from !== timeSlot.from || ts.to !== timeSlot.to);
+                return { ...slot, timeSlots: updatedTimeSlots };
+            }
+            return slot;
+        }).filter(slot => slot.timeSlots.length > 0); // Remove day if no time slots are left
+    
+        startTransition(async () => {
+            const doctorRef = doc(db, "doctors", selectedDoctor.id);
+            try {
+                await updateDoc(doctorRef, { availabilitySlots: updatedAvailabilitySlots });
+                const updatedDoctor = { ...selectedDoctor, availabilitySlots: updatedAvailabilitySlots };
+                setSelectedDoctor(updatedDoctor);
+                setDoctors(prev => prev.map(d => d.id === selectedDoctor.id ? updatedDoctor : d));
+                toast({
+                    title: "Time Slot Deleted",
+                    description: `The time slot has been removed from ${day}.`,
+                });
+            } catch (error) {
+                console.error("Error deleting time slot:", error);
+                toast({
+                    variant: "destructive",
+                    title: "Update Failed",
+                    description: "Could not delete the time slot.",
+                });
+            }
+        });
+    };
 
     const applySharedSlotsToSelectedDays = () => {
       if (selectedDays.length === 0) {
@@ -1066,9 +1098,17 @@ export default function DoctorsPage() {
                                         .map((slot, index) => (
                                             <div key={index} className="flex items-start">
                                                 <p className="w-28 font-semibold text-sm">{slot.day}</p>
-                                                <div className="flex flex-wrap gap-2">
+                                                <div className="flex flex-wrap gap-2 items-center">
                                                     {slot.timeSlots.map((ts, i) => (
-                                                        <Badge key={i} variant="outline" className="text-sm">{ts.from} - {ts.to}</Badge>
+                                                        <Badge key={i} variant="outline" className="text-sm group relative pr-7">
+                                                            {ts.from} - {ts.to}
+                                                            <button 
+                                                                onClick={() => handleDeleteTimeSlot(slot.day, ts)}
+                                                                className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                            >
+                                                                <X className="h-3 w-3 text-red-500" />
+                                                            </button>
+                                                        </Badge>
                                                     ))}
                                                 </div>
                                             </div>
@@ -1145,3 +1185,5 @@ export default function DoctorsPage() {
     </>
   );
 }
+
+    
