@@ -579,10 +579,14 @@ export default function DoctorsPage() {
         const currentFormSlots = form.getValues('availabilitySlots') || [];
         const newSlotsMap = new Map<string, { day: string; timeSlots: { from: string; to: string }[] }>();
         
+        // Populate map with existing slots that are not in selectedDays
         currentFormSlots.forEach(slot => {
+          if (!selectedDays.includes(slot.day)) {
             newSlotsMap.set(slot.day, slot);
+          }
         });
 
+        // Add/overwrite slots for selected days
         selectedDays.forEach(day => {
             newSlotsMap.set(day, { day, timeSlots: validSharedTimeSlots });
         });
@@ -1116,7 +1120,7 @@ export default function DoctorsPage() {
                                         .sort((a, b) => daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day))
                                         .map((slot, index) => (
                                             <React.Fragment key={index}>
-                                            <div className="flex items-start gap-4">
+                                            <div className="flex">
                                                 <p className="w-24 font-semibold text-sm pt-1">{slot.day}</p>
                                                 <div className="flex flex-wrap gap-2 items-center">
                                                     {slot.timeSlots.map((ts, i) => (
@@ -1207,8 +1211,3 @@ export default function DoctorsPage() {
     </>
   );
 }
-
-    
-
-    
-
