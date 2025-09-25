@@ -36,7 +36,7 @@ function DashboardHeader({
             initialDateRange={dateRange}
          />
         {dateRange?.from && (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground bg-[#E6F0F7] px-3 py-2 rounded-md">
             {dateRange.to
               ? `${format(dateRange.from, "LLL dd, y")} - ${format(
                   dateRange.to,
