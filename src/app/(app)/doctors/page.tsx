@@ -64,8 +64,8 @@ const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Fri
 const dayAbbreviations = ["S", "M", "T", "W", "T", "F", "S"];
 
 const timeSlotSchema = z.object({
-  from: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Invalid time format (HH:MM)"),
-  to: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Invalid time format (HH:MM)"),
+  from: z.string().regex(/^(0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$/, "Invalid 12-hour time format (e.g., 09:00 AM)"),
+  to: z.string().regex(/^(0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$/, "Invalid 12-hour time format (e.g., 09:00 AM)"),
 });
 
 const availabilitySlotSchema = z.object({
@@ -100,9 +100,8 @@ const generateTimeOptions = () => {
     const options = [];
     for (let h = 0; h < 24; h++) {
         for (let m = 0; m < 60; m += 30) {
-            const hour = String(h).padStart(2, '0');
-            const minute = String(m).padStart(2, '0');
-            options.push(`${hour}:${minute}`);
+            const date = new Date(0, 0, 0, h, m);
+            options.push(format(date, "hh:mm a"));
         }
     }
     return options;
@@ -193,7 +192,7 @@ export default function DoctorsPage() {
   const [isEditingAvailability, setIsEditingAvailability] = useState(false);
   
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
-  const [sharedTimeSlots, setSharedTimeSlots] = useState<Array<{ from: string; to: string }>>([{ from: "09:00", to: "17:00" }]);
+  const [sharedTimeSlots, setSharedTimeSlots] = useState<Array<{ from: string; to: string }>>([{ from: "09:00 AM", to: "05:00 PM" }]);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("All");
@@ -621,8 +620,8 @@ export default function DoctorsPage() {
       const aptTime = parseDateFns(appointment.time, "hh:mm a", new Date(0));
       
       return leaveForDay.slots.some(leaveSlot => {
-          const leaveStart = parseDateFns(leaveSlot.from, "HH:mm", new Date(0));
-          const leaveEnd = parseDateFns(leaveSlot.to, "HH:mm", new Date(0));
+          const leaveStart = parseDateFns(leaveSlot.from, "hh:mm a", new Date(0));
+          const leaveEnd = parseDateFns(leaveSlot.to, "hh:mm a", new Date(0));
           return aptTime >= leaveStart && aptTime < leaveEnd;
       });
   };

@@ -48,7 +48,7 @@ export function TimeSlots({ selectedDate, availabilitySlots, leaveSlots, appoint
   const getAppointmentsForSlot = (slot: TimeSlot) => {
     if (!selectedDate) return 0;
     const formattedDate = format(selectedDate, 'd MMMM yyyy');
-    const slotTimeFormatted = format(parseDateFns(slot.from, 'HH:mm', new Date()), 'hh:mm a');
+    const slotTimeFormatted = format(parseDateFns(slot.from, 'hh:mm a', new Date()), 'hh:mm a');
 
     return appointments.filter(apt => {
         return apt.date === formattedDate && apt.time === slotTimeFormatted;
@@ -125,4 +125,3 @@ export function TimeSlots({ selectedDate, availabilitySlots, leaveSlots, appoint
     </div>
   );
 }
-
