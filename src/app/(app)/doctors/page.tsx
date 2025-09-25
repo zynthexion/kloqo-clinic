@@ -472,20 +472,22 @@ export default function DoctorsPage() {
 
     const handleAvailabilitySave = (values: WeeklyAvailabilityFormValues) => {
         if (!selectedDoctor) return;
-
-        const scheduleString = values.availabilitySlots
+    
+        const validSlots = values.availabilitySlots.filter(slot => slot.timeSlots.length > 0);
+    
+        const scheduleString = validSlots
           ?.sort((a, b) => daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day))
           .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${ts.from}-${ts.to}`).join(', ')}`)
           .join('; ');
-
+    
         startTransition(async () => {
             const doctorRef = doc(db, "doctors", selectedDoctor.id);
             try {
                 await updateDoc(doctorRef, {
-                    availabilitySlots: values.availabilitySlots,
+                    availabilitySlots: validSlots,
                     schedule: scheduleString,
                 });
-                const updatedDoctor = { ...selectedDoctor, availabilitySlots: values.availabilitySlots, schedule: scheduleString };
+                const updatedDoctor = { ...selectedDoctor, availabilitySlots: validSlots, schedule: scheduleString };
                 setSelectedDoctor(updatedDoctor);
                 setDoctors(prev => prev.map(d => d.id === selectedDoctor.id ? updatedDoctor : d));
                 setIsEditingAvailability(false);
@@ -513,7 +515,7 @@ export default function DoctorsPage() {
                 return { ...slot, timeSlots: updatedTimeSlots };
             }
             return slot;
-        }).filter(slot => slot.timeSlots.length > 0); // Remove day if no time slots are left
+        }).filter(slot => slot.timeSlots.length > 0);
     
         startTransition(async () => {
             const doctorRef = doc(db, "doctors", selectedDoctor.id);
@@ -538,45 +540,39 @@ export default function DoctorsPage() {
     };
 
     const applySharedSlotsToSelectedDays = () => {
-      if (selectedDays.length === 0) {
-        toast({
-          variant: "destructive",
-          title: "No days selected",
-          description: "Please select one or more days to apply the time slots.",
-        });
-        return;
-      }
-    
-      const currentSlots = form.getValues('availabilitySlots') || [];
-      const newSlots = [...currentSlots];
-    
-      selectedDays.forEach(day => {
-        const dayIndex = newSlots.findIndex(s => s.day === day);
+        if (selectedDays.length === 0) {
+            toast({
+                variant: "destructive",
+                title: "No days selected",
+                description: "Please select one or more days to apply the time slots.",
+            });
+            return;
+        }
+
+        const currentSlots = form.getValues('availabilitySlots') || [];
+        const newSlotsMap = new Map(currentSlots.map(s => [s.day, s]));
         const validSharedTimeSlots = sharedTimeSlots.filter(ts => ts.from && ts.to);
 
-        if (dayIndex !== -1) {
-          // Update existing day
-          newSlots[dayIndex].timeSlots = validSharedTimeSlots;
-        } else {
-          // Add new day
-          newSlots.push({ day, timeSlots: validSharedTimeSlots });
+        if (validSharedTimeSlots.length === 0) {
+             toast({
+                variant: "destructive",
+                title: "No time slots defined",
+                description: "Please define at least one valid time slot.",
+            });
+            return;
         }
-      });
-      
-      // Remove days that are no longer selected, if they were previously in the form state
-      const filteredSlots = newSlots.filter(s => {
-          const currentDayIsSelected = selectedDays.includes(s.day)
-          const wasOriginallyPresent = selectedDoctor?.availabilitySlots?.some(os => os.day === s.day);
-          return currentDayIsSelected || wasOriginallyPresent;
-      });
 
+        selectedDays.forEach(day => {
+            newSlotsMap.set(day, { day, timeSlots: validSharedTimeSlots });
+        });
 
-      form.setValue('availabilitySlots', newSlots, { shouldDirty: true });
+        const updatedSlots = Array.from(newSlotsMap.values());
+        form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true });
 
-      toast({
-        title: "Time Slots Applied",
-        description: `The defined time slots have been applied to the selected days.`,
-      });
+        toast({
+            title: "Time Slots Applied",
+            description: `The defined time slots have been applied to the selected days.`,
+        });
     };
 
     const handleLeaveUpdate = async (updatedLeaveSlots: LeaveSlot[]) => {
@@ -1186,4 +1182,5 @@ export default function DoctorsPage() {
   );
 }
 
+    
     
