@@ -962,36 +962,29 @@ export default function DoctorsPage() {
                             {isEditingAvailability ? (
                                 <Form {...form}>
                                     <form onSubmit={form.handleSubmit(handleAvailabilitySave)} className="space-y-4">
-                                        <Accordion type="multiple" className="w-full">
-                                            {daysOfWeek.map((day, dayIndex) => {
-                                                const fieldIndex = fields.findIndex(f => f.day === day);
-                                                const isChecked = form.getValues('availableDays').includes(day);
+                                        <Accordion type="single" collapsible className="w-full" onValueChange={(value) => {
+                                            const currentDays = form.getValues('availableDays') || [];
+                                            const dayIndex = fields.findIndex(f => f.day === value);
+                                            const isDaySelected = currentDays.includes(value);
 
+                                            if (value && !isDaySelected) {
+                                                form.setValue('availableDays', [...currentDays, value], { shouldValidate: true });
+                                                if (dayIndex === -1) {
+                                                    append({ day: value, timeSlots: [{ from: "09:00", to: "17:00" }] });
+                                                }
+                                            }
+                                        }}>
+                                            {daysOfWeek.map((day) => {
+                                                const fieldIndex = fields.findIndex(f => f.day === day);
+                                                
                                                 return (
                                                     <AccordionItem value={day} key={day}>
-                                                        <div className="flex items-center gap-2">
-                                                            <Checkbox
-                                                                id={`day-${day}`}
-                                                                checked={isChecked}
-                                                                onCheckedChange={(checked) => {
-                                                                    const currentDays = form.getValues('availableDays') || [];
-                                                                    const newDays = checked
-                                                                        ? [...currentDays, day]
-                                                                        : currentDays.filter((value) => value !== day);
-                                                                    form.setValue('availableDays', newDays, { shouldValidate: true });
-
-                                                                    if (checked && fieldIndex === -1) {
-                                                                        append({ day: day, timeSlots: [{ from: "09:00", to: "17:00" }] });
-                                                                    } else if (!checked && fieldIndex > -1) {
-                                                                        remove(fieldIndex);
-                                                                    }
-                                                                }}
-                                                            />
-                                                            <AccordionTrigger className="flex-1 py-2 font-medium">{day}</AccordionTrigger>
-                                                        </div>
+                                                        <AccordionTrigger className="py-2 font-medium">
+                                                            {day}
+                                                        </AccordionTrigger>
                                                         <AccordionContent>
-                                                            {isChecked && fieldIndex !== -1 && (
-                                                                <div className="pl-8 pt-2 space-y-2">
+                                                            {fieldIndex !== -1 && (
+                                                                <div className="pt-2 space-y-2">
                                                                     {form.getValues(`availabilitySlots.${fieldIndex}.timeSlots`).map((_, timeIndex) => (
                                                                         <div key={timeIndex} className="flex items-end gap-2">
                                                                              <FormField
