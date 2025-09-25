@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -20,10 +21,16 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <div className="w-full h-screen lg:grid lg:min-h-[600px] lg:grid-cols-2 xl:min-h-[800px]">
-      <div className="flex items-center justify-center py-12">
-        <div className="mx-auto grid w-[350px] gap-6">
-          <div className="grid gap-2 text-center">
+    <div
+      className="w-full h-screen bg-cover bg-center flex items-center justify-center"
+      style={{
+        backgroundImage:
+          "url('https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=1920&h=1080&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8bWVkaWNpbmV8ZW58MHx8MHx8fDA%3D')",
+      }}
+    >
+        <div className="absolute inset-0 bg-primary/80" />
+        <Card className="mx-auto w-[400px] z-10">
+          <CardHeader className="text-center">
             <div className="flex items-center justify-center gap-2 mb-4">
               <PeterdrawLogo className="h-8 w-8 text-primary" />
               <h1 className="text-3xl font-bold font-headline">Kloqo</h1>
@@ -32,7 +39,8 @@ export default function LoginPage() {
             <CardDescription className="text-balance text-muted-foreground">
               Enter your email below to login to your account
             </CardDescription>
-          </div>
+          </CardHeader>
+          <CardContent>
           <form className="grid gap-4">
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
@@ -87,15 +95,8 @@ export default function LoginPage() {
               Sign up
             </Link>
           </div>
-        </div>
-      </div>
-      <div
-        className="hidden bg-cover bg-center bg-no-repeat lg:block"
-        style={{
-          backgroundImage:
-            "url('https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=1920&h=1080&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8bWVkaWNpbmV8ZW58MHx8MHx8fDA%3D')",
-        }}
-      ></div>
+          </CardContent>
+        </Card>
     </div>
   );
 }
