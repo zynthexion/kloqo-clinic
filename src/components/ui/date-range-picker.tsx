@@ -119,21 +119,13 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
             <DropdownMenuTrigger asChild>
                 <Button
                     variant={"outline"}
+                    size="icon"
                     className={cn(
-                    "w-[200px] justify-between text-left font-normal bg-[#E6F0F7]",
-                    !date && "text-muted-foreground"
+                      "bg-[#E6F0F7]",
+                      !date && "text-muted-foreground"
                     )}
                 >
-                    <div className="flex items-center">
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        <span>
-                            {preset === 'custom' && date?.from && date?.to
-                                ? `${format(date.from, "LLL dd, y")} - ${format(date.to, "LLL dd, y")}`
-                                : getPresetLabel(preset)
-                            }
-                        </span>
-                    </div>
-                    <ChevronDown className="h-4 w-4 opacity-50" />
+                    <CalendarIcon className="h-4 w-4" />
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56">
