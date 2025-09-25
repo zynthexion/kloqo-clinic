@@ -26,7 +26,7 @@ function DashboardHeader({
   onDateRangeChange: (dateRange: DateRange | undefined) => void;
 }) {
   return (
-    <header className="flex h-16 items-center justify-between gap-4 px-6 border-b pt-6">
+    <header className="flex items-center justify-between gap-4 px-6 border-b py-6">
       <div>
         <h1 className="text-2xl font-bold">Dashboard</h1>
         <p className="text-sm text-muted-foreground">
