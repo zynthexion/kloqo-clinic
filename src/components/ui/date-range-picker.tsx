@@ -23,8 +23,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 interface DateRangePickerProps extends React.HTMLAttributes<HTMLDivElement> {
+    onDateChange: (dateRange: DateRange | undefined) => void;
     initialDateRange?: DateRange;
-    onDateChange?: (dateRange: DateRange | undefined) => void;
 }
 
 const presets = [
@@ -40,10 +40,6 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
   const [date, setDate] = React.useState<DateRange | undefined>(initialDateRange)
   const [preset, setPreset] = React.useState<string>("last7");
   const [isCustomPickerOpen, setIsCustomPickerOpen] = React.useState(false);
-
-  React.useEffect(() => {
-    setDate(initialDateRange);
-  }, [initialDateRange]);
 
   React.useEffect(() => {
     if (onDateChange) {
@@ -82,7 +78,12 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
   };
 
   const getPresetLabel = (value: string) => {
-    if (value === 'custom') return 'Custom';
+    if (value === 'custom') {
+         if (date?.from && date.to) {
+            return `${format(date.from, "LLL dd, y")} - ${format(date.to, "LLL dd, y")}`;
+         }
+         return 'Custom';
+    }
     return presets.find(p => p.value === value)?.label || "Select date range";
   }
 
@@ -92,10 +93,10 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
             <DropdownMenuTrigger asChild>
                  <Button
                     variant={"outline"}
-                    className="w-[150px] justify-start text-left font-normal"
+                    size="icon"
+                    className="bg-[#E6F0F7]"
                 >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    <span>{getPresetLabel(preset)}</span>
+                    <CalendarIcon className="h-4 w-4" />
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56">
@@ -113,7 +114,7 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
                             setIsCustomPickerOpen(true)
                         }}>
                             <Check className={cn("mr-2 h-4 w-4", preset === 'custom' ? "opacity-100" : "opacity-0")} />
-                            Custom Range
+                             <span>Custom Range</span>
                         </DropdownMenuItem>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
