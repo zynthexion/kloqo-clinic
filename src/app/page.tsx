@@ -20,7 +20,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 
 function DashboardHeader({
   dateRange,
-  onDateRangeChange,
+  onDateChange,
 }: {
   dateRange: DateRange | undefined;
   onDateRangeChange: (dateRange: DateRange | undefined) => void;
@@ -32,7 +32,7 @@ function DashboardHeader({
       </div>
       <div className="flex items-center gap-4">
          <DateRangePicker 
-            onDateChange={onDateRangeChange}
+            onDateChange={onDateChange}
             initialDateRange={dateRange}
          />
         {dateRange?.from && (

@@ -33,7 +33,6 @@ const presets = [
     { value: "last_month", label: "Last month" },
     { value: "this_year", label: "This year" },
     { value: "last_year", label: "Last year" },
-    { value: "custom", label: "Custom" },
 ]
 
 export function DateRangePicker({ className, initialDateRange, onDateChange }: DateRangePickerProps) {
@@ -76,79 +75,52 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
         const lastYear = subYears(now, 1);
         setDate({ from: startOfYear(lastYear), to: endOfYear(lastYear) });
         break;
-      case "custom":
-        setIsCustomPickerOpen(true);
-        return; 
       default:
         setDate(undefined);
         break;
     }
-    setIsCustomPickerOpen(false);
   };
 
   const getPresetLabel = (value: string) => {
     return presets.find(p => p.value === value)?.label || "Select date range";
   }
 
-  const CustomDatePopover = ({ children }: { children: React.ReactNode }) => (
-    <Popover open={isCustomPickerOpen} onOpenChange={setIsCustomPickerOpen}>
-        <PopoverTrigger asChild>
-            {children}
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-                initialFocus
-                mode="range"
-                defaultMonth={date?.from}
-                selected={date}
-                onSelect={(range) => {
-                    setDate(range);
-                    if (range?.from && range?.to) {
-                       setIsCustomPickerOpen(false);
-                    }
-                }}
-                numberOfMonths={2}
-            />
-        </PopoverContent>
-    </Popover>
-  );
 
   return (
     <div className={cn("grid gap-2", className)}>
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+        <Popover open={isCustomPickerOpen} onOpenChange={setIsCustomPickerOpen}>
+            <PopoverTrigger asChild>
                 <Button
                     variant={"outline"}
                     size="icon"
                     className={cn(
-                      "bg-[#E6F0F7]",
-                      !date && "text-muted-foreground"
+                    "bg-[#E6F0F7]",
+                    !date && "text-muted-foreground"
                     )}
+                    onClick={() => {
+                        setPreset("custom")
+                        setIsCustomPickerOpen(true)
+                    }}
                 >
                     <CalendarIcon className="h-4 w-4" />
                 </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56">
-                {presets.map(p => (
-                    p.value === 'custom' ? (
-                        <CustomDatePopover key={p.value}>
-                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handlePresetChange('custom'); }}>
-                                <div className={cn("flex w-full items-center justify-between", preset === p.value && "font-semibold")}>
-                                    {p.label}
-                                </div>
-                            </DropdownMenuItem>
-                        </CustomDatePopover>
-                    ) : (
-                        <DropdownMenuItem key={p.value} onSelect={() => handlePresetChange(p.value)}>
-                             <div className={cn("flex w-full items-center justify-between", preset === p.value && "font-semibold")}>
-                                {p.label}
-                                {preset === p.value && <Check className="h-4 w-4" />}
-                            </div>
-                        </DropdownMenuItem>
-                    )
-                ))}
-            </DropdownMenuContent>
-        </DropdownMenu>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                    initialFocus
+                    mode="range"
+                    defaultMonth={date?.from}
+                    selected={date}
+                    onSelect={(range) => {
+                        setDate(range);
+                        if (range?.from && range?.to) {
+                            setIsCustomPickerOpen(false);
+                        }
+                    }}
+                    numberOfMonths={2}
+                />
+            </PopoverContent>
+        </Popover>
     </div>
   )
 }
