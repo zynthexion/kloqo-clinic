@@ -58,6 +58,7 @@ import AppointmentStatusChart from "@/components/dashboard/appointment-status-ch
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Separator } from "@/components/ui/separator";
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const dayAbbreviations = ["S", "M", "T", "W", "T", "F", "S"];
@@ -90,7 +91,12 @@ const addDoctorFormSchema = z.object({
 type AddDoctorFormValues = z.infer<typeof addDoctorFormSchema>;
 
 const weeklyAvailabilityFormSchema = z.object({
-  availabilitySlots: z.array(availabilitySlotSchema),
+  availabilitySlots: z.array(availabilitySlotSchema).refine(
+    (slots) => slots.every((slot) => slot.timeSlots.length > 0),
+    {
+      message: "Each selected day must have at least one time slot.",
+    }
+  ),
 });
 type WeeklyAvailabilityFormValues = z.infer<typeof weeklyAvailabilityFormSchema>;
 
@@ -231,9 +237,13 @@ export default function DoctorsPage() {
       );
 
       if (doctorAppointments.length > 0) {
-          const firstAptDate = parse(doctorAppointments[0].date, 'd MMMM yyyy', new Date());
-          if (!isNaN(firstAptDate.getTime())) {
-            setSelectedDate(firstAptDate);
+          try {
+            const firstAptDate = parse(doctorAppointments[0].date, 'd MMMM yyyy', new Date());
+            if (!isNaN(firstAptDate.getTime())) {
+              setSelectedDate(firstAptDate);
+            }
+          } catch(e) {
+              // ignore invalid date
           }
       }
       
@@ -567,41 +577,19 @@ export default function DoctorsPage() {
         }
     
         const currentFormSlots = form.getValues('availabilitySlots') || [];
-        const newSlotsMap = new Map(currentFormSlots.map(s => [s.day, s]));
-    
+        const newSlotsMap = new Map<string, { day: string; timeSlots: { from: string; to: string }[] }>();
+        
+        currentFormSlots.forEach(slot => {
+            newSlotsMap.set(slot.day, slot);
+        });
+
         selectedDays.forEach(day => {
             newSlotsMap.set(day, { day, timeSlots: validSharedTimeSlots });
         });
-    
-        const allPossibleDays = [...new Set([...selectedDays, ...currentFormSlots.map(s => s.day)])];
-        
-        const updatedSlots = allPossibleDays.map(day => {
-            if (newSlotsMap.has(day)) {
-                return newSlotsMap.get(day)!;
-            }
-            // This part is tricky. If a day was previously selected but is no longer, should we remove it?
-            // Current logic keeps it if it was in form slots, but with new times if it was re-selected.
-            // Let's refine to only include currently selected days or days that already had slots.
-            const existingDay = currentFormSlots.find(s => s.day === day);
-            if (existingDay) return existingDay;
-            return null;
 
-        }).filter((s): s is { day: string; timeSlots: { from: string; to: string }[]} => s !== null && newSlotsMap.has(s.day));
-
-        // Let's try a simpler approach. We will build the new slots from scratch.
-        const freshSlots = daysOfWeek.map(day => {
-            if (selectedDays.includes(day)) {
-                return { day, timeSlots: validSharedTimeSlots };
-            }
-            // Keep existing slots for days that are not part of the current selection
-            const existingDay = currentFormSlots.find(s => s.day === day);
-            if (existingDay) {
-                return existingDay;
-            }
-            return null;
-        }).filter(s => s !== null && s.timeSlots.length > 0) as { day: string; timeSlots: { from: string; to: string }[]}[];
+        const updatedSlots = Array.from(newSlotsMap.values()).filter(slot => slot.timeSlots.length > 0);
         
-        form.setValue('availabilitySlots', freshSlots, { shouldDirty: true });
+        form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true });
         
         toast({
             title: "Time Slots Applied",
@@ -1127,8 +1115,9 @@ export default function DoctorsPage() {
                                         .slice()
                                         .sort((a, b) => daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day))
                                         .map((slot, index) => (
-                                            <div key={index} className="flex items-start">
-                                                <p className="w-28 font-semibold text-sm">{slot.day}</p>
+                                            <React.Fragment key={index}>
+                                            <div className="flex items-start gap-4">
+                                                <p className="w-24 font-semibold text-sm pt-1">{slot.day}</p>
                                                 <div className="flex flex-wrap gap-2 items-center">
                                                     {slot.timeSlots.map((ts, i) => (
                                                         <Badge key={i} variant="outline" className="text-sm group relative pr-7">
@@ -1143,6 +1132,8 @@ export default function DoctorsPage() {
                                                     ))}
                                                 </div>
                                             </div>
+                                            {index < selectedDoctor.availabilitySlots!.length -1 && <Separator className="my-3"/>}
+                                            </React.Fragment>
                                         ))
                                     ) : (
                                         <p className="text-sm text-muted-foreground">No availability slots defined.</p>
@@ -1220,3 +1211,4 @@ export default function DoctorsPage() {
     
 
     
+
