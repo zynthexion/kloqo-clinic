@@ -29,19 +29,19 @@ function DashboardHeader({
     <header className="flex items-center justify-between gap-4 px-6 border-b py-6">
       <div>
         <h1 className="text-2xl font-bold">Dashboard</h1>
-      </div>
-      <div className="flex items-center gap-4">
-         <DateRangePicker 
-            onDateChange={onDateChange}
-            initialDateRange={dateRange}
-         />
-        <p className="text-sm text-muted-foreground bg-[#E6F0F7] px-3 py-2 rounded-md">
+         <p className="text-sm text-muted-foreground">
             {dateRange?.from ? 
                 dateRange.to ? `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}`
                 : format(dateRange.from, "LLL dd, y")
                 : "Select a date range"
             }
         </p>
+      </div>
+      <div className="flex items-center gap-4">
+         <DateRangePicker 
+            onDateChange={onDateChange}
+            initialDateRange={dateRange}
+         />
          <div className="flex items-center gap-2">
             <Button variant="outline" size="icon">
                 <Printer className="h-4 w-4" />
