@@ -92,7 +92,7 @@ export default function TodaysAppointments({ selectedDate }: { selectedDate: Dat
                 ))
               ) : appointments.length > 0 ? (
                 appointments.map((apt) => (
-                  <TableRow key={apt.id}>
+                  <TableRow key={apt.id || apt.tokenNumber}>
                     <TableCell className="font-medium">{apt.patientName}</TableCell>
                     <TableCell>{apt.time}</TableCell>
                     <TableCell>{apt.doctor}</TableCell>
