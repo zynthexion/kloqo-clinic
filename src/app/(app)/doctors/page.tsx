@@ -39,6 +39,7 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormDescription, FormMessage } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Select,
   SelectContent,
