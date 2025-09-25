@@ -570,14 +570,7 @@ export default function DoctorsPage() {
         const newSlotsMap = new Map(currentFormSlots.map(s => [s.day, s]));
     
         selectedDays.forEach(day => {
-            const existingDay = newSlotsMap.get(day);
-            if (existingDay) {
-                const combinedSlots = [...existingDay.timeSlots, ...validSharedTimeSlots];
-                const uniqueSlots = Array.from(new Map(combinedSlots.map(item => [`${item.from}-${item.to}`, item])).values());
-                newSlotsMap.set(day, { day, timeSlots: uniqueSlots });
-            } else {
-                 newSlotsMap.set(day, { day, timeSlots: validSharedTimeSlots });
-            }
+            newSlotsMap.set(day, { day, timeSlots: validSharedTimeSlots });
         });
     
         const allPossibleDays = [...new Set([...selectedDays, ...currentFormSlots.map(s => s.day)])];
@@ -586,15 +579,36 @@ export default function DoctorsPage() {
             if (newSlotsMap.has(day)) {
                 return newSlotsMap.get(day)!;
             }
-            return { day, timeSlots: [] };
-        }).filter(s => s.timeSlots.length > 0);
+            // This part is tricky. If a day was previously selected but is no longer, should we remove it?
+            // Current logic keeps it if it was in form slots, but with new times if it was re-selected.
+            // Let's refine to only include currently selected days or days that already had slots.
+            const existingDay = currentFormSlots.find(s => s.day === day);
+            if (existingDay) return existingDay;
+            return null;
+
+        }).filter((s): s is { day: string; timeSlots: { from: string; to: string }[]} => s !== null && newSlotsMap.has(s.day));
+
+        // Let's try a simpler approach. We will build the new slots from scratch.
+        const freshSlots = daysOfWeek.map(day => {
+            if (selectedDays.includes(day)) {
+                return { day, timeSlots: validSharedTimeSlots };
+            }
+            // Keep existing slots for days that are not part of the current selection
+            const existingDay = currentFormSlots.find(s => s.day === day);
+            if (existingDay) {
+                return existingDay;
+            }
+            return null;
+        }).filter(s => s !== null && s.timeSlots.length > 0) as { day: string; timeSlots: { from: string; to: string }[]}[];
         
-        form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true });
-    
+        form.setValue('availabilitySlots', freshSlots, { shouldDirty: true });
+        
         toast({
             title: "Time Slots Applied",
             description: `The defined time slots have been applied to the selected days.`,
         });
+
+        setSelectedDays([]);
     };
 
     const handleLeaveUpdate = async (updatedLeaveSlots: LeaveSlot[]) => {
@@ -1030,9 +1044,9 @@ export default function DoctorsPage() {
                                       <div className="space-y-2">
                                         <Label>1. Select days to apply time slots to</Label>
                                         <ToggleGroup type="multiple" value={selectedDays} onValueChange={setSelectedDays} variant="outline" className="flex-wrap justify-start">
-                                            {dayAbbreviations.map((day, index) => (
+                                            {daysOfWeek.map((day, index) => (
                                                 <ToggleGroupItem key={daysOfWeek[index]} value={daysOfWeek[index]} aria-label={`Toggle ${daysOfWeek[index]}`} className="h-9 w-9">
-                                                    {day}
+                                                    {dayAbbreviations[index]}
                                                 </ToggleGroupItem>
                                             ))}
                                         </ToggleGroup>
@@ -1079,11 +1093,18 @@ export default function DoctorsPage() {
                                                <div key={field.id} className="flex items-start text-sm">
                                                   <p className="w-28 font-semibold">{field.day}</p>
                                                   <div className="flex flex-wrap gap-1">
-                                                      {field.timeSlots.map((ts, i) => (
-                                                          <Badge key={i} variant="secondary" className="font-normal">
-                                                            {ts.from && ts.to ? `${format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a")} - ${format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")}`: 'Invalid time'}
-                                                          </Badge>
-                                                      ))}
+                                                      {field.timeSlots.map((ts, i) => {
+                                                          if (!ts.from || !ts.to) return null;
+                                                          try {
+                                                            return (
+                                                              <Badge key={i} variant="secondary" className="font-normal">
+                                                                {format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a")} - {format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")}
+                                                              </Badge>
+                                                            );
+                                                          } catch (e) {
+                                                            return <Badge key={i} variant="destructive">Invalid</Badge>;
+                                                          }
+                                                      })}
                                                   </div>
                                                </div>
                                             ))}
