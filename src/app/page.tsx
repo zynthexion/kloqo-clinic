@@ -17,7 +17,6 @@ import { Printer, FileDown } from "lucide-react";
 import AppointmentStatusChart from "@/components/dashboard/appointment-status-chart";
 import PatientsVsAppointmentsChart from "@/components/dashboard/patients-vs-appointments-chart";
 import { Sidebar } from "@/components/layout/sidebar";
-import { TopNav } from "@/components/layout/top-nav";
 
 function DashboardHeader({
   dateRange,
@@ -74,7 +73,6 @@ export default function Home() {
     <div className="flex h-full">
     <Sidebar />
     <div className="flex-1 flex flex-col h-full overflow-y-auto">
-      <TopNav />
       <DashboardHeader
         dateRange={dateRange}
         onDateRangeChange={setDateRange}
