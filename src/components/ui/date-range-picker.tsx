@@ -78,11 +78,12 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
         break;
       case "custom":
         setIsCustomPickerOpen(true);
-        break;
+        return; 
       default:
         setDate(undefined);
         break;
     }
+    setIsCustomPickerOpen(false);
   };
 
   const getPresetLabel = (value: string) => {
@@ -102,7 +103,9 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
                 selected={date}
                 onSelect={(range) => {
                     setDate(range);
-                    if (range) setIsCustomPickerOpen(false);
+                    if (range?.from && range?.to) {
+                       setIsCustomPickerOpen(false);
+                    }
                 }}
                 numberOfMonths={2}
             />
@@ -140,7 +143,6 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
                             <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handlePresetChange('custom'); }}>
                                 <div className={cn("flex w-full items-center justify-between", preset === p.value && "font-semibold")}>
                                     {p.label}
-                                    {preset === p.value && <Check className="h-4 w-4" />}
                                 </div>
                             </DropdownMenuItem>
                         </CustomDatePopover>
