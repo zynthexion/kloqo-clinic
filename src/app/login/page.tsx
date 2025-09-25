@@ -49,6 +49,7 @@ export default function LoginPage() {
                 type="email"
                 placeholder="m@example.com"
                 required
+                defaultValue="test@example.com"
               />
             </div>
             <div className="grid gap-2">
@@ -66,6 +67,7 @@ export default function LoginPage() {
                   id="password"
                   type={showPassword ? 'text' : 'password'}
                   required
+                  defaultValue="password123"
                 />
                 <Button
                   type="button"
