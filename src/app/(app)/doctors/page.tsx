@@ -36,7 +36,6 @@ import { Input } from "@/components/ui/input";
 import { TimeSlots } from "@/components/doctors/time-slots";
 import { useForm, useFieldArray } from "react-hook-form";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormDescription, FormMessage } from "@/components/ui/form";
-import { Checkbox } from "@/components/ui/checkbox";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -244,7 +243,13 @@ export default function DoctorsPage() {
       setNewSpecialty(selectedDoctor.specialty);
       setNewDepartment(selectedDoctor.department || "");
       form.reset({
-        availabilitySlots: selectedDoctor.availabilitySlots || [],
+        availabilitySlots: selectedDoctor.availabilitySlots?.map(s => ({
+            ...s,
+            timeSlots: s.timeSlots.map(ts => ({
+                from: format(parseDateFns(ts.from, 'hh:mm a', new Date()), 'HH:mm'),
+                to: format(parseDateFns(ts.to, 'hh:mm a', new Date()), 'HH:mm')
+            }))
+        })) || [],
       });
       setIsEditingDetails(false);
       setIsEditingBio(false);
@@ -1068,7 +1073,9 @@ export default function DoctorsPage() {
                                                   <p className="w-28 font-semibold">{field.day}</p>
                                                   <div className="flex flex-wrap gap-1">
                                                       {field.timeSlots.map((ts, i) => (
-                                                          <Badge key={i} variant="secondary" className="font-normal">{format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a")} - {format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")}</Badge>
+                                                          <Badge key={i} variant="secondary" className="font-normal">
+                                                            {ts.from && ts.to ? `${format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a")} - ${format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")}`: 'Invalid time'}
+                                                          </Badge>
                                                       ))}
                                                   </div>
                                                </div>
@@ -1084,7 +1091,7 @@ export default function DoctorsPage() {
                                         </Button>
                                       </div>
                                   </form>
-                               </Form>
+                                </Form>
                             ) : (
                                 <div className="space-y-3">
                                     {selectedDoctor.availabilitySlots && selectedDoctor.availabilitySlots.length > 0 ? (
@@ -1182,5 +1189,4 @@ export default function DoctorsPage() {
   );
 }
 
-    
     
