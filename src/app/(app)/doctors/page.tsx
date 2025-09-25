@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useTransition } from "react";
@@ -55,6 +56,7 @@ import { AddDoctorForm } from "@/components/doctors/add-doctor-form";
 import OverviewStats from "@/components/dashboard/overview-stats";
 import AppointmentStatusChart from "@/components/dashboard/appointment-status-chart";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -959,125 +961,107 @@ export default function DoctorsPage() {
                             <CardContent>
                             {isEditingAvailability ? (
                                 <Form {...form}>
-                                    <form onSubmit={form.handleSubmit(handleAvailabilitySave)} className="space-y-6">
-                                        <FormField
-                                            control={form.control}
-                                            name="availableDays"
-                                            render={() => (
-                                            <FormItem>
-                                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                                {daysOfWeek.map((day) => (
-                                                    <FormField
-                                                    key={day}
-                                                    control={form.control}
-                                                    name="availableDays"
-                                                    render={({ field }) => (
-                                                        <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                                                        <FormControl>
-                                                            <Checkbox
-                                                            checked={field.value?.includes(day)}
-                                                            onCheckedChange={(checked) => {
-                                                                const currentDays = field.value || [];
-                                                                const newDays = checked
-                                                                ? [...currentDays, day]
-                                                                : currentDays.filter(
-                                                                    (value) => value !== day
-                                                                  );
-                                                                field.onChange(newDays);
+                                    <form onSubmit={form.handleSubmit(handleAvailabilitySave)} className="space-y-4">
+                                        <Accordion type="multiple" className="w-full">
+                                            {daysOfWeek.map((day, dayIndex) => {
+                                                const fieldIndex = fields.findIndex(f => f.day === day);
+                                                const isChecked = form.getValues('availableDays').includes(day);
 
-                                                                const dayIndex = fields.findIndex(f => f.day === day);
-                                                                if (checked && dayIndex === -1) {
-                                                                append({ day: day, timeSlots: [{ from: "09:00", to: "17:00" }] });
-                                                                } else if (!checked && dayIndex > -1) {
-                                                                remove(dayIndex);
-                                                                }
-                                                            }}
+                                                return (
+                                                    <AccordionItem value={day} key={day}>
+                                                        <div className="flex items-center gap-2">
+                                                            <Checkbox
+                                                                id={`day-${day}`}
+                                                                checked={isChecked}
+                                                                onCheckedChange={(checked) => {
+                                                                    const currentDays = form.getValues('availableDays') || [];
+                                                                    const newDays = checked
+                                                                        ? [...currentDays, day]
+                                                                        : currentDays.filter((value) => value !== day);
+                                                                    form.setValue('availableDays', newDays, { shouldValidate: true });
+
+                                                                    if (checked && fieldIndex === -1) {
+                                                                        append({ day: day, timeSlots: [{ from: "09:00", to: "17:00" }] });
+                                                                    } else if (!checked && fieldIndex > -1) {
+                                                                        remove(fieldIndex);
+                                                                    }
+                                                                }}
                                                             />
-                                                        </FormControl>
-                                                        <FormLabel className="font-normal text-sm">{day}</FormLabel>
-                                                        </FormItem>
-                                                    )}
-                                                    />
-                                                ))}
-                                                </div>
-                                                <FormMessage />
-                                            </FormItem>
-                                            )}
-                                        />
-                                        
-                                        <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
-                                        {fields.map((field, dayIndex) => {
-                                            const timeSlotsArray = form.getValues(`availabilitySlots.${dayIndex}.timeSlots`);
-                                            return (
-                                                <div key={field.id} className="space-y-2 p-3 border rounded-md bg-muted/50">
-                                                    <h4 className="font-semibold text-sm">{field.day} Time Slots</h4>
-                                                    {timeSlotsArray.map((_, timeIndex) => (
-                                                        <div key={timeIndex} className="flex items-end gap-2">
-                                                            <FormField
-                                                                control={form.control}
-                                                                name={`availabilitySlots.${dayIndex}.timeSlots.${timeIndex}.from`}
-                                                                render={({ field }) => (
-                                                                    <FormItem className="flex-grow">
-                                                                        <FormLabel className="text-xs">From</FormLabel>
-                                                                            <Select onValueChange={field.onChange} value={field.value}>
-                                                                                <FormControl>
-                                                                                    <SelectTrigger className="h-8">
-                                                                                        <SelectValue placeholder="HH:MM" />
-                                                                                    </SelectTrigger>
-                                                                                </FormControl>
-                                                                                <SelectContent>
-                                                                                    {timeOptions.map(option => <SelectItem key={option} value={option}>{option}</SelectItem>)}
-                                                                                </SelectContent>
-                                                                            </Select>
-                                                                    </FormItem>
-                                                                )}
-                                                            />
-                                                            <FormField
-                                                                control={form.control}
-                                                                name={`availabilitySlots.${dayIndex}.timeSlots.${timeIndex}.to`}
-                                                                render={({ field }) => (
-                                                                    <FormItem className="flex-grow">
-                                                                        <FormLabel className="text-xs">To</FormLabel>
-                                                                        <Select onValueChange={field.onChange} value={field.value}>
-                                                                                <FormControl>
-                                                                                    <SelectTrigger className="h-8">
-                                                                                        <SelectValue placeholder="HH:MM" />
-                                                                                    </SelectTrigger>
-                                                                                </FormControl>
-                                                                                <SelectContent>
-                                                                                    {timeOptions.map(option => <SelectItem key={option} value={option}>{option}</SelectItem>)}
-                                                                                </SelectContent>
-                                                                            </Select>
-                                                                    </FormItem>
-                                                                )}
-                                                            />
-                                                            <Button type="button" variant="ghost" size="icon" onClick={() => copyTimeSlotToAllDays(dayIndex, timeIndex)}><Copy className="h-4 w-4" /></Button>
-                                                            <Button type="button" variant="ghost" size="icon" onClick={() => {
-                                                                const currentSlots = form.getValues(`availabilitySlots.${dayIndex}.timeSlots`);
-                                                                if (currentSlots.length > 1) {
-                                                                const newSlots = currentSlots.filter((_, i) => i !== timeIndex);
-                                                                update(dayIndex, { ...form.getValues(`availabilitySlots.${dayIndex}`), timeSlots: newSlots });
-                                                                }
-                                                            }}><Trash className="h-4 w-4" /></Button>
+                                                            <AccordionTrigger className="flex-1 py-2 font-medium">{day}</AccordionTrigger>
                                                         </div>
-                                                    ))}
-                                                    <Button type="button" size="sm" variant="outline" onClick={() => {
-                                                        const currentSlots = form.getValues(`availabilitySlots.${dayIndex}.timeSlots`);
-                                                        const newSlots = [...currentSlots, { from: "", to: "" }];
-                                                        update(dayIndex, { ...form.getValues(`availabilitySlots.${dayIndex}`), timeSlots: newSlots });
-                                                    }}>Add Slot</Button>
-                                                </div>
-                                            )
-                                        })}
-                                        </div>
-                                        <div className="flex justify-end gap-2">
-                                            <Button type="button" variant="ghost" onClick={() => setIsEditingAvailability(false)} disabled={isPending}>Cancel</Button>
-                                            <Button type="submit" disabled={isPending}>
-                                                {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Saving...</> : 'Save Changes'}
-                                            </Button>
-                                        </div>
-                                    </form>
-                                </Form>
+                                                        <AccordionContent>
+                                                            {isChecked && fieldIndex !== -1 && (
+                                                                <div className="pl-8 pt-2 space-y-2">
+                                                                    {form.getValues(`availabilitySlots.${fieldIndex}.timeSlots`).map((_, timeIndex) => (
+                                                                        <div key={timeIndex} className="flex items-end gap-2">
+                                                                             <FormField
+                                                                                control={form.control}
+                                                                                name={`availabilitySlots.${fieldIndex}.timeSlots.${timeIndex}.from`}
+                                                                                render={({ field }) => (
+                                                                                    <FormItem className="flex-grow">
+                                                                                        <FormLabel className="text-xs">From</FormLabel>
+                                                                                        <Select onValueChange={field.onChange} value={field.value}>
+                                                                                            <FormControl>
+                                                                                                <SelectTrigger className="h-8">
+                                                                                                    <SelectValue placeholder="HH:MM" />
+                                                                                                </SelectTrigger>
+                                                                                            </FormControl>
+                                                                                            <SelectContent>
+                                                                                                {timeOptions.map(option => <SelectItem key={option + "-from"} value={option}>{option}</SelectItem>)}
+                                                                                            </SelectContent>
+                                                                                        </Select>
+                                                                                    </FormItem>
+                                                                                )}
+                                                                            />
+                                                                            <FormField
+                                                                                control={form.control}
+                                                                                name={`availabilitySlots.${fieldIndex}.timeSlots.${timeIndex}.to`}
+                                                                                render={({ field }) => (
+                                                                                    <FormItem className="flex-grow">
+                                                                                        <FormLabel className="text-xs">To</FormLabel>
+                                                                                        <Select onValueChange={field.onChange} value={field.value}>
+                                                                                            <FormControl>
+                                                                                                <SelectTrigger className="h-8">
+                                                                                                    <SelectValue placeholder="HH:MM" />
+                                                                                                </SelectTrigger>
+                                                                                            </FormControl>
+                                                                                            <SelectContent>
+                                                                                                {timeOptions.map(option => <SelectItem key={option + "-to"} value={option}>{option}</SelectItem>)}
+                                                                                            </SelectContent>
+                                                                                        </Select>
+                                                                                    </FormItem>
+                                                                                )}
+                                                                            />
+                                                                            <Button type="button" variant="ghost" size="icon" onClick={() => copyTimeSlotToAllDays(fieldIndex, timeIndex)}><Copy className="h-4 w-4" /></Button>
+                                                                            <Button type="button" variant="ghost" size="icon" onClick={() => {
+                                                                                const currentSlots = form.getValues(`availabilitySlots.${fieldIndex}.timeSlots`);
+                                                                                if (currentSlots.length > 1) {
+                                                                                    const newSlots = currentSlots.filter((_, i) => i !== timeIndex);
+                                                                                    update(fieldIndex, { ...form.getValues(`availabilitySlots.${fieldIndex}`), timeSlots: newSlots });
+                                                                                }
+                                                                            }}><Trash className="h-4 w-4" /></Button>
+                                                                        </div>
+                                                                    ))}
+                                                                    <Button type="button" size="sm" variant="outline" onClick={() => {
+                                                                        const currentSlots = form.getValues(`availabilitySlots.${fieldIndex}.timeSlots`);
+                                                                        update(fieldIndex, { ...form.getValues(`availabilitySlots.${fieldIndex}`), timeSlots: [...currentSlots, { from: "", to: "" }] });
+                                                                    }}>Add Slot</Button>
+                                                                </div>
+                                                            )}
+                                                        </AccordionContent>
+                                                    </AccordionItem>
+                                                )
+                                            })}
+                                        </Accordion>
+
+                                      <div className="flex justify-end gap-2 mt-4">
+                                        <Button type="button" variant="ghost" onClick={() => setIsEditingAvailability(false)} disabled={isPending}>Cancel</Button>
+                                        <Button type="submit" disabled={isPending}>
+                                            {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Saving...</> : 'Save Changes'}
+                                        </Button>
+                                      </div>
+                                  </form>
+                               </Form>
                             ) : (
                                 <div className="space-y-3">
                                     {selectedDoctor.availabilitySlots && selectedDoctor.availabilitySlots.length > 0 ? (
