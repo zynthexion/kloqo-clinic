@@ -3,7 +3,7 @@
 
 import * as React from "react"
 import { format, subDays, startOfMonth, endOfMonth, subMonths, startOfWeek, endOfWeek, startOfYear, endOfYear, subYears } from "date-fns"
-import { Calendar as CalendarIcon } from "lucide-react"
+import { Calendar as CalendarIcon, Check, ChevronDown } from "lucide-react"
 import { DateRange } from "react-day-picker"
 
 import { cn } from "@/lib/utils"
@@ -15,12 +15,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 interface DateRangePickerProps extends React.HTMLAttributes<HTMLDivElement> {
     initialDateRange?: DateRange;
@@ -40,10 +39,11 @@ const presets = [
 export function DateRangePicker({ className, initialDateRange, onDateChange }: DateRangePickerProps) {
   const [date, setDate] = React.useState<DateRange | undefined>(initialDateRange)
   const [preset, setPreset] = React.useState<string>("last7");
+  const [isCustomPickerOpen, setIsCustomPickerOpen] = React.useState(false);
 
   React.useEffect(() => {
     setDate(initialDateRange);
-    // Find preset based on initialDateRange if needed, or default.
+    // You might want to add logic here to determine the preset based on the initialDateRange
   }, [initialDateRange]);
 
   React.useEffect(() => {
@@ -69,7 +69,7 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
         const lastMonth = subMonths(now, 1);
         setDate({ from: startOfMonth(lastMonth), to: endOfMonth(lastMonth) });
         break;
-       case "this_year":
+      case "this_year":
         setDate({ from: startOfYear(now), to: endOfYear(now) });
         break;
       case "last_year":
@@ -77,8 +77,7 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
         setDate({ from: startOfYear(lastYear), to: endOfYear(lastYear) });
         break;
       case "custom":
-        // For custom, we don't set a date here. The user will pick it.
-        setDate(undefined);
+        setIsCustomPickerOpen(true);
         break;
       default:
         setDate(undefined);
@@ -87,55 +86,75 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
   };
 
   const getPresetLabel = (value: string) => {
-    return presets.find(p => p.value === value)?.label || "Select";
+    return presets.find(p => p.value === value)?.label || "Select date range";
   }
 
-  return (
-    <div className={cn("grid gap-2", className)}>
-      <Popover>
+  const CustomDatePopover = ({ children }: { children: React.ReactNode }) => (
+    <Popover open={isCustomPickerOpen} onOpenChange={setIsCustomPickerOpen}>
         <PopoverTrigger asChild>
-          <Button
-            id="date"
-            variant={"outline"}
-            className={cn(
-              "w-[300px] justify-start text-left font-normal",
-              !date && "text-muted-foreground"
-            )}
-          >
-            <CalendarIcon className="mr-2 h-4 w-4" />
-            <span>{getPresetLabel(preset)}</span>
-          </Button>
+            {children}
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="end">
-          <div className="flex items-center p-2">
-            <Select onValueChange={handlePresetChange} value={preset}>
-                <SelectTrigger>
-                    <SelectValue placeholder="Select" />
-                </SelectTrigger>
-                <SelectContent>
-                    {presets.map(p => (
-                        <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
-          </div>
-          {preset === "custom" && (
+        <PopoverContent className="w-auto p-0" align="start">
             <Calendar
                 initialFocus
                 mode="range"
                 defaultMonth={date?.from}
                 selected={date}
                 onSelect={(range) => {
-                setDate(range);
-                if (range?.from && range?.to) {
-                    setPreset("custom");
-                }
+                    setDate(range);
+                    if (range) setIsCustomPickerOpen(false);
                 }}
                 numberOfMonths={2}
             />
-          )}
         </PopoverContent>
-      </Popover>
+    </Popover>
+  );
+
+  return (
+    <div className={cn("grid gap-2", className)}>
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button
+                    variant={"outline"}
+                    className={cn(
+                    "w-[200px] justify-between text-left font-normal bg-[#E6F0F7]",
+                    !date && "text-muted-foreground"
+                    )}
+                >
+                    <div className="flex items-center">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        <span>
+                            {preset === 'custom' && date?.from && date?.to
+                                ? `${format(date.from, "LLL dd, y")} - ${format(date.to, "LLL dd, y")}`
+                                : getPresetLabel(preset)
+                            }
+                        </span>
+                    </div>
+                    <ChevronDown className="h-4 w-4 opacity-50" />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56">
+                {presets.map(p => (
+                    p.value === 'custom' ? (
+                        <CustomDatePopover key={p.value}>
+                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handlePresetChange('custom'); }}>
+                                <div className={cn("flex w-full items-center justify-between", preset === p.value && "font-semibold")}>
+                                    {p.label}
+                                    {preset === p.value && <Check className="h-4 w-4" />}
+                                </div>
+                            </DropdownMenuItem>
+                        </CustomDatePopover>
+                    ) : (
+                        <DropdownMenuItem key={p.value} onSelect={() => handlePresetChange(p.value)}>
+                             <div className={cn("flex w-full items-center justify-between", preset === p.value && "font-semibold")}>
+                                {p.label}
+                                {preset === p.value && <Check className="h-4 w-4" />}
+                            </div>
+                        </DropdownMenuItem>
+                    )
+                ))}
+            </DropdownMenuContent>
+        </DropdownMenu>
     </div>
   )
 }
