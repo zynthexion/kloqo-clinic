@@ -77,27 +77,6 @@ export function Sidebar() {
           ))}
         </nav>
         <div className="mt-auto p-2 shrink-0">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div
-                className={cn(
-                  "flex items-center h-12 p-3 rounded-lg cursor-pointer transition-colors hover:bg-sidebar-accent/50",
-                  "overflow-hidden"
-                )}
-              >
-                <Settings className="h-6 w-6 shrink-0" />
-                <span className="ml-4 text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100 whitespace-nowrap">
-                  Settings
-                </span>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent
-              side="right"
-              className="group-hover:hidden ml-2"
-            >
-              Settings
-            </TooltipContent>
-          </Tooltip>
            <Tooltip>
             <TooltipTrigger asChild>
               <div
