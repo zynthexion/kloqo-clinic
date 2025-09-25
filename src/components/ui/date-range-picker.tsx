@@ -27,12 +27,23 @@ interface DateRangePickerProps extends React.HTMLAttributes<HTMLDivElement> {
     onDateChange: (dateRange: DateRange | undefined) => void;
 }
 
+const presets = [
+    { value: "today", label: "Today" },
+    { value: "last7", label: "Last 7 days" },
+    { value: "this_month", label: "This month" },
+    { value: "last_month", label: "Last month" },
+    { value: "this_year", label: "This year" },
+    { value: "last_year", label: "Last year" },
+    { value: "custom", label: "Custom" },
+]
+
 export function DateRangePicker({ className, initialDateRange, onDateChange }: DateRangePickerProps) {
   const [date, setDate] = React.useState<DateRange | undefined>(initialDateRange)
-  const [preset, setPreset] = React.useState<string>("custom");
+  const [preset, setPreset] = React.useState<string>("last7");
 
   React.useEffect(() => {
     setDate(initialDateRange);
+    // Find preset based on initialDateRange if needed, or default.
   }, [initialDateRange]);
 
   React.useEffect(() => {
@@ -65,11 +76,19 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
         const lastYear = subYears(now, 1);
         setDate({ from: startOfYear(lastYear), to: endOfYear(lastYear) });
         break;
+      case "custom":
+        // For custom, we don't set a date here. The user will pick it.
+        setDate(undefined);
+        break;
       default:
         setDate(undefined);
         break;
     }
   };
+
+  const getPresetLabel = (value: string) => {
+    return presets.find(p => p.value === value)?.label || "Select";
+  }
 
   return (
     <div className={cn("grid gap-2", className)}>
@@ -84,50 +103,37 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
             )}
           >
             <CalendarIcon className="mr-2 h-4 w-4" />
-            {date?.from ? (
-              date.to ? (
-                <>
-                  {format(date.from, "LLL dd, y")} -{" "}
-                  {format(date.to, "LLL dd, y")}
-                </>
-              ) : (
-                format(date.from, "LLL dd, y")
-              )
-            ) : (
-              <span>Pick a date</span>
-            )}
+            <span>{getPresetLabel(preset)}</span>
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="end">
           <div className="flex items-center p-2">
             <Select onValueChange={handlePresetChange} value={preset}>
                 <SelectTrigger>
-                    <SelectValue placeholder="Select a preset" />
+                    <SelectValue placeholder="Select" />
                 </SelectTrigger>
                 <SelectContent>
-                    <SelectItem value="today">Today</SelectItem>
-                    <SelectItem value="last7">Last 7 days</SelectItem>
-                    <SelectItem value="this_month">This month</SelectItem>
-                    <SelectItem value="last_month">Last month</SelectItem>
-                    <SelectItem value="this_year">This year</SelectItem>
-                    <SelectItem value="last_year">Last year</SelectItem>
-                    <SelectItem value="custom">Custom</SelectItem>
+                    {presets.map(p => (
+                        <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                    ))}
                 </SelectContent>
             </Select>
           </div>
-          <Calendar
-            initialFocus
-            mode="range"
-            defaultMonth={date?.from}
-            selected={date}
-            onSelect={(range) => {
-              setDate(range);
-              if (range?.from && range?.to) {
-                setPreset("custom");
-              }
-            }}
-            numberOfMonths={2}
-          />
+          {preset === "custom" && (
+            <Calendar
+                initialFocus
+                mode="range"
+                defaultMonth={date?.from}
+                selected={date}
+                onSelect={(range) => {
+                setDate(range);
+                if (range?.from && range?.to) {
+                    setPreset("custom");
+                }
+                }}
+                numberOfMonths={2}
+            />
+          )}
         </PopoverContent>
       </Popover>
     </div>
