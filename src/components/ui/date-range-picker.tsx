@@ -45,10 +45,12 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
     if (onDateChange) {
       onDateChange(date);
     }
-  }, [date, onDateChange]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
 
   const handlePresetChange = (value: string) => {
     setPreset(value);
+    setIsCustomPickerOpen(false);
     const now = new Date();
     switch (value) {
       case "today":
@@ -77,67 +79,61 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
     }
   };
 
-  const getPresetLabel = (value: string) => {
-    if (value === 'custom') {
-         if (date?.from && date.to) {
-            return `${format(date.from, "LLL dd, y")} - ${format(date.to, "LLL dd, y")}`;
-         }
-         return 'Custom';
-    }
-    return presets.find(p => p.value === value)?.label || "Select date range";
-  }
-
   return (
     <div className={cn("grid gap-2", className)}>
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+        <Popover>
+            <PopoverTrigger asChild>
                 <Button
+                    id="date"
                     variant={"outline"}
-                    size="icon"
-                >
-                    <CalendarIcon className="h-4 w-4" />
+                    className={cn(
+                        "w-[300px] justify-start text-left font-normal bg-[#E6F0F7]"
+                    )}
+                    >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    <span>
+                        {date?.from ? (
+                            date.to ? (
+                                <>
+                                {format(date.from, "LLL dd, y")} -{" "}
+                                {format(date.to, "LLL dd, y")}
+                                </>
+                            ) : (
+                                format(date.from, "LLL dd, y")
+                            )
+                        ) : (
+                            "Pick a date"
+                        )}
+                    </span>
                 </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56">
-                {presets.map(p => (
-                    <DropdownMenuItem key={p.value} onClick={() => handlePresetChange(p.value)}>
-                        <Check className={cn("mr-2 h-4 w-4", preset === p.value ? "opacity-100" : "opacity-0")} />
-                        {p.label}
-                    </DropdownMenuItem>
-                ))}
-                <DropdownMenuSeparator />
-                <Popover open={isCustomPickerOpen} onOpenChange={setIsCustomPickerOpen}>
-                    <PopoverTrigger asChild>
-                        <DropdownMenuItem 
-                            onSelect={e => e.preventDefault()} 
-                            onClick={() => {
-                                setPreset("custom")
-                                setDate(undefined)
-                                setIsCustomPickerOpen(true)
-                            }}
-                        >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            <span>Custom Range</span>
-                        </DropdownMenuItem>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                            initialFocus
-                            mode="range"
-                            defaultMonth={date?.from}
-                            selected={date}
-                            onSelect={(range) => {
-                                setDate(range);
-                                if (range?.from && range?.to) {
-                                    setIsCustomPickerOpen(false);
-                                }
-                            }}
-                            numberOfMonths={2}
-                        />
-                    </PopoverContent>
-                </Popover>
-            </DropdownMenuContent>
-        </DropdownMenu>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+                <div className="flex">
+                    <div className="w-48 border-r">
+                        <div className="p-2">
+                            {presets.map((p) => (
+                                <Button 
+                                    key={p.value} 
+                                    variant="ghost"
+                                    className="w-full justify-start"
+                                    onClick={() => handlePresetChange(p.value)}
+                                >
+                                    {p.label}
+                                </Button>
+                            ))}
+                        </div>
+                    </div>
+                    <Calendar
+                        initialFocus
+                        mode="range"
+                        defaultMonth={date?.from}
+                        selected={date}
+                        onSelect={setDate}
+                        numberOfMonths={2}
+                    />
+                </div>
+            </PopoverContent>
+        </Popover>
     </div>
   )
 }
