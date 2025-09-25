@@ -29,6 +29,12 @@ function DashboardHeader({
     <header className="flex items-center justify-between gap-4 px-6 border-b py-6">
       <div>
         <h1 className="text-2xl font-bold">Dashboard</h1>
+      </div>
+      <div className="flex items-center gap-4">
+         <DateRangePicker 
+            onDateChange={onDateRangeChange}
+            initialDateRange={dateRange}
+         />
         {dateRange?.from && (
           <p className="text-sm text-muted-foreground">
             {dateRange.to
@@ -39,20 +45,16 @@ function DashboardHeader({
               : format(dateRange.from, "LLL dd, y")}
           </p>
         )}
-      </div>
-      <div className="flex items-center gap-2">
-         <DateRangePicker 
-            onDateChange={onDateRangeChange}
-            initialDateRange={dateRange}
-         />
-         <Button variant="outline" size="icon">
-            <Printer className="h-4 w-4" />
-            <span className="sr-only">Print</span>
-         </Button>
-         <Button variant="outline" size="icon">
-            <FileDown className="h-4 w-4" />
-            <span className="sr-only">Download PDF</span>
-         </Button>
+         <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon">
+                <Printer className="h-4 w-4" />
+                <span className="sr-only">Print</span>
+            </Button>
+            <Button variant="outline" size="icon">
+                <FileDown className="h-4 w-4" />
+                <span className="sr-only">Download PDF</span>
+            </Button>
+         </div>
       </div>
     </header>
   );
