@@ -38,11 +38,11 @@ import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "../ui/scroll-area";
 import Image from "next/image";
 import { Textarea } from "../ui/textarea";
-import { format } from "date-fns";
+import { format, parse } from "date-fns";
 
 const timeSlotSchema = z.object({
-  from: z.string().regex(/^(0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$/, "Invalid 12-hour time format (e.g., 09:00 AM)"),
-  to: z.string().regex(/^(0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$/, "Invalid 12-hour time format (e.g., 09:00 AM)"),
+  from: z.string().min(1, "Required"),
+  to: z.string().min(1, "Required"),
 });
 
 const availabilitySlotSchema = z.object({
@@ -78,18 +78,6 @@ type AddDoctorFormProps = {
 
 const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
-const generateTimeOptions = () => {
-    const options = [];
-    for (let h = 0; h < 24; h++) {
-        for (let m = 0; m < 60; m += 30) {
-            const date = new Date(0, 0, 0, h, m);
-            options.push(format(date, "hh:mm a"));
-        }
-    }
-    return options;
-};
-const timeOptions = generateTimeOptions();
-
 export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }: AddDoctorFormProps) {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const { toast } = useToast();
@@ -122,7 +110,13 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         consultationFee: doctor.consultationFee || 0,
         averageConsultingTime: doctor.averageConsultingTime || 15,
         availableDays: doctor.availabilitySlots?.map(s => s.day) || [],
-        availabilitySlots: doctor.availabilitySlots || [],
+        availabilitySlots: doctor.availabilitySlots?.map(s => ({
+          ...s,
+          timeSlots: s.timeSlots.map(ts => ({
+            from: format(parse(ts.from, 'hh:mm a', new Date()), 'HH:mm'),
+            to: format(parse(ts.to, 'hh:mm a', new Date()), 'HH:mm')
+          }))
+        })) || [],
       });
       setPhotoPreview(doctor.avatar);
     } else {
@@ -175,7 +169,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 
     toast({
       title: "Time Slot Copied",
-      description: `Time slot ${timeSlotToCopy.from} - ${timeSlotToCopy.to} has been applied to all selected days.`,
+      description: `Time slot ${format(parse(timeSlotToCopy.from, "HH:mm", new Date()), "hh:mm a")} - ${format(parse(timeSlotToCopy.to, "HH:mm", new Date()), "hh:mm a")} has been applied to all selected days.`,
     });
   }
 
@@ -385,7 +379,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 
                                         const dayIndex = fields.findIndex(f => f.day === day);
                                         if (checked && dayIndex === -1) {
-                                          append({ day: day, timeSlots: [{ from: "09:00 AM", to: "10:00 AM" }] });
+                                          append({ day: day, timeSlots: [{ from: "09:00", to: "17:00" }] });
                                         } else if (!checked && dayIndex > -1) {
                                           remove(dayIndex);
                                         }
@@ -420,16 +414,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                                         render={({ field }) => (
                                             <FormItem className="flex-grow">
                                                 <FormLabel className="text-xs">From</FormLabel>
-                                                <Select onValueChange={field.onChange} value={field.value}>
-                                                    <FormControl>
-                                                        <SelectTrigger>
-                                                            <SelectValue placeholder="HH:MM" />
-                                                        </SelectTrigger>
-                                                    </FormControl>
-                                                    <SelectContent>
-                                                        {timeOptions.map(option => <SelectItem key={option} value={option}>{option}</SelectItem>)}
-                                                    </SelectContent>
-                                                </Select>
+                                                <Input type="time" {...field} />
                                                 <FormMessage />
                                             </FormItem>
                                         )}
@@ -440,16 +425,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                                         render={({ field }) => (
                                             <FormItem className="flex-grow">
                                                 <FormLabel className="text-xs">To</FormLabel>
-                                                <Select onValueChange={field.onChange} value={field.value}>
-                                                    <FormControl>
-                                                        <SelectTrigger>
-                                                            <SelectValue placeholder="HH:MM" />
-                                                        </SelectTrigger>
-                                                    </FormControl>
-                                                    <SelectContent>
-                                                        {timeOptions.map(option => <SelectItem key={option} value={option}>{option}</SelectItem>)}
-                                                    </SelectContent>
-                                                </Select>
+                                                <Input type="time" {...field} />
                                                 <FormMessage />
                                             </FormItem>
                                         )}

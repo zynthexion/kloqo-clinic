@@ -65,7 +65,7 @@ const formSchema = z.object({
   date: z.date({
     required_error: "A date is required.",
   }),
-  time: z.string().regex(/^(0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$/, "Invalid 12-hour time format (e.g., 09:00 AM)"),
+  time: z.string().min(1, "Please select a time."),
   department: z.string().min(1, { message: "Please select a department." }),
   bookedVia: z.enum(["Online", "Phone", "Walk-in"]),
   place: z.string().min(2, { message: "Place must be at least 2 characters." }),
@@ -224,6 +224,7 @@ export default function AppointmentsPage() {
                 ...editingAppointment,
                 date: isNaN(appointmentDate.getTime()) ? undefined : appointmentDate,
                 doctor: doctor.id,
+                time: format(parseDateFns(editingAppointment.time, "hh:mm a", new Date()), 'HH:mm'),
             });
             setPatientSearchTerm(editingAppointment.patientName);
             setSelectedDoctorId(doctor.id);
@@ -245,9 +246,10 @@ export default function AppointmentsPage() {
      try {
         const doctorName = doctors.find(d => d.id === values.doctor)?.name || "Unknown Doctor";
         
-        const dataToSave: Omit<AddAppointmentFormValues, 'date'> & { date: string, status: 'Confirmed' | 'Pending' | 'Cancelled', treatment: string } = {
+        const dataToSave: Omit<AddAppointmentFormValues, 'date' | 'time'> & { date: string, time: string, status: 'Confirmed' | 'Pending' | 'Cancelled', treatment: string } = {
             ...values,
             date: format(values.date, "d MMMM yyyy"),
+            time: format(parseDateFns(values.time, "HH:mm", new Date()), "hh:mm a"),
             doctor: doctorName,
             status: "Pending",
             treatment: "General Consultation",
@@ -260,7 +262,7 @@ export default function AppointmentsPage() {
             await setDoc(appointmentRef, restOfData, { merge: true });
 
             setAppointments(prev => {
-                return prev.map(apt => apt.id === id ? { ...apt, ...restOfData } : apt);
+                return prev.map(apt => apt.id === id ? { ...apt, ...restOfData, id: id } : apt);
             });
             toast({
                 title: "Appointment Rescheduled",
@@ -704,8 +706,8 @@ export default function AppointmentsPage() {
                                     {timeSlots.length > 0 ? timeSlots.map(slot => (
                                     <Button
                                         key={slot.time} type="button"
-                                        variant={field.value === slot.time ? "default" : "outline"}
-                                        onClick={() => field.onChange(slot.time)}
+                                        variant={field.value === format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm') ? "default" : "outline"}
+                                        onClick={() => field.onChange(format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm'))}
                                         disabled={slot.disabled}
                                         className={cn("text-xs", slot.disabled && "line-through")}
                                     >{slot.time}</Button>

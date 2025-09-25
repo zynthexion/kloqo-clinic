@@ -63,8 +63,8 @@ const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Fri
 const dayAbbreviations = ["S", "M", "T", "W", "T", "F", "S"];
 
 const timeSlotSchema = z.object({
-  from: z.string().regex(/^(0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$/, "Invalid 12-hour time format (e.g., 09:00 AM)"),
-  to: z.string().regex(/^(0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$/, "Invalid 12-hour time format (e.g., 09:00 AM)"),
+  from: z.string().min(1, "Required"),
+  to: z.string().min(1, "Required"),
 });
 
 const availabilitySlotSchema = z.object({
@@ -93,19 +93,6 @@ const weeklyAvailabilityFormSchema = z.object({
   availabilitySlots: z.array(availabilitySlotSchema),
 });
 type WeeklyAvailabilityFormValues = z.infer<typeof weeklyAvailabilityFormSchema>;
-
-
-const generateTimeOptions = () => {
-    const options = [];
-    for (let h = 0; h < 24; h++) {
-        for (let m = 0; m < 60; m += 30) {
-            const date = new Date(0, 0, 0, h, m);
-            options.push(format(date, "hh:mm a"));
-        }
-    }
-    return options;
-};
-const timeOptions = generateTimeOptions();
 
 const StarRating = ({ rating }: { rating: number }) => (
   <div className="flex items-center">
@@ -191,7 +178,7 @@ export default function DoctorsPage() {
   const [isEditingAvailability, setIsEditingAvailability] = useState(false);
   
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
-  const [sharedTimeSlots, setSharedTimeSlots] = useState<Array<{ from: string; to: string }>>([{ from: "09:00 AM", to: "05:00 PM" }]);
+  const [sharedTimeSlots, setSharedTimeSlots] = useState<Array<{ from: string; to: string }>>([{ from: "09:00", to: "17:00" }]);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("All");
@@ -280,7 +267,7 @@ export default function DoctorsPage() {
 
         const scheduleString = doctorData.availabilitySlots
           ?.sort((a, b) => daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day))
-          .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${ts.from}-${ts.to}`).join(', ')}`)
+          .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a")}-${format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")}`).join(', ')}`)
           .join('; ');
 
         const doctorToSave: Omit<Doctor, 'id'> = {
@@ -296,7 +283,10 @@ export default function DoctorsPage() {
           experience: doctorData.experience,
           consultationFee: doctorData.consultationFee,
           averageConsultingTime: doctorData.averageConsultingTime,
-          availabilitySlots: doctorData.availabilitySlots,
+          availabilitySlots: doctorData.availabilitySlots.map(s => ({...s, timeSlots: s.timeSlots.map(ts => ({
+            from: format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a"),
+            to: format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")
+          }))})),
         };
 
         const docId = doctorData.id || `doc-${Date.now()}`;
@@ -472,22 +462,32 @@ export default function DoctorsPage() {
 
     const handleAvailabilitySave = (values: WeeklyAvailabilityFormValues) => {
         if (!selectedDoctor) return;
-    
-        const validSlots = values.availabilitySlots.filter(slot => slot.timeSlots.length > 0);
+
+        const validSlots = values.availabilitySlots
+          .map(slot => ({
+            ...slot,
+            timeSlots: slot.timeSlots.filter(ts => ts.from && ts.to)
+          }))
+          .filter(slot => slot.timeSlots.length > 0);
     
         const scheduleString = validSlots
           ?.sort((a, b) => daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day))
-          .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${ts.from}-${ts.to}`).join(', ')}`)
+          .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a")}-${format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")}`).join(', ')}`)
           .join('; ');
+
+        const availabilitySlotsToSave = validSlots.map(s => ({...s, timeSlots: s.timeSlots.map(ts => ({
+          from: format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a"),
+          to: format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")
+        }))}));
     
         startTransition(async () => {
             const doctorRef = doc(db, "doctors", selectedDoctor.id);
             try {
                 await updateDoc(doctorRef, {
-                    availabilitySlots: validSlots,
+                    availabilitySlots: availabilitySlotsToSave,
                     schedule: scheduleString,
                 });
-                const updatedDoctor = { ...selectedDoctor, availabilitySlots: validSlots, schedule: scheduleString };
+                const updatedDoctor = { ...selectedDoctor, availabilitySlots: availabilitySlotsToSave, schedule: scheduleString };
                 setSelectedDoctor(updatedDoctor);
                 setDoctors(prev => prev.map(d => d.id === selectedDoctor.id ? updatedDoctor : d));
                 setIsEditingAvailability(false);
@@ -548,11 +548,9 @@ export default function DoctorsPage() {
             });
             return;
         }
-
-        const currentSlots = form.getValues('availabilitySlots') || [];
-        const newSlotsMap = new Map(currentSlots.map(s => [s.day, s]));
+    
         const validSharedTimeSlots = sharedTimeSlots.filter(ts => ts.from && ts.to);
-
+    
         if (validSharedTimeSlots.length === 0) {
              toast({
                 variant: "destructive",
@@ -561,14 +559,26 @@ export default function DoctorsPage() {
             });
             return;
         }
-
+    
+        const currentFormSlots = form.getValues('availabilitySlots') || [];
+        const newSlotsMap = new Map(currentFormSlots.map(s => [s.day, s]));
+    
         selectedDays.forEach(day => {
             newSlotsMap.set(day, { day, timeSlots: validSharedTimeSlots });
         });
-
-        const updatedSlots = Array.from(newSlotsMap.values());
+    
+        const allPossibleDays = [...new Set([...selectedDays, ...currentFormSlots.map(s => s.day)])];
+        
+        const updatedSlots = allPossibleDays.map(day => {
+            if (newSlotsMap.has(day)) {
+                return newSlotsMap.get(day)!;
+            }
+            // This part should technically not be reached if logic is sound.
+            return { day, timeSlots: [] };
+        }).filter(s => s.timeSlots.length > 0);
+        
         form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true });
-
+    
         toast({
             title: "Time Slots Applied",
             description: `The defined time slots have been applied to the selected days.`,
@@ -1022,29 +1032,19 @@ export default function DoctorsPage() {
                                             <div key={index} className="flex items-end gap-2">
                                                <div className="flex-grow">
                                                   <Label className="text-xs font-normal">From</Label>
-                                                  <Select value={ts.from} onValueChange={(value) => {
+                                                  <Input type="time" value={ts.from} onChange={(e) => {
                                                       const newShared = [...sharedTimeSlots];
-                                                      newShared[index].from = value;
+                                                      newShared[index].from = e.target.value;
                                                       setSharedTimeSlots(newShared);
-                                                  }}>
-                                                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                                                      <SelectContent>
-                                                        {timeOptions.map(t => <SelectItem key={`shared-from-${t}`} value={t}>{t}</SelectItem>)}
-                                                      </SelectContent>
-                                                  </Select>
+                                                  }} />
                                                </div>
                                                <div className="flex-grow">
                                                   <Label className="text-xs font-normal">To</Label>
-                                                  <Select value={ts.to} onValueChange={(value) => {
+                                                  <Input type="time" value={ts.to} onChange={(e) => {
                                                       const newShared = [...sharedTimeSlots];
-                                                      newShared[index].to = value;
+                                                      newShared[index].to = e.target.value;
                                                       setSharedTimeSlots(newShared);
-                                                  }}>
-                                                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                                                      <SelectContent>
-                                                        {timeOptions.map(t => <SelectItem key={`shared-to-${t}`} value={t}>{t}</SelectItem>)}
-                                                      </SelectContent>
-                                                  </Select>
+                                                  }} />
                                                </div>
                                                <Button type="button" variant="ghost" size="icon" onClick={() => setSharedTimeSlots(prev => prev.filter((_, i) => i !== index))} disabled={sharedTimeSlots.length <=1}>
                                                     <Trash className="h-4 w-4 text-red-500" />
@@ -1068,7 +1068,7 @@ export default function DoctorsPage() {
                                                   <p className="w-28 font-semibold">{field.day}</p>
                                                   <div className="flex flex-wrap gap-1">
                                                       {field.timeSlots.map((ts, i) => (
-                                                          <Badge key={i} variant="secondary" className="font-normal">{ts.from} - {ts.to}</Badge>
+                                                          <Badge key={i} variant="secondary" className="font-normal">{format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a")} - {format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")}</Badge>
                                                       ))}
                                                   </div>
                                                </div>

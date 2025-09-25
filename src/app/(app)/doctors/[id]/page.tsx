@@ -53,8 +53,8 @@ import { cn } from "@/lib/utils";
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 const timeSlotSchema = z.object({
-  from: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Invalid time format (HH:MM)"),
-  to: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Invalid time format (HH:MM)"),
+  from: z.string().min(1, "Required"),
+  to: z.string().min(1, "Required"),
 });
 
 const availabilitySlotSchema = z.object({
@@ -70,19 +70,6 @@ const formSchema = z.object({
 });
 
 type WeeklyAvailabilityFormValues = z.infer<typeof formSchema>;
-
-const generateTimeOptions = () => {
-    const options = [];
-    for (let h = 0; h < 24; h++) {
-        for (let m = 0; m < 60; m += 30) {
-            const hour = String(h).padStart(2, '0');
-            const minute = String(m).padStart(2, '0');
-            options.push(`${hour}:${minute}`);
-        }
-    }
-    return options;
-};
-const timeOptions = generateTimeOptions();
 
 
 export default function DoctorDetailPage() {
@@ -142,7 +129,13 @@ export default function DoctorDetailPage() {
           setNewDepartment(doctorData.department || "");
           form.reset({
             availableDays: doctorData.availabilitySlots?.map(s => s.day) || [],
-            availabilitySlots: doctorData.availabilitySlots || [],
+            availabilitySlots: doctorData.availabilitySlots?.map(s => ({
+              ...s,
+              timeSlots: s.timeSlots.map(ts => ({
+                from: format(parseDateFns(ts.from, 'hh:mm a', new Date()), 'HH:mm'),
+                to: format(parseDateFns(ts.to, 'hh:mm a', new Date()), 'HH:mm')
+              }))
+            })) || [],
           });
 
           const appointmentsCollection = collection(db, "appointments");
@@ -265,17 +258,22 @@ export default function DoctorDetailPage() {
 
         const scheduleString = values.availabilitySlots
           ?.sort((a, b) => daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day))
-          .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${ts.from}-${ts.to}`).join(', ')}`)
+          .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a")}-${format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")}`).join(', ')}`)
           .join('; ');
+
+        const availabilitySlotsToSave = values.availabilitySlots.map(s => ({...s, timeSlots: s.timeSlots.map(ts => ({
+          from: format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a"),
+          to: format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")
+        }))}));
 
         startTransition(async () => {
             const doctorRef = doc(db, "doctors", doctor.id);
             try {
                 await updateDoc(doctorRef, {
-                    availabilitySlots: values.availabilitySlots,
+                    availabilitySlots: availabilitySlotsToSave,
                     schedule: scheduleString,
                 });
-                setDoctor(prev => prev ? { ...prev, availabilitySlots: values.availabilitySlots, schedule: scheduleString } : null);
+                setDoctor(prev => prev ? { ...prev, availabilitySlots: availabilitySlotsToSave, schedule: scheduleString } : null);
                 setIsEditingAvailability(false);
                 toast({
                     title: "Availability Updated",
@@ -315,7 +313,7 @@ export default function DoctorDetailPage() {
       form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true });
       toast({
         title: "Time Slot Copied",
-        description: `Time slot ${timeSlotToCopy.from} - ${timeSlotToCopy.to} has been applied to all selected days.`,
+        description: `Time slot ${format(parseDateFns(timeSlotToCopy.from, "HH:mm", new Date()), "hh:mm a")} - ${format(parseDateFns(timeSlotToCopy.to, "HH:mm", new Date()), "hh:mm a")} has been applied to all selected days.`,
       });
     }
 
@@ -675,16 +673,7 @@ export default function DoctorDetailPage() {
                                                               render={({ field }) => (
                                                                   <FormItem className="flex-grow">
                                                                       <FormLabel className="text-xs">From</FormLabel>
-                                                                        <Select onValueChange={field.onChange} value={field.value}>
-                                                                            <FormControl>
-                                                                                <SelectTrigger className="h-8">
-                                                                                    <SelectValue placeholder="HH:MM" />
-                                                                                </SelectTrigger>
-                                                                            </FormControl>
-                                                                            <SelectContent>
-                                                                                {timeOptions.map(option => <SelectItem key={option} value={option}>{option}</SelectItem>)}
-                                                                            </SelectContent>
-                                                                        </Select>
+                                                                      <Input type="time" {...field} />
                                                                   </FormItem>
                                                               )}
                                                           />
@@ -694,16 +683,7 @@ export default function DoctorDetailPage() {
                                                               render={({ field }) => (
                                                                   <FormItem className="flex-grow">
                                                                       <FormLabel className="text-xs">To</FormLabel>
-                                                                       <Select onValueChange={field.onChange} value={field.value}>
-                                                                            <FormControl>
-                                                                                <SelectTrigger className="h-8">
-                                                                                    <SelectValue placeholder="HH:MM" />
-                                                                                </SelectTrigger>
-                                                                            </FormControl>
-                                                                            <SelectContent>
-                                                                                {timeOptions.map(option => <SelectItem key={option} value={option}>{option}</SelectItem>)}
-                                                                            </SelectContent>
-                                                                        </Select>
+                                                                      <Input type="time" {...field} />
                                                                   </FormItem>
                                                               )}
                                                           />

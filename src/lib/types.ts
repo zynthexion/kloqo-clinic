@@ -86,6 +86,7 @@ export type Department = {
     name: string;
     description: string;
     image: string;
+    imageHint?: string;
     doctors: string[];
 }
 
