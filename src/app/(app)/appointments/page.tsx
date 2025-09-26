@@ -747,7 +747,7 @@ export default function AppointmentsPage() {
           </Button>
         </div>
         <aside className={cn(
-            "relative flex-shrink-0 p-6 pl-0 transition-all duration-300 ease-in-out",
+            "relative flex-shrink-0 p-6 pr-6 transition-all duration-300 ease-in-out",
             isDrawerExpanded ? "w-9/12" : "w-1/3"
         )}>
           <Card className="h-full rounded-2xl">
