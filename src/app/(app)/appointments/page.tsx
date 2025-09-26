@@ -66,9 +66,8 @@ const formSchema = z.object({
     required_error: "A date is required.",
   }),
   time: z.string().min(1, "Please select a time."),
-  department: z.string().min(1, { message: "Please select a department." }),
-  bookedVia: z.enum(["Online", "Phone", "Walk-in"]),
   place: z.string().min(2, { message: "Place must be at least 2 characters." }),
+  bookedVia: z.enum(["Phone", "Walk-in"]),
   tokenNumber: z.string().optional(),
 });
 
@@ -103,15 +102,13 @@ export default function AppointmentsPage() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       patientName: "",
-      gender: "Male",
       phone: "",
       age: 0,
       doctor: "",
       date: undefined,
       time: undefined,
-      department: "",
       place: "",
-      bookedVia: "Online",
+      bookedVia: "Phone",
     },
   });
   
@@ -210,8 +207,9 @@ export default function AppointmentsPage() {
     setIsNewPatient(false);
     form.reset({
       patientName: "", gender: "Male", phone: "", age: 0, doctor: "",
-      date: undefined, time: undefined, department: "",
-      place: "", bookedVia: "Online",
+      date: undefined, time: undefined,
+      place: "",
+      bookedVia: "Phone",
     });
   }
 
@@ -225,6 +223,7 @@ export default function AppointmentsPage() {
                 date: isNaN(appointmentDate.getTime()) ? undefined : appointmentDate,
                 doctor: doctor.id,
                 time: format(parseDateFns(editingAppointment.time, "hh:mm a", new Date()), 'HH:mm'),
+                bookedVia: (editingAppointment.bookedVia === "Phone" || editingAppointment.bookedVia === "Walk-in") ? editingAppointment.bookedVia : "Phone"
             });
             setPatientSearchTerm(editingAppointment.patientName);
             setSelectedDoctorId(doctor.id);
@@ -270,11 +269,7 @@ export default function AppointmentsPage() {
             });
         } else {
             const appointmentId = `APT-${Date.now()}`;
-            let prefix = '';
-            if (values.bookedVia === 'Online') prefix = 'A';
-            else if (values.bookedVia === 'Phone') prefix = 'P';
-            else if (values.bookedVia === 'Walk-in') prefix = 'W';
-            const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3, '0')}`;
+            const tokenNumber = `${(appointments.length + 1).toString().padStart(3, '0')}`;
             
             const newAppointmentData: Appointment = {
                 ...dataToSave,
@@ -306,11 +301,8 @@ export default function AppointmentsPage() {
     setSelectedDoctorId(doctorId);
     const doctor = doctors.find(d => d.id === doctorId);
     if (doctor) {
-        form.setValue("department", doctor.department || "");
-        form.setValue("date", undefined, { shouldValidate: true });
-        form.setValue("time", undefined, { shouldValidate: true });
-    } else {
-        form.setValue("department", "");
+      form.setValue("date", undefined, { shouldValidate: true });
+      form.setValue("time", undefined, { shouldValidate: true });
     }
   }
 
@@ -485,7 +477,7 @@ export default function AppointmentsPage() {
         <h1 className="text-xl font-semibold md:text-2xl">Appointments</h1>
       </header>
       <div className="flex-1 p-6">
-        <div className="flex items-start gap-4">
+        <div className="flex items-stretch gap-4">
           <main
             onClick={() => {
               if (isDrawerExpanded) {
@@ -493,7 +485,7 @@ export default function AppointmentsPage() {
               }
             }}
             className={cn(
-              "relative flex-shrink-0 transition-all duration-300 ease-in-out",
+              "relative flex-shrink-0 transition-all duration-300 ease-in-out h-[calc(100vh-7rem)]",
               isDrawerExpanded ? "w-3/12" : "w-2/3"
             )}
           >
@@ -611,15 +603,11 @@ export default function AppointmentsPage() {
                             </FormItem>
                             )}
                         />
-                            <FormField control={form.control} name="bookedVia" render={({ field }) => (
+                        <FormField control={form.control} name="bookedVia" render={({ field }) => (
                             <FormItem className="space-y-3">
                                 <FormLabel>Booked Via</FormLabel>
                                 <FormControl>
                                     <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4">
-                                        <FormItem className="flex items-center space-x-2 space-y-0">
-                                            <FormControl><RadioGroupItem value="Online" /></FormControl>
-                                            <FormLabel className="font-normal">Online</FormLabel>
-                                        </FormItem>
                                         <FormItem className="flex items-center space-x-2 space-y-0">
                                             <FormControl><RadioGroupItem value="Phone" /></FormControl>
                                             <FormLabel className="font-normal">Phone</FormLabel>
@@ -633,7 +621,7 @@ export default function AppointmentsPage() {
                                 <FormMessage />
                             </FormItem>
                             )} />
-                      </div>
+                                                  </div>
                       
                       {!isDrawerExpanded && (
                       <>
@@ -689,15 +677,7 @@ export default function AppointmentsPage() {
                                   </FormItem>
                                   )}
                               />
-                              <FormField control={form.control} name="department" render={({ field }) => (
-                                  <FormItem>
-                                      <FormLabel>Department</FormLabel>
-                                      <FormControl>
-                                          <Input placeholder="Department" {...field} disabled />
-                                      </FormControl>
-                                  </FormItem>
-                              )} />
-                          </div>
+                                                        </div>
 
                           {selectedDoctor && selectedDate && (
                               <FormField control={form.control} name="time" render={({ field }) => (
@@ -748,8 +728,8 @@ export default function AppointmentsPage() {
             </Button>
           </div>
           <aside className={cn(
-              "relative flex-shrink-0 transition-all duration-300 ease-in-out",
-              isDrawerExpanded ? "w-9/12" : "w-1/3"
+              "relative flex-shrink-0 transition-all duration-300 ease-in-out h-[calc(100vh-7rem)]",
+              isDrawerExpanded ? "w-8/12" : "w-[26.666667%] mr-6"
           )}>
             <Card className="h-full rounded-2xl">
               <CardHeader className="p-4 border-b">
