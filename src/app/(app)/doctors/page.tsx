@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useTransition } from "react";
@@ -839,8 +840,7 @@ export default function DoctorsPage() {
                     ) : (
                         <div className="text-center">
                             <p className="text-2xl font-bold">{selectedDoctor.experience}</p>
-                            <p className="text-sm opacity-90">Years</p>
-                            <p className="text-xs opacity-80">of experience</p>
+                            <p className="text-sm opacity-90">Years of experience</p>
                         </div>
                     )}
                 </div>
@@ -1234,3 +1234,4 @@ export default function DoctorsPage() {
     </>
   );
 }
+
