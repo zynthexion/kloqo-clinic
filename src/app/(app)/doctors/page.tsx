@@ -807,7 +807,7 @@ export default function DoctorsPage() {
                             <Input 
                                 value={newName} 
                                 onChange={(e) => setNewName(e.target.value)} 
-                                className="text-2xl font-bold h-10 bg-transparent border-white/50"
+                                className="text-2xl font-bold h-10 bg-transparent border-white/50 placeholder:text-green-200/70"
                                 placeholder="Doctor's Name"
                                 disabled={isPending}
                             />
@@ -816,7 +816,7 @@ export default function DoctorsPage() {
                             <Input 
                                 value={newSpecialty} 
                                 onChange={(e) => setNewSpecialty(e.target.value)} 
-                                className="text-md h-9 bg-transparent border-white/50"
+                                className="text-md h-9 bg-transparent border-white/50 placeholder:text-green-200/70"
                                 placeholder="Doctor's Specialty"
                                 disabled={isPending}
                             />
