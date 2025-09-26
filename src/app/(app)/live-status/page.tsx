@@ -15,13 +15,12 @@ const DoctorStatusCard = ({ data }: { data: LiveStatus }) => (
   <Link href={`/live-status/${data.id}`}>
     <Card
       className={cn(
-        "p-4 flex flex-col justify-between border-2 h-full hover:shadow-lg transition-shadow",
-        data.status === "available" ? "border-blue-400 hover:border-blue-500" : "border-red-500 hover:border-red-600"
+        "p-4 flex flex-col justify-between h-full shadow-md hover:shadow-xl transition-shadow",
+        data.status === "available" ? "bg-blue-50" : "bg-red-50"
       )}
     >
       <div>
         <h3 className="font-semibold text-lg">{`${data.doctorName} - ${data.specialty}`}</h3>
-        <p className="text-sm text-muted-foreground">Room {data.room}</p>
       </div>
       <div className="mt-4">
         {data.status === "available" ? (
