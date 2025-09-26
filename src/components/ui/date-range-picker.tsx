@@ -14,13 +14,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu"
 
 interface DateRangePickerProps extends React.HTMLAttributes<HTMLDivElement> {
     onDateChange: (dateRange: DateRange | undefined) => void;
@@ -38,7 +31,6 @@ const presets = [
 
 export function DateRangePicker({ className, initialDateRange, onDateChange }: DateRangePickerProps) {
   const [date, setDate] = React.useState<DateRange | undefined>(initialDateRange)
-  const [preset, setPreset] = React.useState<string>("last7");
   const [isCustomPickerOpen, setIsCustomPickerOpen] = React.useState(false);
 
   React.useEffect(() => {
@@ -49,39 +41,38 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
   }, [date]);
 
   const handlePresetChange = (value: string) => {
-    setPreset(value);
     setIsCustomPickerOpen(false);
     const now = new Date();
+    let newRange: DateRange | undefined;
     switch (value) {
       case "today":
-        setDate({ from: now, to: now });
+        newRange = { from: now, to: now };
         break;
       case "last7":
-        setDate({ from: subDays(now, 6), to: now });
+        newRange = { from: subDays(now, 6), to: now };
         break;
       case "this_month":
-        setDate({ from: startOfMonth(now), to: endOfMonth(now) });
+        newRange = { from: startOfMonth(now), to: endOfMonth(now) };
         break;
       case "last_month":
         const lastMonth = subMonths(now, 1);
-        setDate({ from: startOfMonth(lastMonth), to: endOfMonth(lastMonth) });
+        newRange = { from: startOfMonth(lastMonth), to: endOfMonth(lastMonth) };
         break;
       case "this_year":
-        setDate({ from: startOfYear(now), to: endOfYear(now) });
+        newRange = { from: startOfYear(now), to: endOfYear(now) };
         break;
       case "last_year":
         const lastYear = subYears(now, 1);
-        setDate({ from: startOfYear(lastYear), to: endOfYear(lastYear) });
+        newRange = { from: startOfYear(lastYear), to: endOfYear(lastYear) };
         break;
       default:
-        setDate(undefined);
+        newRange = undefined;
         break;
     }
+    setDate(newRange);
   };
 
   const handleDateSelect = (selectedRange: DateRange | undefined) => {
-    // The `react-day-picker` library's range mode already handles the logic
-    // of starting a new selection. We just need to update our state.
     setDate(selectedRange);
   }
 
