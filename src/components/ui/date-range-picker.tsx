@@ -81,6 +81,10 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
 
   const handleDateSelect = (selectedDate: DateRange | undefined) => {
     setDate(selectedDate);
+    if (selectedDate?.from && selectedDate?.to) {
+      // Optional: close picker once a full range is selected.
+      // setIsCustomPickerOpen(false);
+    }
   }
 
   return (
