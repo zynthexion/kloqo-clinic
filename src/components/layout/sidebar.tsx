@@ -101,7 +101,6 @@ export function Sidebar() {
                     </Avatar>
                     <div className="text-left opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100 whitespace-nowrap">
                       <p className="text-sm font-semibold text-sidebar-foreground">{user.name}</p>
-                      <p className="text-xs text-sidebar-foreground/70">{user.email}</p>
                     </div>
                     <MoreVertical className="ml-auto h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100" />
                   </div>
