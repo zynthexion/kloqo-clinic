@@ -245,6 +245,9 @@ export const user = {
     name: 'Alfredo Westervelt',
     email: 'alfredo.westervelt@wellnest.com',
     avatar: "https://picsum.photos/seed/user-avatar/100/100",
+    clinicName: 'Kloqo Clinic',
+    place: 'New York, USA',
+    phone: '123-456-7890',
 };
 
 
