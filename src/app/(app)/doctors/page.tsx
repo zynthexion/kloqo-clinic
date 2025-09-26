@@ -808,6 +808,7 @@ export default function DoctorsPage() {
                                 value={newName} 
                                 onChange={(e) => setNewName(e.target.value)} 
                                 className="text-2xl font-bold h-10 bg-transparent border-white/50"
+                                placeholder="Doctor's Name"
                                 disabled={isPending}
                             />
                         </div>
@@ -816,6 +817,7 @@ export default function DoctorsPage() {
                                 value={newSpecialty} 
                                 onChange={(e) => setNewSpecialty(e.target.value)} 
                                 className="text-md h-9 bg-transparent border-white/50"
+                                placeholder="Doctor's Specialty"
                                 disabled={isPending}
                             />
                         </div>
@@ -890,6 +892,7 @@ export default function DoctorsPage() {
                                       value={newAvgTime} 
                                       onChange={(e) => setNewAvgTime(e.target.value)} 
                                       className="w-20 h-8"
+                                      placeholder="min"
                                       disabled={isPending}
                                   />
                                   <Button size="icon" className="h-8 w-8" onClick={handleTimeSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
@@ -916,6 +919,7 @@ export default function DoctorsPage() {
                                       value={newFee} 
                                       onChange={(e) => setNewFee(e.target.value)} 
                                       className="w-20 h-8"
+                                      placeholder="$"
                                       disabled={isPending}
                                   />
                                   <Button size="icon" className="h-8 w-8" onClick={handleFeeSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
@@ -979,6 +983,7 @@ export default function DoctorsPage() {
                                             value={newBio} 
                                             onChange={(e) => setNewBio(e.target.value)} 
                                             className="min-h-[120px]"
+                                            placeholder="Enter a short bio for the doctor..."
                                             disabled={isPending}
                                         />
                                     </div>
@@ -1218,5 +1223,3 @@ export default function DoctorsPage() {
     </>
   );
 }
-
-    

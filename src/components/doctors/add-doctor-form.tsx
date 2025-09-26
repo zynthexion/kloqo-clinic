@@ -309,7 +309,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     <FormItem>
                       <FormLabel>Years of Experience</FormLabel>
                       <FormControl>
-                        <Input type="number" {...field} />
+                        <Input type="number" placeholder="e.g., 10" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -322,7 +322,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     <FormItem>
                       <FormLabel>Consultation Fee ($)</FormLabel>
                       <FormControl>
-                        <Input type="number" {...field} />
+                        <Input type="number" placeholder="e.g., 150" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -335,7 +335,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     <FormItem>
                       <FormLabel>Average Consulting Time (minutes)</FormLabel>
                       <FormControl>
-                        <Input type="number" {...field} />
+                        <Input type="number" placeholder="e.g., 15" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

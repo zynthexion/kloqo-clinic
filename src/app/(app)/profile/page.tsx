@@ -222,7 +222,7 @@ export default function ProfilePage() {
                                     <FormItem>
                                         <FormLabel className="text-xs text-muted-foreground">Admin Name</FormLabel>
                                         <FormControl>
-                                            <Input {...field} disabled={!isEditingProfile} />
+                                            <Input {...field} placeholder="Your Name" disabled={!isEditingProfile} />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -236,7 +236,7 @@ export default function ProfilePage() {
                                     <FormItem>
                                         <FormLabel className="text-xs text-muted-foreground">Clinic Name</FormLabel>
                                         <FormControl>
-                                            <Input {...field} disabled={!isEditingProfile} />
+                                            <Input {...field} placeholder="Your Clinic's Name" disabled={!isEditingProfile} />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -250,7 +250,7 @@ export default function ProfilePage() {
                                     <FormItem>
                                         <FormLabel className="text-xs text-muted-foreground">Email</FormLabel>
                                         <FormControl>
-                                            <Input type="email" {...field} disabled={!isEditingProfile} />
+                                            <Input type="email" placeholder="your-email@example.com" {...field} disabled={!isEditingProfile} />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
@@ -264,7 +264,7 @@ export default function ProfilePage() {
                                     <FormItem>
                                         <FormLabel className="text-xs text-muted-foreground">Phone</FormLabel>
                                         <FormControl>
-                                            <Input {...field} disabled={!isEditingProfile} />
+                                            <Input {...field} placeholder="123-456-7890" disabled={!isEditingProfile} />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>

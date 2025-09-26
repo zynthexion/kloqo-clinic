@@ -78,6 +78,7 @@ export default function SignupPage() {
                 <Input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
                   required
                 />
                 <Button
