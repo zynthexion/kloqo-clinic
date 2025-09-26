@@ -28,7 +28,7 @@ import { db, storage } from "@/lib/firebase";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import type { Doctor, Appointment, LeaveSlot, Department, TimeSlot } from "@/lib/types";
 import { format, parse, isSameDay, getDay, parse as parseDateFns } from "date-fns";
-import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon, PlusCircle, DollarSign, Printer, FileDown, ChevronUp, ChevronDown } from "lucide-react";
+import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon, PlusCircle, DollarSign, Printer, FileDown, ChevronUp, ChevronDown, Minus } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -793,8 +793,9 @@ export default function DoctorsPage() {
           <div className="h-full overflow-y-auto pr-2 md:col-span-9">
             {selectedDoctor ? (
             <>
-            <div className="bg-primary text-primary-foreground rounded-lg p-4 flex items-start gap-6 mb-6">
-                <div className="relative flex-shrink-0">
+            <div className="bg-primary text-primary-foreground rounded-lg p-4 flex items-center gap-6 mb-6">
+                {/* Column 1: Image and Basic Info */}
+                <div className="flex items-center gap-4 flex-shrink-0">
                     <Image
                         src={selectedDoctor.avatar}
                         alt={selectedDoctor.name}
@@ -803,96 +804,59 @@ export default function DoctorsPage() {
                         className="rounded-md object-cover"
                         data-ai-hint="doctor portrait"
                     />
-                </div>
-                <div className="flex-grow text-white space-y-1.5">
-                    {isEditingDetails ? (
-                       <>
-                        <div className="flex items-center gap-2">
-                            <Input 
-                                value={newName} 
-                                onChange={(e) => setNewName(e.target.value)} 
-                                className="text-2xl font-bold h-10 bg-transparent border-white/50 placeholder:text-green-200/70"
-                                placeholder="Doctor's Name"
-                                disabled={isPending}
-                            />
-                        </div>
-                         <div className="flex items-center gap-2 mt-1">
-                            <Input 
-                                value={newSpecialty} 
-                                onChange={(e) => setNewSpecialty(e.target.value)} 
-                                className="text-md h-9 bg-transparent border-white/50 placeholder:text-green-200/70"
-                                placeholder="Doctor's Specialty"
-                                disabled={isPending}
-                            />
-                        </div>
-                        <div className="flex items-center gap-2 mt-1">
-                            <Select onValueChange={setNewDepartment} value={newDepartment}>
-                                <SelectTrigger className="w-[200px] h-9 bg-transparent border-white/50">
-                                    <SelectValue placeholder="Select department" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {departments.map(dept => (
-                                        <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                       </>
-                    ) : (
-                       <>
+                    <div className="space-y-1">
                         <p className="font-bold text-2xl">{selectedDoctor.name}</p>
                         <p className="text-md opacity-90">{selectedDoctor.specialty}</p>
-                        <p className="text-md opacity-90">
-                           {selectedDoctor.degrees?.join(", ")} {selectedDoctor.degrees && selectedDoctor.degrees.length > 0 && selectedDoctor.department ? ' - ' : ''} {selectedDoctor.department}
-                        </p>
-                       </>
-                    )}
-                    
-                    <div className="pt-2">
-                        {isEditingDetails ? (
-                            <div className="flex items-center gap-2">
-                                <span className="opacity-90">Years:</span>
-                                <div className="flex items-center">
-                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-white hover:bg-white/20" onClick={() => setNewExperience(prev => Math.max(0, Number(prev) - 1))} disabled={isPending}>
-                                        <Minus className="h-4 w-4"/>
-                                    </Button>
-                                    <Input 
-                                        type="number"
-                                        value={newExperience} 
-                                        onChange={(e) => setNewExperience(e.target.value)} 
-                                        className="w-16 h-9 bg-transparent border-white/50 placeholder:text-green-200/70 text-center"
-                                        placeholder="Years"
-                                        disabled={isPending}
-                                    />
-                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-white hover:bg-white/20" onClick={() => setNewExperience(prev => Number(prev) + 1)} disabled={isPending}>
-                                        <PlusCircle className="h-4 w-4"/>
-                                    </Button>
-                                </div>
-                            </div>
-                        ) : (
-                           <p className="text-md opacity-90">{selectedDoctor.experience} Years of experience</p>
-                        )}
-                        <div className="flex items-center gap-2 mt-1">
-                            <StarRating rating={selectedDoctor.rating || 0} />
-                            <span className="text-md opacity-90">({selectedDoctor.reviews}+ Reviews)</span>
-                        </div>
+                        <p className="text-md opacity-90">{selectedDoctor.department}</p>
                     </div>
-
-
-                     {isEditingDetails && (
-                        <div className="flex justify-start gap-2 pt-2">
-                            <Button size="sm" variant="ghost" className="text-white hover:bg-white/20" onClick={() => {setIsEditingDetails(false); setNewName(selectedDoctor.name); setNewSpecialty(selectedDoctor.specialty); setNewDepartment(selectedDoctor.department || "");}} disabled={isPending}>Cancel</Button>
-                            <Button size="sm" className="bg-white text-primary hover:bg-white/90" onClick={handleDetailsSave} disabled={isPending}>
-                                {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Saving...</> : <><Save className="mr-2 h-4 w-4" /> Save</>}
-                            </Button>
-                        </div>
-                    )}
                 </div>
-                <div className="flex flex-col items-end justify-between h-full text-right space-y-2">
+
+                {/* Column 2: Experience and Reviews */}
+                <div className="flex-grow space-y-2">
+                    {isEditingDetails ? (
+                        <div className="flex items-center gap-2">
+                            <span className="opacity-90">Years:</span>
+                            <div className="flex items-center">
+                                <Button size="icon" variant="ghost" className="h-8 w-8 text-white hover:bg-white/20" onClick={() => setNewExperience(prev => Math.max(0, Number(prev) - 1))} disabled={isPending}>
+                                    <Minus className="h-4 w-4"/>
+                                </Button>
+                                <Input 
+                                    type="number"
+                                    value={newExperience} 
+                                    onChange={(e) => setNewExperience(e.target.value)} 
+                                    className="w-16 h-9 bg-transparent border-white/50 placeholder:text-green-200/70 text-center"
+                                    placeholder="Years"
+                                    disabled={isPending}
+                                />
+                                <Button size="icon" variant="ghost" className="h-8 w-8 text-white hover:bg-white/20" onClick={() => setNewExperience(prev => Number(prev) + 1)} disabled={isPending}>
+                                    <PlusCircle className="h-4 w-4"/>
+                                </Button>
+                            </div>
+                        </div>
+                    ) : (
+                       <p className="text-md opacity-90">{selectedDoctor.experience} Years of experience</p>
+                    )}
+                    <div className="flex items-center gap-2">
+                        <StarRating rating={selectedDoctor.rating || 0} />
+                        <span className="text-md opacity-90">({selectedDoctor.reviews}+ Reviews)</span>
+                    </div>
+                </div>
+
+                {/* Column 3: Actions */}
+                <div className="flex flex-col items-end justify-between self-stretch">
                     {!isEditingDetails && (
                         <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" onClick={() => setIsEditingDetails(true)}>
                             <Edit className="h-5 w-5" />
                         </Button>
+                    )}
+                     {isEditingDetails && (
+                        <div className="flex items-center gap-2">
+                            <Button size="sm" variant="ghost" className="text-white hover:bg-white/20" onClick={() => {setIsEditingDetails(false); /* reset logic handled in useEffect */}} disabled={isPending}>Cancel</Button>
+                            <Button size="sm" className="bg-white text-primary hover:bg-white/90" onClick={handleDetailsSave} disabled={isPending}>
+                                {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />}
+                                Save
+                            </Button>
+                        </div>
                     )}
                     <div className="flex-grow"></div>
                     <div className="flex items-center space-x-2 bg-primary p-2 rounded-md">
