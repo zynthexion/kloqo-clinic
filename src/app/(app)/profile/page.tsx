@@ -29,7 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import { collection, getDocs, setDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { MobileApp } from "@/lib/types";
-import { Eye, EyeOff, UserCircle, KeyRound, Edit } from "lucide-react";
+import { Eye, EyeOff, UserCircle, KeyRound, Edit, Save, X } from "lucide-react";
 import { user as userData } from "@/lib/data";
 import { Separator } from "@/components/ui/separator";
 
@@ -51,13 +51,23 @@ const passwordFormSchema = z.object({
 
 type PasswordFormValues = z.infer<typeof passwordFormSchema>;
 
+const profileFormSchema = z.object({
+    name: z.string().min(2, "Name must be at least 2 characters."),
+    clinicName: z.string().min(2, "Clinic name must be at least 2 characters."),
+    email: z.string().email("Please enter a valid email."),
+    phone: z.string().min(10, "Phone number must be at least 10 digits."),
+});
+
+type ProfileFormValues = z.infer<typeof profileFormSchema>;
+
 
 export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [credentials, setCredentials] = useState<MobileApp | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showSavedPassword, setShowSavedPassword] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditingMobile, setIsEditingMobile] = useState(false);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
   const { toast } = useToast();
 
   const mobileAppForm = useForm<MobileAppFormValues>({
@@ -77,6 +87,16 @@ export default function ProfilePage() {
       }
   });
 
+    const profileForm = useForm<ProfileFormValues>({
+        resolver: zodResolver(profileFormSchema),
+        defaultValues: {
+            name: userData.name,
+            clinicName: userData.clinicName,
+            email: userData.email,
+            phone: userData.phone,
+        }
+    });
+
   useEffect(() => {
     const fetchCredentials = async () => {
       setLoading(true);
@@ -89,9 +109,9 @@ export default function ProfilePage() {
           username: credsData.username,
           password: "", 
         });
-        setIsEditing(false);
+        setIsEditingMobile(false);
       } else {
-        setIsEditing(true);
+        setIsEditingMobile(true);
       }
       setLoading(false);
     };
@@ -116,7 +136,7 @@ export default function ProfilePage() {
           username: values.username,
           password: "",
       });
-      setIsEditing(false);
+      setIsEditingMobile(false);
       setShowSavedPassword(false);
 
       toast({
@@ -143,14 +163,33 @@ export default function ProfilePage() {
     passwordForm.reset();
   }
 
-  const handleCancel = () => {
+  const onProfileSubmit = (values: ProfileFormValues) => {
+      console.log(values);
+       toast({
+        title: "Profile Updated",
+        description: "Your profile information has been changed successfully.",
+    });
+    setIsEditingProfile(false);
+  }
+
+  const handleCancelMobile = () => {
     if (credentials) {
         mobileAppForm.reset({
             username: credentials.username,
             password: "",
         });
-        setIsEditing(false);
+        setIsEditingMobile(false);
     }
+  }
+  
+  const handleCancelProfile = () => {
+    profileForm.reset({
+        name: userData.name,
+        clinicName: userData.clinicName,
+        email: userData.email,
+        phone: userData.phone,
+    });
+    setIsEditingProfile(false);
   }
 
   return (
@@ -163,33 +202,86 @@ export default function ProfilePage() {
                 <CardHeader>
                     <div className="flex items-center justify-between">
                         <CardTitle>Your Profile</CardTitle>
-                        <Button variant="outline" size="icon"><Edit className="w-4 h-4"/></Button>
+                        {!isEditingProfile && (
+                            <Button variant="outline" size="icon" onClick={() => setIsEditingProfile(true)}>
+                                <Edit className="w-4 h-4"/>
+                            </Button>
+                        )}
                     </div>
                     <CardDescription>
                         This is your clinic's information.
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="space-y-1">
-                        <p className="text-sm font-medium text-muted-foreground">Admin Name</p>
-                        <p>{userData.name}</p>
-                    </div>
-                    <Separator/>
-                    <div className="space-y-1">
-                        <p className="text-sm font-medium text-muted-foreground">Clinic Name</p>
-                        <p>{userData.clinicName}</p>
-                    </div>
-                    <Separator/>
-                    <div className="space-y-1">
-                        <p className="text-sm font-medium text-muted-foreground">Email</p>
-                        <p>{userData.email}</p>
-                    </div>
-                     <Separator/>
-                    <div className="space-y-1">
-                        <p className="text-sm font-medium text-muted-foreground">Phone</p>
-                        <p>{userData.phone}</p>
-                    </div>
-                </CardContent>
+                 <Form {...profileForm}>
+                    <form onSubmit={profileForm.handleSubmit(onProfileSubmit)}>
+                        <CardContent className="space-y-4">
+                            <FormField
+                                control={profileForm.control}
+                                name="name"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-xs text-muted-foreground">Admin Name</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} disabled={!isEditingProfile} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <Separator/>
+                            <FormField
+                                control={profileForm.control}
+                                name="clinicName"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-xs text-muted-foreground">Clinic Name</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} disabled={!isEditingProfile} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <Separator/>
+                            <FormField
+                                control={profileForm.control}
+                                name="email"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-xs text-muted-foreground">Email</FormLabel>
+                                        <FormControl>
+                                            <Input type="email" {...field} disabled={!isEditingProfile} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <Separator/>
+                             <FormField
+                                control={profileForm.control}
+                                name="phone"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-xs text-muted-foreground">Phone</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} disabled={!isEditingProfile} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                             {isEditingProfile && (
+                                <div className="flex justify-end gap-2 pt-4">
+                                    <Button type="button" variant="ghost" onClick={handleCancelProfile}>Cancel</Button>
+                                    <Button type="submit">
+                                        <Save className="mr-2 h-4 w-4" />
+                                        Save Changes
+                                    </Button>
+                                </div>
+                            )}
+                        </CardContent>
+                    </form>
+                 </Form>
                 <CardFooter>
                     <Form {...passwordForm}>
                         <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="w-full space-y-4">
@@ -229,7 +321,7 @@ export default function ProfilePage() {
                     <CardHeader>
                         <CardTitle>Loading...</CardTitle>
                     </CardHeader>
-                ) : isEditing || !credentials ? (
+                ) : isEditingMobile || !credentials ? (
                     <>
                     <CardHeader>
                     <CardTitle>{credentials ? "Update Mobile App Login" : "Set Mobile App Login"}</CardTitle>
@@ -290,7 +382,7 @@ export default function ProfilePage() {
                         />
                         </CardContent>
                         <CardFooter className="flex justify-end gap-2">
-                        {credentials && <Button type="button" variant="outline" onClick={handleCancel}>Cancel</Button>}
+                        {credentials && <Button type="button" variant="outline" onClick={handleCancelMobile}>Cancel</Button>}
                         <Button type="submit" disabled={mobileAppForm.formState.isSubmitting}>
                             {mobileAppForm.formState.isSubmitting ? "Saving..." : "Save Credentials"}
                         </Button>
@@ -334,7 +426,7 @@ export default function ProfilePage() {
                             {showSavedPassword ? <EyeOff className="mr-2"/> : <Eye className="mr-2"/>}
                             {showSavedPassword ? 'Hide' : 'Reveal'} Password
                         </Button>
-                        <Button onClick={() => setIsEditing(true)}>Update Credentials</Button>
+                        <Button onClick={() => setIsEditingMobile(true)}>Update Credentials</Button>
                     </CardFooter>
                     </>
                 )}
