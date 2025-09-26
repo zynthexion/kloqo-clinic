@@ -484,7 +484,7 @@ export default function AppointmentsPage() {
       <header className="flex h-14 items-center gap-4 border-b bg-background px-4 sm:px-6">
         <h1 className="text-xl font-semibold md:text-2xl">Appointments</h1>
       </header>
-      <div className="flex flex-1 items-start overflow-hidden">
+      <div className="flex flex-1 items-start">
         <main
           onClick={() => {
             if (isDrawerExpanded) {
