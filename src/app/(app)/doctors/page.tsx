@@ -28,7 +28,7 @@ import { db, storage } from "@/lib/firebase";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import type { Doctor, Appointment, LeaveSlot, Department, TimeSlot } from "@/lib/types";
 import { format, parse, isSameDay, getDay, parse as parseDateFns } from "date-fns";
-import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon, PlusCircle, DollarSign, Printer, FileDown } from "lucide-react";
+import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon, PlusCircle, DollarSign, Printer, FileDown, ChevronUp, ChevronDown } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -179,6 +179,7 @@ export default function DoctorsPage() {
   const [newBio, setNewBio] = useState("");
   const [newSpecialty, setNewSpecialty] = useState("");
   const [newDepartment, setNewDepartment] = useState("");
+  const [newExperience, setNewExperience] = useState<number | string>("");
 
   const [isEditingAvailability, setIsEditingAvailability] = useState(false);
   
@@ -252,6 +253,7 @@ export default function DoctorsPage() {
       setNewBio(selectedDoctor.bio || "");
       setNewSpecialty(selectedDoctor.specialty);
       setNewDepartment(selectedDoctor.department || "");
+      setNewExperience(selectedDoctor.experience || 0);
       form.reset({
         availabilitySlots: selectedDoctor.availabilitySlots?.map(s => ({
             ...s,
@@ -442,6 +444,7 @@ export default function DoctorsPage() {
                     name: newName,
                     specialty: newSpecialty,
                     department: newDepartment,
+                    experience: Number(newExperience),
                 };
                 await updateDoc(doctorRef, updatedData);
                 const updatedDoctor = { ...selectedDoctor, ...updatedData };
@@ -840,11 +843,29 @@ export default function DoctorsPage() {
                         <p className="font-bold text-2xl">{selectedDoctor.name}</p>
                         <p className="text-md opacity-90">{selectedDoctor.specialty}</p>
                         <p className="text-md opacity-90">
-                            {selectedDoctor.degrees?.join(", ")} {selectedDoctor.degrees && selectedDoctor.degrees.length > 0 && selectedDoctor.department ? ' - ' : ''} {selectedDoctor.department}
+                           {selectedDoctor.degrees?.join(", ")} {selectedDoctor.degrees && selectedDoctor.degrees.length > 0 && selectedDoctor.department ? ' - ' : ''} {selectedDoctor.department}
                         </p>
                        </>
                     )}
-                    <p className="text-md opacity-90">{selectedDoctor.experience} Years of experience</p>
+                    {isEditingDetails ? (
+                         <div className="flex items-center gap-2">
+                             <Input 
+                                type="number"
+                                value={newExperience} 
+                                onChange={(e) => setNewExperience(e.target.value)} 
+                                className="w-20 h-9 bg-transparent border-white/50 placeholder:text-green-200/70"
+                                placeholder="Years"
+                                disabled={isPending}
+                            />
+                            <div className="flex flex-col">
+                                <Button type="button" variant="ghost" size="icon" className="h-5 w-5 text-white hover:bg-white/20" onClick={() => setNewExperience(prev => Number(prev) + 1)}><ChevronUp className="h-4 w-4" /></Button>
+                                <Button type="button" variant="ghost" size="icon" className="h-5 w-5 text-white hover:bg-white/20" onClick={() => setNewExperience(prev => Math.max(0, Number(prev) - 1))}><ChevronDown className="h-4 w-4" /></Button>
+                            </div>
+                            <span className="opacity-90">Years of experience</span>
+                        </div>
+                    ) : (
+                        <p className="text-md opacity-90">{selectedDoctor.experience} Years of experience</p>
+                    )}
                     <div className="flex items-center gap-2">
                         <StarRating rating={selectedDoctor.rating || 0} />
                         <span className="text-md opacity-90">({selectedDoctor.reviews}+ Reviews)</span>
@@ -1225,3 +1246,5 @@ export default function DoctorsPage() {
     </>
   );
 }
+
+    
