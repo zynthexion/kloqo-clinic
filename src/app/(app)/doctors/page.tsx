@@ -813,7 +813,7 @@ export default function DoctorsPage() {
                 </div>
 
                 {/* Column 2: Experience */}
-                <div className="flex flex-col items-center">
+                <div className="flex flex-col items-center pt-2">
                     <div className="mb-2">
                         <Trophy className="w-4 h-4 text-yellow-400" />
                     </div>
@@ -846,7 +846,7 @@ export default function DoctorsPage() {
                 </div>
 
                  {/* Column 3: Reviews */}
-                 <div className="flex flex-col items-center">
+                 <div className="flex flex-col items-center pt-2">
                     <div className="mb-2">
                         <Star className="w-4 h-4 text-yellow-400" />
                     </div>
