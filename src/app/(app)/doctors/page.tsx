@@ -793,9 +793,9 @@ export default function DoctorsPage() {
           <div className="h-full overflow-y-auto pr-2 md:col-span-9">
             {selectedDoctor ? (
             <>
-            <div className="bg-primary text-primary-foreground rounded-lg p-4 flex items-center gap-6 mb-6">
+            <div className="bg-primary text-primary-foreground rounded-lg p-4 grid grid-cols-3 items-center gap-6 mb-6">
                 {/* Column 1: Image and Basic Info */}
-                <div className="flex items-center gap-4 flex-shrink-0">
+                <div className="flex items-center gap-4">
                     <Image
                         src={selectedDoctor.avatar}
                         alt={selectedDoctor.name}
@@ -812,7 +812,7 @@ export default function DoctorsPage() {
                 </div>
 
                 {/* Column 2: Experience and Reviews */}
-                <div className="flex-grow space-y-2">
+                <div className="space-y-2">
                     {isEditingDetails ? (
                         <div className="flex items-center gap-2">
                             <span className="opacity-90">Years:</span>
