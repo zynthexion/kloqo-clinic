@@ -847,7 +847,7 @@ export default function AppointmentsPage() {
                       <TableBody>
                         {filteredAppointments
                           .map((appointment) => (
-                          <TableRow key={`${appointment.id}-${appointment.tokenNumber}`} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
+                          <TableRow key={appointment.id} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
                             <TableCell>
                               <div className="font-medium">{appointment.patientName}</div>
                               <div className="text-xs text-muted-foreground">with {appointment.doctor}</div>
@@ -887,3 +887,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
