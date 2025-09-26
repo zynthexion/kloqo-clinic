@@ -2,8 +2,8 @@
 "use client"
 
 import * as React from "react"
-import { format, subDays, startOfMonth, endOfMonth, subMonths, startOfWeek, endOfWeek, startOfYear, endOfYear, subYears } from "date-fns"
-import { Calendar as CalendarIcon, Check, ChevronDown } from "lucide-react"
+import { format } from "date-fns"
+import { Calendar as CalendarIcon } from "lucide-react"
 import { DateRange } from "react-day-picker"
 
 import { cn } from "@/lib/utils"
@@ -14,6 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { subDays, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, subYears } from "date-fns";
 
 interface DateRangePickerProps extends React.HTMLAttributes<HTMLDivElement> {
     onDateChange: (dateRange: DateRange | undefined) => void;
