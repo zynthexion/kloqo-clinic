@@ -118,7 +118,7 @@ export default function DoctorAvailability({ selectedDate }: DoctorAvailabilityP
                                 {appointmentCount > 0 && (
                                  <Badge variant="secondary" className="font-semibold">
                                     <Users className="h-3 w-3 mr-1.5" />
-                                    {appointmentCount} {appointmentCount > 1 ? 'apps' : 'app'}
+                                    {appointmentCount} {appointmentCount > 1 ? 'appointments' : 'appointment'}
                                 </Badge>
                                )}
                             </div>
