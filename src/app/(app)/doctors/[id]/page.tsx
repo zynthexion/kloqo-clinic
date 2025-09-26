@@ -106,6 +106,7 @@ export default function DoctorDetailPage() {
   const [newBio, setNewBio] = useState("");
   const [newSpecialty, setNewSpecialty] = useState("");
   const [newDepartment, setNewDepartment] = useState("");
+  const [newExperience, setNewExperience] = useState<number | string>("");
 
   const [isEditingAvailability, setIsEditingAvailability] = useState(false);
   
@@ -127,6 +128,7 @@ export default function DoctorDetailPage() {
           setNewBio(doctorData.bio || "");
           setNewSpecialty(doctorData.specialty);
           setNewDepartment(doctorData.department || "");
+          setNewExperience(doctorData.experience || "");
           form.reset({
             availableDays: doctorData.availabilitySlots?.map(s => s.day) || [],
             availabilitySlots: doctorData.availabilitySlots?.map(s => ({
@@ -237,7 +239,8 @@ export default function DoctorDetailPage() {
                     name: newName,
                     specialty: newSpecialty,
                     department: newDepartment,
-                    bio: newBio 
+                    bio: newBio,
+                    experience: Number(newExperience),
                 };
                 await updateDoc(doctorRef, updatedData);
                 setDoctor(prev => prev ? { ...prev, ...updatedData } : null);
@@ -453,6 +456,16 @@ export default function DoctorDetailPage() {
                                 </SelectContent>
                             </Select>
                         </div>
+                         <div className="flex items-center gap-2 mt-1">
+                             <Input 
+                                value={newExperience as string} 
+                                onChange={(e) => setNewExperience(e.target.value)} 
+                                className="text-lg h-10 w-40"
+                                placeholder="Experience (years)"
+                                type="number"
+                                disabled={isPending}
+                            />
+                        </div>
                        </>
                     ) : (
                        <>
@@ -465,6 +478,7 @@ export default function DoctorDetailPage() {
                         <div className="flex items-center gap-2">
                         <p className="mt-2 text-sm text-muted-foreground">{doctor.department}</p>
                         </div>
+                        <p className="mt-1 text-sm text-muted-foreground">{doctor.experience} years of experience</p>
                        </>
                     )}
                    <div className="flex items-center space-x-2 mt-4">
@@ -480,10 +494,24 @@ export default function DoctorDetailPage() {
                    </div>
                 </div>
               </div>
-                {!isEditingDetails && (
+              {!isEditingDetails ? (
                     <Button variant="outline" size="sm" onClick={() => setIsEditingDetails(true)}>
                         <Edit className="mr-2 h-4 w-4" /> Edit
                     </Button>
+                ) : (
+                    <div className="flex flex-col gap-2">
+                         <Button onClick={handleDetailsSave} disabled={isPending}>
+                            {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Saving...</> : <><Save className="mr-2 h-4 w-4" /> Save Details</>}
+                        </Button>
+                        <Button variant="ghost" onClick={() => {
+                            setIsEditingDetails(false); 
+                            setNewName(doctor.name); 
+                            setNewSpecialty(doctor.specialty); 
+                            setNewDepartment(doctor.department || ""); 
+                            setNewBio(doctor.bio || "");
+                            setNewExperience(doctor.experience || "");
+                        }} disabled={isPending}>Cancel</Button>
+                    </div>
                 )}
             </CardHeader>
           </Card>
@@ -514,14 +542,6 @@ export default function DoctorDetailPage() {
                                 <p className="text-muted-foreground">{doctor.bio || "No biography available."}</p>
                             )}
                         </CardContent>
-                         {isEditingDetails && (
-                            <CardContent className="flex justify-end gap-2">
-                                <Button variant="ghost" onClick={() => {setIsEditingDetails(false); setNewName(doctor.name); setNewSpecialty(doctor.specialty); setNewDepartment(doctor.department || ""); setNewBio(doctor.bio || "");}} disabled={isPending}>Cancel</Button>
-                                <Button onClick={handleDetailsSave} disabled={isPending}>
-                                    {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Saving...</> : <><Save className="mr-2 h-4 w-4" /> Save Details</>}
-                                </Button>
-                            </CardContent>
-                        )}
                     </Card>
                      <Card>
                         <CardHeader>
