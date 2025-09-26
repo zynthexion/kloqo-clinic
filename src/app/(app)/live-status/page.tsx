@@ -20,7 +20,8 @@ const DoctorStatusCard = ({ data }: { data: LiveStatus }) => (
       )}
     >
       <div>
-        <h3 className="font-semibold text-lg">{`${data.doctorName} - ${data.specialty}`}</h3>
+        <h3 className="font-semibold text-lg">{data.doctorName}</h3>
+        <p className="text-sm text-muted-foreground">{data.specialty}</p>
       </div>
       <div className="mt-4">
         {data.status === "available" ? (
