@@ -807,13 +807,15 @@ export default function DoctorsPage() {
                     <div className="space-y-1">
                         <p className="font-bold text-2xl">{selectedDoctor.name}</p>
                         <p className="text-md opacity-90">{selectedDoctor.specialty}</p>
-                         <p className="text-sm opacity-90">{selectedDoctor.degrees?.join(', ')} {selectedDoctor.degrees && selectedDoctor.department ? ' - ' : ''} {selectedDoctor.department}</p>
+                         <p className="text-sm opacity-90">{selectedDoctor.degrees?.join(', ')}{selectedDoctor.degrees && selectedDoctor.department ? ' - ' : ''}{selectedDoctor.department}</p>
                     </div>
                 </div>
 
                 {/* Column 2: Experience */}
                 <div className="flex flex-col items-center space-y-2">
-                     <Trophy className="w-4 h-4 text-yellow-400 mb-2" />
+                    <div className="mb-2">
+                        <Trophy className="w-4 h-4 text-yellow-400" />
+                    </div>
                     {isEditingDetails ? (
                         <div className="flex items-center gap-2">
                             <span className="opacity-90">Years:</span>
@@ -841,7 +843,9 @@ export default function DoctorsPage() {
 
                  {/* Column 3: Reviews */}
                  <div className="flex flex-col items-center space-y-2">
-                    <Star className="w-4 h-4 text-yellow-400 mb-2" />
+                    <div className="mb-2">
+                        <Star className="w-4 h-4 text-yellow-400" />
+                    </div>
                     <div className="flex items-center gap-2">
                         <StarRating rating={selectedDoctor.rating || 0} />
                     </div>
