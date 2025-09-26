@@ -41,7 +41,6 @@ const menuItems = [
   { href: "/patients", icon: Users, label: "Patients" },
   { href: "/departments", icon: Building2, label: "Departments" },
   { href: "/live-status", icon: Activity, label: "Live Status" },
-  { href: "/profile", icon: UserIcon, label: "Profile" },
 ];
 
 export function Sidebar() {
