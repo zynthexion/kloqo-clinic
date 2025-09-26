@@ -793,7 +793,7 @@ export default function DoctorsPage() {
           <div className="h-full overflow-y-auto pr-2 md:col-span-9">
             {selectedDoctor ? (
             <>
-            <div className="bg-primary text-primary-foreground rounded-lg p-4 grid grid-cols-[2fr,1fr,1fr,1fr] items-center gap-6 mb-6">
+            <div className="bg-primary text-primary-foreground rounded-lg p-4 grid grid-cols-[2fr,1fr,1fr,1fr] items-start gap-6 mb-6">
                 {/* Column 1: Image and Basic Info */}
                 <div className="flex items-center gap-4">
                     <Image
@@ -807,12 +807,12 @@ export default function DoctorsPage() {
                     <div className="space-y-1">
                         <p className="font-bold text-2xl">{selectedDoctor.name}</p>
                         <p className="text-md opacity-90">{selectedDoctor.specialty}</p>
-                         <p className="text-sm opacity-90">{selectedDoctor.degrees?.join(', ')}{selectedDoctor.degrees && selectedDoctor.department ? ' - ' : ''}{selectedDoctor.department}</p>
+                         <p className="text-sm opacity-90">{(selectedDoctor.degrees || []).join(', ')}{selectedDoctor.degrees && selectedDoctor.department ? ' - ' : ''}{selectedDoctor.department}</p>
                     </div>
                 </div>
 
                 {/* Column 2: Experience */}
-                <div className="flex flex-col items-center space-y-2">
+                <div className="flex flex-col items-center">
                     <div className="mb-2">
                         <Trophy className="w-4 h-4 text-yellow-400" />
                     </div>
@@ -837,19 +837,23 @@ export default function DoctorsPage() {
                             </div>
                         </div>
                     ) : (
-                       <p className="text-md opacity-90">{selectedDoctor.experience} Years of experience</p>
+                        <div className="text-center">
+                            <p className="text-2xl font-bold">{selectedDoctor.experience}</p>
+                            <p className="text-sm opacity-90">Years</p>
+                            <p className="text-xs opacity-80">of experience</p>
+                        </div>
                     )}
                 </div>
 
                  {/* Column 3: Reviews */}
-                 <div className="flex flex-col items-center space-y-2">
+                 <div className="flex flex-col items-center">
                     <div className="mb-2">
                         <Star className="w-4 h-4 text-yellow-400" />
                     </div>
                     <div className="flex items-center gap-2">
                         <StarRating rating={selectedDoctor.rating || 0} />
                     </div>
-                    <span className="text-md opacity-90">({selectedDoctor.reviews}+ Reviews)</span>
+                    <span className="text-md opacity-90 mt-2">({selectedDoctor.reviews}+ Reviews)</span>
                 </div>
 
                 {/* Column 4: Actions */}
