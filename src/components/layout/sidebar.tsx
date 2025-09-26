@@ -41,7 +41,6 @@ const menuItems = [
   { href: "/patients", icon: Users, label: "Patients" },
   { href: "/departments", icon: Building2, label: "Departments" },
   { href: "/live-status", icon: Activity, label: "Live Status" },
-  { href: "/mobile-app", icon: Smartphone, label: "Mobile App" },
   { href: "/profile", icon: UserIcon, label: "Profile" },
 ];
 
