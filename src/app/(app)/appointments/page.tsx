@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useEffect, useState, useMemo, useRef } from "react";
@@ -464,17 +463,27 @@ export default function AppointmentsPage() {
     
     if (activeTab === 'upcoming') {
         filtered = filtered.filter(apt => {
-            const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
-            return (apt.status === 'Confirmed' || apt.status === 'Pending') && (isFuture(aptDate) || isToday(aptDate));
+            try {
+                const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
+                return (apt.status === 'Confirmed' || apt.status === 'Pending') && (isFuture(aptDate) || isToday(aptDate));
+            } catch(e) { return false; }
         });
     } else if (activeTab === 'completed') {
         filtered = filtered.filter(apt => {
-            const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
-            return apt.status === 'Confirmed' && isPast(aptDate) && !isToday(aptDate);
+            try {
+                const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
+                return apt.status === 'Confirmed' && isPast(aptDate) && !isToday(aptDate);
+            } catch(e) { return false; }
         });
     }
 
-    return filtered.sort((a,b) => new Date(`${a.date} ${b.time}`).getTime() - new Date(`${b.date} ${b.time}`).getTime());
+    return filtered.sort((a,b) => {
+        try {
+            const dateA = new Date(`${a.date} ${a.time}`).getTime();
+            const dateB = new Date(`${b.date} ${b.time}`).getTime();
+            return dateA - dateB;
+        } catch(e) { return 0; }
+    });
   }, [appointments, drawerSearchTerm, filterAvailableDoctors, doctors, activeTab]);
 
 
@@ -894,5 +903,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
-    
