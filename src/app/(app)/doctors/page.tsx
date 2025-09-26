@@ -793,7 +793,7 @@ export default function DoctorsPage() {
           <div className="h-full overflow-y-auto pr-2 md:col-span-9">
             {selectedDoctor ? (
             <>
-            <div className="bg-primary text-primary-foreground rounded-lg p-4 grid grid-cols-4 items-center gap-6 mb-6">
+            <div className="bg-primary text-primary-foreground rounded-lg p-4 grid grid-cols-[2fr,1fr,1fr,1fr] items-center gap-6 mb-6">
                 {/* Column 1: Image and Basic Info */}
                 <div className="flex items-center gap-4">
                     <Image
@@ -807,6 +807,7 @@ export default function DoctorsPage() {
                     <div className="space-y-1">
                         <p className="font-bold text-2xl">{selectedDoctor.name}</p>
                         <p className="text-md opacity-90">{selectedDoctor.specialty}</p>
+                         <p className="text-sm opacity-90">{selectedDoctor.degrees?.join(', ')} {selectedDoctor.degrees && selectedDoctor.department ? ' - ' : ''} {selectedDoctor.department}</p>
                     </div>
                 </div>
 
@@ -1225,4 +1226,3 @@ export default function DoctorsPage() {
     </>
   );
 }
-
