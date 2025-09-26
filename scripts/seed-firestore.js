@@ -298,7 +298,15 @@ const formatDate = (day) => {
     return format(date, 'd MMMM yyyy');
 };
 
-const appointments = [
+const getTokenNumber = (bookedVia, index) => {
+    let prefix = '';
+    if (bookedVia === 'Online') prefix = 'A';
+    else if (bookedVia === 'Phone') prefix = 'P';
+    else if (bookedVia === 'Walk-in') prefix = 'W';
+    return `${prefix}${(index + 1).toString().padStart(3, '0')}`;
+};
+
+const rawAppointments = [
   {
     id: 'APT001',
     patientName: 'Caren G. Simpson',
@@ -311,7 +319,6 @@ const appointments = [
     treatment: 'Routine Check-Up',
     status: 'Confirmed',
     department: 'General Medicine',
-    tokenNumber: 'TKN001',
     bookedVia: 'Online',
     place: 'New York, USA',
   },
@@ -327,7 +334,6 @@ const appointments = [
     treatment: 'Cardiac Consultation',
     status: 'Confirmed',
     department: 'Cardiology',
-    tokenNumber: 'TKN002',
     bookedVia: 'Phone',
     place: 'London, UK',
   },
@@ -343,7 +349,6 @@ const appointments = [
     treatment: 'Pediatric Check-Up',
     status: 'Pending',
     department: 'Pediatrics',
-    tokenNumber: 'TKN003',
     bookedVia: 'Walk-in',
     place: 'Tokyo, Japan',
   },
@@ -359,7 +364,6 @@ const appointments = [
     treatment: 'Skin Allergy',
     status: 'Cancelled',
     department: 'Dermatology',
-    tokenNumber: 'TKN004',
     bookedVia: 'Online',
     place: 'Sydney, Australia',
   },
@@ -375,7 +379,6 @@ const appointments = [
     treatment: 'Follow-Up Visit',
     status: 'Confirmed',
     department: 'General Medicine',
-    tokenNumber: 'TKN005',
     bookedVia: 'Phone',
     place: 'Paris, France',
   },
@@ -391,7 +394,6 @@ const appointments = [
     treatment: 'Routine Check-Up',
     status: 'Confirmed',
     department: 'General Medicine',
-    tokenNumber: 'TKN006',
     bookedVia: 'Online',
     place: 'Berlin, Germany',
   },
@@ -407,7 +409,6 @@ const appointments = [
     treatment: 'Cardiac Consultation',
     status: 'Confirmed',
     department: 'Cardiology',
-    tokenNumber: 'TKN007',
     bookedVia: 'Phone',
     place: 'Moscow, Russia',
   },
@@ -423,7 +424,6 @@ const appointments = [
     treatment: 'Pediatric Check-Up',
     status: 'Pending',
     department: 'Pediatrics',
-    tokenNumber: 'TKN008',
     bookedVia: 'Walk-in',
     place: 'Rio de Janeiro, Brazil',
   },
@@ -439,7 +439,6 @@ const appointments = [
     treatment: 'Skin Allergy',
     status: 'Cancelled',
     department: 'Dermatology',
-    tokenNumber: 'TKN009',
     bookedVia: 'Online',
     place: 'Mumbai, India',
   },
@@ -455,7 +454,6 @@ const appointments = [
     treatment: 'Follow-Up Visit',
     status: 'Confirmed',
     department: 'Internal Medicine',
-    tokenNumber: 'TKN010',
     bookedVia: 'Phone',
     place: 'Cairo, Egypt',
   },
@@ -471,7 +469,6 @@ const appointments = [
     treatment: 'Cardiac Check-Up',
     status: 'Confirmed',
     department: 'Cardiology',
-    tokenNumber: 'TKN011',
     bookedVia: 'Online',
     place: 'Mexico City, Mexico',
   },
@@ -487,7 +484,6 @@ const appointments = [
     treatment: 'Pediatric Check-Up',
     status: 'Pending',
     department: 'Pediatrics',
-    tokenNumber: 'TKN012',
     bookedVia: 'Walk-in',
     place: 'Cape Town, South Africa',
   },
@@ -503,11 +499,15 @@ const appointments = [
     treatment: 'Follow-Up Visit',
     status: 'Confirmed',
     department: 'Cardiology',
-    tokenNumber: 'TKN013',
     bookedVia: 'Phone',
     place: 'Toronto, Canada',
   }
 ];
+
+const appointments = rawAppointments.map((apt, index) => ({
+  ...apt,
+  tokenNumber: getTokenNumber(apt.bookedVia, index),
+}));
 
 
 // Initialize Firebase Admin SDK
@@ -539,3 +539,5 @@ async function main() {
 
 
 main().catch(console.error);
+
+    
