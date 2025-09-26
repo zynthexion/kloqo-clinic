@@ -847,6 +847,38 @@ export default function DoctorsPage() {
                         </p>
                        </>
                     )}
+                    
+                    <div className="pt-2">
+                        {isEditingDetails ? (
+                            <div className="flex items-center gap-2">
+                                <span className="opacity-90">Years:</span>
+                                <div className="flex items-center">
+                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-white hover:bg-white/20" onClick={() => setNewExperience(prev => Math.max(0, Number(prev) - 1))} disabled={isPending}>
+                                        <Minus className="h-4 w-4"/>
+                                    </Button>
+                                    <Input 
+                                        type="number"
+                                        value={newExperience} 
+                                        onChange={(e) => setNewExperience(e.target.value)} 
+                                        className="w-16 h-9 bg-transparent border-white/50 placeholder:text-green-200/70 text-center"
+                                        placeholder="Years"
+                                        disabled={isPending}
+                                    />
+                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-white hover:bg-white/20" onClick={() => setNewExperience(prev => Number(prev) + 1)} disabled={isPending}>
+                                        <PlusCircle className="h-4 w-4"/>
+                                    </Button>
+                                </div>
+                            </div>
+                        ) : (
+                           <p className="text-md opacity-90">{selectedDoctor.experience} Years of experience</p>
+                        )}
+                        <div className="flex items-center gap-2 mt-1">
+                            <StarRating rating={selectedDoctor.rating || 0} />
+                            <span className="text-md opacity-90">({selectedDoctor.reviews}+ Reviews)</span>
+                        </div>
+                    </div>
+
+
                      {isEditingDetails && (
                         <div className="flex justify-start gap-2 pt-2">
                             <Button size="sm" variant="ghost" className="text-white hover:bg-white/20" onClick={() => {setIsEditingDetails(false); setNewName(selectedDoctor.name); setNewSpecialty(selectedDoctor.specialty); setNewDepartment(selectedDoctor.department || "");}} disabled={isPending}>Cancel</Button>
@@ -862,27 +894,7 @@ export default function DoctorsPage() {
                             <Edit className="h-5 w-5" />
                         </Button>
                     )}
-                    <div className="flex-grow space-y-1.5">
-                        {isEditingDetails ? (
-                            <div className="flex items-center gap-2 justify-end">
-                                <span className="opacity-90">Years:</span>
-                                <Input 
-                                    type="number"
-                                    value={newExperience} 
-                                    onChange={(e) => setNewExperience(e.target.value)} 
-                                    className="w-20 h-9 bg-transparent border-white/50 placeholder:text-green-200/70 text-right"
-                                    placeholder="Years"
-                                    disabled={isPending}
-                                />
-                            </div>
-                        ) : (
-                            <p className="text-md opacity-90">{selectedDoctor.experience} Years of experience</p>
-                        )}
-                        <div className="flex items-center gap-2 justify-end">
-                            <StarRating rating={selectedDoctor.rating || 0} />
-                            <span className="text-md opacity-90">({selectedDoctor.reviews}+ Reviews)</span>
-                        </div>
-                    </div>
+                    <div className="flex-grow"></div>
                     <div className="flex items-center space-x-2 bg-primary p-2 rounded-md">
                       <Switch
                         id="status-switch"
