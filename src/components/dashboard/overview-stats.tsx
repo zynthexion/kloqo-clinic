@@ -193,12 +193,12 @@ export default function OverviewStats({ dateRange, doctorId }: OverviewStatsProp
       {stats.map((stat) => {
         const { component: Icon, color } = iconMap[stat.icon as keyof typeof iconMap] || { component: Users, color: "text-muted-foreground" };
         return (
-            <Card key={stat.title} className={getCardClass(stat.title)}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <Card key={stat.title} className={cn("text-center", getCardClass(stat.title))}>
+            <CardHeader className="flex flex-col items-center space-y-2 pb-2">
+                <Icon className={cn("h-6 w-6", color)} />
                 <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
-                <Icon className={cn("h-4 w-4", color)} />
             </CardHeader>
-            <CardContent className="flex flex-col items-center justify-center text-center">
+            <CardContent>
                 <div className="text-2xl font-bold">{stat.value}</div>
                 {stat.change && (
                   <p className={cn(
