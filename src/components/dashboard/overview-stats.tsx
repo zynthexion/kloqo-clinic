@@ -198,7 +198,7 @@ export default function OverviewStats({ dateRange, doctorId }: OverviewStatsProp
                 <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
                 <Icon className={cn("h-4 w-4", color)} />
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-col items-center justify-center text-center">
                 <div className="text-2xl font-bold">{stat.value}</div>
                 {stat.change && (
                   <p className={cn(
