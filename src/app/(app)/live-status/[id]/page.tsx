@@ -12,8 +12,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { CheckCircle, Clock } from "lucide-react";
 
 // Dummy data for token details
-const completedTokens = ["A001", "A002"];
-const pendingTokens = ["A003", "A004", "A005", "A006", "A007"];
+const completedTokens = ["A001", "W002"];
+const pendingTokens = ["P003", "A004", "A005", "P006", "W007"];
 
 const allTokens = [
     ...completedTokens.map(token => ({ token, status: 'completed' })),
@@ -116,4 +116,3 @@ export default function LiveStatusDetailPage() {
   );
 }
 
-    
