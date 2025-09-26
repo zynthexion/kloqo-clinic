@@ -28,7 +28,7 @@ import { db, storage } from "@/lib/firebase";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import type { Doctor, Appointment, LeaveSlot, Department, TimeSlot } from "@/lib/types";
 import { format, parse, isSameDay, getDay, parse as parseDateFns } from "date-fns";
-import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon, PlusCircle, DollarSign, Printer, FileDown, ChevronUp, ChevronDown, Minus } from "lucide-react";
+import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon, PlusCircle, DollarSign, Printer, FileDown, ChevronUp, ChevronDown, Minus, Trophy } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -813,6 +813,7 @@ export default function DoctorsPage() {
 
                 {/* Column 2: Experience and Reviews */}
                 <div className="flex flex-col items-center justify-center space-y-2">
+                     <Trophy className="w-8 h-8 text-yellow-400 mb-2" />
                     {isEditingDetails ? (
                         <div className="flex items-center gap-2">
                             <span className="opacity-90">Years:</span>
