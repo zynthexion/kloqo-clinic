@@ -79,9 +79,16 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
     }
   };
 
+  const handleDateSelect = (selectedDate: DateRange | undefined) => {
+    setDate(selectedDate);
+    if (selectedDate?.from && selectedDate?.to) {
+        setIsCustomPickerOpen(false);
+    }
+  }
+
   return (
     <div className={cn("grid gap-2", className)}>
-        <Popover>
+        <Popover open={isCustomPickerOpen} onOpenChange={setIsCustomPickerOpen}>
             <PopoverTrigger asChild>
                 <Button
                     id="date"
@@ -128,7 +135,7 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
                         mode="range"
                         defaultMonth={date?.from}
                         selected={date}
-                        onSelect={setDate}
+                        onSelect={handleDateSelect}
                         numberOfMonths={2}
                     />
                 </div>
