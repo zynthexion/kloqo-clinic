@@ -12,7 +12,6 @@ import {
     Stethoscope, 
     XCircle,
     CheckCircle,
-    DollarSign,
     CalendarClock,
 } from "lucide-react";
 import { isFuture, parse, isPast, isWithinInterval, subDays, differenceInDays } from "date-fns";
@@ -25,7 +24,7 @@ const iconMap: { [key: string]: { component: React.ElementType, color: string } 
     "Total Doctors": { component: Stethoscope, color: "text-fuchsia-500" },
     "Cancelled": { component: XCircle, color: "text-red-500" },
     "Completed Appointments": { component: CheckCircle, color: "text-green-500" },
-    "Total Revenue": { component: DollarSign, color: "text-blue-500" },
+    "Total Revenue": { component: () => <span className="font-bold">₹</span>, color: "text-blue-500" },
     "Upcoming": { component: CalendarClock, color: "text-amber-500" },
 };
 
@@ -141,7 +140,7 @@ export default function OverviewStats({ dateRange, doctorId }: OverviewStatsProp
           },
           { 
               title: "Total Revenue", 
-              value: "$12,450", 
+              value: "₹12,450", 
               icon: "Total Revenue",
               change: "+5.2%",
               changeType: "increase"
@@ -215,3 +214,6 @@ export default function OverviewStats({ dateRange, doctorId }: OverviewStatsProp
     </div>
   );
 }
+
+
+    

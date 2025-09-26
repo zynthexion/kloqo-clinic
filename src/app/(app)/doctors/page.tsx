@@ -417,7 +417,7 @@ export default function DoctorsPage() {
                 setIsEditingFee(false);
                 toast({
                     title: "Consultation Fee Updated",
-                    description: `Consultation fee set to $${feeValue}.`,
+                    description: `Consultation fee set to ₹${feeValue}.`,
                 });
             } catch (error) {
                 console.error("Error updating fee:", error);
@@ -793,7 +793,7 @@ export default function DoctorsPage() {
           <div className="h-full overflow-y-auto pr-2 md:col-span-9">
             {selectedDoctor ? (
             <>
-            <div className="bg-primary text-primary-foreground rounded-lg p-4 grid grid-cols-[2fr,1fr,1fr,1fr] items-start gap-6 mb-6">
+            <div className="bg-primary text-primary-foreground rounded-lg p-4 grid grid-cols-[auto,1fr,1fr,auto] items-start gap-6 mb-6">
                 {/* Column 1: Image and Basic Info */}
                 <div className="flex items-center gap-4">
                     <Image
@@ -805,9 +805,38 @@ export default function DoctorsPage() {
                         data-ai-hint="doctor portrait"
                     />
                     <div className="space-y-1">
-                        <p className="font-bold text-2xl">{selectedDoctor.name}</p>
-                        <p className="text-md opacity-90">{selectedDoctor.specialty}</p>
-                         <p className="text-sm opacity-90">{(selectedDoctor.degrees || []).join(', ')}{selectedDoctor.degrees && selectedDoctor.department ? ' - ' : ''}{selectedDoctor.department}</p>
+                        {isEditingDetails ? (
+                           <>
+                           <Input 
+                               value={newName} 
+                               onChange={(e) => setNewName(e.target.value)} 
+                               className="text-2xl font-bold h-10 bg-transparent border-white/50 placeholder:text-green-200/70"
+                               disabled={isPending}
+                           />
+                           <Input 
+                               value={newSpecialty} 
+                               onChange={(e) => setNewSpecialty(e.target.value)} 
+                               className="text-md h-9 bg-transparent border-white/50 placeholder:text-green-200/70"
+                               disabled={isPending}
+                           />
+                           <Select onValueChange={setNewDepartment} value={newDepartment}>
+                               <SelectTrigger className="w-[200px] h-9 bg-transparent border-white/50">
+                                   <SelectValue placeholder="Select department" />
+                               </SelectTrigger>
+                               <SelectContent>
+                                   {departments.map(dept => (
+                                       <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
+                                   ))}
+                               </SelectContent>
+                           </Select>
+                       </>
+                        ) : (
+                            <>
+                                <p className="font-bold text-2xl">{selectedDoctor.name}</p>
+                                <p className="text-md opacity-90">{selectedDoctor.specialty}</p>
+                                <p className="text-sm opacity-90">{(selectedDoctor.degrees || []).join(', ')}{selectedDoctor.degrees && selectedDoctor.department ? ' - ' : ''}{selectedDoctor.department}</p>
+                            </>
+                        )}
                     </div>
                 </div>
 
@@ -919,7 +948,7 @@ export default function DoctorsPage() {
                   <Card>
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                           <CardTitle className="text-sm font-medium">Consultation Fee</CardTitle>
-                          <DollarSign className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-muted-foreground font-bold">₹</span>
                       </CardHeader>
                       <CardContent>
                           {isEditingFee ? (
@@ -929,7 +958,7 @@ export default function DoctorsPage() {
                                       value={newFee} 
                                       onChange={(e) => setNewFee(e.target.value)} 
                                       className="w-20 h-8"
-                                      placeholder="$"
+                                      placeholder="₹"
                                       disabled={isPending}
                                   />
                                   <Button size="icon" className="h-8 w-8" onClick={handleFeeSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
@@ -937,7 +966,7 @@ export default function DoctorsPage() {
                               </div>
                           ) : (
                               <div className="flex items-center gap-2">
-                                  <p className="text-2xl font-bold">${selectedDoctor.consultationFee || 0}</p>
+                                  <p className="text-2xl font-bold">₹{selectedDoctor.consultationFee || 0}</p>
                                   <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingFee(true)}><Edit className="h-3 w-3"/></Button>
                               </div>
                           )}
@@ -1234,4 +1263,5 @@ export default function DoctorsPage() {
   );
 }
 
+    
     

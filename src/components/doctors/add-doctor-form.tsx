@@ -320,7 +320,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                   name="consultationFee"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Consultation Fee ($)</FormLabel>
+                      <FormLabel>Consultation Fee (₹)</FormLabel>
                       <FormControl>
                         <Input type="number" placeholder="e.g., 150" {...field} />
                       </FormControl>
@@ -466,3 +466,5 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
     </Dialog>
   );
 }
+
+    
