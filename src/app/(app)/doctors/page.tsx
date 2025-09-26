@@ -584,18 +584,15 @@ export default function DoctorsPage() {
         const currentFormSlots = form.getValues('availabilitySlots') || [];
         const newSlotsMap = new Map<string, { day: string; timeSlots: { from: string; to: string }[] }>();
         
-        // Preserve existing slots that are not in the selected days
-        currentFormSlots.forEach(slot => {
-            if (!selectedDays.includes(slot.day)) {
-                newSlotsMap.set(slot.day, slot);
+        daysOfWeek.forEach(day => {
+            const existingSlot = currentFormSlots.find(s => s.day === day);
+            if (selectedDays.includes(day)) {
+                newSlotsMap.set(day, { day, timeSlots: validSharedTimeSlots });
+            } else if (existingSlot) {
+                newSlotsMap.set(day, existingSlot);
             }
         });
-
-        // Add or overwrite slots for selected days
-        selectedDays.forEach(day => {
-            newSlotsMap.set(day, { day, timeSlots: validSharedTimeSlots });
-        });
-
+    
         const updatedSlots = Array.from(newSlotsMap.values()).filter(slot => slot.timeSlots.length > 0);
         
         form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true });
@@ -604,7 +601,7 @@ export default function DoctorsPage() {
             title: "Time Slots Applied",
             description: `The defined time slots have been applied to the selected days.`,
         });
-
+        
         setSelectedDays([]);
     };
 
@@ -1216,6 +1213,3 @@ export default function DoctorsPage() {
     </>
   );
 }
-
-
-    
