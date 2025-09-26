@@ -42,6 +42,7 @@ const menuItems = [
   { href: "/departments", icon: Building2, label: "Departments" },
   { href: "/live-status", icon: Activity, label: "Live Status" },
   { href: "/mobile-app", icon: Smartphone, label: "Mobile App" },
+  { href: "/profile", icon: UserIcon, label: "Profile" },
 ];
 
 export function Sidebar() {
@@ -107,9 +108,11 @@ export function Sidebar() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="right" align="start" className="mb-2 ml-2">
-              <DropdownMenuItem>
-                <UserIcon className="mr-2 h-4 w-4" />
-                <span>View Profile</span>
+              <DropdownMenuItem asChild>
+                <Link href="/profile">
+                  <UserIcon className="mr-2 h-4 w-4" />
+                  <span>View Profile</span>
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="text-red-500">

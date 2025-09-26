@@ -2,7 +2,8 @@
 
 
 
-import { Bell, Search, Settings, UserPlus, Calendar as CalendarIcon, Plus, Maximize, Minus, ZoomIn, ZoomOut, Activity, ChevronLeft } from "lucide-react";
+
+import { Bell, Search, Settings, UserPlus, Calendar as CalendarIcon, Plus, Maximize, Minus, ZoomIn, ZoomOut, Activity, ChevronLeft, User } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "../ui/dropdown-menu";
@@ -115,10 +116,20 @@ export function MobileAppHeader() {
     return (
       <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
         
-        <h1 className="text-xl font-semibold md:text-2xl">Mobile App Credentials</h1>
+        <h1 className="text-xl font-semibold md:text-2xl">Mobile App</h1>
       </header>
     );
   }
+
+export function ProfileHeader() {
+    return (
+      <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
+        <h1 className="text-xl font-semibold md:text-2xl flex items-center gap-2">
+            <User className="h-5 w-5" /> Profile
+        </h1>
+      </header>
+    );
+}
     
 
     
