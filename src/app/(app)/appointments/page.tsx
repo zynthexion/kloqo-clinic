@@ -135,7 +135,7 @@ export default function AppointmentsPage() {
       try {
         const appointmentsCollection = collection(db, "appointments");
         const appointmentsSnapshot = await getDocs(appointmentsCollection);
-        const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ ...doc.data() } as Appointment));
+        const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
         setAppointments(appointmentsList);
 
         const patientMap = new Map<string, Patient>();
@@ -809,8 +809,8 @@ export default function AppointmentsPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {filteredAppointments.map(appointment => (
-                          <TableRow key={`${appointment.id}-${appointment.tokenNumber}`} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
+                        {filteredAppointments.map((appointment, index) => (
+                          <TableRow key={`${appointment.id || Date.now()}-${appointment.tokenNumber}-${index}`} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
                             <TableCell className="font-medium">{appointment.patientName}</TableCell>
                             <TableCell>{appointment.age}</TableCell>
                             <TableCell>{appointment.gender}</TableCell>
@@ -862,8 +862,8 @@ export default function AppointmentsPage() {
                       </TableHeader>
                       <TableBody>
                         {filteredAppointments
-                          .map((appointment) => (
-                          <TableRow key={`${appointment.id}-${appointment.tokenNumber}`} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
+                          .map((appointment, index) => (
+                          <TableRow key={`${appointment.id || Date.now()}-${appointment.tokenNumber}-${index}`} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
                             <TableCell>
                               <div className="font-medium">{appointment.patientName}</div>
                               <div className="text-xs text-muted-foreground">with {appointment.doctor}</div>
@@ -903,3 +903,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
