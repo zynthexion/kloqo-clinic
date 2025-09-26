@@ -593,6 +593,7 @@ export default function DoctorsPage() {
         });
         
         // Also ensure any newly checked days that weren't in the form get added
+        const watchedAvailableDays = form.watch("availableDays");
         watchedAvailableDays.forEach(day => {
             if (selectedDays.includes(day) && !newSlotsMap.has(day)) {
                  newSlotsMap.set(day, { day, timeSlots: validSharedTimeSlots });
@@ -837,6 +838,7 @@ export default function DoctorsPage() {
                     ) : (
                        <>
                         <p className="font-bold text-2xl">{selectedDoctor.name}</p>
+                        <p className="text-md opacity-90">{selectedDoctor.specialty}</p>
                         <p className="text-md opacity-90">
                             {selectedDoctor.degrees?.join(", ")} - {selectedDoctor.department}
                         </p>
