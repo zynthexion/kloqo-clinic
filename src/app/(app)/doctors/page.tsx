@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useTransition } from "react";
@@ -810,14 +811,16 @@ export default function DoctorsPage() {
                            <Input 
                                value={newName} 
                                onChange={(e) => setNewName(e.target.value)} 
-                               className="text-2xl font-bold h-10 bg-transparent border-white/50 placeholder:text-green-200/70"
+                               className="text-2xl font-bold h-10 bg-transparent border-white/50 placeholder:text-primary-foreground/70"
                                disabled={isPending}
+                               placeholder="Doctor Name"
                            />
                            <Input 
                                value={newSpecialty} 
                                onChange={(e) => setNewSpecialty(e.target.value)} 
-                               className="text-md h-9 bg-transparent border-white/50 placeholder:text-green-200/70"
+                               className="text-md h-9 bg-transparent border-white/50 placeholder:text-primary-foreground/70"
                                disabled={isPending}
+                               placeholder="Specialty"
                            />
                            <Select onValueChange={setNewDepartment} value={newDepartment}>
                                <SelectTrigger className="w-[200px] h-9 bg-transparent border-white/50">
@@ -856,7 +859,7 @@ export default function DoctorsPage() {
                                     type="number"
                                     value={newExperience} 
                                     onChange={(e) => setNewExperience(e.target.value)} 
-                                    className="w-16 h-9 bg-transparent border-white/50 placeholder:text-green-200/70 text-center"
+                                    className="w-16 h-9 bg-transparent border-white/50 placeholder:text-primary-foreground/70 text-center"
                                     placeholder="Years"
                                     disabled={isPending}
                                 />
