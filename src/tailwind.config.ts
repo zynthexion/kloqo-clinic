@@ -12,6 +12,7 @@ export default {
       fontFamily: {
         body: ['Inter', 'sans-serif'],
         headline: ['Orbitron', 'sans-serif'],
+        logo: ['Michroma', 'sans-serif'],
         code: ['monospace'],
       },
       colors: {
