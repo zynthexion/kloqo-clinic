@@ -483,19 +483,19 @@ export default function DoctorsPage() {
 
     const handleAvailabilitySave = (values: WeeklyAvailabilityFormValues) => {
         if (!selectedDoctor) return;
-
+    
         const validSlots = values.availabilitySlots
-          .map(slot => ({
-            ...slot,
-            timeSlots: slot.timeSlots.filter(ts => ts.from && ts.to)
-          }))
+          .map(slot => {
+              const filteredTimeSlots = slot.timeSlots.filter(ts => ts.from && ts.to);
+              return { ...slot, timeSlots: filteredTimeSlots };
+          })
           .filter(slot => slot.timeSlots.length > 0);
     
         const scheduleString = validSlots
           ?.sort((a, b) => daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day))
           .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a")}-${format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")}`).join(', ')}`)
           .join('; ');
-
+    
         const availabilitySlotsToSave = validSlots.map(s => ({...s, timeSlots: s.timeSlots.map(ts => ({
           from: format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a"),
           to: format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")
@@ -584,16 +584,25 @@ export default function DoctorsPage() {
         const currentFormSlots = form.getValues('availabilitySlots') || [];
         const newSlotsMap = new Map<string, { day: string; timeSlots: { from: string; to: string }[] }>();
         
-        daysOfWeek.forEach(day => {
-            const existingSlot = currentFormSlots.find(s => s.day === day);
-            if (selectedDays.includes(day)) {
-                newSlotsMap.set(day, { day, timeSlots: validSharedTimeSlots });
-            } else if (existingSlot) {
-                newSlotsMap.set(day, existingSlot);
+        // Initialize with existing slots
+        currentFormSlots.forEach(slot => newSlotsMap.set(slot.day, slot));
+    
+        // Add or overwrite selected days
+        selectedDays.forEach(day => {
+            newSlotsMap.set(day, { day, timeSlots: validSharedTimeSlots });
+        });
+        
+        // Also ensure any newly checked days that weren't in the form get added
+        watchedAvailableDays.forEach(day => {
+            if (selectedDays.includes(day) && !newSlotsMap.has(day)) {
+                 newSlotsMap.set(day, { day, timeSlots: validSharedTimeSlots });
             }
         });
     
-        const updatedSlots = Array.from(newSlotsMap.values()).filter(slot => slot.timeSlots.length > 0);
+        const updatedSlots = Array.from(newSlotsMap.values()).filter(slot => {
+            const dayIsChecked = watchedAvailableDays.includes(slot.day);
+            return dayIsChecked && slot.timeSlots.length > 0;
+        });
         
         form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true });
         
@@ -934,7 +943,7 @@ export default function DoctorsPage() {
                           <CardTitle className="text-sm font-medium">Today's Appointments</CardTitle>
                           <CalendarDays className="h-4 w-4 text-muted-foreground" />
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className="flex items-center justify-center">
                           <div className="text-2xl font-bold">{selectedDoctor.todaysAppointments || 0}</div>
                       </CardContent>
                   </Card>
@@ -1089,15 +1098,11 @@ export default function DoctorsPage() {
                                                     <div className="flex flex-wrap gap-1 mt-1">
                                                       {field.timeSlots.map((ts, i) => {
                                                           if (!ts.from || !ts.to) return null;
-                                                          try {
                                                             return (
                                                               <Badge key={i} variant="secondary" className="font-normal">
-                                                                {format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a")} - {format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")}
+                                                                {ts.from} - {ts.to}
                                                               </Badge>
                                                             );
-                                                          } catch (e) {
-                                                            return <Badge key={i} variant="destructive">Invalid</Badge>;
-                                                          }
                                                       })}
                                                     </div>
                                                 </div>
@@ -1213,3 +1218,5 @@ export default function DoctorsPage() {
     </>
   );
 }
+
+    
