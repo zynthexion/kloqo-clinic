@@ -142,11 +142,18 @@ export default function AppointmentsPage() {
         const patientMap = new Map<string, Patient>();
         appointmentsList.forEach((apt) => {
           if (!apt.patientName || !apt.phone) return;
-          const patientId = encodeURIComponent(`${apt.patientName}-${apt.phone}`);
+          const patientId = encodeURIComponent(`${apt.patientName.toLowerCase().replace(/\s+/g, '')}-${apt.phone}`);
           
           if (!apt.date) return;
 
-          const appointmentDate = parse(apt.date, 'd MMMM yyyy', new Date());
+          let appointmentDate;
+          try {
+              appointmentDate = parse(apt.date, 'd MMMM yyyy', new Date());
+              if (isNaN(appointmentDate.getTime())) return;
+          } catch (e) {
+              return; // Skip if date is invalid
+          }
+
 
           if (patientMap.has(patientId)) {
             const existingPatient = patientMap.get(patientId)!;
@@ -847,7 +854,7 @@ export default function AppointmentsPage() {
                       <TableBody>
                         {filteredAppointments
                           .map((appointment) => (
-                          <TableRow key={appointment.id} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
+                          <TableRow key={`${appointment.id}-${appointment.tokenNumber}`} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
                             <TableCell>
                               <div className="font-medium">{appointment.patientName}</div>
                               <div className="text-xs text-muted-foreground">with {appointment.doctor}</div>
