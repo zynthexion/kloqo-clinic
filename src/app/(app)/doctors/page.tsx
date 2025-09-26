@@ -793,7 +793,7 @@ export default function DoctorsPage() {
           <div className="h-full overflow-y-auto pr-2 md:col-span-9">
             {selectedDoctor ? (
             <>
-            <div className="bg-primary text-primary-foreground rounded-lg p-4 grid grid-cols-3 items-center gap-6 mb-6">
+            <div className="bg-primary text-primary-foreground rounded-lg p-4 grid grid-cols-4 items-center gap-6 mb-6">
                 {/* Column 1: Image and Basic Info */}
                 <div className="flex items-center gap-4">
                     <Image
@@ -807,11 +807,10 @@ export default function DoctorsPage() {
                     <div className="space-y-1">
                         <p className="font-bold text-2xl">{selectedDoctor.name}</p>
                         <p className="text-md opacity-90">{selectedDoctor.specialty}</p>
-                        <p className="text-md opacity-90">{selectedDoctor.department}</p>
                     </div>
                 </div>
 
-                {/* Column 2: Experience and Reviews */}
+                {/* Column 2: Experience */}
                 <div className="flex flex-col items-center justify-center space-y-2">
                      <Trophy className="w-4 h-4 text-yellow-400 mb-2" />
                     {isEditingDetails ? (
@@ -837,13 +836,18 @@ export default function DoctorsPage() {
                     ) : (
                        <p className="text-md opacity-90">{selectedDoctor.experience} Years of experience</p>
                     )}
-                    <div className="flex items-center gap-2">
-                        <StarRating rating={selectedDoctor.rating || 0} />
-                        <span className="text-md opacity-90">({selectedDoctor.reviews}+ Reviews)</span>
-                    </div>
                 </div>
 
-                {/* Column 3: Actions */}
+                 {/* Column 3: Reviews */}
+                 <div className="flex flex-col items-center justify-center space-y-2">
+                    <Star className="w-4 h-4 text-yellow-400 mb-2" />
+                    <div className="flex items-center gap-2">
+                        <StarRating rating={selectedDoctor.rating || 0} />
+                    </div>
+                    <span className="text-md opacity-90">({selectedDoctor.reviews}+ Reviews)</span>
+                </div>
+
+                {/* Column 4: Actions */}
                 <div className="flex flex-col items-end justify-between self-stretch">
                     {!isEditingDetails && (
                         <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" onClick={() => setIsEditingDetails(true)}>
@@ -1221,3 +1225,4 @@ export default function DoctorsPage() {
     </>
   );
 }
+
