@@ -745,7 +745,7 @@ export default function AppointmentsPage() {
           </div>
           <aside className={cn(
               "relative flex-shrink-0 transition-all duration-300 ease-in-out h-[calc(100vh-7rem)]",
-              isDrawerExpanded ? "w-8/12" : "w-[26.666667%] mr-6"
+              isDrawerExpanded ? "w-8/12 pr-6" : "w-[26.666667%] mr-6"
           )}>
             <Card className="h-full rounded-2xl">
               <CardHeader className="p-4 border-b">
@@ -810,7 +810,7 @@ export default function AppointmentsPage() {
                       </TableHeader>
                       <TableBody>
                         {filteredAppointments.map((appointment, index) => (
-                          <TableRow key={`${appointment.id || Date.now()}-${appointment.tokenNumber}-${index}`} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
+                          <TableRow key={`${appointment.id || index}-${appointment.tokenNumber}`} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
                             <TableCell className="font-medium">{appointment.patientName}</TableCell>
                             <TableCell>{appointment.age}</TableCell>
                             <TableCell>{appointment.gender}</TableCell>
@@ -863,7 +863,7 @@ export default function AppointmentsPage() {
                       <TableBody>
                         {filteredAppointments
                           .map((appointment, index) => (
-                          <TableRow key={`${appointment.id || Date.now()}-${appointment.tokenNumber}-${index}`} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
+                          <TableRow key={`${appointment.id || index}-${appointment.tokenNumber}`} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
                             <TableCell>
                               <div className="font-medium">{appointment.patientName}</div>
                               <div className="text-xs text-muted-foreground">with {appointment.doctor}</div>
@@ -903,5 +903,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
-    
