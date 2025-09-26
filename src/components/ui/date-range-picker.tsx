@@ -79,12 +79,10 @@ export function DateRangePicker({ className, initialDateRange, onDateChange }: D
     }
   };
 
-  const handleDateSelect = (selectedDate: DateRange | undefined) => {
-    setDate(selectedDate);
-    if (selectedDate?.from && selectedDate?.to) {
-      // Optional: close picker once a full range is selected.
-      // setIsCustomPickerOpen(false);
-    }
+  const handleDateSelect = (selectedRange: DateRange | undefined) => {
+    // The `react-day-picker` library's range mode already handles the logic
+    // of starting a new selection. We just need to update our state.
+    setDate(selectedRange);
   }
 
   return (
