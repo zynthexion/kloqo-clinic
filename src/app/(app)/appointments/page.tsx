@@ -114,19 +114,23 @@ export default function AppointmentsPage() {
   const patientInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    console.log('Search term:', patientSearchTerm); // DEBUG
-    console.log('All patients count:', allPatients.length); // DEBUG
+    console.log('Search term:', patientSearchTerm);
+    console.log('Search term length:', patientSearchTerm.length); // ADD THIS
+    console.log('All patients count:', allPatients.length);
     
     if (patientSearchTerm.length > 1) {
       const lowercasedTerm = patientSearchTerm.toLowerCase().replace(/\s+/g, '');
+      console.log('Lowercased term:', lowercasedTerm); // ADD THIS
       const results = allPatients.filter(p =>
-        p.name && p.name.toLowerCase().replace(/\s+/g, '').includes(lowercasedTerm)
+        p.name.toLowerCase().replace(/\s+/g, '').includes(lowercasedTerm)
       );
-      console.log('Search results:', results); // DEBUG
+      console.log('Search results:', results); // ADD THIS
+      console.log('Setting popover open to true'); // ADD THIS
       setPatientSearchResults(results);
       setIsPatientPopoverOpen(true);
       setIsNewPatient(results.length === 0);
     } else {
+      console.log('Search term too short or empty'); // ADD THIS
       setPatientSearchResults([]);
       setIsPatientPopoverOpen(false);
       setIsNewPatient(false);
