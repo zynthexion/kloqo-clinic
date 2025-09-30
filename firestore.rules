@@ -1,3 +1,4 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -10,14 +11,17 @@ service cloud.firestore {
     match /departments/{departmentId} {
       allow read, write: if true;
     }
-
-    // Allow public read and write access for development
+    
+     // Allow public read and write access for development
     match /appointments/{appointmentId} {
       allow read, write: if true;
     }
-
-    // Allow public read and write access for development
+    
     match /mobile-app/{credentialId} {
+      allow read, write: if true;
+    }
+
+    match /patients/{patientId} {
       allow read, write: if true;
     }
   }
