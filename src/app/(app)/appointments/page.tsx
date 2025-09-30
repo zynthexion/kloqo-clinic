@@ -116,9 +116,8 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     if (patientSearchTerm.length > 1) {
-      const lowercasedTerm = patientSearchTerm.toLowerCase().replace(/\s+/g, '');
       const results = allPatients.filter(p =>
-        p.name.toLowerCase().replace(/\s+/g, '').includes(lowercasedTerm)
+        p.phone.includes(patientSearchTerm)
       );
       setPatientSearchResults(results);
       setIsPatientPopoverOpen(true);
@@ -192,7 +191,7 @@ export default function AppointmentsPage() {
                 time: format(parseDateFns(editingAppointment.time, "hh:mm a", new Date()), 'HH:mm'),
                 bookedVia: (editingAppointment.bookedVia === "Phone" || editingAppointment.bookedVia === "Walk-in") ? editingAppointment.bookedVia : "Phone"
             });
-            setPatientSearchTerm(editingAppointment.patientName);
+            setPatientSearchTerm(editingAppointment.phone);
             setSelectedDoctorId(doctor.id);
             setBookingType("existing");
         }
@@ -300,17 +299,23 @@ export default function AppointmentsPage() {
     form.setValue("gender", patient.gender);
     form.setValue("phone", patient.phone);
     form.setValue("place", patient.place || "");
-    setPatientSearchTerm(patient.name);
+    setPatientSearchTerm(patient.phone);
     setIsPatientPopoverOpen(false);
     patientInputRef.current?.blur();
   }
   
   const handlePatientNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    form.setValue("patientName", value);
-    if (bookingType === 'existing') {
+    // For "new" tab, it's a direct input for patient name
+    if (bookingType === 'new') {
+        form.setValue("patientName", value);
+    } else { // For "existing" tab, it's for searching
         setPatientSearchTerm(value);
+        if (isEditing) {
+            form.setValue("phone", value);
+        }
     }
+
     if (isDrawerExpanded) {
         setIsDrawerExpanded(false);
     }
@@ -510,49 +515,47 @@ export default function AppointmentsPage() {
                                 <TabsTrigger value="new">New Patient</TabsTrigger>
                             </TabsList>
                             <TabsContent value="existing" className="space-y-4 pt-4">
-                                <FormField
-                                    control={form.control}
-                                    name="patientName"
-                                    render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Search Patient</FormLabel>
-                                        <Popover open={isPatientPopoverOpen} onOpenChange={setIsPatientPopoverOpen}>
-                                        <PopoverTrigger asChild>
-                                            <FormControl>
-                                            <Input
-                                                ref={patientInputRef}
-                                                placeholder="Start typing patient name..."
-                                                value={field.value}
-                                                onChange={handlePatientNameChange}
-                                            />
-                                            </FormControl>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                                            <Command>
-                                            <CommandList>
-                                                <CommandEmpty>No patient found.</CommandEmpty>
-                                                <CommandGroup>
-                                                {patientSearchResults.map((patient) => (
-                                                    <CommandItem
-                                                    key={patient.id}
-                                                    value={patient.name}
-                                                    onSelect={() => handlePatientSelect(patient)}
-                                                    >
-                                                    {patient.name}
-                                                    <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
-                                                    </CommandItem>
-                                                ))}
-                                                </CommandGroup>
-                                            </CommandList>
-                                            </Command>
-                                        </PopoverContent>
-                                        </Popover>
-                                        <FormMessage />
-                                    </FormItem>
-                                    )}
-                                />
-                                 {patientSearchTerm && (
+                                <FormItem>
+                                    <FormLabel>Search Patient by Phone</FormLabel>
+                                    <Popover open={isPatientPopoverOpen} onOpenChange={setIsPatientPopoverOpen}>
+                                    <PopoverTrigger asChild>
+                                        <FormControl>
+                                        <Input
+                                            ref={patientInputRef}
+                                            placeholder="Start typing phone number..."
+                                            value={patientSearchTerm}
+                                            onChange={handlePatientNameChange}
+                                        />
+                                        </FormControl>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                        <Command>
+                                        <CommandList>
+                                            <CommandEmpty>No patient found.</CommandEmpty>
+                                            <CommandGroup>
+                                            {patientSearchResults.map((patient) => (
+                                                <CommandItem
+                                                key={patient.id}
+                                                value={patient.name}
+                                                onSelect={() => handlePatientSelect(patient)}
+                                                >
+                                                {patient.name}
+                                                <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
+                                                </CommandItem>
+                                            ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                        </Command>
+                                    </PopoverContent>
+                                    </Popover>
+                                    <FormMessage />
+                                </FormItem>
+                                 {form.getValues("patientName") && bookingType === 'existing' && (
                                     <div className="grid grid-cols-2 gap-4">
+                                        <FormItem>
+                                            <FormLabel>Name</FormLabel>
+                                            <FormControl><Input readOnly {...form.register("patientName")} /></FormControl>
+                                        </FormItem>
                                         <FormItem>
                                             <FormLabel>Age</FormLabel>
                                             <FormControl><Input readOnly {...form.register("age")} /></FormControl>
@@ -560,10 +563,6 @@ export default function AppointmentsPage() {
                                         <FormItem>
                                             <FormLabel>Gender</FormLabel>
                                             <FormControl><Input readOnly {...form.register("gender")} /></FormControl>
-                                        </FormItem>
-                                        <FormItem>
-                                            <FormLabel>Phone</FormLabel>
-                                            <FormControl><Input readOnly {...form.register("phone")} /></FormControl>
                                         </FormItem>
                                         <FormItem>
                                             <FormLabel>Place</FormLabel>
@@ -906,5 +905,7 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
 
     
