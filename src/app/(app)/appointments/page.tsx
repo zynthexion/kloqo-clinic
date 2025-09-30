@@ -18,7 +18,7 @@ import type { Appointment, Doctor, Patient } from "@/lib/types";
 import { collection, getDocs, setDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
-import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday } from "date-fns";
+import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
   Form,
@@ -39,7 +39,9 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, FileDown, Filter, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight } from "lucide-react";
+import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints } from "lucide-react";
+import { DateRange } from "react-day-picker";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
   Table,
   TableBody,
@@ -61,9 +63,10 @@ const formSchema = z.object({
   phone: z.string().min(10, { message: "Phone number must be at least 10 digits." }),
   age: z.coerce.number().min(0, "Age cannot be negative."),
   doctor: z.string().min(1, { message: "Please select a doctor." }),
+  department: z.string().min(1, { message: "Department is required." }),
   date: z.date({
-    required_error: "A date is required.",
-  }),
+    required_error: "A date is required."
+  }).optional(),
   time: z.string().min(1, "Please select a time."),
   place: z.string().min(2, { message: "Place must be at least 2 characters." }),
   bookedVia: z.enum(["Phone", "Walk-in"]),
@@ -76,6 +79,29 @@ const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Fri
 
 
 export default function AppointmentsPage() {
+  // ...
+  const handleCancel = (appointment: Appointment) => {
+    setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Cancelled' } : a));
+  };
+  const handleComplete = (appointment: Appointment) => {
+    setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Confirmed' } : a));
+  };
+  const handleSkip = async (appointment: Appointment) => {
+  // Update local state
+  setAppointments(prev => {
+    const updated = prev.map(a => a.id === appointment.id ? { ...a, skipped: true, isSkipped: true } : a);
+    return [
+      ...updated.filter(a => !a.skipped),
+      ...updated.filter(a => a.skipped)
+    ];
+  });
+  // Update Firestore
+  if (appointment.id) {
+    const appointmentRef = doc(db, "appointments", appointment.id);
+    await setDoc(appointmentRef, { isSkipped: true }, { merge: true });
+  }
+};
+
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [allPatients, setAllPatients] = useState<Patient[]>([]);
@@ -91,7 +117,11 @@ export default function AppointmentsPage() {
   const [isDrawerExpanded, setIsDrawerExpanded] = useState(false);
   const [drawerSearchTerm, setDrawerSearchTerm] = useState("");
   const [filterAvailableDoctors, setFilterAvailableDoctors] = useState(false);
-  const [activeTab, setActiveTab] = useState("upcoming");
+const [selectedDrawerDoctor, setSelectedDrawerDoctor] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("all");
+const currentYearStart = startOfYear(new Date());
+const currentYearEnd = endOfYear(new Date());
+const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ from: currentYearStart, to: currentYearEnd });
 
 
   const { toast } = useToast();
@@ -135,11 +165,15 @@ export default function AppointmentsPage() {
 
         const appointmentsCollection = collection(db, "appointments");
         const appointmentsSnapshot = await getDocs(appointmentsCollection);
-        const appointmentsList = appointmentsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        } as Appointment));
-        setAppointments(appointmentsList);
+        const appointmentsList = appointmentsSnapshot.docs.map(doc => {
+  const data = doc.data();
+  return {
+    id: doc.id,
+    ...data,
+    skipped: data.isSkipped || data.skipped || false,
+  } as Appointment;
+});
+setAppointments(appointmentsList);
 
         const patientsCollection = collection(db, "patients");
         const patientsSnapshot = await getDocs(patientsCollection);
@@ -170,6 +204,7 @@ export default function AppointmentsPage() {
     setPatientSearchTerm("");
     form.reset({
       patientName: "", gender: "Male", phone: "", age: 0, doctor: "",
+      department: "",
       date: undefined, time: undefined,
       place: "",
       bookedVia: "Phone",
@@ -203,11 +238,13 @@ export default function AppointmentsPage() {
   }, [doctors, selectedDoctorId]);
 
   const selectedDate = form.watch("date");
+// filteredAppointments is defined below
+
 
   async function onSubmit(values: AddAppointmentFormValues) {
     try {
       const doctorName = doctors.find(d => d.id === values.doctor)?.name || "Unknown Doctor";
-      const appointmentDateStr = format(values.date, "d MMMM yyyy");
+      const appointmentDateStr = format(values.date ?? (Array.isArray(values.date) ? values.date[0] : new Date()), "d MMMM yyyy");
 
       if (bookingType === 'new' && !isEditing) {
         const patientId = encodeURIComponent(`${values.patientName}-${values.phone}`);
@@ -252,7 +289,8 @@ export default function AppointmentsPage() {
           });
       } else {
           const appointmentId = `APT-${Date.now()}`;
-          const tokenNumber = `${(appointments.length + 1).toString().padStart(3, '0')}`;
+          const prefix = values.bookedVia === 'Phone' ? 'P' : 'W';
+const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3, '0')}`;
           
           const newAppointmentData: Appointment = {
               ...dataToSave,
@@ -280,14 +318,15 @@ export default function AppointmentsPage() {
   }
 
   const onDoctorChange = (doctorId: string) => {
-    form.setValue("doctor", doctorId);
-    setSelectedDoctorId(doctorId);
-    const doctor = doctors.find(d => d.id === doctorId);
-    if (doctor) {
-      form.setValue("date", undefined, { shouldValidate: true });
-      form.setValue("time", undefined, { shouldValidate: true });
-    }
+  form.setValue("doctor", doctorId);
+  setSelectedDoctorId(doctorId);
+  const doctor = doctors.find(d => d.id === doctorId);
+  if (doctor) {
+    form.setValue("department", doctor.department || "");
+    form.setValue("date", undefined, { shouldValidate: true });
+    form.setValue("time", "", { shouldValidate: true });
   }
+}
 
   const handlePatientSelect = (patient: Patient) => {
     form.setValue("patientName", patient.name);
@@ -419,12 +458,26 @@ export default function AppointmentsPage() {
     
     let filtered = appointments;
 
-    if (filterAvailableDoctors) {
-        const availableDoctorNames = doctors
-            .filter(d => d.availability === 'Available')
-            .map(d => d.name);
-        filtered = filtered.filter(apt => availableDoctorNames.includes(apt.doctor));
+    // Filter by date range if set
+    if (drawerDateRange && (drawerDateRange.from || drawerDateRange.to)) {
+      filtered = filtered.filter(apt => {
+        try {
+          const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
+          const from = drawerDateRange.from ? new Date(drawerDateRange.from.setHours(0,0,0,0)) : null;
+          const to = drawerDateRange.to ? new Date(drawerDateRange.to.setHours(23,59,59,999)) : null;
+          if (from && to) return aptDate >= from && aptDate <= to;
+          if (from) return aptDate >= from;
+          if (to) return aptDate <= to;
+          return true;
+        } catch {
+          return true;
+        }
+      });
     }
+
+    if (selectedDrawerDoctor && selectedDrawerDoctor !== 'all') {
+  filtered = filtered.filter(apt => apt.doctor === selectedDrawerDoctor);
+}
 
     if (searchTermLower) {
       filtered = filtered.filter(apt =>
@@ -435,20 +488,20 @@ export default function AppointmentsPage() {
     }
     
     if (activeTab === 'upcoming') {
-        filtered = filtered.filter(apt => {
-            try {
-                const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
-                return (apt.status === 'Confirmed' || apt.status === 'Pending') && (isFuture(aptDate) || isToday(aptDate));
-            } catch(e) { return false; }
-        });
-    } else if (activeTab === 'completed') {
-        filtered = filtered.filter(apt => {
-            try {
-                const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
-                return apt.status === 'Confirmed' && isPast(aptDate) && !isToday(aptDate);
-            } catch(e) { return false; }
-        });
-    }
+  filtered = filtered.filter(apt => {
+    try {
+      const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
+      return (apt.status === 'Confirmed' || apt.status === 'Pending') && (isFuture(aptDate) || isToday(aptDate));
+    } catch(e) { return false; }
+  });
+} else if (activeTab === 'completed') {
+  filtered = filtered.filter(apt => {
+    try {
+      const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
+      return apt.status === 'Confirmed' && isPast(aptDate) && !isToday(aptDate);
+    } catch(e) { return false; }
+  });
+} // else 'all' returns all
 
     return filtered.sort((a,b) => {
         try {
@@ -459,6 +512,8 @@ export default function AppointmentsPage() {
     });
   }, [appointments, drawerSearchTerm, filterAvailableDoctors, doctors, activeTab]);
 
+  const today = format(new Date(), "d MMMM yyyy");
+  const todaysAppointments = filteredAppointments.filter(apt => apt.date === today);
 
   return (
     <>
@@ -541,19 +596,19 @@ export default function AppointmentsPage() {
                                     <div className="grid grid-cols-2 gap-4">
                                         <FormItem>
                                             <FormLabel>Name</FormLabel>
-                                            <FormControl><Input readOnly {...form.register("patientName")} /></FormControl>
+                                            <FormControl><Input readOnly {...form.register("patientName")} value={form.watch('patientName') ?? ''} /></FormControl>
                                         </FormItem>
                                         <FormItem>
                                             <FormLabel>Age</FormLabel>
-                                            <FormControl><Input readOnly {...form.register("age")} /></FormControl>
+                                            <FormControl><Input readOnly {...form.register("age")} value={form.watch('age') !== undefined ? form.watch('age') : ''} /></FormControl>
                                         </FormItem>
                                         <FormItem>
                                             <FormLabel>Gender</FormLabel>
-                                            <FormControl><Input readOnly {...form.register("gender")} /></FormControl>
+                                            <FormControl><Input readOnly {...form.register("gender")} value={form.watch('gender') ?? ''} /></FormControl>
                                         </FormItem>
                                         <FormItem>
                                             <FormLabel>Place</FormLabel>
-                                            <FormControl><Input readOnly {...form.register("place")} /></FormControl>
+                                            <FormControl><Input readOnly {...form.register("place")} value={form.watch('place') ?? ''} /></FormControl>
                                         </FormItem>
                                     </div>
                                 )}
@@ -562,14 +617,14 @@ export default function AppointmentsPage() {
                                 <FormField control={form.control} name="patientName" render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Patient Name</FormLabel>
-                                        <FormControl><Input placeholder="Full Name" {...field} /></FormControl>
+                                        <FormControl><Input placeholder="Full Name" {...field} value={field.value ?? ''} /></FormControl>
                                         <FormMessage />
                                     </FormItem>
                                 )} />
                                 <FormField control={form.control} name="age" render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Age</FormLabel>
-                                        <FormControl><Input type="number" placeholder="35" {...field} value={field.value || ''} /></FormControl>
+                                        <FormControl><Input type="number" placeholder="35" {...field} value={field.value !== undefined ? field.value : ''} /></FormControl>
                                         <FormMessage />
                                     </FormItem>
                                 )} />
@@ -594,14 +649,14 @@ export default function AppointmentsPage() {
                                 <FormField control={form.control} name="phone" render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Phone Number</FormLabel>
-                                        <FormControl><Input placeholder="123-456-7890" {...field} /></FormControl>
+                                        <FormControl><Input placeholder="123-456-7890" {...field} value={field.value ?? ''} /></FormControl>
                                         <FormMessage />
                                     </FormItem>
                                 )} />
                                 <FormField control={form.control} name="place" render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Place</FormLabel>
-                                        <FormControl><Input placeholder="New York, USA" {...field} /></FormControl>
+                                        <FormControl><Input placeholder="New York, USA" {...field} value={field.value ?? ''} /></FormControl>
                                         <FormMessage />
                                     </FormItem>
                                 )} />
@@ -635,25 +690,29 @@ export default function AppointmentsPage() {
                             <FormField control={form.control} name="date" render={({ field }) => (
                                 <FormItem className="flex flex-col">
                                     <Calendar
-                                    className="bg-primary text-primary-foreground rounded-md [&_button:hover]:bg-primary/80 [&_.rdp-day_today]:bg-primary-foreground/20 [&_button]:text-primary-foreground"
-                                    mode="single" selected={field.value} onSelect={field.onChange}
-                                    disabled={(date) => 
-                                        date < new Date(new Date().setHours(0,0,0,0)) || 
-                                        !selectedDoctor ||
-                                        !availableDaysOfWeek.includes(getDay(date)) ||
-                                        leaveDates.some(leaveDate => isSameDay(date, leaveDate))
-                                    }
-                                    initialFocus
-                                    compact={false}
-                                    modifiers={{ 
-                                        available: selectedDoctor ? { dayOfWeek: availableDaysOfWeek } : {},
-                                        leave: leaveDates,
-                                    }}
-                                    modifiersStyles={{
-                                        available: { backgroundColor: 'hsl(var(--accent))', color: 'hsl(var(--accent-foreground))' },
-                                        leave: { backgroundColor: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' },
-                                    }}
-                                    />
+  className="bg-primary text-primary-foreground rounded-md [&_button:hover]:bg-primary/80 [&_.rdp-day_today]:bg-primary-foreground/20 [&_button]:text-primary-foreground"
+  mode="single"
+  selected={field.value}
+  onSelect={(date) => {
+    if (date && date instanceof Date && !isNaN(date.getTime())) {
+      field.onChange(date);
+      form.clearErrors("date");
+    }
+  }}
+  disabled={(date) => 
+    date < new Date(new Date().setHours(0,0,0,0)) || 
+    !selectedDoctor ||
+    !availableDaysOfWeek.includes(getDay(date)) ||
+    leaveDates.some(leaveDate => isSameDay(date, leaveDate))
+  }
+  initialFocus
+  compact={false}
+  modifiers={selectedDoctor ? { available: { dayOfWeek: availableDaysOfWeek }, leave: leaveDates } : { leave: leaveDates }}
+  modifiersStyles={{
+    available: { backgroundColor: 'hsl(var(--accent))', color: 'hsl(var(--accent-foreground))' },
+    leave: { backgroundColor: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' },
+  }}
+/>
                                     <FormMessage />
                                 </FormItem>
                                 )}
@@ -664,24 +723,32 @@ export default function AppointmentsPage() {
                               <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
                               <div className="space-y-4">
                               <FormField control={form.control} name="doctor" render={({ field }) => (
-                                  <FormItem>
-                                      <FormLabel>Doctor</FormLabel>
-                                      <Select onValueChange={onDoctorChange} value={field.value}>
-                                      <FormControl>
-                                          <SelectTrigger>
-                                          <SelectValue placeholder="Select a doctor" />
-                                          </SelectTrigger>
-                                      </FormControl>
-                                      <SelectContent>
-                                          {doctors.map(doc => (
-                                          <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
-                                          ))}
-                                      </SelectContent>
-                                      </Select>
-                                      <FormMessage />
-                                  </FormItem>
-                                  )}
-                              />
+  <FormItem>
+    <FormLabel>Doctor</FormLabel>
+    <Select onValueChange={onDoctorChange} value={field.value}>
+      <FormControl>
+        <SelectTrigger>
+          <SelectValue placeholder="Select a doctor" />
+        </SelectTrigger>
+      </FormControl>
+      <SelectContent>
+        {doctors.map(doc => (
+          <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+    <FormMessage />
+  </FormItem>
+)} />
+<FormField control={form.control} name="department" render={({ field }) => (
+  <FormItem>
+    <FormLabel>Department</FormLabel>
+    <FormControl>
+      <Input readOnly placeholder="Department" {...field} value={field.value ?? ''} />
+    </FormControl>
+    <FormMessage />
+  </FormItem>
+)} />
                                                         </div>
 
                           {selectedDoctor && selectedDate && (
@@ -691,12 +758,21 @@ export default function AppointmentsPage() {
                                   <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-2">
                                       {timeSlots.length > 0 ? timeSlots.map(slot => (
                                       <Button
-                                          key={slot.time} type="button"
-                                          variant={field.value === format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm') ? "default" : "outline"}
-                                          onClick={() => field.onChange(format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm'))}
-                                          disabled={slot.disabled}
-                                          className={cn("text-xs", slot.disabled && "line-through")}
-                                      >{slot.time}</Button>
+  key={slot.time}
+  type="button"
+  variant={field.value === format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm') ? "default" : "outline"}
+  onClick={() => {
+    const val = format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm');
+    field.onChange(val);
+    if (val) {
+      form.clearErrors("time");
+    }
+  }}
+  disabled={slot.disabled}
+  className={cn("text-xs", slot.disabled && "line-through")}
+>
+  {slot.time}
+</Button>
                                       )) : <p className="text-sm text-muted-foreground col-span-2">No available slots for this day.</p>}
                                   </div>
                                   <FormMessage />
@@ -719,7 +795,7 @@ export default function AppointmentsPage() {
               </CardContent>
             </Card>
           </main>
-          <div className="flex h-full items-center justify-center z-20">
+          <div className="flex flex-col justify-center items-center w-12">
             <Button
               variant="outline"
               size="icon"
@@ -739,40 +815,65 @@ export default function AppointmentsPage() {
             <Card className="h-full rounded-2xl">
               <CardHeader className="p-4 border-b">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CardTitle>Appointment Details</CardTitle>
-                  </div>
-                  <Tabs value={activeTab} onValueChange={setActiveTab}>
-                    <TabsList>
-                      <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
-                      <TabsTrigger value="completed">Completed</TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                </div>
-                <div className="flex items-center gap-2 mt-2">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      type="search"
-                      placeholder="Search by patient, doctor, department..."
-                      className="w-full rounded-lg bg-background pl-8 h-9"
-                      value={drawerSearchTerm}
-                      onChange={(e) => setDrawerSearchTerm(e.target.value)}
-                    />
-                  </div>
-                  <Button variant={filterAvailableDoctors ? "default" : "outline"} size="icon" onClick={() => setFilterAvailableDoctors(prev => !prev)}>
-                    <Filter className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" size="icon">
-                    <Printer className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" size="icon">
-                    <FileDown className="h-4 w-4" />
-                  </Button>
-                </div>
+  <div className="flex items-center gap-2">
+    <CardTitle>{isDrawerExpanded ? "Appointment Details" : "Today's Appointments"}</CardTitle>
+  </div>
+  {isDrawerExpanded && (
+    <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <TabsList>
+        <TabsTrigger value="all">All</TabsTrigger>
+        <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
+        <TabsTrigger value="completed">Completed</TabsTrigger>
+      </TabsList>
+    </Tabs>
+  )}
+</div>
+<div className="flex items-center gap-2 mt-2 w-full">
+  <div className="relative flex-1">
+    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+    <Input
+      type="search"
+      placeholder="Search by patient, doctor, department..."
+      className="w-full rounded-lg bg-background pl-8 h-9"
+      value={drawerSearchTerm}
+      onChange={(e) => setDrawerSearchTerm(e.target.value)}
+    />
+  </div>
+  {isDrawerExpanded && (
+    <>
+      <DateRangePicker
+        initialDateRange={drawerDateRange}
+        onDateChange={setDrawerDateRange}
+        className="mx-2"
+      />
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="icon">
+            <Stethoscope className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuItem onClick={() => setSelectedDrawerDoctor('all')}>All Doctors</DropdownMenuItem>
+          {doctors.map(doc => (
+            <DropdownMenuItem key={doc.id} onClick={() => setSelectedDrawerDoctor(doc.name)}>{doc.name}</DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <span className="ml-2 text-xs text-muted-foreground">
+        {selectedDrawerDoctor && selectedDrawerDoctor !== 'all' ? `Doctor: ${selectedDrawerDoctor}` : 'All Doctors'}
+      </span>
+      <Button variant="outline" size="icon">
+        <Printer className="h-4 w-4" />
+      </Button>
+      <Button variant="outline" size="icon">
+        <FileDown className="h-4 w-4" />
+      </Button>
+    </>
+  )}
+</div>
               </CardHeader>
               <CardContent className="p-0">
-                <ScrollArea className="h-[calc(100vh-19rem)]">
+              <ScrollArea className="h-[calc(100vh-19rem)]">
                   {loading ? (
                     <div className="p-6">
                       {Array.from({ length: 10 }).map((_, i) => (
@@ -840,47 +941,87 @@ export default function AppointmentsPage() {
                       </TableBody>
                     </Table>
                   ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Patient</TableHead>
-                          <TableHead>Appointment</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredAppointments
-                          .map((appointment, index) => (
-                          <TableRow key={appointment.id ? `${appointment.id}-${appointment.tokenNumber}` : `${Date.now()}-${index}`} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
-                            <TableCell>
-                              <div className="font-medium">{appointment.patientName}</div>
-                              <div className="text-xs text-muted-foreground">with {appointment.doctor}</div>
-                            </TableCell>
-                            <TableCell>
-                              <div>{appointment.date}</div>
-                              <div className="text-xs text-muted-foreground">{appointment.time}</div>
-                            </TableCell>
-                            <TableCell>
-                              <Badge
-                                variant={
-                                  appointment.status === "Confirmed" ? "success"
-                                  : appointment.status === "Pending" ? "warning"
-                                  : "destructive"
-                                }
-                              >{appointment.status}</Badge>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button variant="link" size="sm" className="p-0 h-auto text-primary" onClick={() => {
-                                setEditingAppointment(appointment);
-                              }}>
-                                Reschedule
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                    <>
+  <div className="flex items-center justify-between mb-2">
+    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <TabsList className="grid w-full grid-cols-2">
+        <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
+        <TabsTrigger value="completed">Completed</TabsTrigger>
+      </TabsList>
+    </Tabs>
+  </div>
+  <Table>
+  <TableHeader>
+    <TableRow>
+      <TableHead>Patient</TableHead>
+      <TableHead>Token</TableHead>
+      <TableHead>Time</TableHead>
+      <TableHead className="text-right">Actions</TableHead>
+    </TableRow>
+  </TableHeader>
+  <TableBody>
+    {filteredAppointments
+      .filter((appointment) => appointment.date === today)
+      .map((appointment, index) => (
+        <TableRow
+  key={appointment.id ? `${appointment.id}-${appointment.tokenNumber}` : `${Date.now()}-${index}`}
+  className={cn(
+    appointment.skipped ? "bg-red-200 dark:bg-red-900/60" : isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30"
+  )}
+> 
+          <TableCell className="font-medium">{appointment.patientName}</TableCell>
+          <TableCell>{appointment.tokenNumber}</TableCell>
+          <TableCell>{appointment.time}</TableCell>
+          <TableCell className="text-right">
+            <DropdownMenu>
+  <DropdownMenuTrigger asChild>
+    <Button variant="ghost" size="icon" className="p-0 h-auto">
+      <MoreHorizontal className="h-5 w-5" />
+    </Button>
+  </DropdownMenuTrigger>
+  <DropdownMenuContent align="end">
+  {isDrawerExpanded ? (
+  <>
+    <DropdownMenuItem onClick={() => setEditingAppointment(appointment)}>
+      Reschedule
+    </DropdownMenuItem>
+    <DropdownMenuItem onClick={() => handleCancel(appointment)} className="text-red-600">
+      Delete
+    </DropdownMenuItem>
+  </>
+) : appointment.skipped ? (
+  <>
+    <DropdownMenuItem onClick={() => handleComplete(appointment)}>
+      Completed
+    </DropdownMenuItem>
+    <DropdownMenuItem onClick={() => setEditingAppointment(appointment)}>
+      Reschedule
+    </DropdownMenuItem>
+  </>
+) : (
+  <>
+    <DropdownMenuItem onClick={() => handleComplete(appointment)}>
+      Completed
+    </DropdownMenuItem>
+    <DropdownMenuItem onClick={() => setEditingAppointment(appointment)}>
+      Reschedule
+    </DropdownMenuItem>
+    <DropdownMenuItem onClick={() => handleSkip(appointment)}>
+      Skip
+    </DropdownMenuItem>
+    <DropdownMenuItem onClick={() => handleCancel(appointment)} className="text-red-600">
+      Cancel
+    </DropdownMenuItem>
+  </>
+)}
+</DropdownMenuContent>
+</DropdownMenu>
+          </TableCell>
+        </TableRow>
+      ))}
+  </TableBody>
+</Table>
+</>
                   )}
                 </ScrollArea>
               </CardContent>

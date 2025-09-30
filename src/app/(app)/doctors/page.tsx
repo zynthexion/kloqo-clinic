@@ -91,6 +91,7 @@ const addDoctorFormSchema = z.object({
 type AddDoctorFormValues = z.infer<typeof addDoctorFormSchema>;
 
 const weeklyAvailabilityFormSchema = z.object({
+  availableDays: z.array(z.string()).default([]),
   availabilitySlots: z.array(availabilitySlotSchema).refine(
     (slots) => slots.every((slot) => slot.timeSlots.length > 0),
     {
@@ -151,6 +152,7 @@ export default function DoctorsPage() {
   const form = useForm<WeeklyAvailabilityFormValues>({
     resolver: zodResolver(weeklyAvailabilityFormSchema),
     defaultValues: {
+      availableDays: [],
       availabilitySlots: [],
     },
   });
@@ -204,8 +206,15 @@ export default function DoctorsPage() {
           getDocs(collection(db, "appointments")),
         ]);
 
-        const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
-        setDoctors(doctorsList);
+        const doctorsList = doctorsSnapshot.docs.map(doc => {
+  const data = doc.data();
+  return {
+    id: doc.id,
+    ...data,
+    availableDays: Array.isArray(data.availableDays) ? data.availableDays : [],
+  } as Doctor;
+});
+setDoctors(doctorsList);
         if (doctorsList.length > 0) {
           setSelectedDoctor(doctorsList[0]);
         }
@@ -597,19 +606,9 @@ export default function DoctorsPage() {
         });
         
         // Also ensure any newly checked days that weren't in the form get added
-        const watchedAvailableDays = form.watch("availableDays");
-        watchedAvailableDays.forEach(day => {
-            if (selectedDays.includes(day) && !newSlotsMap.has(day)) {
-                 newSlotsMap.set(day, { day, timeSlots: validSharedTimeSlots });
-            }
-        });
-    
-        const updatedSlots = Array.from(newSlotsMap.values()).filter(slot => {
-            const dayIsChecked = watchedAvailableDays.includes(slot.day);
-            return dayIsChecked && slot.timeSlots.length > 0;
-        });
-        
-        form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true });
+        // Only update slots for selectedDays, preserve others
+const updatedSlots = Array.from(newSlotsMap.values());
+form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true });
         
         toast({
             title: "Time Slots Applied",

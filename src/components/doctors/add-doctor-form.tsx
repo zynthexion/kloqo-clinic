@@ -259,7 +259,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                       <FormItem>
                         <FormLabel>Name</FormLabel>
                         <FormControl>
-                          <Input placeholder="Dr. John Doe" {...field} />
+                          <Input placeholder="Dr. John Doe" {...field} value={field.value ?? ''} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -322,7 +322,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                       <FormItem>
                         <FormLabel>Years of Experience</FormLabel>
                         <FormControl>
-                          <Input type="number" placeholder="e.g., 10" {...field} />
+                          <Input type="number" placeholder="e.g., 10" {...field} value={field.value !== undefined ? field.value : ''} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -335,7 +335,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                       <FormItem>
                         <FormLabel>Consultation Fee (₹)</FormLabel>
                         <FormControl>
-                          <Input type="number" placeholder="e.g., 150" {...field} />
+                          <Input type="number" placeholder="e.g., 150" {...field} value={field.value !== undefined ? field.value : ''} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -348,7 +348,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                       <FormItem>
                         <FormLabel>Average Consulting Time (minutes)</FormLabel>
                         <FormControl>
-                          <Input type="number" placeholder="e.g., 15" {...field} />
+                          <Input type="number" placeholder="e.g., 15" {...field} value={field.value !== undefined ? field.value : ''} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -422,13 +422,16 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                                         <p className="font-semibold">{field.day}</p>
                                         <div className="flex flex-wrap gap-1 mt-1">
                                           {field.timeSlots.map((ts, i) => {
-                                              if (!ts.from || !ts.to) return null;
-                                                return (
-                                                  <Badge key={i} variant="secondary" className="font-normal">
-                                                    {ts.from} - {ts.to}
-                                                  </Badge>
-                                                );
-                                          })}
+  if (!ts.from || !ts.to) return null;
+  // Convert 'HH:mm' to 12-hour format
+  const from12 = format(parse(ts.from, 'HH:mm', new Date()), 'hh:mm a');
+  const to12 = format(parse(ts.to, 'HH:mm', new Date()), 'hh:mm a');
+  return (
+    <Badge key={i} variant="secondary" className="font-normal">
+      {from12} - {to12}
+    </Badge>
+  );
+})}
                                         </div>
                                     </div>
                                 )) : <p className="text-xs text-muted-foreground text-center pt-6">No availability applied yet.</p>}
