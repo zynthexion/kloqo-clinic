@@ -519,7 +519,7 @@ export default function AppointmentsPage() {
                                             {patientSearchResults.map((patient) => (
                                                 <CommandItem
                                                 key={patient.id}
-                                                value={patient.name}
+                                                value={patient.phone}
                                                 onSelect={() => handlePatientSelect(patient)}
                                                 >
                                                 {patient.name}
@@ -888,9 +888,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
-    
-
-    
-
-    
