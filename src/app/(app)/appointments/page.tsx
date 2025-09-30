@@ -526,8 +526,8 @@ export default function AppointmentsPage() {
                                             <Input
                                                 ref={patientInputRef}
                                                 placeholder="Start typing patient name..."
+                                                {...field}
                                                 onChange={handlePatientNameChange}
-                                                value={form.getValues("patientName")}
                                             />
                                             </FormControl>
                                         </PopoverTrigger>
