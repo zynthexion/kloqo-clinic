@@ -120,7 +120,7 @@ export default function AppointmentsPage() {
     if (patientSearchTerm.length > 1) {
       const lowercasedTerm = patientSearchTerm.toLowerCase().replace(/\s+/g, '');
       const results = allPatients.filter(p =>
-        p.name.toLowerCase().replace(/\s+/g, '').includes(lowercasedTerm)
+        p.name && p.name.toLowerCase().replace(/\s+/g, '').includes(lowercasedTerm)
       );
       console.log('Search results:', results); // DEBUG
       setPatientSearchResults(results);
@@ -149,16 +149,13 @@ export default function AppointmentsPage() {
         const patientMap = new Map<string, Patient>();
         
         appointmentsList.forEach((apt) => {
-          // Better validation - only skip if BOTH are missing
           if (!apt.patientName || !apt.phone) {
             console.warn('Skipping appointment with missing data:', apt);
             return;
           }
           
-          // Create patient ID (same as patients page)
           const patientId = encodeURIComponent(`${apt.patientName}-${apt.phone}`);
           
-          // Validate date
           if (!apt.date) {
             console.warn('Skipping appointment with no date:', apt);
             return;
@@ -180,19 +177,23 @@ export default function AppointmentsPage() {
             const existingPatient = patientMap.get(patientId)!;
             
             let lastVisitDate = existingPatient.lastVisit;
-            try {
-              const existingDate = parse(existingPatient.lastVisit, 'd MMMM yyyy', new Date());
-              if (appointmentDate > existingDate) {
+            if (existingPatient.lastVisit) {
+              try {
+                const existingDate = parse(existingPatient.lastVisit, 'd MMMM yyyy', new Date());
+                if (!isNaN(existingDate.getTime()) && appointmentDate > existingDate) {
+                  lastVisitDate = apt.date;
+                }
+              } catch (e) {
                 lastVisitDate = apt.date;
               }
-            } catch (e) {
+            } else {
               lastVisitDate = apt.date;
             }
     
             patientMap.set(patientId, {
               ...existingPatient,
               lastVisit: lastVisitDate,
-              totalAppointments: existingPatient.totalAppointments + 1,
+              totalAppointments: (existingPatient.totalAppointments || 0) + 1,
             });
           } else {
             patientMap.set(patientId, {
@@ -835,7 +836,7 @@ export default function AppointmentsPage() {
                       </TableHeader>
                       <TableBody>
                         {filteredAppointments.map((appointment, index) => (
-                          <TableRow key={`${appointment.id || index}-${appointment.tokenNumber}`} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
+                          <TableRow key={appointment.id ? `${appointment.id}-${appointment.tokenNumber}` : `${Date.now()}-${index}`} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
                             <TableCell className="font-medium">{appointment.patientName}</TableCell>
                             <TableCell>{appointment.age}</TableCell>
                             <TableCell>{appointment.gender}</TableCell>
@@ -888,7 +889,7 @@ export default function AppointmentsPage() {
                       <TableBody>
                         {filteredAppointments
                           .map((appointment, index) => (
-                          <TableRow key={`${appointment.id || index}-${appointment.tokenNumber}`} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
+                          <TableRow key={appointment.id ? `${appointment.id}-${appointment.tokenNumber}` : `${Date.now()}-${index}`} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
                             <TableCell>
                               <div className="font-medium">{appointment.patientName}</div>
                               <div className="text-xs text-muted-foreground">with {appointment.doctor}</div>
