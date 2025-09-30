@@ -115,11 +115,15 @@ export default function AppointmentsPage() {
   const patientInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    console.log('Search useEffect triggered.');
+    console.log('patientSearchTerm:', patientSearchTerm);
+    console.log('allPatients:', allPatients);
     if (patientSearchTerm.length > 1) {
       const lowercasedTerm = patientSearchTerm.toLowerCase().replace(/\s+/g, '');
       const results = allPatients.filter(p =>
         p.name.toLowerCase().replace(/\s+/g, '').includes(lowercasedTerm)
       );
+      console.log('Search results:', results);
       setPatientSearchResults(results);
       setIsPatientPopoverOpen(true);
     } else {
