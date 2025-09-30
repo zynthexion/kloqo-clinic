@@ -53,7 +53,7 @@ export type Appointment = {
   tokenNumber: string;
   bookedVia: 'Online' | 'Phone' | 'Walk-in';
   place?: string;
-  skipped?: boolean;
+  isSkipped?: boolean;
 };
 
 export type Patient = {
@@ -107,3 +107,5 @@ export type MobileApp = {
     username: string;
     password?: string;
 }
+
+    

@@ -89,10 +89,10 @@ export default function AppointmentsPage() {
   const handleSkip = async (appointment: Appointment) => {
   // Update local state
   setAppointments(prev => {
-    const updated = prev.map(a => a.id === appointment.id ? { ...a, skipped: true, isSkipped: true } : a);
+    const updated = prev.map(a => a.id === appointment.id ? { ...a, isSkipped: true } : a);
     return [
-      ...updated.filter(a => !a.skipped),
-      ...updated.filter(a => a.skipped)
+      ...updated.filter(a => !a.isSkipped),
+      ...updated.filter(a => a.isSkipped)
     ];
   });
   // Update Firestore
@@ -967,11 +967,11 @@ const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3,
       .filter((appointment) => appointment.date === today)
       .map((appointment, index) => (
         <TableRow
-  key={appointment.id ? `${appointment.id}-${appointment.tokenNumber}` : `${Date.now()}-${index}`}
-  className={cn(
-    appointment.skipped ? "bg-red-200 dark:bg-red-900/60" : isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30"
-  )}
-> 
+          key={appointment.id ? `${appointment.id}-${appointment.tokenNumber}` : `${Date.now()}-${index}`}
+          className={cn(
+            appointment.isSkipped ? "bg-red-200 dark:bg-red-900/60" : isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30"
+          )}
+        > 
           <TableCell className="font-medium">{appointment.patientName}</TableCell>
           <TableCell>{appointment.tokenNumber}</TableCell>
           <TableCell>{appointment.time}</TableCell>
@@ -986,7 +986,7 @@ const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3,
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {appointment.skipped ? (
+                {appointment.isSkipped ? (
                   <>
                     <DropdownMenuItem onClick={() => handleComplete(appointment)}>
                       Completed
@@ -1031,3 +1031,5 @@ const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3,
     </>
   );
 }
+
+    
