@@ -115,15 +115,11 @@ export default function AppointmentsPage() {
   const patientInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    console.log('Search useEffect triggered.');
-    console.log('patientSearchTerm:', patientSearchTerm);
-    console.log('allPatients:', allPatients);
     if (patientSearchTerm.length > 1) {
       const lowercasedTerm = patientSearchTerm.toLowerCase().replace(/\s+/g, '');
       const results = allPatients.filter(p =>
         p.name.toLowerCase().replace(/\s+/g, '').includes(lowercasedTerm)
       );
-      console.log('Search results:', results);
       setPatientSearchResults(results);
       setIsPatientPopoverOpen(true);
     } else {
@@ -526,14 +522,13 @@ export default function AppointmentsPage() {
                                             <Input
                                                 ref={patientInputRef}
                                                 placeholder="Start typing patient name..."
-                                                {...field}
+                                                value={field.value}
                                                 onChange={handlePatientNameChange}
                                             />
                                             </FormControl>
                                         </PopoverTrigger>
                                         <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
                                             <Command>
-                                            <CommandInput placeholder="Search patient..." />
                                             <CommandList>
                                                 <CommandEmpty>No patient found.</CommandEmpty>
                                                 <CommandGroup>
