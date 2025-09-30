@@ -86,7 +86,8 @@ export default function AppointmentsPage() {
   const [patientSearchTerm, setPatientSearchTerm] = useState("");
   const [patientSearchResults, setPatientSearchResults] = useState<Patient[]>([]);
   const [isPatientPopoverOpen, setIsPatientPopoverOpen] = useState(false);
-  const [isNewPatient, setIsNewPatient] = useState(false);
+  const [bookingType, setBookingType] = useState("existing");
+
   const [isDrawerExpanded, setIsDrawerExpanded] = useState(false);
   const [drawerSearchTerm, setDrawerSearchTerm] = useState("");
   const [filterAvailableDoctors, setFilterAvailableDoctors] = useState(false);
@@ -114,26 +115,16 @@ export default function AppointmentsPage() {
   const patientInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    console.log('Search term:', patientSearchTerm);
-    console.log('Search term length:', patientSearchTerm.length); // ADD THIS
-    console.log('All patients count:', allPatients.length);
-    
     if (patientSearchTerm.length > 1) {
       const lowercasedTerm = patientSearchTerm.toLowerCase().replace(/\s+/g, '');
-      console.log('Lowercased term:', lowercasedTerm); // ADD THIS
       const results = allPatients.filter(p =>
         p.name.toLowerCase().replace(/\s+/g, '').includes(lowercasedTerm)
       );
-      console.log('Search results:', results); // ADD THIS
-      console.log('Setting popover open to true'); // ADD THIS
       setPatientSearchResults(results);
       setIsPatientPopoverOpen(true);
-      setIsNewPatient(results.length === 0);
     } else {
-      console.log('Search term too short or empty'); // ADD THIS
       setPatientSearchResults([]);
       setIsPatientPopoverOpen(false);
-      setIsNewPatient(false);
     }
   }, [patientSearchTerm, allPatients]);
 
@@ -215,7 +206,6 @@ export default function AppointmentsPage() {
         });
         
         const patientsArray = Array.from(patientMap.values());
-        console.log('Extracted patients:', patientsArray.length, patientsArray); // DEBUG
         setAllPatients(patientsArray);
     
       } catch (error) {
@@ -240,7 +230,6 @@ export default function AppointmentsPage() {
     setEditingAppointment(null);
     setSelectedDoctorId(null);
     setPatientSearchTerm("");
-    setIsNewPatient(false);
     form.reset({
       patientName: "", gender: "Male", phone: "", age: 0, doctor: "",
       date: undefined, time: undefined,
@@ -263,7 +252,7 @@ export default function AppointmentsPage() {
             });
             setPatientSearchTerm(editingAppointment.patientName);
             setSelectedDoctorId(doctor.id);
-            setIsNewPatient(false);
+            setBookingType("existing");
         }
     } else {
         resetForm();
@@ -350,26 +339,29 @@ export default function AppointmentsPage() {
     form.setValue("place", patient.place || "");
     setPatientSearchTerm(patient.name);
     setIsPatientPopoverOpen(false);
-    setIsNewPatient(false);
     patientInputRef.current?.blur();
   }
   
   const handlePatientNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     form.setValue("patientName", value);
-    setPatientSearchTerm(value);
+    if (bookingType === 'existing') {
+        setPatientSearchTerm(value);
+    }
     if (isDrawerExpanded) {
         setIsDrawerExpanded(false);
     }
   };
 
-  const handleCommandKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "Enter" && patientSearchResults.length === 0) {
-      e.preventDefault();
-      form.setValue("patientName", patientSearchTerm);
-      setIsPatientPopoverOpen(false);
-      patientInputRef.current?.blur();
-    }
+  const handleBookingTypeChange = (value: string) => {
+    setBookingType(value);
+    setPatientSearchTerm("");
+    form.setValue("patientName", "");
+    form.setValue("age", 0);
+    form.setValue("gender", "Male");
+    form.setValue("phone", "");
+    form.setValue("place", "");
+    form.clearErrors();
   };
 
   const availableDaysOfWeek = useMemo(() => {
@@ -549,107 +541,125 @@ export default function AppointmentsPage() {
                       <div className="space-y-4 md:col-span-1">
                         <h3 className="text-lg font-medium border-b pb-2">Patient Details</h3>
                         
-                        <FormField
-                            control={form.control}
-                            name="patientName"
-                            render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Patient Name</FormLabel>
-                                <Popover open={isPatientPopoverOpen} onOpenChange={setIsPatientPopoverOpen}>
-                                <PopoverTrigger asChild>
-                                    <FormControl>
-                                    <Input
-                                        ref={patientInputRef}
-                                        placeholder="Start typing patient name..."
-                                        {...field}
-                                        onChange={handlePatientNameChange}
-                                        value={patientSearchTerm}
-                                    />
-                                    </FormControl>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                                    <Command onKeyDown={handleCommandKeyDown}>
-                                    <CommandInput placeholder="Search patient..." />
-                                    <CommandList>
-                                        <CommandEmpty>
-                                        <div className="p-4 text-sm">
-                                            New Patient: "{patientSearchTerm}"
-                                        </div>
-                                        </CommandEmpty>
-                                        <CommandGroup>
-                                        {patientSearchResults.map((patient) => (
-                                            <CommandItem
-                                            key={patient.id}
-                                            value={patient.name}
-                                            onSelect={() => handlePatientSelect(patient)}
-                                            >
-                                            {patient.name}
-                                            <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
-                                            </CommandItem>
-                                        ))}
-                                        </CommandGroup>
-                                    </CommandList>
-                                    </Command>
-                                </PopoverContent>
-                                </Popover>
-                                <FormMessage />
-                            </FormItem>
-                            )}
-                        />
-
-                        {patientSearchTerm && (
-                            <div className={`text-sm px-3 py-1 rounded ${
-                                isNewPatient 
-                                ? 'bg-green-100 text-green-800' 
-                                : 'bg-blue-100 text-blue-800'
-                            }`}>
-                                {isNewPatient ? '✓ New Patient' : '✓ Existing Patient'}
-                            </div>
-                        )}
-
-                        <FormField control={form.control} name="age" render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Age</FormLabel>
-                                <FormControl><Input type="number" placeholder="35" {...field} value={field.value || ''} /></FormControl>
-                                <FormMessage />
-                            </FormItem>
-                            )}
-                        />
-                        <FormField control={form.control} name="gender" render={({ field }) => (
-                            <FormItem className="space-y-3">
-                                <FormLabel>Gender</FormLabel>
-                                <FormControl>
-                                <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4">
-                                    <FormItem className="flex items-center space-x-2 space-y-0">
-                                    <FormControl><RadioGroupItem value="Male" /></FormControl>
-                                    <FormLabel className="font-normal">Male</FormLabel>
+                        <Tabs value={bookingType} onValueChange={handleBookingTypeChange} className="w-full">
+                            <TabsList className="grid w-full grid-cols-2">
+                                <TabsTrigger value="existing">Existing Patient</TabsTrigger>
+                                <TabsTrigger value="new">New Patient</TabsTrigger>
+                            </TabsList>
+                            <TabsContent value="existing" className="space-y-4 pt-4">
+                                <FormField
+                                    control={form.control}
+                                    name="patientName"
+                                    render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Search Patient</FormLabel>
+                                        <Popover open={isPatientPopoverOpen} onOpenChange={setIsPatientPopoverOpen}>
+                                        <PopoverTrigger asChild>
+                                            <FormControl>
+                                            <Input
+                                                ref={patientInputRef}
+                                                placeholder="Start typing patient name..."
+                                                onChange={handlePatientNameChange}
+                                                value={patientSearchTerm}
+                                            />
+                                            </FormControl>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                            <Command>
+                                            <CommandInput placeholder="Search patient..." />
+                                            <CommandList>
+                                                <CommandEmpty>No patient found.</CommandEmpty>
+                                                <CommandGroup>
+                                                {patientSearchResults.map((patient) => (
+                                                    <CommandItem
+                                                    key={patient.id}
+                                                    value={patient.name}
+                                                    onSelect={() => handlePatientSelect(patient)}
+                                                    >
+                                                    {patient.name}
+                                                    <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
+                                                    </CommandItem>
+                                                ))}
+                                                </CommandGroup>
+                                            </CommandList>
+                                            </Command>
+                                        </PopoverContent>
+                                        </Popover>
+                                        <FormMessage />
                                     </FormItem>
-                                    <FormItem className="flex items-center space-x-2 space-y-0">
-                                    <FormControl><RadioGroupItem value="Female" /></FormControl>
-                                    <FormLabel className="font-normal">Female</FormLabel>
+                                    )}
+                                />
+                                 {patientSearchTerm && (
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <FormItem>
+                                            <FormLabel>Age</FormLabel>
+                                            <FormControl><Input readOnly {...form.register("age")} /></FormControl>
+                                        </FormItem>
+                                        <FormItem>
+                                            <FormLabel>Gender</FormLabel>
+                                            <FormControl><Input readOnly {...form.register("gender")} /></FormControl>
+                                        </FormItem>
+                                        <FormItem>
+                                            <FormLabel>Phone</FormLabel>
+                                            <FormControl><Input readOnly {...form.register("phone")} /></FormControl>
+                                        </FormItem>
+                                        <FormItem>
+                                            <FormLabel>Place</FormLabel>
+                                            <FormControl><Input readOnly {...form.register("place")} /></FormControl>
+                                        </FormItem>
+                                    </div>
+                                )}
+                            </TabsContent>
+                            <TabsContent value="new" className="space-y-4 pt-4">
+                                <FormField control={form.control} name="patientName" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Patient Name</FormLabel>
+                                        <FormControl><Input placeholder="Full Name" {...field} /></FormControl>
+                                        <FormMessage />
                                     </FormItem>
-                                </RadioGroup>
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                            )}
-                        />
-                        <FormField control={form.control} name="phone" render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Phone Number</FormLabel>
-                                <FormControl><Input placeholder="123-456-7890" {...field} /></FormControl>
-                                <FormMessage />
-                            </FormItem>
-                            )}
-                        />
-                            <FormField control={form.control} name="place" render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Place</FormLabel>
-                                <FormControl><Input placeholder="New York, USA" {...field} /></FormControl>
-                                <FormMessage />
-                            </FormItem>
-                            )}
-                        />
+                                )} />
+                                <FormField control={form.control} name="age" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Age</FormLabel>
+                                        <FormControl><Input type="number" placeholder="35" {...field} value={field.value || ''} /></FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )} />
+                                <FormField control={form.control} name="gender" render={({ field }) => (
+                                    <FormItem className="space-y-3">
+                                        <FormLabel>Gender</FormLabel>
+                                        <FormControl>
+                                        <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4">
+                                            <FormItem className="flex items-center space-x-2 space-y-0">
+                                            <FormControl><RadioGroupItem value="Male" /></FormControl>
+                                            <FormLabel className="font-normal">Male</FormLabel>
+                                            </FormItem>
+                                            <FormItem className="flex items-center space-x-2 space-y-0">
+                                            <FormControl><RadioGroupItem value="Female" /></FormControl>
+                                            <FormLabel className="font-normal">Female</FormLabel>
+                                            </FormItem>
+                                        </RadioGroup>
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )} />
+                                <FormField control={form.control} name="phone" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Phone Number</FormLabel>
+                                        <FormControl><Input placeholder="123-456-7890" {...field} /></FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )} />
+                                <FormField control={form.control} name="place" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Place</FormLabel>
+                                        <FormControl><Input placeholder="New York, USA" {...field} /></FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )} />
+                            </TabsContent>
+                        </Tabs>
+
                         <FormField control={form.control} name="bookedVia" render={({ field }) => (
                             <FormItem className="space-y-3">
                                 <FormLabel>Booked Via</FormLabel>
@@ -668,7 +678,7 @@ export default function AppointmentsPage() {
                                 <FormMessage />
                             </FormItem>
                             )} />
-                                                  </div>
+                      </div>
                       
                       {!isDrawerExpanded && (
                       <>
