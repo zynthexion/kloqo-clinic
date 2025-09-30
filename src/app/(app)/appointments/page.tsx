@@ -114,11 +114,15 @@ export default function AppointmentsPage() {
   const patientInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    console.log('Search term:', patientSearchTerm); // DEBUG
+    console.log('All patients count:', allPatients.length); // DEBUG
+    
     if (patientSearchTerm.length > 1) {
       const lowercasedTerm = patientSearchTerm.toLowerCase().replace(/\s+/g, '');
       const results = allPatients.filter(p =>
         p.name.toLowerCase().replace(/\s+/g, '').includes(lowercasedTerm)
       );
+      console.log('Search results:', results); // DEBUG
       setPatientSearchResults(results);
       setIsPatientPopoverOpen(true);
       setIsNewPatient(results.length === 0);
@@ -135,38 +139,56 @@ export default function AppointmentsPage() {
       try {
         const appointmentsCollection = collection(db, "appointments");
         const appointmentsSnapshot = await getDocs(appointmentsCollection);
-        const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
+        const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ 
+          id: doc.id, 
+          ...doc.data() 
+        } as Appointment));
+        
         setAppointments(appointmentsList);
-
+    
         const patientMap = new Map<string, Patient>();
+        
         appointmentsList.forEach((apt) => {
-          if (!apt.patientName || !apt.phone) return;
-          const patientId = encodeURIComponent(`${apt.patientName.toLowerCase().replace(/\s+/g, '')}-${apt.phone}`);
+          // Better validation - only skip if BOTH are missing
+          if (!apt.patientName || !apt.phone) {
+            console.warn('Skipping appointment with missing data:', apt);
+            return;
+          }
           
-          if (!apt.date) return;
-
+          // Create patient ID (same as patients page)
+          const patientId = encodeURIComponent(`${apt.patientName}-${apt.phone}`);
+          
+          // Validate date
+          if (!apt.date) {
+            console.warn('Skipping appointment with no date:', apt);
+            return;
+          }
+    
           let appointmentDate;
           try {
-              appointmentDate = parse(apt.date, 'd MMMM yyyy', new Date());
-              if (isNaN(appointmentDate.getTime())) return;
+            appointmentDate = parse(apt.date, 'd MMMM yyyy', new Date());
+            if (isNaN(appointmentDate.getTime())) {
+              console.warn('Invalid date format:', apt.date);
+              return;
+            }
           } catch (e) {
-              return; // Skip if date is invalid
+            console.warn('Date parse error:', e);
+            return;
           }
-
-
+    
           if (patientMap.has(patientId)) {
             const existingPatient = patientMap.get(patientId)!;
             
             let lastVisitDate = existingPatient.lastVisit;
             try {
-                const existingDate = parse(existingPatient.lastVisit, 'd MMMM yyyy', new Date());
-                if (appointmentDate > existingDate) {
-                    lastVisitDate = apt.date;
-                }
-            } catch (e) {
+              const existingDate = parse(existingPatient.lastVisit, 'd MMMM yyyy', new Date());
+              if (appointmentDate > existingDate) {
                 lastVisitDate = apt.date;
+              }
+            } catch (e) {
+              lastVisitDate = apt.date;
             }
-
+    
             patientMap.set(patientId, {
               ...existingPatient,
               lastVisit: lastVisitDate,
@@ -186,8 +208,11 @@ export default function AppointmentsPage() {
             });
           }
         });
-        setAllPatients(Array.from(patientMap.values()));
-
+        
+        const patientsArray = Array.from(patientMap.values());
+        console.log('Extracted patients:', patientsArray.length, patientsArray); // DEBUG
+        setAllPatients(patientsArray);
+    
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
@@ -862,8 +887,8 @@ export default function AppointmentsPage() {
                       </TableHeader>
                       <TableBody>
                         {filteredAppointments
-                          .map((appointment) => (
-                          <TableRow key={appointment.id} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
+                          .map((appointment, index) => (
+                          <TableRow key={`${appointment.id || index}-${appointment.tokenNumber}`} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
                             <TableCell>
                               <div className="font-medium">{appointment.patientName}</div>
                               <div className="text-xs text-muted-foreground">with {appointment.doctor}</div>
@@ -903,5 +928,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
-    
