@@ -133,7 +133,6 @@ export default function AppointmentsPage() {
       try {
         setLoading(true);
 
-        // Fetch all appointments
         const appointmentsCollection = collection(db, "appointments");
         const appointmentsSnapshot = await getDocs(appointmentsCollection);
         const appointmentsList = appointmentsSnapshot.docs.map(doc => ({
@@ -142,7 +141,6 @@ export default function AppointmentsPage() {
         } as Appointment));
         setAppointments(appointmentsList);
 
-        // Fetch all patients from the 'patients' collection
         const patientsCollection = collection(db, "patients");
         const patientsSnapshot = await getDocs(patientsCollection);
         const patientsList = patientsSnapshot.docs.map(doc => ({
@@ -151,7 +149,6 @@ export default function AppointmentsPage() {
         } as Patient));
         setAllPatients(patientsList);
 
-        // Fetch all doctors
         const doctorsCollection = collection(db, "doctors");
         const doctorsSnapshot = await getDocs(doctorsCollection);
         const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
@@ -228,7 +225,6 @@ export default function AppointmentsPage() {
           totalAppointments: 1,
         };
         await setDoc(patientRef, newPatientData, { merge: true });
-        // Refresh patient list
         setAllPatients(prev => [...prev, newPatientData]);
       }
 
@@ -304,21 +300,8 @@ export default function AppointmentsPage() {
     patientInputRef.current?.blur();
   }
   
-  const handlePatientNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    // For "new" tab, it's a direct input for patient name
-    if (bookingType === 'new') {
-        form.setValue("patientName", value);
-    } else { // For "existing" tab, it's for searching
-        setPatientSearchTerm(value);
-        if (isEditing) {
-            form.setValue("phone", value);
-        }
-    }
-
-    if (isDrawerExpanded) {
-        setIsDrawerExpanded(false);
-    }
+  const handlePatientSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPatientSearchTerm(e.target.value);
   };
 
   const handleBookingTypeChange = (value: string) => {
@@ -524,7 +507,7 @@ export default function AppointmentsPage() {
                                             ref={patientInputRef}
                                             placeholder="Start typing phone number..."
                                             value={patientSearchTerm}
-                                            onChange={handlePatientNameChange}
+                                            onChange={handlePatientSearchChange}
                                         />
                                         </FormControl>
                                     </PopoverTrigger>
@@ -905,6 +888,8 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
 
     
 
