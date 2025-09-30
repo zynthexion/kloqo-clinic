@@ -48,7 +48,7 @@ export type Appointment = {
   date: string;
   time: string;
   department: string;
-  status: 'Confirmed' | 'Pending' | 'Cancelled';
+  status: 'Confirmed' | 'Pending' | 'Cancelled' | 'Completed';
   treatment: string;
   tokenNumber: string;
   bookedVia: 'Online' | 'Phone' | 'Walk-in';
@@ -107,5 +107,3 @@ export type MobileApp = {
     username: string;
     password?: string;
 }
-
-    

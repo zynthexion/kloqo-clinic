@@ -83,8 +83,12 @@ export default function AppointmentsPage() {
   const handleCancel = (appointment: Appointment) => {
     setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Cancelled' } : a));
   };
-  const handleComplete = (appointment: Appointment) => {
-    setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Confirmed' } : a));
+  const handleComplete = async (appointment: Appointment) => {
+    setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Completed' } : a));
+    if (appointment.id) {
+        const appointmentRef = doc(db, "appointments", appointment.id);
+        await setDoc(appointmentRef, { status: "Completed" }, { merge: true });
+    }
   };
   const handleSkip = async (appointment: Appointment) => {
   // Update local state
@@ -118,7 +122,7 @@ export default function AppointmentsPage() {
   const [drawerSearchTerm, setDrawerSearchTerm] = useState("");
   const [filterAvailableDoctors, setFilterAvailableDoctors] = useState(false);
 const [selectedDrawerDoctor, setSelectedDrawerDoctor] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("all");
+  const [activeTab, setActiveTab] = useState("upcoming");
 const currentYearStart = startOfYear(new Date());
 const currentYearEnd = endOfYear(new Date());
 const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ from: currentYearStart, to: currentYearEnd });
@@ -268,7 +272,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
         setAllPatients(prev => [...prev, newPatientData]);
       }
 
-      const dataToSave: Omit<AddAppointmentFormValues, 'date' | 'time'> & { date: string, time: string, status: 'Confirmed' | 'Pending' | 'Cancelled', treatment: string } = {
+      const dataToSave: Omit<AddAppointmentFormValues, 'date' | 'time'> & { date: string, time: string, status: 'Confirmed' | 'Pending' | 'Cancelled' | 'Completed', treatment: string } = {
           ...values,
           date: appointmentDateStr,
           time: format(parseDateFns(values.time, "HH:mm", new Date()), "hh:mm a"),
@@ -498,12 +502,7 @@ const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3,
     } catch(e) { return false; }
   });
 } else if (activeTab === 'completed') {
-  filtered = filtered.filter(apt => {
-    try {
-      const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
-      return apt.status === 'Confirmed' && isPast(aptDate) && !isToday(aptDate);
-    } catch(e) { return false; }
-  });
+  filtered = filtered.filter(apt => apt.status === 'Completed');
 } // else 'all' returns all
 
     return filtered.sort((a,b) => {
@@ -513,7 +512,7 @@ const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3,
             return dateA - dateB;
         } catch(e) { return 0; }
     });
-  }, [appointments, drawerSearchTerm, filterAvailableDoctors, doctors, activeTab]);
+  }, [appointments, drawerSearchTerm, filterAvailableDoctors, doctors, activeTab, drawerDateRange, selectedDrawerDoctor]);
 
   const today = format(new Date(), "d MMMM yyyy");
   const todaysAppointments = filteredAppointments.filter(apt => apt.date === today);
@@ -1031,5 +1030,3 @@ const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3,
     </>
   );
 }
-
-    
