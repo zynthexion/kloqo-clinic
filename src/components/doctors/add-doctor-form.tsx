@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
@@ -31,14 +31,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import { PlusCircle, Trash, Copy, Upload } from "lucide-react";
-import type { Doctor, Department } from "@/lib/types";
+import { PlusCircle, Trash, Upload } from "lucide-react";
+import type { Doctor, Department, AvailabilitySlot } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "../ui/scroll-area";
 import Image from "next/image";
 import { Textarea } from "../ui/textarea";
 import { format, parse } from "date-fns";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 
 const timeSlotSchema = z.object({
   from: z.string().min(1, "Required"),
@@ -59,10 +61,7 @@ const formSchema = z.object({
   experience: z.coerce.number().min(0, "Years of experience cannot be negative."),
   consultationFee: z.coerce.number().min(0, "Consultation fee cannot be negative."),
   averageConsultingTime: z.coerce.number().min(5, "Must be at least 5 minutes."),
-  availableDays: z.array(z.string()).refine((value) => value.some((item) => item), {
-    message: "You have to select at least one day.",
-  }),
-  availabilitySlots: z.array(availabilitySlotSchema),
+  availabilitySlots: z.array(availabilitySlotSchema).min(1, "At least one availability slot is required."),
   photo: z.instanceof(File).optional(),
 });
 
@@ -76,12 +75,16 @@ type AddDoctorFormProps = {
   departments: Department[];
 };
 
-const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const dayAbbreviations = ["S", "M", "T", "W", "T", "F", "S"];
 
 export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }: AddDoctorFormProps) {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const { toast } = useToast();
   const isEditMode = !!doctor;
+
+  const [selectedDays, setSelectedDays] = useState<string[]>([]);
+  const [sharedTimeSlots, setSharedTimeSlots] = useState<Array<{ from: string; to: string }>>([{ from: "09:00", to: "17:00" }]);
 
   const form = useForm<AddDoctorFormValues>({
     resolver: zodResolver(formSchema),
@@ -93,13 +96,19 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
       experience: 0,
       consultationFee: 0,
       averageConsultingTime: 15,
-      availableDays: [],
       availabilitySlots: [],
     },
   });
 
   useEffect(() => {
     if (doctor) {
+      const availabilitySlots = doctor.availabilitySlots?.map(s => ({
+          ...s,
+          timeSlots: s.timeSlots.map(ts => ({
+            from: format(parse(ts.from, 'hh:mm a', new Date()), 'HH:mm'),
+            to: format(parse(ts.to, 'hh:mm a', new Date()), 'HH:mm')
+          }))
+        })) || [];
       form.reset({
         id: doctor.id,
         name: doctor.name,
@@ -109,16 +118,12 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         experience: doctor.experience || 0,
         consultationFee: doctor.consultationFee || 0,
         averageConsultingTime: doctor.averageConsultingTime || 15,
-        availableDays: doctor.availabilitySlots?.map(s => s.day) || [],
-        availabilitySlots: doctor.availabilitySlots?.map(s => ({
-          ...s,
-          timeSlots: s.timeSlots.map(ts => ({
-            from: format(parse(ts.from, 'hh:mm a', new Date()), 'HH:mm'),
-            to: format(parse(ts.to, 'hh:mm a', new Date()), 'HH:mm')
-          }))
-        })) || [],
+        availabilitySlots: availabilitySlots,
       });
       setPhotoPreview(doctor.avatar);
+      if(availabilitySlots.length > 0) {
+        setSharedTimeSlots(availabilitySlots[0].timeSlots);
+      }
     } else {
       form.reset({
         name: "",
@@ -128,50 +133,56 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         experience: 0,
         consultationFee: 0,
         averageConsultingTime: 15,
-        availableDays: [],
         availabilitySlots: [],
       });
       setPhotoPreview(null);
+      setSharedTimeSlots([{ from: "09:00", to: "17:00" }]);
     }
-  }, [doctor, form]);
+  }, [doctor, form, isOpen]);
 
+  const watchedAvailabilitySlots = form.watch('availabilitySlots');
 
-  const { fields, append, remove, update } = useFieldArray({
-    control: form.control,
-    name: "availabilitySlots",
-  });
-
-  const watchedAvailableDays = form.watch("availableDays");
-
-  const copyTimeSlotToAllDays = (dayIndex: number, timeIndex: number) => {
-    const timeSlotToCopy = form.getValues(`availabilitySlots.${dayIndex}.timeSlots.${timeIndex}`);
-    if (!timeSlotToCopy.from || !timeSlotToCopy.to) {
+  const applySharedSlotsToSelectedDays = () => {
+    if (selectedDays.length === 0) {
         toast({
             variant: "destructive",
-            title: "Cannot Copy",
-            description: "Please fill in both 'From' and 'To' times before copying.",
+            title: "No days selected",
+            description: "Please select one or more days to apply the time slots.",
         });
         return;
     }
 
-    const currentSlots = form.getValues('availabilitySlots');
-    const updatedSlots = currentSlots.map(daySlot => {
-        if (watchedAvailableDays.includes(daySlot.day)) {
-            const timeSlotExists = daySlot.timeSlots.some(ts => ts.from === timeSlotToCopy.from && ts.to === timeSlotToCopy.to);
-            if (!timeSlotExists) {
-                return { ...daySlot, timeSlots: [...daySlot.timeSlots, timeSlotToCopy] };
-            }
-        }
-        return daySlot;
+    const validSharedTimeSlots = sharedTimeSlots.filter(ts => ts.from && ts.to);
+
+    if (validSharedTimeSlots.length === 0) {
+         toast({
+            variant: "destructive",
+            title: "No time slots defined",
+            description: "Please define at least one valid time slot.",
+        });
+        return;
+    }
+
+    const currentFormSlots = form.getValues('availabilitySlots') || [];
+    const newSlotsMap = new Map<string, AvailabilitySlot>();
+    
+    currentFormSlots.forEach(slot => newSlotsMap.set(slot.day, slot));
+
+    selectedDays.forEach(day => {
+        newSlotsMap.set(day, { day, timeSlots: validSharedTimeSlots });
     });
 
+    const updatedSlots = Array.from(newSlotsMap.values());
+    
     form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true });
-
+    
     toast({
-      title: "Time Slot Copied",
-      description: `Time slot ${format(parse(timeSlotToCopy.from, "HH:mm", new Date()), "hh:mm a")} - ${format(parse(timeSlotToCopy.to, "HH:mm", new Date()), "hh:mm a")} has been applied to all selected days.`,
+        title: "Time Slots Applied",
+        description: `The defined time slots have been applied to the selected days.`,
     });
-  }
+    
+    setSelectedDays([]);
+};
 
   function onSubmit(values: AddDoctorFormValues) {
     onSave(values);
@@ -200,7 +211,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
             setPhotoPreview(null);
         }
     }}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{isEditMode ? "Edit Doctor" : "Add New Doctor"}</DialogTitle>
           <DialogDescription>
@@ -208,13 +219,13 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)}>
             <ScrollArea className="h-[60vh] p-4">
               <div className="space-y-4">
                  <FormField
                   control={form.control}
                   name="photo"
-                  render={({ field }) => (
+                  render={() => (
                     <FormItem>
                       <FormLabel>Doctor's Photo</FormLabel>
                       <FormControl>
@@ -341,122 +352,92 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     </FormItem>
                   )}
                 />
-
-                <FormField
-                  control={form.control}
-                  name="availableDays"
-                  render={() => (
-                    <FormItem>
-                      <div className="mb-4">
-                        <FormLabel>Available Days</FormLabel>
-                        <FormDescription>
-                          Select the days the doctor is available.
-                        </FormDescription>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {daysOfWeek.map((day) => (
-                          <FormField
-                            key={day}
-                            control={form.control}
-                            name="availableDays"
-                            render={({ field }) => {
-                              return (
-                                <FormItem
-                                  key={day}
-                                  className="flex flex-row items-start space-x-3 space-y-0"
-                                >
-                                  <FormControl>
-                                    <Checkbox
-                                      checked={field.value?.includes(day)}
-                                      onCheckedChange={(checked) => {
-                                        const currentDays = field.value || [];
-                                        const newDays = checked
-                                          ? [...currentDays, day]
-                                          : currentDays.filter(
-                                              (value) => value !== day
-                                            );
-                                        field.onChange(newDays);
-
-                                        const dayIndex = fields.findIndex(f => f.day === day);
-                                        if (checked && dayIndex === -1) {
-                                          append({ day: day, timeSlots: [{ from: "09:00", to: "17:00" }] });
-                                        } else if (!checked && dayIndex > -1) {
-                                          remove(dayIndex);
-                                        }
-                                      }}
-                                    />
-                                  </FormControl>
-                                  <FormLabel className="font-normal">
-                                    {day}
-                                  </FormLabel>
-                                </FormItem>
-                              );
-                            }}
-                          />
-                        ))}
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
                 
-                {fields.map((field, dayIndex) => {
-                    const timeSlotsArray = form.getValues(`availabilitySlots.${dayIndex}.timeSlots`);
-                    
-                    return (
-                        <div key={field.id} className="space-y-2 p-3 border rounded-md">
-                            <h4 className="font-semibold">{field.day} Time Slots</h4>
-                            {timeSlotsArray.map((_, timeIndex) => (
-                                <div key={timeIndex} className="flex items-center gap-2">
-                                    <FormField
-                                        control={form.control}
-                                        name={`availabilitySlots.${dayIndex}.timeSlots.${timeIndex}.from`}
-                                        render={({ field }) => (
-                                            <FormItem className="flex-grow">
-                                                <FormLabel className="text-xs">From</FormLabel>
-                                                <Input type="time" {...field} />
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name={`availabilitySlots.${dayIndex}.timeSlots.${timeIndex}.to`}
-                                        render={({ field }) => (
-                                            <FormItem className="flex-grow">
-                                                <FormLabel className="text-xs">To</FormLabel>
-                                                <Input type="time" {...field} />
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <Button type="button" variant="ghost" size="icon" onClick={() => copyTimeSlotToAllDays(dayIndex, timeIndex)} className="self-end">
-                                        <Copy className="h-4 w-4" />
-                                    </Button>
-                                    <Button type="button" variant="outline" size="icon" className="self-end" onClick={() => {
-                                        const currentSlots = form.getValues(`availabilitySlots.${dayIndex}.timeSlots`);
-                                        const newSlots = currentSlots.filter((_, i) => i !== timeIndex);
-                                        update(dayIndex, { ...form.getValues(`availabilitySlots.${dayIndex}`), timeSlots: newSlots });
-                                    }}>
-                                        <Trash className="h-4 w-4" />
-                                    </Button>
+                <div className="space-y-4 rounded-lg border p-4">
+                  <FormField
+                    control={form.control}
+                    name="availabilitySlots"
+                    render={() => (
+                      <FormItem>
+                        <div className="mb-4">
+                          <FormLabel className="text-base">Weekly Availability</FormLabel>
+                          <FormDescription>
+                            Define the doctor's recurring weekly schedule.
+                          </FormDescription>
+                        </div>
+                          <div className="space-y-2">
+                            <Label>1. Select days to apply time slots to</Label>
+                            <ToggleGroup type="multiple" value={selectedDays} onValueChange={setSelectedDays} variant="outline" className="flex-wrap justify-start">
+                                {daysOfWeek.map((day, index) => (
+                                    <ToggleGroupItem key={daysOfWeek[index]} value={daysOfWeek[index]} aria-label={`Toggle ${daysOfWeek[index]}`} className="h-9 w-9">
+                                        {dayAbbreviations[index]}
+                                    </ToggleGroupItem>
+                                ))}
+                            </ToggleGroup>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>2. Define time slots</Label>
+                            {sharedTimeSlots.map((ts, index) => (
+                                <div key={index} className="flex items-end gap-2">
+                                   <div className="flex-grow">
+                                      <Label className="text-xs font-normal">From</Label>
+                                      <Input type="time" value={ts.from} onChange={(e) => {
+                                          const newShared = [...sharedTimeSlots];
+                                          newShared[index].from = e.target.value;
+                                          setSharedTimeSlots(newShared);
+                                      }} />
+                                   </div>
+                                   <div className="flex-grow">
+                                      <Label className="text-xs font-normal">To</Label>
+                                      <Input type="time" value={ts.to} onChange={(e) => {
+                                          const newShared = [...sharedTimeSlots];
+                                          newShared[index].to = e.target.value;
+                                          setSharedTimeSlots(newShared);
+                                      }} />
+                                   </div>
+                                   <Button type="button" variant="ghost" size="icon" onClick={() => setSharedTimeSlots(prev => prev.filter((_, i) => i !== index))} disabled={sharedTimeSlots.length <=1}>
+                                        <Trash className="h-4 w-4 text-red-500" />
+                                   </Button>
                                 </div>
                             ))}
-                            <Button type="button" size="sm" variant="outline" onClick={() => {
-                                const currentSlots = form.getValues(`availabilitySlots.${dayIndex}.timeSlots`);
-                                const newSlots = [...currentSlots, { from: "", to: "" }];
-                                update(dayIndex, { ...form.getValues(`availabilitySlots.${dayIndex}`), timeSlots: newSlots });
-                            }}>
-                                Add Time Slot
+                            <Button type="button" size="sm" variant="outline" onClick={() => setSharedTimeSlots(prev => [...prev, { from: "", to: "" }])}>
+                                Add Another Slot
                             </Button>
-                        </div>
-                    )
-                })}
+                          </div>
+                          
+                          <Button type="button" className="w-full" onClick={applySharedSlotsToSelectedDays}>
+                            3. Apply to Selected Days
+                          </Button>
 
-
+                          <div className="space-y-2 pt-4">
+                            <Label>Review and save</Label>
+                            <div className="space-y-3 rounded-md border p-3 min-h-[100px]">
+                                {watchedAvailabilitySlots.length > 0 ? watchedAvailabilitySlots.map((field, index) => (
+                                   <div key={index} className="text-sm">
+                                        <p className="font-semibold">{field.day}</p>
+                                        <div className="flex flex-wrap gap-1 mt-1">
+                                          {field.timeSlots.map((ts, i) => {
+                                              if (!ts.from || !ts.to) return null;
+                                                return (
+                                                  <Badge key={i} variant="secondary" className="font-normal">
+                                                    {ts.from} - {ts.to}
+                                                  </Badge>
+                                                );
+                                          })}
+                                        </div>
+                                    </div>
+                                )) : <p className="text-xs text-muted-foreground text-center pt-6">No availability applied yet.</p>}
+                            </div>
+                          </div>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
               </div>
             </ScrollArea>
-            <DialogFooter>
+            <DialogFooter className="pt-4">
               <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancel</Button>
               <Button type="submit">{isEditMode ? "Save Changes" : "Save Doctor"}</Button>
             </DialogFooter>
