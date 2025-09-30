@@ -267,58 +267,77 @@ export default function AppointmentsPage() {
   const selectedDate = form.watch("date");
 
   async function onSubmit(values: AddAppointmentFormValues) {
-     try {
-        const doctorName = doctors.find(d => d.id === values.doctor)?.name || "Unknown Doctor";
+    try {
+      const doctorName = doctors.find(d => d.id === values.doctor)?.name || "Unknown Doctor";
+      const appointmentDateStr = format(values.date, "d MMMM yyyy");
+
+      if (bookingType === 'new' && !isEditing) {
+        const patientId = encodeURIComponent(`${values.patientName}-${values.phone}`);
+        const patientRef = doc(db, "patients", patientId);
         
-        const dataToSave: Omit<AddAppointmentFormValues, 'date' | 'time'> & { date: string, time: string, status: 'Confirmed' | 'Pending' | 'Cancelled', treatment: string } = {
-            ...values,
-            date: format(values.date, "d MMMM yyyy"),
-            time: format(parseDateFns(values.time, "HH:mm", new Date()), "hh:mm a"),
-            doctor: doctorName,
-            status: "Pending",
-            treatment: "General Consultation",
+        const newPatientData: Patient = {
+          id: patientId,
+          name: values.patientName,
+          age: values.age,
+          gender: values.gender,
+          phone: values.phone,
+          place: values.place,
+          lastVisit: appointmentDateStr,
+          doctor: doctorName,
+          totalAppointments: 1,
         };
+        await setDoc(patientRef, newPatientData, { merge: true });
+      }
 
-        if (isEditing) {
-            const { id, ...restOfData } = dataToSave;
-            if (!id) throw new Error("Editing an appointment without an ID.");
-            const appointmentRef = doc(db, "appointments", id);
-            await setDoc(appointmentRef, restOfData, { merge: true });
+      const dataToSave: Omit<AddAppointmentFormValues, 'date' | 'time'> & { date: string, time: string, status: 'Confirmed' | 'Pending' | 'Cancelled', treatment: string } = {
+          ...values,
+          date: appointmentDateStr,
+          time: format(parseDateFns(values.time, "HH:mm", new Date()), "hh:mm a"),
+          doctor: doctorName,
+          status: "Pending",
+          treatment: "General Consultation",
+      };
 
-            setAppointments(prev => {
-                return prev.map(apt => apt.id === id ? { ...apt, ...restOfData, id: id } : apt);
-            });
-            toast({
-                title: "Appointment Rescheduled",
-                description: `Appointment for ${restOfData.patientName} has been updated.`,
-            });
-        } else {
-            const appointmentId = `APT-${Date.now()}`;
-            const tokenNumber = `${(appointments.length + 1).toString().padStart(3, '0')}`;
-            
-            const newAppointmentData: Appointment = {
-                ...dataToSave,
-                id: appointmentId,
-                tokenNumber: tokenNumber,
-            };
-            const appointmentRef = doc(db, "appointments", appointmentId);
-            await setDoc(appointmentRef, newAppointmentData);
-            setAppointments(prev => [...prev, newAppointmentData]);
-            toast({
-                title: "Appointment Booked",
-                description: `Appointment for ${newAppointmentData.patientName} has been successfully booked.`,
-            });
-        }
-     } catch (error) {
-        console.error("Error saving appointment: ", error);
-        toast({
-            variant: "destructive",
-            title: "Error",
-            description: "Failed to save appointment. Please try again.",
-        });
-     } finally {
-        resetForm();
-     }
+      if (isEditing) {
+          const { id, ...restOfData } = dataToSave;
+          if (!id) throw new Error("Editing an appointment without an ID.");
+          const appointmentRef = doc(db, "appointments", id);
+          await setDoc(appointmentRef, restOfData, { merge: true });
+
+          setAppointments(prev => {
+              return prev.map(apt => apt.id === id ? { ...apt, ...restOfData, id: id } : apt);
+          });
+          toast({
+              title: "Appointment Rescheduled",
+              description: `Appointment for ${restOfData.patientName} has been updated.`,
+          });
+      } else {
+          const appointmentId = `APT-${Date.now()}`;
+          const tokenNumber = `${(appointments.length + 1).toString().padStart(3, '0')}`;
+          
+          const newAppointmentData: Appointment = {
+              ...dataToSave,
+              id: appointmentId,
+              tokenNumber: tokenNumber,
+          };
+          const appointmentRef = doc(db, "appointments", appointmentId);
+          await setDoc(appointmentRef, newAppointmentData);
+          setAppointments(prev => [...prev, newAppointmentData]);
+          toast({
+              title: "Appointment Booked",
+              description: `Appointment for ${newAppointmentData.patientName} has been successfully booked.`,
+          });
+      }
+    } catch (error) {
+      console.error("Error saving appointment: ", error);
+      toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to save appointment. Please try again.",
+      });
+    } finally {
+      resetForm();
+    }
   }
 
   const onDoctorChange = (doctorId: string) => {
@@ -944,5 +963,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
-    
