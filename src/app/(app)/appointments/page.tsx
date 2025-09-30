@@ -502,14 +502,18 @@ export default function AppointmentsPage() {
                                     <FormLabel>Search Patient by Phone</FormLabel>
                                     <Popover open={isPatientPopoverOpen} onOpenChange={setIsPatientPopoverOpen}>
                                     <PopoverTrigger asChild>
-                                        <FormControl>
-                                        <Input
-                                            ref={patientInputRef}
-                                            placeholder="Start typing phone number..."
-                                            value={patientSearchTerm}
-                                            onChange={handlePatientSearchChange}
-                                        />
-                                        </FormControl>
+                                        <div className="relative">
+                                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                            <FormControl>
+                                            <Input
+                                                ref={patientInputRef}
+                                                placeholder="Start typing phone number..."
+                                                value={patientSearchTerm}
+                                                onChange={handlePatientSearchChange}
+                                                className="pl-8"
+                                            />
+                                            </FormControl>
+                                        </div>
                                     </PopoverTrigger>
                                     <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
                                         <Command>
@@ -888,3 +892,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
