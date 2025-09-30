@@ -62,7 +62,7 @@ const formSchema = z.object({
   consultationFee: z.coerce.number().min(0, "Consultation fee cannot be negative."),
   averageConsultingTime: z.coerce.number().min(5, "Must be at least 5 minutes."),
   availabilitySlots: z.array(availabilitySlotSchema).min(1, "At least one availability slot is required."),
-  photo: z.instanceof(File).optional(),
+  photo: z.any().optional(),
 });
 
 type AddDoctorFormValues = z.infer<typeof formSchema>;
@@ -211,7 +211,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
             setPhotoPreview(null);
         }
     }}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-4xl">
         <DialogHeader>
           <DialogTitle>{isEditMode ? "Edit Doctor" : "Add New Doctor"}</DialogTitle>
           <DialogDescription>
@@ -220,140 +220,144 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
-            <ScrollArea className="h-[60vh] p-4">
-              <div className="space-y-4">
-                 <FormField
-                  control={form.control}
-                  name="photo"
-                  render={() => (
-                    <FormItem>
-                      <FormLabel>Doctor's Photo</FormLabel>
-                      <FormControl>
-                        <div className="flex items-center gap-4">
-                          <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center overflow-hidden">
-                            {photoPreview ? (
-                              <Image src={photoPreview} alt="Doctor's Photo" width={96} height={96} className="object-cover" />
-                            ) : (
-                              <Upload className="w-8 h-8 text-muted-foreground" />
-                            )}
-                          </div>
-                          <Input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" id="photo-upload" />
-                          <label htmlFor="photo-upload" className="cursor-pointer">
-                            <Button type="button" variant="outline">
-                              <Upload className="mr-2 h-4 w-4" />
-                              Upload
-                            </Button>
-                          </label>
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Dr. John Doe" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="specialty"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Specialty</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Cardiology" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="department"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Department</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
+            <ScrollArea className="h-[60vh] p-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
+                {/* Left Column */}
+                <div className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="photo"
+                    render={() => (
+                      <FormItem>
+                        <FormLabel>Doctor's Photo</FormLabel>
                         <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a department" />
-                          </SelectTrigger>
+                          <div className="flex items-center gap-4">
+                            <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center overflow-hidden">
+                              {photoPreview ? (
+                                <Image src={photoPreview} alt="Doctor's Photo" width={96} height={96} className="object-cover" />
+                              ) : (
+                                <Upload className="w-8 h-8 text-muted-foreground" />
+                              )}
+                            </div>
+                            <Input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" id="photo-upload" />
+                            <label htmlFor="photo-upload" className="cursor-pointer">
+                              <Button type="button" variant="outline">
+                                <Upload className="mr-2 h-4 w-4" />
+                                Upload
+                              </Button>
+                            </label>
+                          </div>
                         </FormControl>
-                        <SelectContent>
-                          {departments.map(dept => (
-                            <SelectItem key={dept.id} value={dept.name}>
-                              {dept.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                 <FormField
-                  control={form.control}
-                  name="bio"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Bio</FormLabel>
-                      <FormControl>
-                        <Textarea placeholder="A brief biography of the doctor..." {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                 <FormField
-                  control={form.control}
-                  name="experience"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Years of Experience</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="e.g., 10" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="consultationFee"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Consultation Fee (₹)</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="e.g., 150" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                 <FormField
-                  control={form.control}
-                  name="averageConsultingTime"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Average Consulting Time (minutes)</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="e.g., 15" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <div className="space-y-4 rounded-lg border p-4">
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Dr. John Doe" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="specialty"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Specialty</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Cardiology" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="department"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Department</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a department" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {departments.map(dept => (
+                              <SelectItem key={dept.id} value={dept.name}>
+                                {dept.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="bio"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Bio</FormLabel>
+                        <FormControl>
+                          <Textarea placeholder="A brief biography of the doctor..." {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="experience"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Years of Experience</FormLabel>
+                        <FormControl>
+                          <Input type="number" placeholder="e.g., 10" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="consultationFee"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Consultation Fee (₹)</FormLabel>
+                        <FormControl>
+                          <Input type="number" placeholder="e.g., 150" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="averageConsultingTime"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Average Consulting Time (minutes)</FormLabel>
+                        <FormControl>
+                          <Input type="number" placeholder="e.g., 15" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Right Column */}
+                <div className="space-y-4">
                   <FormField
                     control={form.control}
                     name="availabilitySlots"
@@ -447,7 +451,5 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
     </Dialog>
   );
 }
-
-    
 
     
