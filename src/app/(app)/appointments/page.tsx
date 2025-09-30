@@ -159,22 +159,20 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
 
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchAppointmentsAndPatients = async () => {
       try {
         setLoading(true);
-
+    
+        // Fetch both appointments and patients collections
         const appointmentsCollection = collection(db, "appointments");
         const appointmentsSnapshot = await getDocs(appointmentsCollection);
-        const appointmentsList = appointmentsSnapshot.docs.map(doc => {
-  const data = doc.data();
-  return {
-    id: doc.id,
-    ...data,
-    skipped: data.isSkipped || data.skipped || false,
-  } as Appointment;
-});
-setAppointments(appointmentsList);
-
+        const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ 
+          id: doc.id, 
+          ...doc.data() 
+        } as Appointment));
+        
+        setAppointments(appointmentsList);
+    
         const patientsCollection = collection(db, "patients");
         const patientsSnapshot = await getDocs(patientsCollection);
         const patientsList = patientsSnapshot.docs.map(doc => ({
@@ -182,21 +180,26 @@ setAppointments(appointmentsList);
             ...doc.data()
         } as Patient));
         setAllPatients(patientsList);
-
+    
         const doctorsCollection = collection(db, "doctors");
         const doctorsSnapshot = await getDocs(doctorsCollection);
         const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
         setDoctors(doctorsList);
-
+    
       } catch (error) {
         console.error("Error fetching data:", error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to load initial data. Please refresh the page.",
+        });
       } finally {
         setLoading(false);
       }
     };
 
-    fetchData();
-  }, []);
+    fetchAppointmentsAndPatients();
+  }, [toast]);
 
   const resetForm = () => {
     setEditingAppointment(null);
@@ -956,7 +959,7 @@ const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3,
       <TableHead>Patient</TableHead>
       <TableHead>Token</TableHead>
       <TableHead>Time</TableHead>
-      <TableHead className="text-right">Actions</TableHead>
+      <TableHead className="text-right">{activeTab === 'completed' ? 'Status' : 'Actions'}</TableHead>
     </TableRow>
   </TableHeader>
   <TableBody>
@@ -973,49 +976,44 @@ const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3,
           <TableCell>{appointment.tokenNumber}</TableCell>
           <TableCell>{appointment.time}</TableCell>
           <TableCell className="text-right">
+             {activeTab === 'completed' ? (
+                <Badge variant="success">Completed</Badge>
+            ) : (
             <DropdownMenu>
-  <DropdownMenuTrigger asChild>
-    <Button variant="ghost" size="icon" className="p-0 h-auto">
-      <MoreHorizontal className="h-5 w-5" />
-    </Button>
-  </DropdownMenuTrigger>
-  <DropdownMenuContent align="end">
-  {isDrawerExpanded ? (
-  <>
-    <DropdownMenuItem onClick={() => setEditingAppointment(appointment)}>
-      Reschedule
-    </DropdownMenuItem>
-    <DropdownMenuItem onClick={() => handleCancel(appointment)} className="text-red-600">
-      Delete
-    </DropdownMenuItem>
-  </>
-) : appointment.skipped ? (
-  <>
-    <DropdownMenuItem onClick={() => handleComplete(appointment)}>
-      Completed
-    </DropdownMenuItem>
-    <DropdownMenuItem onClick={() => setEditingAppointment(appointment)}>
-      Reschedule
-    </DropdownMenuItem>
-  </>
-) : (
-  <>
-    <DropdownMenuItem onClick={() => handleComplete(appointment)}>
-      Completed
-    </DropdownMenuItem>
-    <DropdownMenuItem onClick={() => setEditingAppointment(appointment)}>
-      Reschedule
-    </DropdownMenuItem>
-    <DropdownMenuItem onClick={() => handleSkip(appointment)}>
-      Skip
-    </DropdownMenuItem>
-    <DropdownMenuItem onClick={() => handleCancel(appointment)} className="text-red-600">
-      Cancel
-    </DropdownMenuItem>
-  </>
-)}
-</DropdownMenuContent>
-</DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="p-0 h-auto">
+                  <MoreHorizontal className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {appointment.skipped ? (
+                  <>
+                    <DropdownMenuItem onClick={() => handleComplete(appointment)}>
+                      Completed
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setEditingAppointment(appointment)}>
+                      Reschedule
+                    </DropdownMenuItem>
+                  </>
+                ) : (
+                  <>
+                    <DropdownMenuItem onClick={() => handleComplete(appointment)}>
+                      Completed
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setEditingAppointment(appointment)}>
+                      Reschedule
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleSkip(appointment)}>
+                      Skip
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleCancel(appointment)} className="text-red-600">
+                      Cancel
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            )}
           </TableCell>
         </TableRow>
       ))}
@@ -1033,5 +1031,3 @@ const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3,
     </>
   );
 }
-
-    
