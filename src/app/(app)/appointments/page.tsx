@@ -130,100 +130,42 @@ export default function AppointmentsPage() {
 
 
   useEffect(() => {
-    const fetchAppointmentsAndPatients = async () => {
+    const fetchData = async () => {
       try {
+        setLoading(true);
+
+        // Fetch all appointments
         const appointmentsCollection = collection(db, "appointments");
         const appointmentsSnapshot = await getDocs(appointmentsCollection);
-        const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ 
-          id: doc.id, 
-          ...doc.data() 
+        const appointmentsList = appointmentsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
         } as Appointment));
-        
         setAppointments(appointmentsList);
-    
-        const patientMap = new Map<string, Patient>();
-        
-        appointmentsList.forEach((apt) => {
-          if (!apt.patientName || !apt.phone) {
-            console.warn('Skipping appointment with missing data:', apt);
-            return;
-          }
-          
-          const patientId = encodeURIComponent(`${apt.patientName}-${apt.phone}`);
-          
-          if (!apt.date) {
-            console.warn('Skipping appointment with no date:', apt);
-            return;
-          }
-    
-          let appointmentDate;
-          try {
-            appointmentDate = parse(apt.date, 'd MMMM yyyy', new Date());
-            if (isNaN(appointmentDate.getTime())) {
-              console.warn('Invalid date format:', apt.date);
-              return;
-            }
-          } catch (e) {
-            console.warn('Date parse error:', e);
-            return;
-          }
-    
-          if (patientMap.has(patientId)) {
-            const existingPatient = patientMap.get(patientId)!;
-            
-            let lastVisitDate = existingPatient.lastVisit;
-            if (existingPatient.lastVisit) {
-              try {
-                const existingDate = parse(existingPatient.lastVisit, 'd MMMM yyyy', new Date());
-                if (!isNaN(existingDate.getTime()) && appointmentDate > existingDate) {
-                  lastVisitDate = apt.date;
-                }
-              } catch (e) {
-                lastVisitDate = apt.date;
-              }
-            } else {
-              lastVisitDate = apt.date;
-            }
-    
-            patientMap.set(patientId, {
-              ...existingPatient,
-              lastVisit: lastVisitDate,
-              totalAppointments: (existingPatient.totalAppointments || 0) + 1,
-            });
-          } else {
-            patientMap.set(patientId, {
-              id: patientId,
-              name: apt.patientName,
-              age: apt.age,
-              gender: apt.gender,
-              phone: apt.phone,
-              place: apt.place,
-              lastVisit: apt.date,
-              doctor: apt.doctor,
-              totalAppointments: 1
-            });
-          }
-        });
-        
-        const patientsArray = Array.from(patientMap.values());
-        setAllPatients(patientsArray);
-    
+
+        // Fetch all patients from the 'patients' collection
+        const patientsCollection = collection(db, "patients");
+        const patientsSnapshot = await getDocs(patientsCollection);
+        const patientsList = patientsSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        } as Patient));
+        setAllPatients(patientsList);
+
+        // Fetch all doctors
+        const doctorsCollection = collection(db, "doctors");
+        const doctorsSnapshot = await getDocs(doctorsCollection);
+        const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
+        setDoctors(doctorsList);
+
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
         setLoading(false);
       }
     };
-    
-    const fetchDoctors = async () => {
-      const doctorsCollection = collection(db, "doctors");
-      const doctorsSnapshot = await getDocs(doctorsCollection);
-      const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
-      setDoctors(doctorsList);
-    };
 
-    fetchAppointmentsAndPatients();
-    fetchDoctors();
+    fetchData();
   }, []);
 
   const resetForm = () => {
@@ -287,6 +229,8 @@ export default function AppointmentsPage() {
           totalAppointments: 1,
         };
         await setDoc(patientRef, newPatientData, { merge: true });
+        // Refresh patient list
+        setAllPatients(prev => [...prev, newPatientData]);
       }
 
       const dataToSave: Omit<AddAppointmentFormValues, 'date' | 'time'> & { date: string, time: string, status: 'Confirmed' | 'Pending' | 'Cancelled', treatment: string } = {
@@ -579,7 +523,7 @@ export default function AppointmentsPage() {
                                                 ref={patientInputRef}
                                                 placeholder="Start typing patient name..."
                                                 onChange={handlePatientNameChange}
-                                                value={patientSearchTerm}
+                                                value={form.getValues("patientName")}
                                             />
                                             </FormControl>
                                         </PopoverTrigger>
@@ -706,7 +650,7 @@ export default function AppointmentsPage() {
                             <FormField control={form.control} name="date" render={({ field }) => (
                                 <FormItem className="flex flex-col">
                                     <Calendar
-                                    className="bg-primary text-primary-foreground rounded-md [&_button:hover]:bg-primary/80 [&_.rdp-day_today]:bg-primary-foreground/20 [&_.rdp-day_today]:text-primary-foreground [&_button]:text-primary-foreground"
+                                    className="bg-primary text-primary-foreground rounded-md [&_button:hover]:bg-primary/80 [&_.rdp-day_today]:bg-primary-foreground/20 [&_button]:text-primary-foreground"
                                     mode="single" selected={field.value} onSelect={field.onChange}
                                     disabled={(date) => 
                                         date < new Date(new Date().setHours(0,0,0,0)) || 
@@ -963,3 +907,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
