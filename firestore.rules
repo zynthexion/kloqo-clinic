@@ -3,34 +3,64 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // --- Helper Functions ---
+
     function isSignedIn() {
       return request.auth != null;
     }
 
+    // Checks if the requesting user is the owner of the document
     function isOwner(userId) {
       return request.auth.uid == userId;
     }
 
-    function getClinicId(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data.clinicId;
+    // Gets the clinicId from the requesting user's profile
+    function getRequestingUserClinicId() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clinicId;
     }
 
-    function belongsToClinic(clinicId) {
-      return isSignedIn() && getClinicId(request.auth.uid) == clinicId;
+    // Checks if the document being accessed has a specific clinicId
+    function resourceBelongsToClinic(clinicId) {
+      return resource.data.clinicId == clinicId;
+    }
+    
+    // Checks if the incoming (new) data has the correct clinicId
+    function requestDataBelongsToClinic(clinicId) {
+        return request.resource.data.clinicId == clinicId;
     }
 
-    match /clinics/{clinicId} {
-      allow read, update: if belongsToClinic(clinicId);
-      allow create: if true;
-    }
 
+    // --- Rule Definitions ---
+
+    // Admins can create their own user profile during signup.
+    // They can only read/update their own profile.
     match /users/{userId} {
       allow read, update: if isOwner(userId);
       allow create: if true;
     }
+    
+    // Admins can create their clinic profile during signup.
+    // They can only read/update the clinic they belong to.
+    match /clinics/{clinicId} {
+      allow read, update: if isSignedIn() && getRequestingUserClinicId() == clinicId;
+      allow create: if true;
+    }
 
-    match /clinics/{clinicId}/{subcollection}/{docId} {
-      allow read, write, delete: if belongsToClinic(clinicId);
+    // Rules for top-level collections that belong to a clinic
+    match /{collection}/{docId} where collection in ['doctors', 'departments', 'appointments', 'mobile-app'] {
+      // Allow read if the user belongs to the same clinic as the document
+      allow read: if isSignedIn() && resourceBelongsToClinic(getRequestingUserClinicId());
+      // Allow create if the new document is being assigned to the user's clinic
+      allow create: if isSignedIn() && requestDataBelongsToClinic(getRequestingUserClinicId());
+      // Allow update/delete if the user belongs to the same clinic
+      allow update, delete: if isSignedIn() && resourceBelongsToClinic(getRequestingUserClinicId());
+    }
+
+    // Patients can create and manage their own profile.
+    // Clinic staff can read a patient's profile.
+    match /patients/{patientId} {
+      allow read: if isSignedIn(); // Allows both patient and clinic staff to read
+      allow create, update: if isOwner(patientId); // Only the patient can create/update their own profile
     }
   }
 }
