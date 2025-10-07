@@ -16,8 +16,7 @@ import { Card } from '@/components/ui/card';
 import { PeterdrawLogo } from '@/components/icons';
 import Link from 'next/link';
 
-import { firestore } from '@/firebase';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { collection, doc, writeBatch } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
@@ -178,10 +177,10 @@ export default function SignupPage() {
         const userCredential = await createUserWithEmailAndPassword(auth, formData.emailAddress, formData.password);
         const user = userCredential.user;
 
-        const batch = writeBatch(firestore);
+        const batch = writeBatch(db);
 
-        const clinicRef = doc(collection(firestore, 'clinics'));
-        const userRef = doc(firestore, 'users', user.uid);
+        const clinicRef = doc(collection(db, 'clinics'));
+        const userRef = doc(db, 'users', user.uid);
         
         const clinicData = {
           id: clinicRef.id,
