@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Appointment, Doctor, Patient } from "@/lib/types";
-import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc } from "firebase/firestore";
+import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear } from "date-fns";
@@ -93,7 +93,7 @@ export default function AppointmentsPage() {
   const handleComplete = async (appointment: Appointment) => {
     setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Completed' } : a));
     if (appointment.id) {
-        const appointmentRef = doc(db, "appointments", appointment.id);
+        const appointmentRef = doc(db, "clinics", auth.currentUser!.uid, "appointments", appointment.id);
         await setDoc(appointmentRef, { status: "Completed" }, { merge: true });
     }
   };
@@ -106,7 +106,7 @@ export default function AppointmentsPage() {
     ];
   });
   if (appointment.id) {
-    const appointmentRef = doc(db, "appointments", appointment.id);
+    const appointmentRef = doc(db, "clinics", auth.currentUser!.uid, "appointments", appointment.id);
     await setDoc(appointmentRef, { isSkipped: true }, { merge: true });
   }
 };
@@ -274,24 +274,36 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
       const doctorName = doctors.find(d => d.id === values.doctor)?.name || "Unknown Doctor";
       const appointmentDateStr = format(values.date ?? (Array.isArray(values.date) ? values.date[0] : new Date()), "d MMMM yyyy");
 
-      if (bookingType === 'new' && !isEditing) {
+      if (bookingType === 'new' || (bookingType === 'existing' && !allPatients.some(p => p.phone === values.phone))) {
         const patientId = encodeURIComponent(`${values.patientName}-${values.phone}`);
         const patientRef = doc(db, "clinics", clinicId, "patients", patientId);
-        
-        const newPatientData: Patient = {
-          id: patientId,
-          clinicId,
-          name: values.patientName,
-          age: values.age,
-          gender: values.gender,
-          phone: values.phone,
-          place: values.place,
-          lastVisit: appointmentDateStr,
-          doctor: doctorName,
-          totalAppointments: 1,
-        };
-        await setDoc(patientRef, newPatientData, { merge: true });
-        setAllPatients(prev => [...prev, newPatientData]);
+        const patientDoc = await getFirestoreDoc(patientRef);
+
+        if (patientDoc.exists()) {
+          // Patient exists, update their record
+          await updateDoc(patientRef, {
+            lastVisit: appointmentDateStr,
+            doctor: doctorName,
+            totalAppointments: increment(1),
+          });
+          setAllPatients(prev => prev.map(p => p.id === patientId ? {...p, lastVisit: appointmentDateStr, doctor: doctorName, totalAppointments: (p.totalAppointments || 0) + 1} : p));
+        } else {
+          // New patient, create a new record
+          const newPatientData: Patient = {
+            id: patientId,
+            clinicId,
+            name: values.patientName,
+            age: values.age,
+            gender: values.gender,
+            phone: values.phone,
+            place: values.place,
+            lastVisit: appointmentDateStr,
+            doctor: doctorName,
+            totalAppointments: 1,
+          };
+          await setDoc(patientRef, newPatientData);
+          setAllPatients(prev => [...prev, newPatientData]);
+        }
       }
 
       const dataToSave = {
@@ -737,7 +749,6 @@ const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3,
     leaveDates.some(leaveDate => isSameDay(date, leaveDate))
   }
   initialFocus
-  compact={false}
   modifiers={selectedDoctor ? { available: { dayOfWeek: availableDaysOfWeek }, leave: leaveDates } : { leave: leaveDates }}
   modifiersStyles={{
     available: { backgroundColor: 'hsl(var(--accent))', color: 'hsl(var(--accent-foreground))' },
