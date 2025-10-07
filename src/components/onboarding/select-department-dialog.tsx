@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -28,9 +28,12 @@ export function SelectDepartmentDialog({ isOpen, setIsOpen, departments, onDepar
   const [searchTerm, setSearchTerm] = useState("");
   const [selected, setSelected] = useState<Omit<Department, "clinicId">[]>([]);
 
-  const filteredDepartments = departments.filter((dept) =>
-    dept.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredDepartments = useMemo(() => {
+    if (!departments) return [];
+    return departments.filter((dept) =>
+      dept.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [departments, searchTerm]);
 
   const toggleSelection = (department: Omit<Department, "clinicId">) => {
     setSelected(prev => {
@@ -95,7 +98,7 @@ export function SelectDepartmentDialog({ isOpen, setIsOpen, departments, onDepar
                     width={48}
                     height={48}
                     className="rounded-md object-cover"
-                    
+                    data-ai-hint={dept.imageHint}
                     />
                     <div className="flex-grow">
                     <p className="font-semibold text-sm">{dept.name}</p>
