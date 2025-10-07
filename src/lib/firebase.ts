@@ -5,12 +5,12 @@ import { getStorage } from "firebase/storage";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyCVCi_yT4w_tLg-WQSMRiB3oMbbd4x78G8",
-    authDomain: "kloqo-clinic-multi-33968-4c50b.firebaseapp.com",
-    projectId: "kloqo-clinic-multi-33968-4c50b",
-    storageBucket: "kloqo-clinic-multi-33968-4c50b.appspot.com",
-    messagingSenderId: "111094760580749718922",
-    appId: "1:111094760580749718922:web:a6230f81fa864f165e378c"
+    apiKey: "AIzaSyDP-2b-5_Y2P8pS-S8-y_U-Q0zX_0",
+    authDomain: "kloqo-a01a4.firebaseapp.com",
+    projectId: "kloqo-a01a4",
+    storageBucket: "kloqo-a01a4.appspot.com",
+    messagingSenderId: "542385449793",
+    appId: "1:542385449793:web:355d40906a5910b271d492",
 };
 
 
