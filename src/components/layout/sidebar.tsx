@@ -37,7 +37,7 @@ import { auth, db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/firebase";
 import { useEffect, useState } from "react";
-import { doc, getDoc, collection, getDocs } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs, query, where } from "firebase/firestore";
 import type { User } from "@/lib/types";
 
 const menuItems = [
@@ -62,7 +62,7 @@ export function Sidebar() {
 
   useEffect(() => {
     if (currentUser) {
-      const fetchUserProfile = async () => {
+      const fetchUserProfileAndClinicData = async () => {
         const userDocRef = doc(db, "users", currentUser.uid);
         const userDoc = await getDoc(userDocRef);
         if (userDoc.exists()) {
@@ -70,20 +70,19 @@ export function Sidebar() {
           setUserProfile(userData);
 
           if (userData.clinicId) {
-            // Check for departments and doctors sub-collections
-            const departmentsQuery = collection(db, "departments");
-            const departmentsSnapshot = await getDocs(query(departmentsQuery, where("clinicId", "==", userData.clinicId)));
+            const departmentsRef = collection(db, `clinics/${userData.clinicId}/departments`);
+            const departmentsSnapshot = await getDocs(departmentsRef);
             setHasDepartments(!departmentsSnapshot.empty);
-
-            const doctorsQuery = collection(db, "doctors");
-            const doctorsSnapshot = await getDocs(query(doctorsQuery, where("clinicId", "==", userData.clinicId)));
+            
+            const doctorsRef = collection(db, `clinics/${userData.clinicId}/doctors`);
+            const doctorsSnapshot = await getDocs(doctorsRef);
             setHasDoctors(!doctorsSnapshot.empty);
           }
         }
       };
-      fetchUserProfile();
+      fetchUserProfileAndClinicData();
     }
-  }, [currentUser]);
+  }, [currentUser, pathname]); // Re-fetch when path changes to update state
 
   const handleLogout = async () => {
     try {
@@ -134,7 +133,7 @@ export function Sidebar() {
     );
 
     if (isDisabled) {
-        return <div>{linkContent}</div>;
+        return <div title={`${label} is disabled during onboarding`}>{linkContent}</div>;
     }
 
     return <Link href={href}>{linkContent}</Link>;
