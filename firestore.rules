@@ -1,4 +1,6 @@
+
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -8,61 +10,70 @@ service cloud.firestore {
     }
 
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    // Get the user's clinic ID from their profile in the /users collection
-    function getClinicId() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clinicId;
+      return request.auth.uid == userId;
     }
     
-    // --- Rules for Top-Level Collections ---
+    function getUserClinicId(userId) {
+        return get(/databases/$(database)/documents/users/$(userId)).data.clinicId;
+    }
+
+    function isClinicStaff(clinicId) {
+      return isSignedIn() && getUserClinicId(request.auth.uid) == clinicId;
+    }
+
+    // --- Rules for Collections ---
 
     // Clinics can be created by any signed-in user during signup.
-    // Only users belonging to that clinic can read or update it.
+    // Only staff of that clinic can read or update it afterwards.
     match /clinics/{clinicId} {
-      allow read, update: if isSignedIn() && getClinicId() == clinicId;
+      allow read, update: if isClinicStaff(clinicId);
       allow create: if isSignedIn();
     }
 
-    // Users can create their own user document during signup.
+    // Users can create their own user document.
     // They can only read or update their own document afterwards.
     match /users/{userId} {
       allow read, update: if isOwner(userId);
       allow create: if isSignedIn();
     }
+
+    // Doctors can be created by staff of the same clinic.
+    // Doctors can be read by any signed-in user (for the patient app).
+    // Doctors can only be updated/deleted by staff of the same clinic.
+    match /doctors/{doctorId} {
+      allow read: if isSignedIn();
+      allow create: if isClinicStaff(request.resource.data.clinicId);
+      allow update, delete: if isClinicStaff(resource.data.clinicId);
+    }
     
-    // Mobile app credentials can be created during signup.
-    // Only users belonging to that clinic can manage them later.
-    match /mobile-app/{credentialId} {
-        allow read, update, delete: if isSignedIn() && get(/databases/$(database)/documents/mobile-app/$(credentialId)).data.clinicId == getClinicId();
-        allow create: if isSignedIn();
+    // Departments can be created by staff of the same clinic.
+    // Departments can be read by any signed-in user (for the patient app).
+    // Departments can only be updated/deleted by staff of the same clinic.
+    match /departments/{departmentId} {
+      allow read: if isSignedIn();
+      allow create: if isClinicStaff(request.resource.data.clinicId);
+      allow update, delete: if isClinicStaff(resource.data.clinicId);
     }
 
-    // A patient can only view their own record.
-    // Clinic staff can read patient records for their clinic.
+    // Appointments can be read/written by staff of the clinic,
+    // or by the patient who owns the appointment.
+    match /appointments/{appointmentId} {
+        allow read, write: if isClinicStaff(request.resource.data.clinicId) || isOwner(request.resource.data.patientId);
+    }
+
+    // Patients can create their own record.
+    // They can only read/update their own record.
+    // Clinic staff can read patient records associated with their clinic (e.g. for booking).
     match /patients/{patientId} {
-        allow read: if isOwner(patientId) || 
-                    exists(/databases/$(database)/documents/appointments/{appointmentId} where get(/databases/$(database)/documents/appointments/{appointmentId}).data.patientId == patientId && get(/databases/$(database)/documents/appointments/{appointmentId}).data.clinicId == getClinicId());
-        allow write: if isOwner(patientId);
+      allow create: if isOwner(patientId);
+      allow read, update: if isOwner(patientId) || isClinicStaff(getUserClinicId(request.auth.uid));
     }
     
-    // Doctors, departments, and appointments are linked to a clinic.
-    // Users can only access these documents if they belong to the same clinic.
-    match /doctors/{docId} {
-        allow read: if isSignedIn();
-        allow create, update, delete: if isSignedIn() && request.resource.data.clinicId == getClinicId();
-    }
-
-    match /departments/{deptId} {
-        allow read: if isSignedIn();
-        allow create, update, delete: if isSignedIn() && request.resource.data.clinicId == getClinicId();
-    }
-    
-    match /appointments/{apptId} {
-        allow read: if isSignedIn() && get(/databases/$(database)/documents/appointments/$(apptId)).data.clinicId == getClinicId();
-        allow create: if isSignedIn() && request.resource.data.clinicId == getClinicId();
-        allow update, delete: if isSignedIn() && get(/databases/$(database)/documents/appointments/$(apptId)).data.clinicId == getClinicId();
+    // Mobile app credentials can be created by any signed-in user during signup.
+    // Only staff of that clinic can read or update it afterwards.
+    match /mobile-app/{credentialId} {
+      allow read, update: if isClinicStaff(resource.data.clinicId);
+      allow create: if isSignedIn();
     }
   }
 }
