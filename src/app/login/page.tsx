@@ -24,7 +24,7 @@ import { useToast } from '@/hooks/use-toast';
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
-  const auth = useAuth();
+  const { auth } = useAuth();
   const { toast } = useToast();
 
   const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
