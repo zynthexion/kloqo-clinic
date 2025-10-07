@@ -309,7 +309,7 @@ export default function DepartmentsPage() {
         </AlertDialog>
 
         <footer className="text-center text-sm text-muted-foreground p-4">
-            Copyright &copy; 2024 Peterdraw &nbsp;&middot;&nbsp; Privacy Policy &nbsp;&middot;&nbsp; Term and conditions &nbsp;&middot;&nbsp; Contact
+            Copyright &copy; 2024 Peterdraw &middot; Privacy Policy &middot; Term and conditions &middot; Contact
         </footer>
       </div>
     </>
