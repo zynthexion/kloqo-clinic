@@ -7,11 +7,12 @@ import { PlusCircle } from "lucide-react";
 import { SelectDepartmentDialog } from "./select-department-dialog";
 import type { Department } from "@/lib/types";
 import Image from "next/image";
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/firebase";
 import { doc, setDoc, getDoc, collection, writeBatch, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { Skeleton } from "../ui/skeleton";
 
 const superAdminDepartments: Department[] = [
     { id: 'dept-01', name: 'General Medicine', description: 'Comprehensive primary care.', image: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8bWVkaWNpbmV8ZW58MHx8MHx8fDA%3D', doctors: [] },
@@ -54,7 +55,8 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
       }
     };
     fetchExistingDepartments();
-  }, [auth.currentUser, onDepartmentsAdded]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth.currentUser]);
 
 
   const handleSelectDepartments = async (departments: Department[]) => {
@@ -77,7 +79,13 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
         });
         await batch.commit();
         
-        const allDepts = [...existingDepartments, ...departments];
+        const allDepts = [...existingDepartments, ...departments].reduce((acc, current) => {
+            if (!acc.find(item => item.id === current.id)) {
+                acc.push(current);
+            }
+            return acc;
+        }, [] as Department[]);
+
         setExistingDepartments(allDepts);
         onDepartmentsAdded(allDepts);
 
@@ -97,11 +105,21 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
   };
   
   if (loading) {
-    return <div className="flex justify-center items-center h-full">Loading...</div>;
+    return (
+        <div className="flex flex-col items-center justify-center h-full text-center w-full max-w-4xl mx-auto">
+            <Skeleton className="h-8 w-1/2 mb-4" />
+            <Skeleton className="h-6 w-3/4 mb-6" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
+                <Skeleton className="h-48 w-full" />
+                <Skeleton className="h-48 w-full" />
+                <Skeleton className="h-48 w-full" />
+            </div>
+        </div>
+    );
   }
 
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center">
+    <div className="flex flex-col items-center justify-center h-full text-center w-full">
       {existingDepartments.length === 0 ? (
         <>
           <h1 className="text-2xl font-bold mb-2">Select your initial departments</h1>
@@ -115,25 +133,43 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
         </>
       ) : (
         <div className="w-full max-w-4xl">
-             <div className="flex justify-end mb-4">
-                 <Button onClick={() => setIsDialogOpen(true)}>
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Add More Departments
-                </Button>
-            </div>
-            <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded-md mb-6 text-left">
+            <div className="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 rounded-md mb-6 text-left">
                 <p className="font-bold">Next Step: Add a Doctor</p>
                 <p>The 'Doctors' menu is now enabled. Add your first doctor to begin managing appointments.</p>
             </div>
-             <div>
-                <h1 className="text-2xl font-bold mb-2">Add your first doctor</h1>
-                <p className="text-muted-foreground mb-6">
+
+            <div className="mb-8">
+                <h2 className="text-xl font-semibold text-left mb-4">Your Departments ({existingDepartments.length})</h2>
+                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {existingDepartments.map((dept) => (
+                        <Card key={dept.id} className="text-left overflow-hidden">
+                            <div className="relative h-32 w-full">
+                                <Image src={dept.image} alt={dept.name} fill style={{objectFit: 'cover'}} data-ai-hint={dept.imageHint || 'clinic department'} />
+                            </div>
+                            <CardContent className="p-4">
+                                <p className="font-semibold">{dept.name}</p>
+                                <p className="text-xs text-muted-foreground">{dept.description}</p>
+                            </CardContent>
+                        </Card>
+                    ))}
+                 </div>
+            </div>
+            
+            <div className="flex flex-col items-center gap-4">
+                <h1 className="text-2xl font-bold">Add your first doctor</h1>
+                <p className="text-muted-foreground">
                     With your department set up, it's time to add a doctor to the system.
                 </p>
-                <Button size="lg" onClick={onAddDoctorClick}>
-                    <PlusCircle className="mr-2 h-5 w-5" />
-                    Add Doctor
-                </Button>
+                <div className="flex items-center gap-4">
+                    <Button size="lg" onClick={onAddDoctorClick}>
+                        <PlusCircle className="mr-2 h-5 w-5" />
+                        Add Doctor
+                    </Button>
+                     <Button variant="outline" onClick={() => setIsDialogOpen(true)}>
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Add Additional Departments
+                    </Button>
+                </div>
             </div>
         </div>
       )}
@@ -147,3 +183,4 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
     </div>
   );
 }
+
