@@ -63,6 +63,7 @@ export default function DepartmentsPage() {
   // Step 1: Fetch master departments once
   useEffect(() => {
     const fetchMasterDepartments = async () => {
+      if (!auth.currentUser) return; // Wait for user
       try {
         const masterDeptsSnapshot = await getDocs(collection(db, "master-departments"));
         const masterDeptsList = masterDeptsSnapshot.docs.map(d => d.data() as Department);
@@ -73,7 +74,7 @@ export default function DepartmentsPage() {
       }
     };
     fetchMasterDepartments();
-  }, [toast]);
+  }, [auth.currentUser, toast]);
 
   // Step 2: Fetch clinic-specific data and combine with master list
   const fetchClinicData = useCallback(async () => {
@@ -358,3 +359,5 @@ export default function DepartmentsPage() {
     </>
   );
 }
+
+    
