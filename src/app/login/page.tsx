@@ -17,14 +17,32 @@ import { PeterdrawLogo } from '@/components/icons';
 import { Eye, EyeOff } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { useToast } from '@/hooks/use-toast';
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
+  const auth = useAuth();
+  const { toast } = useToast();
 
-  const handleLogin = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    router.push('/');
+    const email = (event.currentTarget.elements.namedItem('email') as HTMLInputElement).value;
+    const password = (event.currentTarget.elements.namedItem('password') as HTMLInputElement).value;
+    
+    try {
+        await signInWithEmailAndPassword(auth, email, password);
+        toast({ title: "Login Successful", description: "Redirecting to dashboard..." });
+        router.push('/');
+    } catch (error: any) {
+        toast({
+            variant: "destructive",
+            title: "Login Failed",
+            description: error.message,
+        });
+    }
   };
 
   return (
@@ -53,6 +71,7 @@ export default function LoginPage() {
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
+                name="email"
                 type="email"
                 placeholder="m@example.com"
                 required
@@ -63,7 +82,7 @@ export default function LoginPage() {
               <div className="flex items-center">
                 <Label htmlFor="password">Password</Label>
                 <Link
-                  href="/forgot-password"
+                  href="#"
                   className="ml-auto inline-block text-sm underline"
                 >
                   Forgot your password?
@@ -72,6 +91,7 @@ export default function LoginPage() {
               <div className="relative">
                 <Input
                   id="password"
+                  name="password"
                   type={showPassword ? 'text' : 'password'}
                   required
                   defaultValue="password123"
@@ -94,13 +114,13 @@ export default function LoginPage() {
             <Button type="submit" className="w-full">
               Login
             </Button>
-            <Button variant="outline" className="w-full">
+            <Button variant="outline" className="w-full" disabled>
               Login with Google
             </Button>
           </form>
           <div className="mt-4 text-center text-sm">
             Don&apos;t have an account?{' '}
-            <Link href="/signup" className="underline">
+            <Link href="/signup" className="underline" prefetch={false}>
               Sign up
             </Link>
           </div>
