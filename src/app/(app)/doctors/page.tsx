@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/table";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
-import { doc, updateDoc, collection, getDocs, setDoc } from "firebase/firestore";
+import { doc, updateDoc, collection, getDocs, setDoc, getDoc, query, where } from "firebase/firestore";
 import { db, storage } from "@/lib/firebase";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import type { Doctor, Appointment, LeaveSlot, Department, TimeSlot } from "@/lib/types";
@@ -59,6 +59,7 @@ import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Separator } from "@/components/ui/separator";
+import { useAuth } from "@/firebase";
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const dayAbbreviations = ["S", "M", "T", "W", "T", "F", "S"];
@@ -142,6 +143,7 @@ const DoctorListItem = ({ doctor, onSelect, isSelected }: { doctor: Doctor, onSe
 );
 
 export default function DoctorsPage() {
+  const auth = useAuth();
   const [isPending, startTransition] = useTransition();
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: subDays(new Date(), 29),
@@ -198,24 +200,28 @@ export default function DoctorsPage() {
 
 
   useEffect(() => {
+    if (!auth.currentUser) return;
+
     const fetchAllData = async () => {
       try {
+        const userDocRef = doc(db, "users", auth.currentUser!.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        const clinicId = userDocSnap.data()?.clinicId;
+
+        if (!clinicId) {
+          toast({ variant: "destructive", title: "Error", description: "Clinic not found for this user."});
+          return;
+        }
+
         const [doctorsSnapshot, departmentsSnapshot, appointmentsSnapshot] = await Promise.all([
-          getDocs(collection(db, "doctors")),
-          getDocs(collection(db, "departments")),
-          getDocs(collection(db, "appointments")),
+          getDocs(query(collection(db, "clinics", clinicId, "doctors"))),
+          getDocs(query(collection(db, "clinics", clinicId, "departments"))),
+          getDocs(query(collection(db, "clinics", clinicId, "appointments"))),
         ]);
 
-        const doctorsList = doctorsSnapshot.docs.map(doc => {
-  const data = doc.data();
-  return {
-    id: doc.id,
-    ...data,
-    availableDays: Array.isArray(data.availableDays) ? data.availableDays : [],
-  } as Doctor;
-});
-setDoctors(doctorsList);
-        if (doctorsList.length > 0) {
+        const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
+        setDoctors(doctorsList);
+        if (doctorsList.length > 0 && !selectedDoctor) {
           setSelectedDoctor(doctorsList[0]);
         }
 
@@ -224,7 +230,6 @@ setDoctors(doctorsList);
 
         const appointmentsList = appointmentsSnapshot.docs.map(doc => doc.data() as Appointment);
         setAppointments(appointmentsList);
-
 
       } catch (error) {
         console.error("Error fetching data:", error);
@@ -237,7 +242,7 @@ setDoctors(doctorsList);
     };
 
     fetchAllData();
-  }, [toast]);
+  }, [auth.currentUser, toast, selectedDoctor]);
   
 
   useEffect(() => {
@@ -303,7 +308,10 @@ setDoctors(doctorsList);
           .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a")}-${format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")}`).join(', ')}`)
           .join('; ');
 
-        const doctorToSave: Omit<Doctor, 'id'> = {
+        const docId = doctorData.id || `doc-${Date.now()}`;
+
+        const doctorToSave: Doctor = {
+          id: docId,
           name: doctorData.name,
           specialty: doctorData.specialty,
           department: doctorData.department,
@@ -321,9 +329,14 @@ setDoctors(doctorsList);
             to: format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")
           }))})),
         };
-
-        const docId = doctorData.id || `doc-${Date.now()}`;
-        await setDoc(doc(db, "doctors", docId), doctorToSave, { merge: true });
+        
+        if (auth.currentUser) {
+            const userDocSnap = await getDoc(doc(db, "users", auth.currentUser.uid));
+            const clinicId = userDocSnap.data()?.clinicId;
+            if (clinicId) {
+                await setDoc(doc(db, "clinics", clinicId, "doctors", docId), doctorToSave, { merge: true });
+            }
+        }
         
         const updatedDoctors = await getDocs(collection(db, "doctors"));
         const doctorsList = updatedDoctors.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
@@ -332,7 +345,7 @@ setDoctors(doctorsList);
         if (!doctorData.id) {
             setSelectedDoctor(doctorsList.find(d => d.name === doctorData.name) || null);
         } else {
-            setSelectedDoctor(prev => prev && prev.id === docId ? { ...prev, ...doctorToSave, id: docId } : prev);
+            setSelectedDoctor(prev => prev && prev.id === docId ? { ...prev, ...doctorToSave } : prev);
         }
 
         toast({
@@ -357,7 +370,7 @@ setDoctors(doctorsList);
         if (!selectedDoctor) return;
 
         startTransition(async () => {
-            const doctorRef = doc(db, "doctors", selectedDoctor.id);
+            const doctorRef = doc(db, "clinics", selectedDoctor.clinicId!, "doctors", selectedDoctor.id);
             try {
                 await updateDoc(doctorRef, { availability: newStatus });
                 const updatedDoctor = { ...selectedDoctor, availability: newStatus };
@@ -387,7 +400,7 @@ setDoctors(doctorsList);
         }
 
         startTransition(async () => {
-            const doctorRef = doc(db, "doctors", selectedDoctor.id);
+            const doctorRef = doc(db, "clinics", selectedDoctor.clinicId!, "doctors", selectedDoctor.id);
             try {
                 await updateDoc(doctorRef, { averageConsultingTime: timeValue });
                 const updatedDoctor = { ...selectedDoctor, averageConsultingTime: timeValue };
@@ -418,7 +431,7 @@ setDoctors(doctorsList);
         }
 
         startTransition(async () => {
-            const doctorRef = doc(db, "doctors", selectedDoctor.id);
+            const doctorRef = doc(db, "clinics", selectedDoctor.clinicId!, "doctors", selectedDoctor.id);
             try {
                 await updateDoc(doctorRef, { consultationFee: feeValue });
                 const updatedDoctor = { ...selectedDoctor, consultationFee: feeValue };
@@ -448,7 +461,7 @@ setDoctors(doctorsList);
         }
 
         startTransition(async () => {
-            const doctorRef = doc(db, "doctors", selectedDoctor.id);
+            const doctorRef = doc(db, "clinics", selectedDoctor.clinicId!, "doctors", selectedDoctor.id);
             try {
                 const updatedData = { 
                     name: newName,
@@ -476,7 +489,7 @@ setDoctors(doctorsList);
         if (!selectedDoctor) return;
         
         startTransition(async () => {
-            const doctorRef = doc(db, "doctors", selectedDoctor.id);
+            const doctorRef = doc(db, "clinics", selectedDoctor.clinicId!, "doctors", selectedDoctor.id);
             try {
                 await updateDoc(doctorRef, { bio: newBio });
                 const updatedDoctor = { ...selectedDoctor, bio: newBio };
@@ -515,7 +528,7 @@ setDoctors(doctorsList);
         }))}));
     
         startTransition(async () => {
-            const doctorRef = doc(db, "doctors", selectedDoctor.id);
+            const doctorRef = doc(db, "clinics", selectedDoctor.clinicId!, "doctors", selectedDoctor.id);
             try {
                 await updateDoc(doctorRef, {
                     availabilitySlots: availabilitySlotsToSave,
@@ -552,7 +565,7 @@ setDoctors(doctorsList);
         }).filter(slot => slot.timeSlots.length > 0);
     
         startTransition(async () => {
-            const doctorRef = doc(db, "doctors", selectedDoctor.id);
+            const doctorRef = doc(db, "clinics", selectedDoctor.clinicId!, "doctors", selectedDoctor.id);
             try {
                 await updateDoc(doctorRef, { availabilitySlots: updatedAvailabilitySlots });
                 const updatedDoctor = { ...selectedDoctor, availabilitySlots: updatedAvailabilitySlots };
@@ -621,7 +634,7 @@ form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true });
     const handleLeaveUpdate = async (updatedLeaveSlots: LeaveSlot[]) => {
         if (!selectedDoctor) return;
         startTransition(async () => {
-            const doctorRef = doc(db, "doctors", selectedDoctor.id);
+            const doctorRef = doc(db, "clinics", selectedDoctor.clinicId!, "doctors", selectedDoctor.id);
             try {
                 await updateDoc(doctorRef, { leaveSlots: updatedLeaveSlots });
                 const updatedDoctor = { ...selectedDoctor, leaveSlots: updatedLeaveSlots };
@@ -1266,4 +1279,6 @@ form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true });
 }
 
     
+    
+
     
