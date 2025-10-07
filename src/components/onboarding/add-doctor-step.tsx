@@ -10,38 +10,71 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from "@/components/ui/card";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
-import { Users, CalendarDays, Edit, Trash, MoreHorizontal } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
+import { setDoc, doc, collection } from "firebase/firestore";
+import { db, storage } from "@/lib/firebase";
+import { useAuth } from "@/firebase";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
 
 export function AddDoctorStep({ departments, onDoctorAdded }: { departments: Department[], onDoctorAdded: (doctor: Doctor) => void }) {
-  const [isAddDoctorOpen, setIsAddDoctorOpen] = useState(false);
+  const auth = useAuth();
+  const [isAddDoctorOpen, setIsAddDoctorOpen] = useState(true);
   const [addedDoctor, setAddedDoctor] = useState<Doctor | null>(null);
   const { toast } = useToast();
 
-  const handleSaveDoctor = (doctorData: Omit<Doctor, 'id' | 'avatar' | 'schedule' | 'preferences' | 'historicalData'> & { photo?: File; id?: string }) => {
-    const newDoctor: Doctor = {
-      id: `doc-${new Date().getTime()}`,
-      name: doctorData.name,
-      specialty: doctorData.specialty,
-      avatar: doctorData.photo ? URL.createObjectURL(doctorData.photo) : `https://picsum.photos/seed/new-doc-${new Date().getTime()}/100/100`,
-      schedule: 'Mon-Fri: 9 AM - 5 PM',
-      preferences: 'Not set',
-      historicalData: 'No data',
-      department: doctorData.department,
-      availability: 'Available',
-      bio: doctorData.bio,
-      averageConsultingTime: doctorData.averageConsultingTime,
-      availabilitySlots: doctorData.availabilitySlots,
-    };
-    setAddedDoctor(newDoctor);
-    onDoctorAdded(newDoctor);
+  const handleSaveDoctor = async (doctorData: Omit<Doctor, 'id' | 'avatar' | 'schedule' | 'preferences' | 'historicalData' | 'clinicId'> & { photo?: File; id?: string }) => {
+    if (!auth.currentUser) {
+        toast({ variant: "destructive", title: "Authentication Error", description: "You must be logged in." });
+        return;
+    }
 
-    toast({
-      title: "First Doctor Added!",
-      description: `${doctorData.name} has been added. You can now proceed.`,
-    });
-    setIsAddDoctorOpen(false);
+    try {
+        const userDoc = await doc(db, "users", auth.currentUser.uid).get();
+        const clinicId = userDoc.data()?.clinicId;
+        if (!clinicId) {
+            toast({ variant: "destructive", title: "Clinic not found", description: "This user is not associated with a clinic." });
+            return;
+        }
+
+        let photoUrl = `https://picsum.photos/seed/new-doc-${Date.now()}/100/100`;
+        if (doctorData.photo instanceof File) {
+            const storageRef = ref(storage, `doctor_avatars/${Date.now()}_${doctorData.photo.name}`);
+            await uploadBytes(storageRef, doctorData.photo);
+            photoUrl = await getDownloadURL(storageRef);
+        }
+
+        const docId = `doc-${Date.now()}`;
+        const newDoctor: Doctor = {
+          id: docId,
+          clinicId: clinicId,
+          name: doctorData.name,
+          specialty: doctorData.specialty,
+          avatar: photoUrl,
+          schedule: 'Not set',
+          preferences: 'Not set',
+          historicalData: 'No data',
+          department: doctorData.department,
+          availability: 'Available',
+          bio: doctorData.bio,
+          averageConsultingTime: doctorData.averageConsultingTime,
+          availabilitySlots: doctorData.availabilitySlots,
+        };
+        
+        await setDoc(doc(db, "doctors", docId), newDoctor);
+        
+        setAddedDoctor(newDoctor);
+        onDoctorAdded(newDoctor);
+
+        toast({
+          title: "First Doctor Added!",
+          description: `${doctorData.name} has been added. You can now proceed.`,
+        });
+        setIsAddDoctorOpen(false);
+
+    } catch (error) {
+        console.error("Error saving doctor:", error);
+        toast({ variant: "destructive", title: "Error", description: "Failed to save doctor." });
+    }
   };
   
   if (addedDoctor) {
