@@ -13,7 +13,7 @@ export function OnboardingCheck() {
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!auth.currentUser || pathname === '/onboarding') return;
+    if (!auth.currentUser || pathname === '/onboarding' || auth.loading) return;
 
     const checkOnboardingStatus = async () => {
       try {
@@ -22,39 +22,44 @@ export function OnboardingCheck() {
 
         if (userDoc.exists()) {
           const clinicId = userDoc.data()?.clinicId;
+          
+          // If there's no clinicId, user must onboard.
           if (!clinicId) {
-            if (pathname !== '/onboarding') router.push('/onboarding');
+            router.push('/onboarding');
             return;
           }
 
+          // Check if at least one department exists for the clinic
           const departmentsQuery = query(collection(db, "departments"), where("clinicId", "==", clinicId));
-          const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
+          const departmentsSnapshot = await getDocs(departmentsQuery);
           
-          const [departmentsSnapshot, doctorsSnapshot] = await Promise.all([
-            getDocs(departmentsQuery),
-            getDocs(doctorsQuery),
-          ]);
+          // Check if at least one doctor exists for the clinic
+          const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
+          const doctorsSnapshot = await getDocs(doctorsQuery);
 
           const needsOnboarding = departmentsSnapshot.empty || doctorsSnapshot.empty;
 
-          if (needsOnboarding && pathname !== '/onboarding') {
+          if (needsOnboarding) {
             router.push('/onboarding');
           }
         } else {
-            if (pathname !== '/onboarding') router.push('/onboarding');
+          // If user document doesn't exist, they need to onboard.
+          router.push('/onboarding');
         }
       } catch (error) {
         console.error("Error checking onboarding status:", error);
+        // Optional: redirect to an error page or show a toast
       }
     };
 
+    // A short delay to allow other startup processes to complete.
     const timer = setTimeout(() => {
         checkOnboardingStatus();
     }, 500);
     
     return () => clearTimeout(timer);
 
-  }, [auth.currentUser, router, pathname]);
+  }, [auth.currentUser, auth.loading, router, pathname]);
 
   return null; // This component does not render anything
 }
