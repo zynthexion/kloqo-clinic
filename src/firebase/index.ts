@@ -1,9 +1,9 @@
 
-import { auth, db } from '@/lib/firebase';
+"use client";
+
+import { auth } from '@/lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { useEffect, useState } from 'react';
-
-export const firestore = db;
 
 export function useAuth() {
     const [user, setUser] = useState<FirebaseUser | null>(null);
