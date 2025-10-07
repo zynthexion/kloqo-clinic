@@ -63,26 +63,30 @@ export default function DepartmentsPage() {
     if (!auth.currentUser) return;
     
     try {
+      const masterDeptsSnapshot = await getDocs(collection(db, "master-departments"));
+      const masterDeptsList = masterDeptsSnapshot.docs.map(d => d.data() as Department);
+      setMasterDepartments(masterDeptsList);
+
       const userDoc = await getDoc(doc(db, "users", auth.currentUser!.uid));
       const clinicId = userDoc.data()?.clinicId;
 
       if (clinicId) {
-          const masterDeptsSnapshot = await getDocs(collection(db, "master-departments"));
-          const masterDeptsList = masterDeptsSnapshot.docs.map(d => d.data() as Department);
-          setMasterDepartments(masterDeptsList);
-
-          const doctorsSnapshot = await getDocs(collection(db, "clinics", clinicId, "doctors"));
-          const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
-          setDoctors(doctorsList);
-          
           const clinicDoc = await getDoc(doc(db, "clinics", clinicId));
           if (clinicDoc.exists()) {
               const clinicData = clinicDoc.data();
               const departmentIds: string[] = clinicData.departments || [];
               
-              const deptsForClinic = masterDeptsList.filter(masterDept => departmentIds.includes(masterDept.id));
-              setClinicDepartments(deptsForClinic);
+              if (departmentIds.length > 0) {
+                  const deptsForClinic = masterDeptsList.filter(masterDept => departmentIds.includes(masterDept.id));
+                  setClinicDepartments(deptsForClinic);
+              } else {
+                setClinicDepartments([]);
+              }
           }
+
+          const doctorsSnapshot = await getDocs(collection(db, "clinics", clinicId, "doctors"));
+          const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
+          setDoctors(doctorsList);
       }
     } catch(error) {
         console.error("Error fetching departments data:", error);
@@ -315,3 +319,5 @@ export default function DepartmentsPage() {
     </>
   );
 }
+
+    
