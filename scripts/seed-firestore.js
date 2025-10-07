@@ -9,8 +9,6 @@ if (typeof window !== 'undefined') {
   throw new Error("This script should only be run in a Node.js environment.");
 }
 
-const defaultClinicId = 'default-clinic-id';
-
 const doctors = [
   {
     id: 'D001',
@@ -536,18 +534,19 @@ try {
 const db = getFirestore();
 
 async function seedCollection(collectionName, data, idField) {
-  const collectionRef = db.collection(collectionName);
   console.log(`Starting to seed ${collectionName}...`);
 
-  const promises = data.map(async (item) => {
-    const docRef = collectionRef.doc(item[idField]);
-    await docRef.set({ ...item, clinicId: defaultClinicId });
-    console.log(`Added ${collectionName} ${item.name || item.patientName || item[idField]} with ID: ${item[idField]}`);
-  });
+  for (const item of data) {
+    const clinicId = 'default-clinic-id'; // Define clinicId here
+    const collectionPath = `clinics/${clinicId}/${collectionName}`;
+    const docRef = db.collection(collectionPath).doc(item[idField]);
+    await docRef.set({ ...item, clinicId: clinicId });
+    console.log(`Added ${collectionName} ${item.name || item.patientName || item[idField]} with ID: ${item[idField]} to clinic ${clinicId}`);
+  }
 
-  await Promise.all(promises);
   console.log(`Finished seeding ${collectionName}.`);
 }
+
 
 async function main() {
     await seedCollection('doctors', doctors, 'id');
