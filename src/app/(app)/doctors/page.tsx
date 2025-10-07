@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useEffect, useMemo, useTransition } from "react";
@@ -213,20 +212,20 @@ export default function DoctorsPage() {
           return;
         }
 
-        const [doctorsSnapshot, departmentsSnapshot, appointmentsSnapshot] = await Promise.all([
+        const [doctorsSnapshot, appointmentsSnapshot] = await Promise.all([
           getDocs(query(collection(db, "clinics", clinicId, "doctors"))),
-          getDocs(query(collection(db, "clinics", clinicId, "departments"))),
           getDocs(query(collection(db, "clinics", clinicId, "appointments"))),
         ]);
+        
+        const masterDepartmentsSnapshot = await getDocs(collection(db, "master-departments"));
+        const masterDepartmentsList = masterDepartmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Department));
+        setDepartments(masterDepartmentsList);
 
-        const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
+        const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), clinicId } as Doctor));
         setDoctors(doctorsList);
         if (doctorsList.length > 0 && !selectedDoctor) {
           setSelectedDoctor(doctorsList[0]);
         }
-
-        const departmentsList = departmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Department));
-        setDepartments(departmentsList);
 
         const appointmentsList = appointmentsSnapshot.docs.map(doc => doc.data() as Appointment);
         setAppointments(appointmentsList);
@@ -242,7 +241,7 @@ export default function DoctorsPage() {
     };
 
     fetchAllData();
-  }, [auth.currentUser, toast, selectedDoctor]);
+  }, [auth.currentUser, toast]);
   
 
   useEffect(() => {
@@ -310,7 +309,7 @@ export default function DoctorsPage() {
 
         const docId = doctorData.id || `doc-${Date.now()}`;
 
-        const doctorToSave: Omit<Doctor, 'id'> & { id?: string } = {
+        const doctorToSave: Omit<Doctor, 'id' | 'clinicId'> & { id?: string } = {
           name: doctorData.name,
           specialty: doctorData.specialty,
           department: doctorData.department,
@@ -341,13 +340,13 @@ export default function DoctorsPage() {
                 
                 const doctorsQuery = query(collection(db, "clinics", clinicId, "doctors"));
                 const updatedDoctors = await getDocs(doctorsQuery);
-                const doctorsList = updatedDoctors.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
+                const doctorsList = updatedDoctors.docs.map(doc => ({ id: doc.id, ...doc.data(), clinicId } as Doctor));
                 setDoctors(doctorsList);
 
                 if (!doctorData.id) {
                     setSelectedDoctor(doctorsList.find(d => d.id === docId) || null);
                 } else {
-                    setSelectedDoctor(prev => prev && prev.id === docId ? { ...prev, ...doctorToSave, id: docId } : prev);
+                    setSelectedDoctor(prev => prev && prev.id === docId ? { ...prev, ...(doctorToSave as Doctor), id: docId, clinicId } : prev);
                 }
             }
         }
@@ -624,8 +623,8 @@ export default function DoctorsPage() {
         
         // Also ensure any newly checked days that weren't in the form get added
         // Only update slots for selectedDays, preserve others
-const updatedSlots = Array.from(newSlotsMap.values());
-form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true });
+        const updatedSlots = Array.from(newSlotsMap.values());
+        form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true });
         
         toast({
             title: "Time Slots Applied",
@@ -1281,8 +1280,3 @@ form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true });
     </>
   );
 }
-
-    
-    
-
-    
