@@ -3,7 +3,7 @@
 
 import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/firebase';
 
@@ -27,12 +27,12 @@ export function OnboardingCheck() {
             return;
           }
 
-          const departmentsRef = collection(db, 'clinics', clinicId, 'departments');
-          const doctorsRef = collection(db, 'clinics', clinicId, 'doctors');
+          const departmentsQuery = query(collection(db, "departments"), where("clinicId", "==", clinicId));
+          const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
           
           const [departmentsSnapshot, doctorsSnapshot] = await Promise.all([
-            getDocs(departmentsRef),
-            getDocs(doctorsRef),
+            getDocs(departmentsQuery),
+            getDocs(doctorsQuery),
           ]);
 
           const needsOnboarding = departmentsSnapshot.empty || doctorsSnapshot.empty;

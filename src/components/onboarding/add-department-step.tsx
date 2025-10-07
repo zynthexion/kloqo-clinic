@@ -10,7 +10,7 @@ import Image from "next/image";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/firebase";
-import { doc, setDoc, getDoc, collection, writeBatch, getDocs } from "firebase/firestore";
+import { doc, setDoc, getDoc, collection, writeBatch, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 const superAdminDepartments: Department[] = [
@@ -38,8 +38,9 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
         const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
         const clinicId = userDoc.data()?.clinicId;
         if (clinicId) {
-            const departmentsRef = collection(db, 'clinics', clinicId, 'departments');
-            const querySnapshot = await getDocs(departmentsRef);
+            const departmentsRef = collection(db, 'departments');
+            const q = query(departmentsRef, where("clinicId", "==", clinicId));
+            const querySnapshot = await getDocs(q);
             const depts = querySnapshot.docs.map(d => d.data() as Department);
             setExistingDepartments(depts);
             if (depts.length > 0) {
@@ -71,8 +72,8 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
 
         const batch = writeBatch(db);
         departments.forEach(dept => {
-            const deptRef = doc(collection(db, `clinics/${clinicId}/departments`));
-            batch.set(deptRef, { ...dept, id: deptRef.id, clinicId });
+            const deptRef = doc(db, "departments", dept.id);
+            batch.set(deptRef, { ...dept, clinicId });
         });
         await batch.commit();
         
