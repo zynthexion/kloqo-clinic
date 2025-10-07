@@ -15,11 +15,11 @@ import { db } from "@/lib/firebase";
 import { Skeleton } from "../ui/skeleton";
 
 const superAdminDepartments: Department[] = [
-    { id: 'dept-01', clinicId: '', name: 'General Medicine', description: 'Comprehensive primary care.', image: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8bWVkaWNpbmV8ZW58MHx8MHx8fDA%3D', doctors: [] },
-    { id: 'dept-02', clinicId: '', name: 'Cardiology', description: 'Specialized heart care.', image: 'https://images.unsplash.com/photo-1530026405182-271453396975?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MjZ8fG1lZGljaW5lfGVufDB8fDB8fHww', doctors: [] },
-    { id: 'dept-03', clinicId: '', name: 'Pediatrics', description: 'Healthcare for children.', image: 'https://images.unsplash.com/photo-1599586120429-48281b6f0ece?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTR8fGNoaWxkcmVuJTIwZG9jdG9yfGVufDB8fDB8fHww', doctors: [] },
-    { id: 'dept-04', clinicId: '', name: 'Dermatology', description: 'Skin health services.', image: 'https://images.unsplash.com/photo-1631894959934-396b3a8d11b3?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTB8fGRlcm1hdG9sb2d5fGVufDB8fDB8fHww', doctors: [] },
-    { id: 'dept-05', clinicId: '', name: 'Neurology', description: 'Nervous system disorders.', image: 'https://images.unsplash.com/photo-1695423589949-c9a56f626245?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Nnx8bmV1cm9sb2d5fGVufDB8fDB8fHww', doctors: [] },
+    { id: 'dept-01', clinicId: '', name: 'General Medicine', description: 'Comprehensive primary care.', image: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8bWVkaWNpbmV8ZW58MHx8MHx8fDA%3D', imageHint: "stethoscope pills", doctors: [] },
+    { id: 'dept-02', clinicId: '', name: 'Cardiology', description: 'Specialized heart care.', image: 'https://images.unsplash.com/photo-1530026405182-271453396975?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MjZ8fG1lZGljaW5lfGVufDB8fDB8fHww', imageHint: "heart model", doctors: [] },
+    { id: 'dept-03', clinicId: '', name: 'Pediatrics', description: 'Healthcare for children.', image: 'https://images.unsplash.com/photo-1599586120429-48281b6f0ece?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTR8fGNoaWxkcmVuJTIwZG9jdG9yfGVufDB8fDB8fHww', imageHint: "doctor baby", doctors: [] },
+    { id: 'dept-04', clinicId: '', name: 'Dermatology', description: 'Skin health services.', image: 'https://images.unsplash.com/photo-1631894959934-396b3a8d11b3?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTB8fGRlcm1hdG9sb2d5fGVufDB8fDB8fHww', imageHint: "skin care", doctors: [] },
+    { id: 'dept-05', clinicId: '', name: 'Neurology', description: 'Nervous system disorders.', image: 'https://images.unsplash.com/photo-1695423589949-c9a56f626245?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Nnx8bmV1cm9sb2d5fGVufDB8fDB8fHww', imageHint: "brain model", doctors: [] },
 ];
 
 
@@ -39,7 +39,7 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
     const fetchExistingDepartments = async () => {
       setLoading(true);
       try {
-        const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+        const userDoc = await getDoc(doc(db, "users", auth.currentUser!.uid));
         const clinicId = userDoc.data()?.clinicId;
         if (clinicId) {
             const departmentsRef = collection(db, 'clinics', clinicId, 'departments');
@@ -67,7 +67,7 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
         return;
     }
     try {
-        const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+        const userDoc = await getDoc(doc(db, "users", auth.currentUser!.uid));
         const clinicId = userDoc.data()?.clinicId;
         if (!clinicId) {
             toast({ variant: "destructive", title: "Error", description: "No clinic ID found for user." });
@@ -136,6 +136,10 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
       ) : (
         <div className="w-full max-w-4xl">
             <div className="mb-8">
+                <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded-md mb-6 text-left w-full">
+                    <p className="font-bold">Departments Added!</p>
+                    <p>You have successfully added departments. The next step is to add doctors.</p>
+                </div>
                 <h2 className="text-xl font-semibold text-left mb-4">Your Departments ({existingDepartments.length})</h2>
                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     {existingDepartments.map((dept) => (
@@ -153,11 +157,7 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
             </div>
             
             <div className="flex flex-col items-center gap-4">
-                 <div className="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 rounded-md mb-6 text-left w-full">
-                    <p className="font-bold">Next Step: Add a Doctor</p>
-                    <p>The 'Doctors' menu is now enabled. Add your first doctor to begin managing appointments.</p>
-                </div>
-                <h1 className="text-2xl font-bold">Add your first doctor</h1>
+                <h1 className="text-2xl font-bold">Next Step: Add a Doctor</h1>
                 <p className="text-muted-foreground">
                     With your department set up, it's time to add a doctor to the system.
                 </p>
