@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Home,
   ClipboardList,
@@ -33,9 +33,12 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { user } from "@/lib/data";
 import { Button } from "../ui/button";
+import { signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { useToast } from "@/hooks/use-toast";
 
 const menuItems = [
-  { href: "/", icon: Home, label: "Dashboard" },
+  { href: "/dashboard", icon: Home, label: "Dashboard" },
   { href: "/appointments", icon: ClipboardList, label: "Appointments" },
   { href: "/doctors", icon: Stethoscope, label: "Doctors" },
   { href: "/patients", icon: Users, label: "Patients" },
@@ -45,6 +48,26 @@ const menuItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { toast } = useToast();
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      toast({
+        title: "Logged Out",
+        description: "You have been successfully logged out.",
+      });
+      router.push('/');
+    } catch (error) {
+      console.error("Logout failed:", error);
+      toast({
+        variant: "destructive",
+        title: "Logout Failed",
+        description: "An error occurred while logging out. Please try again.",
+      });
+    }
+  };
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -113,7 +136,7 @@ export function Sidebar() {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-red-500">
+              <DropdownMenuItem onClick={handleLogout} className="text-red-500">
                 <LogOut className="mr-2 h-4 w-4" />
                 <span>Logout</span>
               </DropdownMenuItem>

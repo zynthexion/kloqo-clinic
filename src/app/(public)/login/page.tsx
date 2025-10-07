@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import {
@@ -26,14 +26,14 @@ export default function LoginPage() {
   const { toast } = useToast();
   const [defaultEmail, setDefaultEmail] = useState('');
 
-  useState(() => {
+  useEffect(() => {
     if (typeof window !== 'undefined') {
       const storedEmail = localStorage.getItem('signupEmail');
       if (storedEmail) {
         setDefaultEmail(storedEmail);
       }
     }
-  });
+  }, []);
 
   const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -95,6 +95,7 @@ export default function LoginPage() {
                 placeholder="m@example.com"
                 required
                 defaultValue={defaultEmail}
+                key={defaultEmail} 
               />
             </div>
             <div className="grid gap-2">
