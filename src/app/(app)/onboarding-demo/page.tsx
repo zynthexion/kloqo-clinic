@@ -1,20 +1,17 @@
+
 "use client";
 
-import { Sidebar } from '@/components/layout/sidebar';
 import { OnboardingCheck } from '@/components/onboarding/onboarding-check';
+import AppLayout from './layout';
 
-export default function AppLayout({
+export default function OnboardingDemoPage({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <div className="flex h-full">
-      <OnboardingCheck />
-      <Sidebar />
-      <div className="flex-1 flex flex-col h-full overflow-y-auto">
+    <AppLayout>
         {children}
-      </div>
-    </div>
+    </AppLayout>
   );
 }

@@ -5,15 +5,13 @@ import { Sidebar } from '@/components/layout/sidebar';
 import { OnboardingCheck } from '@/components/onboarding/onboarding-check';
 import { useAuth } from '@/firebase';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 
-export default function AppLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+function AuthLayoutContent({ children }: { children: React.ReactNode }) {
   const { currentUser, loading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     if (!loading && !currentUser) {
@@ -21,12 +19,16 @@ export default function AppLayout({
     }
   }, [currentUser, loading, router]);
 
-  if (loading || !currentUser) {
+  if (loading) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
         <p>Loading...</p>
       </div>
     );
+  }
+
+  if (!currentUser) {
+    return null; // or a loading spinner, as the redirect will happen
   }
 
   return (
@@ -38,4 +40,17 @@ export default function AppLayout({
       </div>
     </div>
   );
+}
+
+
+export default function AppLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <Suspense fallback={<div className="flex h-screen w-full items-center justify-center"><p>Loading...</p></div>}>
+      <AuthLayoutContent>{children}</AuthLayoutContent>
+    </Suspense>
+  )
 }

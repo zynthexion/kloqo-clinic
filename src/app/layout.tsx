@@ -1,6 +1,7 @@
-import type {Metadata} from 'next';
+import type { Metadata } from 'next';
 import './globals.css';
-import { Toaster } from "@/components/ui/toaster"
+import { Toaster } from "@/components/ui/toaster";
+import { AuthProvider } from '@/firebase';
 
 export const metadata: Metadata = {
   title: 'Kloqo',
@@ -23,8 +24,10 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Michroma&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased h-full">
+        <AuthProvider>
           {children}
           <Toaster />
+        </AuthProvider>
       </body>
     </html>
   );
