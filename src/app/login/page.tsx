@@ -20,11 +20,11 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
+import { auth } from '@/lib/firebase';
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
-  const { auth } = useAuth();
   const { toast } = useToast();
 
   const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
