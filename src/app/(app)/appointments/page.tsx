@@ -183,17 +183,17 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
           return;
         }
 
-        const appointmentsQuery = query(collection(db, "appointments"), where("clinicId", "==", clinicId));
+        const appointmentsQuery = query(collection(db, "clinics", clinicId, "appointments"));
         const appointmentsSnapshot = await getDocs(appointmentsQuery);
         const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
         setAppointments(appointmentsList);
     
-        const patientsQuery = query(collection(db, "patients"), where("clinicId", "==", clinicId));
+        const patientsQuery = query(collection(db, "clinics", clinicId, "patients"));
         const patientsSnapshot = await getDocs(patientsQuery);
         const patientsList = patientsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Patient));
         setAllPatients(patientsList);
     
-        const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
+        const doctorsQuery = query(collection(db, "clinics", clinicId, "doctors"));
         const doctorsSnapshot = await getDocs(doctorsQuery);
         const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
         setDoctors(doctorsList);
@@ -276,7 +276,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
 
       if (bookingType === 'new' && !isEditing) {
         const patientId = encodeURIComponent(`${values.patientName}-${values.phone}`);
-        const patientRef = doc(db, "patients", patientId);
+        const patientRef = doc(db, "clinics", clinicId, "patients", patientId);
         
         const newPatientData: Patient = {
           id: patientId,
@@ -307,7 +307,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
       if (isEditing) {
           const { id, ...restOfData } = dataToSave;
           if (!id) throw new Error("Editing an appointment without an ID.");
-          const appointmentRef = doc(db, "appointments", id);
+          const appointmentRef = doc(db, "clinics", clinicId, "appointments", id);
           await setDoc(appointmentRef, restOfData, { merge: true });
 
           setAppointments(prev => {
@@ -333,7 +333,7 @@ const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3,
               id: appointmentId,
               tokenNumber: tokenNumber,
           };
-          const appointmentRef = doc(db, "appointments", appointmentId);
+          const appointmentRef = doc(db, "clinics", clinicId, "appointments", appointmentId);
           await setDoc(appointmentRef, newAppointmentData);
           setAppointments(prev => [...prev, newAppointmentData]);
           toast({
@@ -1059,5 +1059,3 @@ const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3,
     </>
   );
 }
-
-    
