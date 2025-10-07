@@ -310,8 +310,7 @@ export default function DoctorsPage() {
 
         const docId = doctorData.id || `doc-${Date.now()}`;
 
-        const doctorToSave: Doctor = {
-          id: docId,
+        const doctorToSave: Omit<Doctor, 'id'> & { id?: string } = {
           name: doctorData.name,
           specialty: doctorData.specialty,
           department: doctorData.department,
@@ -330,22 +329,27 @@ export default function DoctorsPage() {
           }))})),
         };
         
+        if (doctorData.id) {
+          doctorToSave.id = doctorData.id;
+        }
+
         if (auth.currentUser) {
             const userDocSnap = await getDoc(doc(db, "users", auth.currentUser.uid));
             const clinicId = userDocSnap.data()?.clinicId;
             if (clinicId) {
                 await setDoc(doc(db, "clinics", clinicId, "doctors", docId), doctorToSave, { merge: true });
-            }
-        }
-        
-        const updatedDoctors = await getDocs(collection(db, "doctors"));
-        const doctorsList = updatedDoctors.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
-        setDoctors(doctorsList);
+                
+                const doctorsQuery = query(collection(db, "clinics", clinicId, "doctors"));
+                const updatedDoctors = await getDocs(doctorsQuery);
+                const doctorsList = updatedDoctors.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
+                setDoctors(doctorsList);
 
-        if (!doctorData.id) {
-            setSelectedDoctor(doctorsList.find(d => d.name === doctorData.name) || null);
-        } else {
-            setSelectedDoctor(prev => prev && prev.id === docId ? { ...prev, ...doctorToSave } : prev);
+                if (!doctorData.id) {
+                    setSelectedDoctor(doctorsList.find(d => d.id === docId) || null);
+                } else {
+                    setSelectedDoctor(prev => prev && prev.id === docId ? { ...prev, ...doctorToSave, id: docId } : prev);
+                }
+            }
         }
 
         toast({
@@ -697,7 +701,7 @@ form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true });
       if (!selectedDoctor?.leaveSlots || !appointment) return false;
       
       const aptDate = parse(appointment.date, "d MMMM yyyy", new Date());
-      const leaveForDay = selectedDoctor.leaveSlots.find(ls => isSameDay(parse(ls.date, "yyyy-MM-dd", new Date()), aptDate));
+      const leaveForDay = selectedDoctor.leaveSlots.find(ls => ls.date && isSameDay(parse(ls.date, "yyyy-MM-dd", new Date()), aptDate));
       
       if (!leaveForDay) return false;
 
