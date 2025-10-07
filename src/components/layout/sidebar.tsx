@@ -55,8 +55,6 @@ export function Sidebar() {
   const { toast } = useToast();
   const { currentUser } = useAuth();
   const [userProfile, setUserProfile] = useState<User | null>(null);
-  const [hasDepartments, setHasDepartments] = useState(false);
-  const [hasDoctors, setHasDoctors] = useState(false);
 
   const isOnboarding = pathname === "/onboarding";
 
@@ -68,21 +66,11 @@ export function Sidebar() {
         if (userDoc.exists()) {
           const userData = userDoc.data() as User;
           setUserProfile(userData);
-
-          if (userData.clinicId) {
-            const departmentsRef = collection(db, `clinics/${userData.clinicId}/departments`);
-            const departmentsSnapshot = await getDocs(departmentsRef);
-            setHasDepartments(!departmentsSnapshot.empty);
-            
-            const doctorsRef = collection(db, `clinics/${userData.clinicId}/doctors`);
-            const doctorsSnapshot = await getDocs(doctorsRef);
-            setHasDoctors(!doctorsSnapshot.empty);
-          }
         }
       };
       fetchUserProfileAndClinicData();
     }
-  }, [currentUser, pathname]); // Re-fetch when path changes to update state
+  }, [currentUser, pathname]);
 
   const handleLogout = async () => {
     try {
@@ -103,16 +91,7 @@ export function Sidebar() {
   };
 
   const NavLink = ({ href, icon: Icon, label }: { href: string, icon: React.ElementType, label: string }) => {
-    let isDisabled = false;
-    if (isOnboarding) {
-        if (label === 'Departments') {
-            isDisabled = false; // Always enabled on onboarding
-        } else if (label === 'Doctors') {
-            isDisabled = !hasDepartments; // Enabled only if departments exist
-        } else {
-            isDisabled = true; // All others disabled on onboarding
-        }
-    }
+    const isDisabled = isOnboarding;
 
     const linkContent = (
         <div
