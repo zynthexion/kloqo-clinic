@@ -167,7 +167,7 @@ export default function DoctorsPage() {
 
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
-  const [departments, setDepartments] = useState<Department[]>([]);
+  const [clinicDepartments, setClinicDepartments] = useState<Department[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [leaveCalDate, setLeaveCalDate] = useState<Date | undefined>(new Date());
@@ -215,14 +215,21 @@ export default function DoctorsPage() {
         const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
         const appointmentsQuery = query(collection(db, "appointments"), where("clinicId", "==", clinicId));
         
-        const [doctorsSnapshot, appointmentsSnapshot] = await Promise.all([
+        const [doctorsSnapshot, appointmentsSnapshot, masterDepartmentsSnapshot, clinicDocSnap] = await Promise.all([
           getDocs(doctorsQuery),
           getDocs(appointmentsQuery),
+          getDocs(collection(db, "master-departments")),
+          getDoc(doc(db, "clinics", clinicId))
         ]);
         
-        const masterDepartmentsSnapshot = await getDocs(collection(db, "master-departments"));
         const masterDepartmentsList = masterDepartmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Department));
-        setDepartments(masterDepartmentsList);
+
+        if (clinicDocSnap.exists()) {
+            const clinicData = clinicDocSnap.data();
+            const departmentIds: string[] = clinicData.departments || [];
+            const deptsForClinic = masterDepartmentsList.filter(masterDept => departmentIds.includes(masterDept.id));
+            setClinicDepartments(deptsForClinic);
+        }
 
         const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), clinicId } as Doctor));
         setDoctors(doctorsList);
@@ -776,7 +783,7 @@ export default function DoctorsPage() {
                       </SelectTrigger>
                       <SelectContent>
                           <SelectItem value="All">All Departments</SelectItem>
-                          {departments.map(dept => (
+                          {clinicDepartments.map(dept => (
                               <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
                           ))}
                       </SelectContent>
@@ -845,7 +852,7 @@ export default function DoctorsPage() {
                                    <SelectValue placeholder="Select department" />
                                </SelectTrigger>
                                <SelectContent>
-                                   {departments.map(dept => (
+                                   {clinicDepartments.map(dept => (
                                        <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
                                    ))}
                                </SelectContent>
@@ -1278,10 +1285,11 @@ export default function DoctorsPage() {
         isOpen={isAddDoctorOpen}
         setIsOpen={setIsAddDoctorOpen}
         doctor={editingDoctor}
-        departments={departments}
+        departments={clinicDepartments}
       />
     </>
   );
 }
+
 
     
