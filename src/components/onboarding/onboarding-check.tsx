@@ -15,7 +15,6 @@ export function OnboardingCheck() {
   useEffect(() => {
     if (!auth.currentUser || auth.loading) return;
     
-    // Don't run the check if we are already on the onboarding page
     if (pathname === '/onboarding') return;
 
     const checkOnboardingStatus = async () => {
@@ -24,7 +23,13 @@ export function OnboardingCheck() {
         const userDoc = await getDoc(userDocRef);
 
         if (userDoc.exists()) {
-          const clinicId = userDoc.data()?.clinicId;
+          const userData = userDoc.data();
+          
+          if (userData.onboarded) {
+              return;
+          }
+
+          const clinicId = userData.clinicId;
           
           if (!clinicId) {
             router.push('/onboarding');
@@ -43,7 +48,6 @@ export function OnboardingCheck() {
             router.push('/onboarding');
           }
         } else {
-          // If the user document doesn't exist, they need to onboard.
           router.push('/onboarding');
         }
       } catch (error) {

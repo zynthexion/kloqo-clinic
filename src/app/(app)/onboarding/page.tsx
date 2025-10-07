@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { AddDoctorForm } from "@/components/doctors/add-doctor-form";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { db, storage } from "@/lib/firebase";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { errorEmitter } from "@/firebase/error-emitter";
@@ -93,6 +93,22 @@ export default function OnboardingPage() {
       });
   };
 
+  const handleCompletion = async () => {
+    if (!auth.currentUser) return;
+    const userRef = doc(db, 'users', auth.currentUser.uid);
+    try {
+        await updateDoc(userRef, { onboarded: true });
+        router.push('/dashboard');
+    } catch (error) {
+        console.error("Failed to update onboarding status: ", error);
+        toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Could not finalize onboarding. Please try again."
+        })
+    }
+  }
+
   return (
     <>
       <main className="flex-1 p-4 sm:p-6">
@@ -105,7 +121,7 @@ export default function OnboardingPage() {
               <p className="text-lg text-muted-foreground mb-8">
                   You have successfully set up your clinic. You are now ready to manage your dashboard.
               </p>
-              <Button onClick={() => router.push('/dashboard')}>Go to Dashboard</Button>
+              <Button onClick={handleCompletion}>Go to Dashboard</Button>
           </div>
         )}
       </main>
