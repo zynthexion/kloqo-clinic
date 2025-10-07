@@ -31,11 +31,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
-import { user } from "@/lib/data";
 import { Button } from "../ui/button";
 import { signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/firebase";
+import { useEffect, useState } from "react";
+import { doc, getDoc } from "firebase/firestore";
+import type { User } from "@/lib/types";
 
 const menuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard" },
@@ -50,6 +53,23 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
+  const { currentUser } = useAuth();
+  const [userProfile, setUserProfile] = useState<User | null>(null);
+
+  const isOnboarding = pathname === "/onboarding";
+
+  useEffect(() => {
+    if (currentUser) {
+      const fetchUserProfile = async () => {
+        const userDocRef = doc(db, "users", currentUser.uid);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+          setUserProfile(userDoc.data() as User);
+        }
+      };
+      fetchUserProfile();
+    }
+  }, [currentUser]);
 
   const handleLogout = async () => {
     try {
@@ -69,6 +89,32 @@ export function Sidebar() {
     }
   };
 
+  const NavLink = ({ href, icon: Icon, label }: { href: string, icon: React.ElementType, label: string }) => {
+    const linkContent = (
+        <div
+            className={cn(
+                "flex items-center h-12 p-3 rounded-lg cursor-pointer transition-colors",
+                pathname === href && !isOnboarding
+                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                : "hover:bg-sidebar-accent/50",
+                isOnboarding && "cursor-not-allowed opacity-50",
+                "overflow-hidden"
+            )}
+        >
+            <Icon className="h-6 w-6 shrink-0" />
+            <span className="ml-4 text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100 whitespace-nowrap">
+                {label}
+            </span>
+        </div>
+    );
+
+    if (isOnboarding) {
+        return <div>{linkContent}</div>;
+    }
+
+    return <Link href={href}>{linkContent}</Link>;
+  }
+
   return (
     <TooltipProvider delayDuration={0}>
       <aside className="group sticky top-0 left-0 h-screen w-16 hover:w-64 transition-all duration-300 ease-in-out flex flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-lg z-50 rounded-tr-2xl rounded-br-2xl">
@@ -85,22 +131,7 @@ export function Sidebar() {
           {menuItems.map((item) => (
             <Tooltip key={item.label}>
               <TooltipTrigger asChild>
-                <Link href={item.href}>
-                  <div
-                    className={cn(
-                      "flex items-center h-12 p-3 rounded-lg cursor-pointer transition-colors",
-                      pathname === item.href
-                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                        : "hover:bg-sidebar-accent/50",
-                      "overflow-hidden"
-                    )}
-                  >
-                    <item.icon className="h-6 w-6 shrink-0" />
-                    <span className="ml-4 text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100 whitespace-nowrap">
-                      {item.label}
-                    </span>
-                  </div>
-                </Link>
+                <NavLink href={item.href} icon={item.icon} label={item.label} />
               </TooltipTrigger>
               <TooltipContent
                 side="right"
@@ -118,11 +149,12 @@ export function Sidebar() {
               <Button variant="ghost" className="w-full justify-start h-auto p-2 hover:bg-sidebar-accent/50">
                   <div className="flex items-center gap-3">
                     <Avatar className="h-9 w-9">
-                      <AvatarImage src={user.avatar} alt={user.name} />
-                      <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                      <AvatarImage src={currentUser?.photoURL || undefined} alt={userProfile?.name || ""} />
+                      <AvatarFallback>{userProfile?.name.charAt(0) || 'U'}</AvatarFallback>
                     </Avatar>
                     <div className="text-left opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100 whitespace-nowrap">
-                      <p className="text-sm font-semibold text-sidebar-foreground">{user.name}</p>
+                      <p className="text-sm font-semibold text-sidebar-foreground">{userProfile?.name || 'User'}</p>
+                      <p className="text-xs text-sidebar-foreground/70">{userProfile?.clinicName || 'No Clinic'}</p>
                     </div>
                     <MoreVertical className="ml-auto h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100" />
                   </div>
