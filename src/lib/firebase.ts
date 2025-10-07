@@ -5,7 +5,7 @@ import { getStorage } from "firebase/storage";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyDP-2b-5_Y2P8pS-S8-y_U-Q0zX_0",
+    apiKey: "AIzaSyB-91t2G8qK_4O1D1d2j3F4g5h6i7j8k9l0",
     authDomain: "kloqo-a01a4.firebaseapp.com",
     projectId: "kloqo-a01a4",
     storageBucket: "kloqo-a01a4.appspot.com",
