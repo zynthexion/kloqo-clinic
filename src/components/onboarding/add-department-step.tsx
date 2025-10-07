@@ -32,24 +32,28 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
 
   useEffect(() => {
     if (!auth.currentUser) {
-        setLoading(false);
-        return;
+      setLoading(false);
+      return;
     }
 
     const fetchExistingDepartments = async () => {
-      setLoading(true);
       try {
         const userDoc = await getDoc(doc(db, "users", auth.currentUser!.uid));
+        if (!userDoc.exists()) {
+          setLoading(false);
+          return;
+        }
+
         const clinicId = userDoc.data()?.clinicId;
         if (clinicId) {
-            const departmentsRef = collection(db, 'clinics', clinicId, 'departments');
-            const q = query(departmentsRef);
-            const querySnapshot = await getDocs(q);
-            const depts = querySnapshot.docs.map(d => d.data() as Department);
-            setExistingDepartments(depts);
-            if (depts.length > 0) {
-              onDepartmentsAdded(depts);
-            }
+          const departmentsRef = collection(db, 'clinics', clinicId, 'departments');
+          const q = query(departmentsRef);
+          const querySnapshot = await getDocs(q);
+          const depts = querySnapshot.docs.map(d => d.data() as Department);
+          setExistingDepartments(depts);
+          if (depts.length > 0) {
+            onDepartmentsAdded(depts);
+          }
         }
       } catch (error) {
         console.error("Error fetching existing departments:", error);
@@ -57,6 +61,7 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
         setLoading(false);
       }
     };
+
     fetchExistingDepartments();
   }, [auth.currentUser, onDepartmentsAdded]);
 
@@ -67,7 +72,7 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
         return;
     }
     try {
-        const userDoc = await getDoc(doc(db, "users", auth.currentUser!.uid));
+        const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
         const clinicId = userDoc.data()?.clinicId;
         if (!clinicId) {
             toast({ variant: "destructive", title: "Error", description: "No clinic ID found for user." });
@@ -184,5 +189,3 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
     </div>
   );
 }
-
-    
