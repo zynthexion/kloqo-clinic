@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { PlusCircle } from "lucide-react";
 import { SelectDepartmentDialog } from "./select-department-dialog";
@@ -10,7 +10,7 @@ import Image from "next/image";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/firebase";
-import { doc, setDoc, getDoc, collection, writeBatch } from "firebase/firestore";
+import { doc, setDoc, getDoc, collection, writeBatch, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 const superAdminDepartments: Department[] = [
@@ -22,11 +22,39 @@ const superAdminDepartments: Department[] = [
 ];
 
 
-export function AddDepartmentStep({ onDepartmentsAdded }: { onDepartmentsAdded: (departments: Department[]) => void }) {
+export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { onDepartmentsAdded: (departments: Department[]) => void, onAddDoctorClick: () => void }) {
   const auth = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedDepartments, setSelectedDepartments] = useState<Department[]>([]);
+  const [existingDepartments, setExistingDepartments] = useState<Department[]>([]);
   const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!auth.currentUser) return;
+
+    const fetchExistingDepartments = async () => {
+      setLoading(true);
+      try {
+        const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+        const clinicId = userDoc.data()?.clinicId;
+        if (clinicId) {
+            const departmentsQuery = query(collection(db, "clinics", clinicId, "departments"));
+            const querySnapshot = await getDocs(departmentsQuery);
+            const depts = querySnapshot.docs.map(d => d.data() as Department);
+            setExistingDepartments(depts);
+            if (depts.length > 0) {
+              onDepartmentsAdded(depts);
+            }
+        }
+      } catch (error) {
+        console.error("Error fetching existing departments:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchExistingDepartments();
+  }, [auth.currentUser, onDepartmentsAdded]);
+
 
   const handleSelectDepartments = async (departments: Department[]) => {
     if (!auth.currentUser) {
@@ -48,8 +76,9 @@ export function AddDepartmentStep({ onDepartmentsAdded }: { onDepartmentsAdded: 
         });
         await batch.commit();
         
-        setSelectedDepartments(departments);
-        onDepartmentsAdded(departments);
+        const allDepts = [...existingDepartments, ...departments];
+        setExistingDepartments(allDepts);
+        onDepartmentsAdded(allDepts);
 
         toast({
             title: "Departments Added",
@@ -65,10 +94,14 @@ export function AddDepartmentStep({ onDepartmentsAdded }: { onDepartmentsAdded: 
         });
     }
   };
+  
+  if (loading) {
+    return <div className="flex justify-center items-center h-full">Loading...</div>;
+  }
 
   return (
     <div className="flex flex-col items-center justify-center h-full text-center">
-      {selectedDepartments.length === 0 ? (
+      {existingDepartments.length === 0 ? (
         <>
           <h1 className="text-2xl font-bold mb-2">Select your initial departments</h1>
           <p className="text-muted-foreground mb-6">
@@ -81,32 +114,25 @@ export function AddDepartmentStep({ onDepartmentsAdded }: { onDepartmentsAdded: 
         </>
       ) : (
         <div className="w-full max-w-4xl">
-            <h2 className="text-2xl font-bold mb-4">Your Departments</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {selectedDepartments.map(department => (
-                <Card key={department.id} className="overflow-hidden">
-                    <CardContent className="p-0">
-                        <div className="relative h-40 w-full">
-                            <Image
-                                src={department.image}
-                                alt={department.name}
-                                fill
-                                style={{objectFit: "cover"}}
-                                
-                            />
-                        </div>
-                        <div className="p-4">
-                            <h3 className="text-lg font-semibold">{department.name}</h3>
-                            <p className="text-sm text-muted-foreground mt-1 h-10">
-                                {department.description}
-                            </p>
-                        </div>
-                    </CardContent>
-                    <CardFooter className="bg-muted/30 px-4 py-3 justify-center">
-                        <p className="text-sm text-primary font-semibold">Added Successfully!</p>
-                    </CardFooter>
-                </Card>
-            ))}
+             <div className="flex justify-end mb-4">
+                 <Button onClick={() => setIsDialogOpen(true)}>
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Add More Departments
+                </Button>
+            </div>
+            <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded-md mb-6 text-left">
+                <p className="font-bold">Next Step: Add a Doctor</p>
+                <p>The 'Doctors' menu is now enabled. Add your first doctor to begin managing appointments.</p>
+            </div>
+             <div>
+                <h1 className="text-2xl font-bold mb-2">Add your first doctor</h1>
+                <p className="text-muted-foreground mb-6">
+                    With your department set up, it's time to add a doctor to the system.
+                </p>
+                <Button size="lg" onClick={onAddDoctorClick}>
+                    <PlusCircle className="mr-2 h-5 w-5" />
+                    Add Doctor
+                </Button>
             </div>
         </div>
       )}

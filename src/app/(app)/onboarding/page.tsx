@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState } from "react";
@@ -16,9 +15,13 @@ export default function OnboardingPage() {
 
   const handleDepartmentsAdded = (departments: Department[]) => {
     setSelectedDepartments(departments);
-    setStep(2);
+    // Don't automatically go to step 2, let the user click the button
   };
   
+  const handleAddDoctorClick = () => {
+      setStep(2);
+  }
+
   const handleDoctorAdded = () => {
       setStep(3);
   }
@@ -26,7 +29,7 @@ export default function OnboardingPage() {
   return (
     <>
       <main className="flex-1 p-4 sm:p-6">
-        {step === 1 && <AddDepartmentStep onDepartmentsAdded={handleDepartmentsAdded} />}
+        {step === 1 && <AddDepartmentStep onDepartmentsAdded={handleDepartmentsAdded} onAddDoctorClick={handleAddDoctorClick} />}
         {step === 2 && selectedDepartments.length > 0 && <AddDoctorStep departments={selectedDepartments} onDoctorAdded={handleDoctorAdded} />}
         {step === 3 && (
             <div className="flex flex-col items-center justify-center h-full text-center bg-background p-8 rounded-lg">
@@ -34,7 +37,7 @@ export default function OnboardingPage() {
               <p className="text-lg text-muted-foreground mb-8">
                   You have successfully set up your clinic. You are now ready to manage your dashboard.
               </p>
-              <Button onClick={() => router.push('/')}>Go to Dashboard</Button>
+              <Button onClick={() => router.push('/dashboard')}>Go to Dashboard</Button>
           </div>
         )}
       </main>
