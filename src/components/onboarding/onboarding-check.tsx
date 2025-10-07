@@ -3,7 +3,7 @@
 
 import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/firebase';
 
@@ -27,17 +27,17 @@ export function OnboardingCheck() {
             return;
           }
 
-          const departmentsQuery = query(collection(db, `clinics/${clinicId}/departments`));
-          const doctorsQuery = query(collection(db, `clinics/${clinicId}/doctors`));
+          const departmentsRef = collection(db, 'clinics', clinicId, 'departments');
+          const doctorsRef = collection(db, 'clinics', clinicId, 'doctors');
           
           const [departmentsSnapshot, doctorsSnapshot] = await Promise.all([
-            getDocs(departmentsQuery),
-            getDocs(doctorsQuery),
+            getDocs(departmentsRef),
+            getDocs(doctorsRef),
           ]);
 
           const needsOnboarding = departmentsSnapshot.empty || doctorsSnapshot.empty;
 
-          if (needsOnboarding) {
+          if (needsOnboarding && pathname !== '/onboarding') {
             router.push('/onboarding');
           }
         } else {
