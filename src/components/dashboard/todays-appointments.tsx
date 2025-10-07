@@ -19,8 +19,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where, getDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useAuth } from "@/firebase";
 import type { Appointment } from "@/lib/types";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
@@ -30,16 +31,31 @@ import { Button } from "../ui/button";
 import { ArrowRight } from "lucide-react";
 
 export default function TodaysAppointments({ selectedDate }: { selectedDate: Date }) {
+  const auth = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!auth.currentUser) {
+      setLoading(false);
+      return;
+    }
+
     const fetchAppointments = async () => {
       try {
         setLoading(true);
+
+        const userDoc = await getDoc(doc(db, "users", auth.currentUser!.uid));
+        const clinicId = userDoc.data()?.clinicId;
+        if (!clinicId) {
+          setLoading(false);
+          return;
+        }
+
         const dateStr = format(selectedDate, "d MMMM yyyy");
         const q = query(
           collection(db, "appointments"),
+          where("clinicId", "==", clinicId),
           where("date", "==", dateStr)
         );
         const querySnapshot = await getDocs(q);
@@ -61,7 +77,7 @@ export default function TodaysAppointments({ selectedDate }: { selectedDate: Dat
       }
     };
     fetchAppointments();
-  }, [selectedDate]);
+  }, [selectedDate, auth.currentUser]);
 
   return (
     <Card className="h-full flex flex-col bg-[#bcddef]/30">
@@ -138,5 +154,3 @@ export default function TodaysAppointments({ selectedDate }: { selectedDate: Dat
     </Card>
   );
 }
-
-    

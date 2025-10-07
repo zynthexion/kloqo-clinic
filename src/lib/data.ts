@@ -1,12 +1,9 @@
 
-
-import type { Doctor, Report, Appointment, Department, AvailabilitySlot, TimeSlot, LiveStatus } from './types';
+import type { Report, Appointment, Department } from './types';
 import { PlaceHolderImages } from './placeholder-images';
 import { format } from 'date-fns';
 
 const getImageUrl = (id: string) => PlaceHolderImages.find(img => img.id === id)?.imageUrl || '';
-
-export let doctors: Doctor[] = [];
 
 const today = new Date();
 const currentYear = today.getFullYear();
@@ -316,63 +313,3 @@ export const departments: Department[] = [
     doctors: ['Dr. Sarah Johnson', 'Dr. Petra Winsburry', 'Dr. Olivia Martinez', 'Dr. Samuel Thompson', 'Dr. Andrew Peterson', 'Dr. Mark Wilson', 'Dr. Thomas Brown', 'Dr. Chloe Harrington', 'Dr. Damian Sanchez', 'Dr. William Carter', 'Dr. Emily Smith'],
   }
 ];
-
-export const liveStatuses: LiveStatus[] = [
-  {
-    id: 'LS001',
-    doctorName: 'Dr. Smith',
-    specialty: 'Cardiology',
-    room: '101',
-    currentToken: 'A002',
-    queue: 5,
-    status: 'available',
-  },
-  {
-    id: 'LS002',
-    doctorName: 'Dr. Johnson',
-    specialty: 'Neurology',
-    room: '205',
-    currentToken: 'P003',
-    queue: 3,
-    status: 'available',
-  },
-  {
-    id: 'LS003',
-    doctorName: 'Dr. Brown',
-    specialty: 'Orthopedics',
-    room: '302',
-    currentToken: 'W001',
-    queue: 7,
-    status: 'available',
-  },
-  {
-    id: 'LS004',
-    doctorName: 'Dr. Garcia',
-    specialty: 'Pediatrics',
-    room: '105',
-    currentToken: 'A004',
-    queue: 4,
-    status: 'available',
-  },
-  {
-    id: 'LS005',
-    doctorName: 'Dr. Wilson',
-    specialty: 'Dermatology',
-    room: '108',
-    status: 'break',
-    returnTime: '2:30 PM',
-  },
-  {
-    id: 'LS006',
-    doctorName: 'Dr. Lee',
-    specialty: 'General Medicine',
-    room: '201',
-    currentToken: 'P005',
-    queue: 8,
-    status: 'available',
-  },
-];
-
-    
-
-    

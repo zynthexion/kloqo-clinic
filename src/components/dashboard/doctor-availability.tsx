@@ -5,8 +5,9 @@ import React, { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import type { Appointment, Doctor } from "@/lib/types";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useAuth } from "@/firebase";
 import { ScrollArea } from "../ui/scroll-area";
 import { getDay, format, isSameDay, parse } from "date-fns";
 import { Button } from "../ui/button";
@@ -22,27 +23,46 @@ type DoctorAvailabilityProps = {
 };
 
 export default function DoctorAvailability({ selectedDate }: DoctorAvailabilityProps) {
+  const auth = useAuth();
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchDoctors = async () => {
-      const doctorsCollection = collection(db, "doctors");
-      const doctorsSnapshot = await getDocs(doctorsCollection);
-      const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
-      setDoctors(doctorsList);
-    };
+    if (!auth.currentUser) {
+      setLoading(false);
+      return;
+    }
 
-    const fetchAppointments = async () => {
-        const appointmentsCollection = collection(db, "appointments");
-        const appointmentsSnapshot = await getDocs(appointmentsCollection);
-        const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
-        setAppointments(appointmentsList);
-    };
+    const fetchClinicData = async () => {
+      setLoading(true);
+      try {
+        const userDocRef = doc(db, "users", auth.currentUser!.uid);
+        const userDocSnap = await getDoc(userDocRef);
 
-    fetchDoctors();
-    fetchAppointments();
-  }, []);
+        if (userDocSnap.exists()) {
+          const clinicId = userDocSnap.data()?.clinicId;
+          if (clinicId) {
+            const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
+            const doctorsSnapshot = await getDocs(doctorsQuery);
+            const doctorsList = doctorsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Doctor));
+            setDoctors(doctorsList);
+            
+            const appointmentsQuery = query(collection(db, "appointments"), where("clinicId", "==", clinicId));
+            const appointmentsSnapshot = await getDocs(appointmentsQuery);
+            const appointmentsList = appointmentsSnapshot.docs.map(a => a.data() as Appointment);
+            setAppointments(appointmentsList);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching clinic data for availability: ", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchClinicData();
+  }, [auth.currentUser]);
 
   const availableDoctors = useMemo(() => {
     if (!selectedDate) return [];
@@ -93,7 +113,9 @@ export default function DoctorAvailability({ selectedDate }: DoctorAvailabilityP
       <CardContent className="flex-grow overflow-auto">
         <ScrollArea className="h-full">
             <div className="space-y-3 pr-3">
-            {availableDoctors.length > 0 ? (
+            {loading ? (
+              <p className="text-sm text-muted-foreground text-center">Loading...</p>
+            ) : availableDoctors.length > 0 ? (
                 availableDoctors.map((doctor) => {
                     const appointmentCount = getAppointmentsForDoctorOnDate(doctor.id);
                     const tendsToRunLate = doctor.historicalData?.toLowerCase().includes('late');
@@ -112,7 +134,7 @@ export default function DoctorAvailability({ selectedDate }: DoctorAvailabilityP
                                     <div>
                                         <Link href={`/doctors/${doctor.id}`} className="font-semibold text-sm hover:underline">{doctor.name}</Link>
                                         <p className="text-xs text-muted-foreground">{doctor.specialty}</p>
-                                        <StarRating rating={4} />
+                                        <StarRating rating={doctor.rating || 0} />
                                     </div>
                                 </div>
                                 {appointmentCount > 0 && (
@@ -124,7 +146,7 @@ export default function DoctorAvailability({ selectedDate }: DoctorAvailabilityP
                             </div>
                             <div className="flex items-center gap-2 mt-3">
                                <Badge variant={doctor.availability === 'Available' ? 'success' : 'destructive'} className="text-xs">
-                                  {doctor.availability === 'Available' ? 'In' : 'Out'}
+                                  {doctor.availability}
                                 </Badge>
                                {tendsToRunLate && (
                                   <Badge variant="warning" className="text-xs">
