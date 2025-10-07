@@ -87,7 +87,7 @@ const defaultFormData: SignUpFormData = {
   ownerName: 'Test Owner',
   designation: 'Doctor',
   mobileNumber: '+11234567890',
-  emailAddress: `test-${Date.now()}@example.com`,
+  emailAddress: `test@example.com`,
   password: 'password123',
   
   address1: '123 Test St',
@@ -138,7 +138,10 @@ export default function SignupPage() {
 
   const methods = useForm<SignUpFormData>({
     resolver: zodResolver(signupSchema),
-    defaultValues: defaultFormData,
+    defaultValues: {
+      ...defaultFormData,
+      emailAddress: `test-${Date.now()}@example.com`,
+    },
     mode: "onBlur"
   });
 
@@ -211,6 +214,10 @@ export default function SignupPage() {
         // Step 4: Commit the batch
         await batch.commit();
 
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('signupEmail', formData.emailAddress);
+        }
+
         toast({
             title: "Registration Successful!",
             description: "Your clinic has been created. Redirecting...",
@@ -230,7 +237,7 @@ export default function SignupPage() {
 
   const handleBack = () => {
     if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
+      setCurrentStep(currentStep + 1);
     }
   };
 
