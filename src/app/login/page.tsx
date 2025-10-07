@@ -29,14 +29,30 @@ export default function LoginPage() {
 
   const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    console.log("Login attempt initiated.");
+
+    if (!auth) {
+      console.error("Firebase auth object is not available.");
+      toast({
+        variant: "destructive",
+        title: "Initialization Error",
+        description: "Authentication service is not ready. Please try again in a moment.",
+      });
+      return;
+    }
+
     const email = (event.currentTarget.elements.namedItem('email') as HTMLInputElement).value;
     const password = (event.currentTarget.elements.namedItem('password') as HTMLInputElement).value;
+
+    console.log("Attempting to sign in with:", { email });
     
     try {
         await signInWithEmailAndPassword(auth, email, password);
+        console.log("Sign-in successful.");
         toast({ title: "Login Successful", description: "Redirecting to dashboard..." });
         router.push('/');
     } catch (error: any) {
+        console.error("Login failed:", error);
         toast({
             variant: "destructive",
             title: "Login Failed",
