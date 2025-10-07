@@ -211,6 +211,17 @@ export default function SignupPage() {
             onboarded: false, // Set onboarding flag
         });
 
+        // Add mobile app credentials to the batch
+        const mobileAppCredsRef = doc(collection(db, "mobile-app"));
+        const mobileUsername = formData.clinicName.toLowerCase().replace(/\s+/g, '-') + '-mobile';
+        const mobilePassword = 'password123'; // Default password
+        batch.set(mobileAppCredsRef, {
+            id: mobileAppCredsRef.id,
+            clinicId: clinicId,
+            username: mobileUsername,
+            password: mobilePassword, // This should be securely hashed in a real application
+        });
+
         // Step 4: Commit the batch
         await batch.commit();
 
@@ -237,7 +248,7 @@ export default function SignupPage() {
 
   const handleBack = () => {
     if (currentStep > 1) {
-      setCurrentStep(currentStep + 1);
+      setCurrentStep(currentStep - 1);
     }
   };
 
@@ -310,3 +321,5 @@ export default function SignupPage() {
     </div>
   );
 }
+
+    
