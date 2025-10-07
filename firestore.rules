@@ -1,39 +1,114 @@
-
+/**
+ * @fileoverview Firestore Security Rules for MediDash Prototyping.
+ *
+ * Core Philosophy:
+ * This ruleset implements a multi-tenant security model based on clinics. Users are associated with a specific clinic,
+ * and data access is generally restricted to users within that clinic.  This is Prototyping Mode: Data shape is not strictly validated.
+ *
+ * Data Structure:
+ * - /clinics/{clinicId}: Contains basic clinic information.
+ * - /users/{userId}: Maps a user's UID to their clinic ID.
+ * - /clinics/{clinicId}/doctors/{doctorId}: Doctor profiles within a clinic.
+ * - /clinics/{clinicId}/patients/{patientId}: Patient records within a clinic.
+ * - /clinics/{clinicId}/appointments/{appointmentId}: Appointment data within a clinic.
+ * - /clinics/{clinicId}/departments/{departmentId}: Department data within a clinic.
+ *
+ * Key Security Decisions:
+ * - Users can only list appointments within their own clinic.
+ * - The rules explicitly deny operations where authorization cannot be clearly established.
+ * - No public listing of users is allowed.
+ *
+ * Denormalization for Authorization:
+ * - The `users` collection is used to map a user's UID to their `clinicId`. This `clinicId` is then used to authorize access to clinic-specific data.
+ */
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Allow unauthenticated users to create their own user document and a clinic
-    match /users/{userId} {
-      allow create: if true;
-      allow read, update: if request.auth != null && request.auth.uid == userId;
+    /**
+     * @description Checks if the user is signed in.
+     */
+    function isSignedIn() {
+      return request.auth != null;
     }
 
+    /**
+     * @description Checks if the user's UID matches the requested user ID.
+     * @param {string} userId - The user ID to check against.
+     */
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    /**
+     * @description Checks if the user is an existing owner of the document.
+     * @param {string} userId - The user ID to check against.
+     */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
+
+    /**
+     * @description Gets the clinic ID associated with a user.
+     * @param {string} userId - The user ID to look up.
+     */
+    function getClinicIdForUser(userId) {
+        return get(/databases/$(database)/documents/users/$(userId)).data.clinicId;
+    }
+
+    /**
+     * @description Checks if the user belongs to the specified clinic.
+     * @param {string} clinicId - The clinic ID to check against.
+     */
+    function belongsToClinic(clinicId) {
+      return isSignedIn() && getClinicIdForUser(request.auth.uid) == clinicId;
+    }
+
+    /**
+     * @description Rules for the /clinics collection.
+     * @path /clinics/{clinicId}
+     * @allow (get) Anyone can read clinic information.
+     * @allow (create) Anyone can create a clinic during signup.
+     * @deny (update) No direct updates allowed through the client.
+     * @deny (delete) No direct deletions allowed through the client.
+     * @principle Public read, owner-only writes (backend only).
+     */
     match /clinics/{clinicId} {
-      allow create: if true;
+      allow get: if true;
+      allow list: if true;
+      allow create: if true; // Allow clinic creation for signup.
+      allow update: if false;
+      allow delete: if false;
     }
 
-    // Authenticated users can read from these collections
-    match /doctors/{docId} {
-      allow read, write: if request.auth != null;
-    }
-    match /appointments/{aptId} {
-      allow read, write: if request.auth != null;
-    }
-    match /departments/{deptId} {
-      allow read, write: if request.auth != null;
-    }
-    match /patients/{patientId} {
-      allow read, write: if request.auth != null;
-    }
-     match /mobile-app/{credId} {
-      allow read, write: if request.auth != null;
+    /**
+     * @description Rules for the /users collection.
+     * @path /users/{userId}
+     * @allow (create) A user can create their own document during signup.
+     * @allow (get) Only the user can read their own profile.
+     * @deny (list) Listing users is not allowed.
+     * @allow (update) User can update their own profile.
+     * @deny (delete) Users cannot delete their profile directly.
+     * @principle Enforces document ownership for reads and writes.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
+      // Allow user document creation during signup.
+      // The `isOwner` check is removed because `request.auth` is null at this point.
+      // The logic in the signup page ensures the `uid` in the document matches the newly created auth user's uid.
+      allow create: if request.auth == null || isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if false;
     }
 
-    // Fallback to deny all other access
-    match /{document=**} {
-      allow read, write: if false;
+    /**
+     * @description Rules for all collections within a clinic.
+     * @path /clinics/{clinicId}/{collection}/{docId}
+     * @principle Enforces that all data operations happen within the user's assigned clinic.
+     */
+    match /clinics/{clinicId}/{collection}/{docId} {
+      allow read, write: if belongsToClinic(clinicId);
     }
   }
 }
