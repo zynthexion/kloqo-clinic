@@ -91,7 +91,6 @@ export default function DepartmentsPage() {
           const departmentIds: string[] = clinicData.departments || [];
 
           if (departmentIds.length > 0) {
-            // New logic: Fetch only the master departments that are in the clinic's list
             const deptsQuery = query(collection(db, 'master-departments'), where('id', 'in', departmentIds));
             const deptsSnapshot = await getDocs(deptsQuery);
             const deptsForClinic = deptsSnapshot.docs.map(d => d.data() as Department);
