@@ -16,9 +16,6 @@ import { Card } from '@/components/ui/card';
 import { PeterdrawLogo } from '@/components/icons';
 import Link from 'next/link';
 
-import { auth, db } from '@/lib/firebase';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { collection, doc, writeBatch } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -173,58 +170,16 @@ export default function SignupPage() {
   };
 
   const onSubmit = async (formData: SignUpFormData) => {
-      try {
-        console.log('Submitting form data:', formData);
-        const userCredential = await createUserWithEmailAndPassword(auth, formData.emailAddress, formData.password);
-        const user = userCredential.user;
-
-        const batch = writeBatch(db);
-
-        const clinicRef = doc(collection(db, 'clinics'));
-        const userRef = doc(db, 'users', user.uid);
-        
-        const clinicData = {
-          id: clinicRef.id,
-          name: formData.clinicName,
-          address: `${formData.address1}, ${formData.city}, ${formData.state} ${formData.pincode}`,
-          contactEmail: formData.emailAddress,
-          contactPhone: formData.mobileNumber,
-          ownerName: formData.ownerName,
-          clinicType: formData.clinicType,
-          plan: formData.plan,
-        };
-        batch.set(clinicRef, clinicData);
-
-        const userData = {
-          uid: user.uid,
-          clinicId: clinicRef.id,
-          email: user.email,
-          name: formData.ownerName,
-          designation: formData.designation,
-          clinicName: formData.clinicName,
-          phone: formData.mobileNumber,
-        };
-        batch.set(userRef, userData);
-
-        await batch.commit();
-
-        toast({ title: 'Success', description: 'Clinic registered successfully! Redirecting...' });
-        
-        router.push('/');
-
-      } catch (error: any) {
-        console.error('Registration failed:', error);
-        if (error.code === 'auth/email-already-in-use') {
-             toast({
-                variant: 'destructive',
-                title: 'Email Already Registered',
-                description: "This email is already in use. Please sign in instead.",
-                action: <Button variant="secondary" onClick={() => router.push('/login')}>Sign In</Button>
-            });
-        } else {
-            toast({ variant: 'destructive', title: 'Registration Failed', description: error.message });
-        }
-      }
+      console.log('--- SIGNUP FORM SUBMITTED (FIREBASE REMOVED) ---');
+      console.log(formData);
+      
+      toast({ 
+          title: 'Registration Submitted (Test)', 
+          description: 'Check the console for form data. Firebase is disconnected.' 
+      });
+      
+      // Simulate success and redirect
+      router.push('/');
   }
 
   const handleBack = () => {
@@ -275,7 +230,7 @@ export default function SignupPage() {
               <header className="flex justify-end items-center mb-8">
                 <p className="text-sm text-muted-foreground">
                   Already have an account?{' '}
-                  <Link href="/login" className="text-primary hover:underline">
+                  <Link href="/" className="text-primary hover:underline">
                     Sign In
                   </Link>
                 </p>
