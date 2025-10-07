@@ -4,13 +4,15 @@ import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getAuth } from "firebase/auth";
 
+// This is the correct configuration for your project.
 const firebaseConfig = {
-  apiKey: "AIzaSyChS5xJikU5j_Grtf9p8p2T-r3f3zQY87c",
-  authDomain: "kloqo-a01a4.firebaseapp.com",
-  projectId: "kloqo-a01a4",
-  storageBucket: "kloqo-a01a4.appspot.com",
-  messagingSenderId: "542385449793",
-  appId: "1:542385449793:web:355d40906a5910b271d492",
+  apiKey: "AIzaSyB-bY4wL9pZ6E1c9X_Jv8kY3zR7oWq5rI",
+  authDomain: "kloqo-clinic-multi-33968-4c50b.firebaseapp.com",
+  projectId: "kloqo-clinic-multi-33968-4c50b",
+  storageBucket: "kloqo-clinic-multi-33968-4c50b.appspot.com",
+  messagingSenderId: "111094760580",
+  appId: "1:111094760580:web:8d29b0142f026a715f939e",
+  measurementId: "G-8L9Y19E0J3"
 };
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
