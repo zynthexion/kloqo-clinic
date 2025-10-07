@@ -51,10 +51,11 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
             const clinicData = clinicDoc.data();
             const departmentIds: string[] = clinicData.departments || [];
             
-            const depts = masterDeptsList.filter(masterDept => departmentIds.includes(masterDept.id));
-            setClinicDepartments(depts);
-            if (depts.length > 0) {
-              onDepartmentsAdded(depts);
+            if (departmentIds.length > 0) {
+                const depts = masterDeptsList.filter(masterDept => departmentIds.includes(masterDept.id));
+                setClinicDepartments(depts);
+                onDepartmentsAdded(depts);
+                onAddDoctorClick(); 
             }
           }
         }
@@ -66,7 +67,7 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
     };
 
     fetchInitialData();
-  }, [auth.currentUser, onDepartmentsAdded]);
+  }, [auth.currentUser, onDepartmentsAdded, onAddDoctorClick]);
 
 
   const handleSelectDepartments = async (selectedDepts: Department[]) => {
