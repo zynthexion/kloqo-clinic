@@ -1,49 +1,31 @@
+
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // A user must be signed in to perform any action, except for creating a user or clinic profile during signup.
-    function isSignedIn() {
-      return request.auth != null;
+    
+    function isOwner(clinicId) {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clinicId == clinicId;
     }
 
-    // The user must be the owner of the document they are trying to access.
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-
-    // Helper function to get the user's assigned clinic ID from their user profile.
-    function getClinicId() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clinicId;
-    }
-
-    // Checks if the user making the request belongs to the clinic they are trying to access.
-    function belongsToClinic(clinicId) {
-      return isSignedIn() && getClinicId() == clinicId;
-    }
-
-    // Anyone can create a clinic during the signup process.
-    // Only authenticated users belonging to that clinic can read or update it.
-    match /clinics/{clinicId} {
-      allow read, update: if belongsToClinic(clinicId);
-      allow create: if true; // Allows creation during signup
-    }
-
-    // Anyone can create a user profile during signup.
-    // A user can only read or update their own profile after they are created.
     match /users/{userId} {
-      allow read, update: if isOwner(userId);
-      allow create: if true; // Allows creation during signup
+      allow read, update: if request.auth.uid == userId;
+      allow create: if request.auth.uid == request.resource.data.uid;
     }
 
-    // Authenticated users can read and write to departments that match their clinicId.
-    match /departments/{departmentId} {
-      allow read, write: if belongsToClinic(resource.data.clinicId);
+    match /clinics/{clinicId} {
+      allow read: if isOwner(clinicId);
     }
 
-    // Authenticated users can read, write, and delete data within their own clinic.
-    match /clinics/{clinicId}/{collection}/{docId} {
-      allow read, write, delete: if belongsToClinic(clinicId);
+    match /clinics/{clinicId}/{subcollection}/{docId} {
+      allow read, write: if isOwner(clinicId);
+    }
+    
+    match /mobile-app/{credentialId} {
+      function getClinicIdForCreds() {
+        return get(/databases/$(database)/documents/mobile-app/$(credentialId)).data.clinicId;
+      }
+      allow read, write: if isOwner(getClinicIdForCreds());
     }
   }
 }
