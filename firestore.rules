@@ -1,31 +1,36 @@
 
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    function isOwner(clinicId) {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clinicId == clinicId;
+
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    match /users/{userId} {
-      allow read, update: if request.auth.uid == userId;
-      allow create: if request.auth.uid == request.resource.data.uid;
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function getClinicId(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.clinicId;
+    }
+
+    function belongsToClinic(clinicId) {
+      return isSignedIn() && getClinicId(request.auth.uid) == clinicId;
     }
 
     match /clinics/{clinicId} {
-      allow read: if isOwner(clinicId);
+      allow read, update: if belongsToClinic(clinicId);
+      allow create: if true;
+    }
+
+    match /users/{userId} {
+      allow read, update: if isOwner(userId);
+      allow create: if true;
     }
 
     match /clinics/{clinicId}/{subcollection}/{docId} {
-      allow read, write: if isOwner(clinicId);
-    }
-    
-    match /mobile-app/{credentialId} {
-      function getClinicIdForCreds() {
-        return get(/databases/$(database)/documents/mobile-app/$(credentialId)).data.clinicId;
-      }
-      allow read, write: if isOwner(getClinicIdForCreds());
+      allow read, write, delete: if belongsToClinic(clinicId);
     }
   }
 }
