@@ -72,7 +72,7 @@ export default function OnboardingPage() {
       availabilitySlots: doctorData.availabilitySlots,
     };
     
-    const docRef = doc(db, "clinics", clinicId, "doctors", docId);
+    const docRef = doc(db, "doctors", docId);
     setDoc(docRef, newDoctor)
       .then(() => {
         handleDoctorAdded(newDoctor);
