@@ -49,21 +49,10 @@ import { DepartmentDoctorsDialog } from "@/components/departments/department-doc
 import { SelectDepartmentDialog } from "@/components/onboarding/select-department-dialog";
 import { useAuth } from "@/firebase";
 
-const superAdminDepartments: Omit<Department, 'clinicId'>[] = [
-    { id: 'dept-01', name: 'General Medicine', description: 'Comprehensive primary care.', image: 'https://picsum.photos/seed/gm/600/400', imageHint: 'stethoscope pills', doctors: [] },
-    { id: 'dept-02', name: 'Cardiology', description: 'Specialized heart care.', image: 'https://picsum.photos/seed/cardio/600/400', imageHint: 'heart model', doctors: [] },
-    { id: 'dept-03', name: 'Pediatrics', description: 'Healthcare for children.', image: 'https://picsum.photos/seed/peds/600/400', imageHint: 'doctor baby', doctors: [] },
-    { id: 'dept-04', name: 'Dermatology', description: 'Skin health services.', image: 'https://picsum.photos/seed/derma/600/400', imageHint: 'skin care', doctors: [] },
-    { id: 'dept-05', name: 'Neurology', description: 'Nervous system disorders.', image: 'https://picsum.photos/seed/neuro/600/400', imageHint: 'brain model', doctors: [] },
-    { id: 'dept-06', name: 'Orthopedics', description: 'Musculoskeletal system disorders.', image: 'https://picsum.photos/seed/ortho/600/400', imageHint: 'joint brace', doctors: [] },
-    { id: 'dept-07', name: 'Oncology', description: 'Cancer diagnosis and treatment.', image: 'https://picsum.photos/seed/onco/600/400', imageHint: 'awareness ribbon', doctors: [] },
-    { id: 'dept-08', name: 'Obstetrics and Gynecology (OB/GYN)', description: 'Women\'s health services.', image: 'https://picsum.photos/seed/obgyn/600/400', imageHint: 'pregnant woman', doctors: [] },
-];
-
-
 export default function DepartmentsPage() {
   const auth = useAuth();
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [masterDepartments, setMasterDepartments] = useState<Omit<Department, "clinicId">[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const { toast } = useToast();
   const [isAddDepartmentOpen, setIsAddDepartmentOpen] = useState(false);
@@ -90,6 +79,10 @@ export default function DepartmentsPage() {
             const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
             setDoctors(doctorsList);
         }
+
+        const masterDeptsSnapshot = await getDocs(collection(db, "master-departments"));
+        const masterDeptsList = masterDeptsSnapshot.docs.map(d => d.data() as Omit<Department, 'clinicId'>);
+        setMasterDepartments(masterDeptsList);
     };
 
     fetchClinicData();
@@ -170,8 +163,8 @@ export default function DepartmentsPage() {
 
         const batch = writeBatch(db);
         selectedDepts.forEach(dept => {
-            const deptRef = doc(db, "departments", dept.id);
-            batch.set(deptRef, { ...dept, clinicId });
+            const deptRef = doc(db, "departments", `${clinicId}_${dept.id}`);
+            batch.set(deptRef, { ...dept, id: `${clinicId}_${dept.id}`, clinicId });
         });
         
         await batch.commit();
@@ -235,7 +228,7 @@ export default function DepartmentsPage() {
               <SelectDepartmentDialog
                   isOpen={isAddDepartmentOpen}
                   setIsOpen={setIsAddDepartmentOpen}
-                  departments={superAdminDepartments}
+                  departments={masterDepartments}
                   onDepartmentsSelect={handleSaveDepartments}
               />
           </div>
