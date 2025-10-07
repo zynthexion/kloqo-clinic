@@ -54,6 +54,11 @@ service cloud.firestore {
       allow create: if isClinicStaff(request.resource.data.clinicId);
       allow update, delete: if isClinicStaff(resource.data.clinicId);
     }
+    
+    // Master list of all possible departments. Any signed-in user can read this.
+    match /master-departments/{departmentId} {
+      allow read: if isSignedIn();
+    }
 
     // Appointments can be read/written by staff of the clinic,
     // or by the patient who owns the appointment.
