@@ -57,6 +57,16 @@ export type Appointment = {
   isSkipped?: boolean;
 };
 
+export type Visit = {
+  appointmentId: string;
+  date: string;
+  time: string;
+  doctor: string;
+  department: string;
+  treatment: string;
+  status: 'Confirmed' | 'Pending' | 'Cancelled' | 'Completed';
+}
+
 export type Patient = {
   id: string;
   clinicId?: string;
@@ -65,9 +75,8 @@ export type Patient = {
   gender: 'Male' | 'Female' | 'Other';
   phone: string;
   place?: string;
-  lastVisit: string;
-  doctor: string;
   totalAppointments: number;
+  visitHistory?: Visit[];
 };
 
 export type Activity = {

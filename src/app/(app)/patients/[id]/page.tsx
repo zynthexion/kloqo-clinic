@@ -3,9 +3,9 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Appointment, Patient } from "@/lib/types";
+import type { Appointment, Patient, Visit } from "@/lib/types";
 import { DashboardHeader } from "@/components/layout/header";
 import {
   Card,
@@ -27,69 +27,48 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/firebase";
+import { parse } from "date-fns";
 
 export default function PatientHistoryPage() {
   const params = useParams();
   const patientId = params.id as string;
+  const auth = useAuth();
 
   const [patient, setPatient] = useState<Patient | null>(null);
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!patientId) return;
+    if (!patientId || !auth.currentUser) return;
 
     const fetchPatientHistory = async () => {
       try {
         setLoading(true);
-        const [name, phone] = decodeURIComponent(patientId).split("-");
 
-        if (!name || !phone) {
-          console.error("Invalid patient ID format");
-          return;
+        const userDocRef = doc(db, "users", auth.currentUser!.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        const clinicId = userDocSnap.data()?.clinicId;
+
+        if (!clinicId) {
+            console.error("Clinic ID not found for user");
+            setLoading(false);
+            return;
         }
+        
+        const patientDocRef = doc(db, "clinics", clinicId, "patients", patientId);
+        const patientDocSnap = await getDoc(patientDocRef);
 
-        const appointmentsRef = collection(db, "appointments");
-        const q = query(
-          appointmentsRef,
-          where("patientName", "==", name),
-          where("phone", "==", phone)
-        );
-
-        const querySnapshot = await getDocs(q);
-        const patientAppointments = querySnapshot.docs.map(
-          (doc) => doc.data() as Appointment
-        );
-
-        if (patientAppointments.length > 0) {
-          const firstAppointment = patientAppointments[0];
-          setPatient({
-            id: patientId,
-            name: firstAppointment.patientName,
-            age: firstAppointment.age,
-            gender: firstAppointment.gender,
-            phone: firstAppointment.phone,
-            place: firstAppointment.place,
-            lastVisit: "", // This will be calculated
-            doctor: "", // This will be the latest one
-            totalAppointments: patientAppointments.length,
-          });
-
-          const sortedAppointments = patientAppointments.sort(
+        if (patientDocSnap.exists()) {
+          const patientData = patientDocSnap.data() as Patient;
+          const sortedHistory = patientData.visitHistory?.sort(
             (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-          );
-
-          setAppointments(sortedAppointments);
-
-          if (sortedAppointments.length > 0) {
-            setPatient(p => p ? ({
-                ...p,
-                lastVisit: sortedAppointments[0].date,
-                doctor: sortedAppointments[0].doctor
-            }) : null)
-          }
-
+          ) || [];
+          
+          setPatient({ ...patientData, visitHistory: sortedHistory });
+        } else {
+          console.error("Patient not found");
         }
+
       } catch (error) {
         console.error("Error fetching patient history:", error);
       } finally {
@@ -98,7 +77,9 @@ export default function PatientHistoryPage() {
     };
 
     fetchPatientHistory();
-  }, [patientId]);
+  }, [patientId, auth.currentUser]);
+
+  const lastVisit = patient?.visitHistory?.[0];
 
   return (
     <>
@@ -144,7 +125,7 @@ export default function PatientHistoryPage() {
                     </div>
                      <div>
                       <p className="text-sm text-muted-foreground">Last Visit</p>
-                      <p className="font-medium">{patient.lastVisit}</p>
+                      <p className="font-medium">{lastVisit ? lastVisit.date : 'N/A'}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -152,7 +133,7 @@ export default function PatientHistoryPage() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Appointment History</CardTitle>
+                  <CardTitle>Visit History</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <Table>
@@ -167,28 +148,36 @@ export default function PatientHistoryPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {appointments.map((apt) => (
-                        <TableRow key={apt.id}>
-                          <TableCell>{apt.date}</TableCell>
-                          <TableCell>{apt.time}</TableCell>
-                          <TableCell>{apt.doctor}</TableCell>
-                          <TableCell>{apt.department}</TableCell>
-                          <TableCell>{apt.treatment}</TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={
-                                apt.status === "Confirmed"
-                                  ? "success"
-                                  : apt.status === "Pending"
-                                  ? "warning"
-                                  : "destructive"
-                              }
-                            >
-                              {apt.status}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {patient.visitHistory && patient.visitHistory.length > 0 ? (
+                        patient.visitHistory.map((visit) => (
+                          <TableRow key={visit.appointmentId}>
+                            <TableCell>{visit.date}</TableCell>
+                            <TableCell>{visit.time}</TableCell>
+                            <TableCell>{visit.doctor}</TableCell>
+                            <TableCell>{visit.department}</TableCell>
+                            <TableCell>{visit.treatment}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={
+                                  visit.status === "Confirmed" || visit.status === "Completed"
+                                    ? "success"
+                                    : visit.status === "Pending"
+                                    ? "warning"
+                                    : "destructive"
+                                }
+                              >
+                                {visit.status}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                         <TableRow>
+                            <TableCell colSpan={6} className="text-center h-24">
+                                No visit history found for this patient.
+                            </TableCell>
+                         </TableRow>
+                      )}
                     </TableBody>
                   </Table>
                 </CardContent>

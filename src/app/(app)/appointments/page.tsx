@@ -14,8 +14,8 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import type { Appointment, Doctor, Patient } from "@/lib/types";
-import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment } from "firebase/firestore";
+import type { Appointment, Doctor, Patient, Visit } from "@/lib/types";
+import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear } from "date-fns";
@@ -272,23 +272,32 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
       }
       
       const doctorName = doctors.find(d => d.id === values.doctor)?.name || "Unknown Doctor";
+      const appointmentId = isEditing ? values.id! : `APT-${Date.now()}`;
       const appointmentDateStr = format(values.date ?? (Array.isArray(values.date) ? values.date[0] : new Date()), "d MMMM yyyy");
+      const appointmentTimeStr = format(parseDateFns(values.time, "HH:mm", new Date()), "hh:mm a");
 
-      if (bookingType === 'new' || (bookingType === 'existing' && !allPatients.some(p => p.phone === values.phone))) {
-        const patientId = encodeURIComponent(`${values.patientName}-${values.phone}`);
-        const patientRef = doc(db, "clinics", clinicId, "patients", patientId);
-        const patientDoc = await getFirestoreDoc(patientRef);
+      const newVisit: Visit = {
+          appointmentId: appointmentId,
+          date: appointmentDateStr,
+          time: appointmentTimeStr,
+          doctor: doctorName,
+          department: values.department,
+          treatment: "General Consultation",
+          status: "Pending"
+      };
 
-        if (patientDoc.exists()) {
-          // Patient exists, update their record
-          await updateDoc(patientRef, {
-            lastVisit: appointmentDateStr,
-            doctor: doctorName,
-            totalAppointments: increment(1),
-          });
-          setAllPatients(prev => prev.map(p => p.id === patientId ? {...p, lastVisit: appointmentDateStr, doctor: doctorName, totalAppointments: (p.totalAppointments || 0) + 1} : p));
-        } else {
-          // New patient, create a new record
+      const patientId = encodeURIComponent(`${values.patientName}-${values.phone}`);
+      const patientRef = doc(db, "clinics", clinicId, "patients", patientId);
+      const patientDoc = await getFirestoreDoc(patientRef);
+
+      if (patientDoc.exists()) {
+        await updateDoc(patientRef, {
+            visitHistory: arrayUnion(newVisit),
+            totalAppointments: increment(1)
+        });
+        const updatedPatients = allPatients.map(p => p.id === patientId ? {...p, visitHistory: [...(p.visitHistory || []), newVisit], totalAppointments: (p.totalAppointments || 0) + 1} : p);
+        setAllPatients(updatedPatients);
+      } else {
           const newPatientData: Patient = {
             id: patientId,
             clinicId,
@@ -297,40 +306,35 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
             gender: values.gender,
             phone: values.phone,
             place: values.place,
-            lastVisit: appointmentDateStr,
-            doctor: doctorName,
             totalAppointments: 1,
+            visitHistory: [newVisit]
           };
           await setDoc(patientRef, newPatientData);
           setAllPatients(prev => [...prev, newPatientData]);
-        }
       }
 
-      const dataToSave = {
+
+      const dataToSave: Appointment = {
           ...values,
+          id: appointmentId,
           date: appointmentDateStr,
-          time: format(parseDateFns(values.time, "HH:mm", new Date()), "hh:mm a"),
+          time: appointmentTimeStr,
           doctor: doctorName,
           status: "Pending",
           treatment: "General Consultation",
           clinicId,
       };
 
-      if (isEditing) {
-          const { id, ...restOfData } = dataToSave;
-          if (!id) throw new Error("Editing an appointment without an ID.");
-          const appointmentRef = doc(db, "clinics", clinicId, "appointments", id);
-          await setDoc(appointmentRef, restOfData, { merge: true });
+      const appointmentRef = doc(db, "clinics", clinicId, "appointments", appointmentId);
+      await setDoc(appointmentRef, dataToSave, { merge: true });
 
-          setAppointments(prev => {
-              return prev.map(apt => apt.id === id ? { ...apt, ...restOfData, id: id } : apt);
-          });
+      if (isEditing) {
+          setAppointments(prev => prev.map(apt => apt.id === appointmentId ? dataToSave : apt));
           toast({
               title: "Appointment Rescheduled",
-              description: `Appointment for ${restOfData.patientName} has been updated.`,
+              description: `Appointment for ${dataToSave.patientName} has been updated.`,
           });
       } else {
-          const appointmentId = `APT-${Date.now()}`;
           let prefix;
           switch (values.bookedVia) {
               case 'Phone': prefix = 'P'; break;
@@ -338,19 +342,14 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
               case 'Online': prefix = 'A'; break;
               default: prefix = 'U';
           }
-const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3, '0')}`;
-          
-          const newAppointmentData: Appointment = {
-              ...dataToSave,
-              id: appointmentId,
-              tokenNumber: tokenNumber,
-          };
-          const appointmentRef = doc(db, "clinics", clinicId, "appointments", appointmentId);
-          await setDoc(appointmentRef, newAppointmentData);
-          setAppointments(prev => [...prev, newAppointmentData]);
+          const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3, '0')}`;
+          dataToSave.tokenNumber = tokenNumber;
+
+          await updateDoc(appointmentRef, { tokenNumber: tokenNumber });
+          setAppointments(prev => [...prev, dataToSave]);
           toast({
               title: "Appointment Booked",
-              description: `Appointment for ${newAppointmentData.patientName} has been successfully booked.`,
+              description: `Appointment for ${dataToSave.patientName} has been successfully booked.`,
           });
       }
     } catch (error) {

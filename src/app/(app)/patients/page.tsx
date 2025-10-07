@@ -66,7 +66,7 @@ export default function PatientsPage() {
           return;
         }
 
-        const patientsQuery = query(collection(db, "patients"), where("clinicId", "==", clinicId));
+        const patientsQuery = query(collection(db, "clinics", clinicId, "patients"));
         const patientsSnapshot = await getDocs(patientsQuery);
         const patientList = patientsSnapshot.docs.map(doc => doc.data() as Patient);
 
@@ -216,7 +216,7 @@ export default function PatientsPage() {
                     </TableHead>
                      <TableHead>
                       <Button variant="ghost" size="sm">
-                        Doctor <ArrowUpDown className="ml-2 h-4 w-4" />
+                        Last Doctor <ArrowUpDown className="ml-2 h-4 w-4" />
                       </Button>
                     </TableHead>
                     <TableHead>Action</TableHead>
@@ -236,21 +236,23 @@ export default function PatientsPage() {
                       </TableRow>
                     ))
                   ) : (
-                    currentPatients.map((patient) => (
+                    currentPatients.map((patient) => {
+                      const lastVisit = patient.visitHistory && patient.visitHistory.length > 0 ? patient.visitHistory[patient.visitHistory.length - 1] : null;
+                      return (
                       <TableRow key={patient.id}>
                         <TableCell className="font-medium">{patient.name}</TableCell>
                         <TableCell>{patient.age}</TableCell>
                         <TableCell>{patient.gender}</TableCell>
                         <TableCell>{patient.phone}</TableCell>
-                        <TableCell>{patient.lastVisit}</TableCell>
-                        <TableCell>{patient.doctor}</TableCell>
+                        <TableCell>{lastVisit ? lastVisit.date : 'N/A'}</TableCell>
+                        <TableCell>{lastVisit ? lastVisit.doctor : 'N/A'}</TableCell>
                         <TableCell>
                           <Button asChild variant="link" className="p-0 h-auto text-primary">
                             <Link href={`/patients/${patient.id}`}>View History</Link>
                           </Button>
                         </TableCell>
                       </TableRow>
-                    ))
+                    )})
                   )}
                 </TableBody>
               </Table>
