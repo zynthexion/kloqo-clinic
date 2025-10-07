@@ -9,14 +9,16 @@ export const firestore = db;
 
 export function useAuth() {
     const [user, setUser] = useState<FirebaseUser | null>(null);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (user) => {
             setUser(user);
+            setLoading(false);
         });
 
         return () => unsubscribe();
     }, []);
 
-    return { ...auth, currentUser: user };
+    return { ...auth, currentUser: user, loading };
 }
