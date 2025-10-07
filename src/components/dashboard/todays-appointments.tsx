@@ -103,6 +103,8 @@ export default function TodaysAppointments({ selectedDate }: { selectedDate: Dat
                             ? "success"
                             : apt.status === "Pending"
                             ? "warning"
+                            : apt.status === "Completed"
+                            ? "success"
                             : "destructive"
                         }
                       >
@@ -127,7 +129,7 @@ export default function TodaysAppointments({ selectedDate }: { selectedDate: Dat
       </CardContent>
        <CardFooter className="pt-4 justify-end">
           <Button asChild variant="link" className="text-primary">
-              <Link href="/appointments">
+              <Link href="/appointments?drawer=open">
                   View All
                   <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
@@ -136,3 +138,5 @@ export default function TodaysAppointments({ selectedDate }: { selectedDate: Dat
     </Card>
   );
 }
+
+    

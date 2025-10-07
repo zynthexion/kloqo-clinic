@@ -1,5 +1,4 @@
 
-
 export type TimeSlot = {
   from: string;
   to: string;
@@ -17,7 +16,7 @@ export type LeaveSlot = {
 
 export type Doctor = {
   id: string;
-  clinicId: string;
+  clinicId?: string;
   name: string;
   specialty: string;
   avatar: string;
@@ -41,7 +40,7 @@ export type Doctor = {
 
 export type Appointment = {
   id:string;
-  clinicId: string;
+  clinicId?: string;
   patientName: string;
   gender: 'Male' | 'Female' | 'Other';
   phone: string;
@@ -60,7 +59,7 @@ export type Appointment = {
 
 export type Patient = {
   id: string;
-  clinicId: string;
+  clinicId?: string;
   name: string;
   age: number;
   gender: 'Male' | 'Female' | 'Other';
@@ -87,7 +86,7 @@ export type Report = {
 
 export type Department = {
     id: string;
-    clinicId: string;
+    clinicId?: string;
     name: string;
     description: string;
     image: string;
@@ -122,3 +121,5 @@ export type User = {
     phone: string;
     designation: 'Doctor' | 'Owner';
 }
+
+    

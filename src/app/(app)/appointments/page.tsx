@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Appointment, Doctor, Patient } from "@/lib/types";
-import { collection, getDocs, setDoc, doc, query, where } from "firebase/firestore";
+import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear } from "date-fns";
@@ -56,6 +56,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/firebase";
+import { useSearchParams } from 'next/navigation';
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -70,7 +71,7 @@ const formSchema = z.object({
   }).optional(),
   time: z.string().min(1, "Please select a time."),
   place: z.string().min(2, { message: "Place must be at least 2 characters." }),
-  bookedVia: z.enum(["Phone", "Walk-in"]),
+  bookedVia: z.enum(["Phone", "Walk-in", "Online"]),
   tokenNumber: z.string().optional(),
 });
 
@@ -81,7 +82,11 @@ const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Fri
 
 export default function AppointmentsPage() {
   const auth = useAuth();
-  // ...
+  const searchParams = useSearchParams();
+  const drawerOpenParam = searchParams.get('drawer');
+
+  const [isDrawerExpanded, setIsDrawerExpanded] = useState(drawerOpenParam === 'open');
+
   const handleCancel = (appointment: Appointment) => {
     setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Cancelled' } : a));
   };
@@ -93,7 +98,6 @@ export default function AppointmentsPage() {
     }
   };
   const handleSkip = async (appointment: Appointment) => {
-  // Update local state
   setAppointments(prev => {
     const updated = prev.map(a => a.id === appointment.id ? { ...a, isSkipped: true } : a);
     return [
@@ -101,7 +105,6 @@ export default function AppointmentsPage() {
       ...updated.filter(a => a.isSkipped)
     ];
   });
-  // Update Firestore
   if (appointment.id) {
     const appointmentRef = doc(db, "appointments", appointment.id);
     await setDoc(appointmentRef, { isSkipped: true }, { merge: true });
@@ -120,7 +123,6 @@ export default function AppointmentsPage() {
   const [isPatientPopoverOpen, setIsPatientPopoverOpen] = useState(false);
   const [bookingType, setBookingType] = useState("existing");
 
-  const [isDrawerExpanded, setIsDrawerExpanded] = useState(false);
   const [drawerSearchTerm, setDrawerSearchTerm] = useState("");
   const [filterAvailableDoctors, setFilterAvailableDoctors] = useState(false);
 const [selectedDrawerDoctor, setSelectedDrawerDoctor] = useState<string | null>(null);
@@ -173,7 +175,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
       try {
         setLoading(true);
         
-        const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+        const userDoc = await getFirestoreDoc(doc(db, "users", auth.currentUser.uid));
         const clinicId = userDoc.data()?.clinicId;
         if (!clinicId) {
           toast({ variant: "destructive", title: "Error", description: "No clinic associated with this user." });
@@ -236,7 +238,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                 date: isNaN(appointmentDate.getTime()) ? undefined : appointmentDate,
                 doctor: doctor.id,
                 time: format(parseDateFns(editingAppointment.time, "hh:mm a", new Date()), 'HH:mm'),
-                bookedVia: (editingAppointment.bookedVia === "Phone" || editingAppointment.bookedVia === "Walk-in") ? editingAppointment.bookedVia : "Phone"
+                bookedVia: (editingAppointment.bookedVia === "Phone" || editingAppointment.bookedVia === "Walk-in" || editingAppointment.bookedVia === "Online") ? editingAppointment.bookedVia : "Phone"
             });
             setPatientSearchTerm(editingAppointment.phone);
             setSelectedDoctorId(doctor.id);
@@ -253,7 +255,6 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
   }, [doctors, selectedDoctorId]);
 
   const selectedDate = form.watch("date");
-// filteredAppointments is defined below
 
 
   async function onSubmit(values: AddAppointmentFormValues) {
@@ -263,7 +264,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     }
 
     try {
-      const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+      const userDoc = await getFirestoreDoc(doc(db, "users", auth.currentUser.uid));
       const clinicId = userDoc.data()?.clinicId;
       if (!clinicId) {
         toast({ variant: "destructive", title: "Error", description: "No clinic associated with this user." });
@@ -293,7 +294,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
         setAllPatients(prev => [...prev, newPatientData]);
       }
 
-      const dataToSave: Omit<AddAppointmentFormValues, 'date' | 'time'> & { date: string, time: string, status: 'Confirmed' | 'Pending' | 'Cancelled' | 'Completed', treatment: string, clinicId: string } = {
+      const dataToSave = {
           ...values,
           date: appointmentDateStr,
           time: format(parseDateFns(values.time, "HH:mm", new Date()), "hh:mm a"),
@@ -318,7 +319,13 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
           });
       } else {
           const appointmentId = `APT-${Date.now()}`;
-          const prefix = values.bookedVia === 'Phone' ? 'P' : 'W';
+          let prefix;
+          switch (values.bookedVia) {
+              case 'Phone': prefix = 'P'; break;
+              case 'Walk-in': prefix = 'W'; break;
+              case 'Online': prefix = 'A'; break;
+              default: prefix = 'U';
+          }
 const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3, '0')}`;
           
           const newAppointmentData: Appointment = {
@@ -399,6 +406,7 @@ const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3,
 
     return selectedDoctor.leaveSlots
       .filter(leaveSlot => {
+        if (!leaveSlot.date) return false;
         const leaveDate = parse(leaveSlot.date, 'yyyy-MM-dd', new Date());
         const dayName = daysOfWeek[getDay(leaveDate)];
         
@@ -432,7 +440,7 @@ const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3,
     const slots: { time: string; disabled: boolean }[] = [];
     const avgTime = selectedDoctor.averageConsultingTime;
     
-    const leaveForDate = selectedDoctor.leaveSlots?.find(ls => isSameDay(parse(ls.date, 'yyyy-MM-dd', new Date()), selectedDate));
+    const leaveForDate = selectedDoctor.leaveSlots?.find(ls => ls.date && isSameDay(parse(ls.date, 'yyyy-MM-dd', new Date()), selectedDate));
     const leaveTimeSlots = leaveForDate ? leaveForDate.slots : [];
 
     availabilityForDay.timeSlots.forEach(ts => {
@@ -469,7 +477,7 @@ const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3,
       if (!doctorForApt || !doctorForApt.leaveSlots) return false;
       
       const aptDate = parse(appointment.date, "d MMMM yyyy", new Date());
-      const leaveForDay = doctorForApt.leaveSlots.find(ls => isSameDay(parse(ls.date, "yyyy-MM-dd", new Date()), aptDate));
+      const leaveForDay = doctorForApt.leaveSlots.find(ls => ls.date && isSameDay(parse(ls.date, "yyyy-MM-dd", new Date()), aptDate));
       
       if (!leaveForDay) return false;
 
@@ -487,7 +495,6 @@ const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3,
     
     let filtered = appointments;
 
-    // Filter by date range if set
     if (drawerDateRange && (drawerDateRange.from || drawerDateRange.to)) {
       filtered = filtered.filter(apt => {
         try {
@@ -525,7 +532,7 @@ const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3,
   });
 } else if (activeTab === 'completed') {
   filtered = filtered.filter(apt => apt.status === 'Completed');
-} // else 'all' returns all
+}
 
     return filtered.sort((a,b) => {
         try {
@@ -1052,3 +1059,5 @@ const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3,
     </>
   );
 }
+
+    
