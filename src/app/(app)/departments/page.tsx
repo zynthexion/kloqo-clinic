@@ -58,45 +58,62 @@ export default function DepartmentsPage() {
   const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
   const [isDoctorsDialogOpen, setIsDoctorsDialogOpen] = useState(false);
   const [deletingDepartment, setDeletingDepartment] = useState<Department | null>(null);
+  const [loading, setLoading] = useState(true);
 
+  // Step 1: Fetch master departments once
+  useEffect(() => {
+    const fetchMasterDepartments = async () => {
+      try {
+        const masterDeptsSnapshot = await getDocs(collection(db, "master-departments"));
+        const masterDeptsList = masterDeptsSnapshot.docs.map(d => d.data() as Department);
+        setMasterDepartments(masterDeptsList);
+      } catch (error) {
+        console.error("Error fetching master departments:", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not load master department list." });
+      }
+    };
+    fetchMasterDepartments();
+  }, [toast]);
+
+  // Step 2: Fetch clinic-specific data and combine with master list
   const fetchClinicData = useCallback(async () => {
-    if (!auth.currentUser) return;
-    
-    try {
-      const masterDeptsSnapshot = await getDocs(collection(db, "master-departments"));
-      const masterDeptsList = masterDeptsSnapshot.docs.map(d => d.data() as Department);
-      setMasterDepartments(masterDeptsList);
+    if (!auth.currentUser || masterDepartments.length === 0) return;
 
+    setLoading(true);
+    try {
       const userDoc = await getDoc(doc(db, "users", auth.currentUser!.uid));
       const clinicId = userDoc.data()?.clinicId;
 
       if (clinicId) {
-          const clinicDoc = await getDoc(doc(db, "clinics", clinicId));
-          if (clinicDoc.exists()) {
-              const clinicData = clinicDoc.data();
-              const departmentIds: string[] = clinicData.departments || [];
-              
-              if (departmentIds.length > 0) {
-                  const deptsForClinic = masterDeptsList.filter(masterDept => departmentIds.includes(masterDept.id));
-                  setClinicDepartments(deptsForClinic);
-              } else {
-                setClinicDepartments([]);
-              }
-          }
+        const clinicDoc = await getDoc(doc(db, "clinics", clinicId));
+        if (clinicDoc.exists()) {
+          const clinicData = clinicDoc.data();
+          const departmentIds: string[] = clinicData.departments || [];
 
-          const doctorsSnapshot = await getDocs(collection(db, "clinics", clinicId, "doctors"));
-          const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
-          setDoctors(doctorsList);
+          if (departmentIds.length > 0) {
+            const deptsForClinic = masterDepartments.filter(masterDept => departmentIds.includes(masterDept.id));
+            setClinicDepartments(deptsForClinic);
+          } else {
+            setClinicDepartments([]);
+          }
+        }
+
+        const doctorsSnapshot = await getDocs(collection(db, "clinics", clinicId, "doctors"));
+        const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
+        setDoctors(doctorsList);
       }
     } catch(error) {
-        console.error("Error fetching departments data:", error);
-        toast({ variant: "destructive", title: "Error", description: "Failed to load department data."});
+        console.error("Error fetching clinic data:", error);
+        toast({ variant: "destructive", title: "Error", description: "Failed to load clinic-specific department data."});
+    } finally {
+        setLoading(false);
     }
-  }, [auth.currentUser, toast]);
+  }, [auth.currentUser, toast, masterDepartments]);
 
   useEffect(() => {
     fetchClinicData();
   }, [fetchClinicData]);
+
 
   const getDoctorAvatar = (doctorName: string) => {
     const doctor = doctors.find((d) => d.name === doctorName);
