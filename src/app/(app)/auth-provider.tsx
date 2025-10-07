@@ -3,10 +3,10 @@
 
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import React, { useEffect, useState, useContext } from 'react';
+import React, { useEffect, useState, useContext, ReactNode } from 'react';
 import { AuthContext } from '@/firebase';
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export function AuthProvider({ children }: { children: ReactNode }) {
     const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -16,7 +16,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setLoading(false);
         });
 
-        return unsubscribe;
+        // Cleanup subscription on unmount
+        return () => unsubscribe();
     }, []);
 
     const value = {
@@ -24,9 +25,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
     };
 
-    return <AuthContext.Provider value={value}>{!loading && children}</AuthContext.Provider>;
+    // Render children only when not loading to prevent flicker or premature rendering of protected content
+    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
-
-export const useAuth = () => {
-    return useContext(AuthContext);
-};

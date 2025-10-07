@@ -3,19 +3,35 @@
 
 import { Sidebar } from '@/components/layout/sidebar';
 import { OnboardingCheck } from '@/components/onboarding/onboarding-check';
-import { AuthProvider } from '@/app/(app)/auth-provider';
 import { Suspense } from 'react';
-import ProtectedRoute from './protected-route';
+import { useAuth } from '@/firebase';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 export default function AppLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const { currentUser, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && !currentUser) {
+      router.push('/');
+    }
+  }, [currentUser, loading, router]);
+  
+  if (loading || !currentUser) {
+    return (
+        <div className="flex h-screen w-full items-center justify-center">
+            <p>Loading...</p>
+        </div>
+    );
+  }
+
   return (
-    <AuthProvider>
       <Suspense fallback={<div className="flex h-screen w-full items-center justify-center"><p>Loading...</p></div>}>
-        <ProtectedRoute>
           <div className="flex h-full">
             <OnboardingCheck />
             <Sidebar />
@@ -23,8 +39,6 @@ export default function AppLayout({
               {children}
             </div>
           </div>
-        </ProtectedRoute>
       </Suspense>
-    </AuthProvider>
   )
 }
