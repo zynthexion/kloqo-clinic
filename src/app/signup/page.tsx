@@ -16,7 +16,8 @@ import { Card } from '@/components/ui/card';
 import { PeterdrawLogo } from '@/components/icons';
 import Link from 'next/link';
 
-import { db as firestore, auth } from '@/lib/firebase';
+import { firestore } from '@/firebase';
+import { auth } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { collection, doc, writeBatch } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
