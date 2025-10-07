@@ -70,6 +70,8 @@ export default function OnboardingPage() {
       bio: doctorData.bio,
       averageConsultingTime: doctorData.averageConsultingTime,
       availabilitySlots: doctorData.availabilitySlots,
+      experience: doctorData.experience,
+      consultationFee: doctorData.consultationFee,
     };
     
     const docRef = doc(db, "doctors", docId);
