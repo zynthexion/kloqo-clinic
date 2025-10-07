@@ -9,6 +9,9 @@ import type { Department } from "@/lib/types";
 import Image from "next/image";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/firebase";
+import { doc, setDoc, getDoc, collection, writeBatch } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 const superAdminDepartments: Department[] = [
     { id: 'dept-01', name: 'General Medicine', description: 'Comprehensive primary care.', image: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8bWVkaWNpbmV8ZW58MHx8MHx8fDA%3D', doctors: [] },
@@ -20,17 +23,47 @@ const superAdminDepartments: Department[] = [
 
 
 export function AddDepartmentStep({ onDepartmentsAdded }: { onDepartmentsAdded: (departments: Department[]) => void }) {
+  const auth = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedDepartments, setSelectedDepartments] = useState<Department[]>([]);
   const { toast } = useToast();
 
-  const handleSelectDepartments = (departments: Department[]) => {
-    setSelectedDepartments(departments);
-    onDepartmentsAdded(departments);
-    toast({
-        title: "Departments Added",
-        description: `${departments.length} departments have been added to your clinic.`,
-    });
+  const handleSelectDepartments = async (departments: Department[]) => {
+    if (!auth.currentUser) {
+        toast({ variant: "destructive", title: "Error", description: "You must be logged in." });
+        return;
+    }
+    try {
+        const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+        const clinicId = userDoc.data()?.clinicId;
+        if (!clinicId) {
+            toast({ variant: "destructive", title: "Error", description: "No clinic ID found for user." });
+            return;
+        }
+
+        const batch = writeBatch(db);
+        departments.forEach(dept => {
+            const deptRef = doc(db, `clinics/${clinicId}/departments`, dept.id);
+            batch.set(deptRef, { ...dept, clinicId });
+        });
+        await batch.commit();
+        
+        setSelectedDepartments(departments);
+        onDepartmentsAdded(departments);
+
+        toast({
+            title: "Departments Added",
+            description: `${departments.length} department(s) have been added to your clinic.`,
+        });
+
+    } catch (error) {
+        console.error("Error saving departments:", error);
+        toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Failed to save departments. Please try again.",
+        });
+    }
   };
 
   return (
@@ -87,5 +120,3 @@ export function AddDepartmentStep({ onDepartmentsAdded }: { onDepartmentsAdded: 
     </div>
   );
 }
-
-    
