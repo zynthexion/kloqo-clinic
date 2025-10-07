@@ -62,28 +62,33 @@ export default function DepartmentsPage() {
   const fetchClinicData = useCallback(async () => {
     if (!auth.currentUser) return;
     
-    const userDoc = await getDoc(doc(db, "users", auth.currentUser!.uid));
-    const clinicId = userDoc.data()?.clinicId;
+    try {
+      const userDoc = await getDoc(doc(db, "users", auth.currentUser!.uid));
+      const clinicId = userDoc.data()?.clinicId;
 
-    if (clinicId) {
-        const doctorsSnapshot = await getDocs(collection(db, "clinics", clinicId, "doctors"));
-        const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
-        setDoctors(doctorsList);
+      if (clinicId) {
+          const masterDeptsSnapshot = await getDocs(collection(db, "master-departments"));
+          const masterDeptsList = masterDeptsSnapshot.docs.map(d => d.data() as Department);
+          setMasterDepartments(masterDeptsList);
 
-        const masterDeptsSnapshot = await getDocs(collection(db, "master-departments"));
-        const masterDeptsList = masterDeptsSnapshot.docs.map(d => d.data() as Department);
-        setMasterDepartments(masterDeptsList);
-        
-        const clinicDoc = await getDoc(doc(db, "clinics", clinicId));
-        if (clinicDoc.exists()) {
-            const clinicData = clinicDoc.data();
-            const departmentIds: string[] = clinicData.departments || [];
-            
-            const deptsForClinic = masterDeptsList.filter(masterDept => departmentIds.includes(masterDept.id));
-            setClinicDepartments(deptsForClinic);
-        }
+          const doctorsSnapshot = await getDocs(collection(db, "clinics", clinicId, "doctors"));
+          const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
+          setDoctors(doctorsList);
+          
+          const clinicDoc = await getDoc(doc(db, "clinics", clinicId));
+          if (clinicDoc.exists()) {
+              const clinicData = clinicDoc.data();
+              const departmentIds: string[] = clinicData.departments || [];
+              
+              const deptsForClinic = masterDeptsList.filter(masterDept => departmentIds.includes(masterDept.id));
+              setClinicDepartments(deptsForClinic);
+          }
+      }
+    } catch(error) {
+        console.error("Error fetching departments data:", error);
+        toast({ variant: "destructive", title: "Error", description: "Failed to load department data."});
     }
-  }, [auth.currentUser]);
+  }, [auth.currentUser, toast]);
 
   useEffect(() => {
     fetchClinicData();
@@ -277,6 +282,7 @@ export default function DepartmentsPage() {
                       <ChevronRight className="h-4 w-4" />
                   </Button>
               </div>
+            </div>
         </main>
         {selectedDepartment && (
           <DepartmentDoctorsDialog
@@ -309,3 +315,5 @@ export default function DepartmentsPage() {
     </>
   );
 }
+
+    
