@@ -66,24 +66,20 @@ export default function DepartmentsPage() {
     const clinicId = userDoc.data()?.clinicId;
 
     if (clinicId) {
-        // Fetch all doctors for the clinic
         const doctorsSnapshot = await getDocs(collection(db, "clinics", clinicId, "doctors"));
         const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
         setDoctors(doctorsList);
 
-        // Fetch master departments
         const masterDeptsSnapshot = await getDocs(collection(db, "master-departments"));
         const masterDeptsList = masterDeptsSnapshot.docs.map(d => d.data() as Department);
         setMasterDepartments(masterDeptsList);
         
-        // Fetch clinic document to get the array of department names
         const clinicDoc = await getDoc(doc(db, "clinics", clinicId));
         if (clinicDoc.exists()) {
             const clinicData = clinicDoc.data();
-            const departmentNames: string[] = clinicData.departments || [];
+            const departmentIds: string[] = clinicData.departments || [];
             
-            // Filter master list to get full department objects for the clinic
-            const deptsForClinic = masterDeptsList.filter(masterDept => departmentNames.includes(masterDept.name));
+            const deptsForClinic = masterDeptsList.filter(masterDept => departmentIds.includes(masterDept.id));
             setClinicDepartments(deptsForClinic);
         }
     }
@@ -174,10 +170,10 @@ export default function DepartmentsPage() {
         if (!clinicId) throw new Error("User has no clinic assigned.");
 
         const clinicRef = doc(db, "clinics", clinicId);
-        const departmentNamesToAdd = selectedDepts.map(d => d.name);
+        const departmentIdsToAdd = selectedDepts.map(d => d.id);
 
         await updateDoc(clinicRef, {
-            departments: arrayUnion(...departmentNamesToAdd)
+            departments: arrayUnion(...departmentIdsToAdd)
         });
 
         fetchClinicData(); // Re-fetch all data to update the UI
@@ -205,7 +201,7 @@ export default function DepartmentsPage() {
 
       const clinicRef = doc(db, "clinics", clinicId);
       await updateDoc(clinicRef, {
-        departments: arrayRemove(deletingDepartment.name)
+        departments: arrayRemove(deletingDepartment.id)
       });
       
       setClinicDepartments(prev => prev.filter(d => d.id !== deletingDepartment.id));

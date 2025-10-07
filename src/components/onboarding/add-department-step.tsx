@@ -49,9 +49,9 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
           const clinicDoc = await getDoc(doc(db, "clinics", clinicId));
           if(clinicDoc.exists()){
             const clinicData = clinicDoc.data();
-            const departmentNames: string[] = clinicData.departments || [];
+            const departmentIds: string[] = clinicData.departments || [];
             
-            const depts = masterDeptsList.filter(masterDept => departmentNames.includes(masterDept.name));
+            const depts = masterDeptsList.filter(masterDept => departmentIds.includes(masterDept.id));
             setClinicDepartments(depts);
             if (depts.length > 0) {
               onDepartmentsAdded(depts);
@@ -82,10 +82,10 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
     }
 
     const clinicRef = doc(db, "clinics", clinicId);
-    const departmentNamesToAdd = selectedDepts.map(d => d.name);
+    const departmentIdsToAdd = selectedDepts.map(d => d.id);
 
     updateDoc(clinicRef, {
-        departments: arrayUnion(...departmentNamesToAdd)
+        departments: arrayUnion(...departmentIdsToAdd)
     })
     .then(() => {
         const allDepts = [...clinicDepartments, ...selectedDepts].reduce((acc, current) => {
@@ -108,7 +108,7 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
         const permissionError = new FirestorePermissionError({
             path: `/clinics/${clinicId}`,
             operation: 'update',
-            requestResourceData: { departments: departmentNamesToAdd },
+            requestResourceData: { departments: departmentIdsToAdd },
         });
         errorEmitter.emit('permission-error', permissionError);
     });
