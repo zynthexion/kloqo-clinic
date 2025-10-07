@@ -184,3 +184,5 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
     </div>
   );
 }
+
+    
