@@ -13,7 +13,7 @@ export function OnboardingCheck() {
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser || pathname === '/onboarding') return;
 
     const checkOnboardingStatus = async () => {
       try {
@@ -22,7 +22,11 @@ export function OnboardingCheck() {
 
         if (userDoc.exists()) {
           const clinicId = userDoc.data()?.clinicId;
-          if (!clinicId) return;
+          if (!clinicId) {
+            // This case might happen if user doc is created but clinic creation fails
+            if (pathname !== '/onboarding') router.push('/onboarding');
+            return;
+          }
 
           const departmentsQuery = query(collection(db, 'departments'), where('clinicId', '==', clinicId));
           const doctorsQuery = query(collection(db, 'doctors'), where('clinicId', '==', clinicId));
@@ -34,16 +38,25 @@ export function OnboardingCheck() {
 
           const needsOnboarding = departmentsSnapshot.empty || doctorsSnapshot.empty;
 
-          if (needsOnboarding && pathname !== '/onboarding') {
+          if (needsOnboarding) {
             router.push('/onboarding');
           }
+        } else {
+            // If the user document doesn't exist for some reason, they need to onboard.
+            if (pathname !== '/onboarding') router.push('/onboarding');
         }
       } catch (error) {
         console.error("Error checking onboarding status:", error);
       }
     };
 
-    checkOnboardingStatus();
+    // A small delay to ensure auth state is fully propagated
+    const timer = setTimeout(() => {
+        checkOnboardingStatus();
+    }, 500);
+    
+    return () => clearTimeout(timer);
+
   }, [auth.currentUser, router, pathname]);
 
   return null; // This component does not render anything

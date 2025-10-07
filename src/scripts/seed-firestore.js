@@ -1,7 +1,13 @@
 
-const { initializeApp } = require('firebase-admin/app');
+const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 const { format } = require('date-fns');
+
+// IMPORTANT: This check is to prevent initialization in a client-side environment
+// as this script is intended for server-side execution only.
+if (typeof window !== 'undefined') {
+  throw new Error("This script should only be run in a Node.js environment.");
+}
 
 const defaultClinicId = 'default-clinic-id';
 
@@ -513,9 +519,19 @@ const appointments = rawAppointments.map((apt, index) => ({
 
 
 // Initialize Firebase Admin SDK
-// Make sure to have your service account key file in the root directory
-// and update the GOOGLE_APPLICATION_CREDENTIALS environment variable
-initializeApp();
+// This requires a service account key file. 
+// Ensure GOOGLE_APPLICATION_CREDENTIALS is set in your environment.
+try {
+    initializeApp({
+        // If you're running this locally with a service account file:
+        // credential: cert(require('./path/to/your/serviceAccountKey.json'))
+    });
+} catch(e) {
+    if (e.code !== 'app/duplicate-app') {
+        console.error("Firebase Admin initialization error:", e);
+    }
+}
+
 
 const db = getFirestore();
 
