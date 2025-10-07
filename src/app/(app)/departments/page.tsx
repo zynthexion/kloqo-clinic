@@ -14,7 +14,6 @@ import {
   ChevronRight,
   PlusCircle,
   MoreHorizontal,
-  Edit,
   Trash,
 } from "lucide-react";
 import {
@@ -41,8 +40,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { Department, Doctor } from "@/lib/types";
-import React, { useState, useEffect } from "react";
-import { collection, getDocs, doc, setDoc, deleteDoc, query, getDoc, writeBatch, where } from "firebase/firestore";
+import React, { useState, useEffect, useCallback } from "react";
+import { collection, getDocs, doc, getDoc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { DepartmentDoctorsDialog } from "@/components/departments/department-doctors-dialog";
@@ -51,8 +50,8 @@ import { useAuth } from "@/firebase";
 
 export default function DepartmentsPage() {
   const auth = useAuth();
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [masterDepartments, setMasterDepartments] = useState<Omit<Department, "clinicId">[]>([]);
+  const [clinicDepartments, setClinicDepartments] = useState<Department[]>([]);
+  const [masterDepartments, setMasterDepartments] = useState<Department[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const { toast } = useToast();
   const [isAddDepartmentOpen, setIsAddDepartmentOpen] = useState(false);
@@ -60,123 +59,132 @@ export default function DepartmentsPage() {
   const [isDoctorsDialogOpen, setIsDoctorsDialogOpen] = useState(false);
   const [deletingDepartment, setDeletingDepartment] = useState<Department | null>(null);
 
-
-  useEffect(() => {
+  const fetchClinicData = useCallback(async () => {
     if (!auth.currentUser) return;
     
-    const fetchClinicData = async () => {
-        const userDoc = await getDoc(doc(db, "users", auth.currentUser!.uid));
-        const clinicId = userDoc.data()?.clinicId;
+    const userDoc = await getDoc(doc(db, "users", auth.currentUser!.uid));
+    const clinicId = userDoc.data()?.clinicId;
 
-        if (clinicId) {
-            const departmentsQuery = query(collection(db, "departments"), where("clinicId", "==", clinicId));
-            const departmentsSnapshot = await getDocs(departmentsQuery);
-            const departmentsList = departmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Department));
-            setDepartments(departmentsList);
+    if (clinicId) {
+        // Fetch all doctors for the clinic
+        const doctorsSnapshot = await getDocs(collection(db, "clinics", clinicId, "doctors"));
+        const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
+        setDoctors(doctorsList);
 
-            const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
-            const doctorsSnapshot = await getDocs(doctorsQuery);
-            const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
-            setDoctors(doctorsList);
-        }
-
+        // Fetch master departments
         const masterDeptsSnapshot = await getDocs(collection(db, "master-departments"));
-        const masterDeptsList = masterDeptsSnapshot.docs.map(d => d.data() as Omit<Department, 'clinicId'>);
+        const masterDeptsList = masterDeptsSnapshot.docs.map(d => d.data() as Department);
         setMasterDepartments(masterDeptsList);
-    };
-
-    fetchClinicData();
+        
+        // Fetch clinic document to get the array of department names
+        const clinicDoc = await getDoc(doc(db, "clinics", clinicId));
+        if (clinicDoc.exists()) {
+            const clinicData = clinicDoc.data();
+            const departmentNames: string[] = clinicData.departments || [];
+            
+            // Filter master list to get full department objects for the clinic
+            const deptsForClinic = masterDeptsList.filter(masterDept => departmentNames.includes(masterDept.name));
+            setClinicDepartments(deptsForClinic);
+        }
+    }
   }, [auth.currentUser]);
+
+  useEffect(() => {
+    fetchClinicData();
+  }, [fetchClinicData]);
 
   const getDoctorAvatar = (doctorName: string) => {
     const doctor = doctors.find((d) => d.name === doctorName);
     return doctor ? doctor.avatar : "https://picsum.photos/seed/generic-doctor/100/100";
   }
 
-  const DepartmentCard = ({ department, onSeeDetail, onDelete }: { department: Department, onSeeDetail: (department: Department) => void, onDelete: (department: Department) => void }) => (
-      <Card className="overflow-hidden flex flex-col">
-          <div className="relative h-40 w-full">
-              <Image
-                  src={department.image}
-                  alt={department.name}
-                  fill
-                  style={{objectFit: "cover"}}
-                  data-ai-hint={department.imageHint}
-              />
-          </div>
-          <CardContent className="p-4 flex-grow">
-              <div className="flex justify-between items-start">
-                <div>
-                    <h3 className="text-lg font-semibold">{department.name}</h3>
-                    <p className="text-sm text-muted-foreground mt-1 h-10 overflow-hidden">
-                        {department.description}
-                    </p>
-                </div>
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                            <span className="sr-only">Open menu</span>
-                            <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem onSelect={() => onDelete(department)} className="text-red-600">
-                            <Trash className="mr-2 h-4 w-4" />
-                            Delete
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-          </CardContent>
-          <CardFooter className="bg-muted/30 px-4 py-3 flex items-center justify-between">
-               <div className="flex items-center">
-                  <div className="flex -space-x-2">
-                      {department.doctors && department.doctors.slice(0, 3).map((doctorName, index) => (
-                          <Image
-                              key={index}
-                              src={getDoctorAvatar(doctorName)}
-                              alt={doctorName}
-                              width={32}
-                              height={32}
-                              className="rounded-full border-2 border-white object-cover"
-                              data-ai-hint="doctor portrait"
-                          />
-                      ))}
-                  </div>
-                  {department.doctors && department.doctors.length > 3 && (
-                      <span className="text-xs text-muted-foreground ml-2">
-                          + {department.doctors.length - 3} others
-                      </span>
-                  )}
-              </div>
-               <Button variant="link" className="p-0 h-auto" onClick={() => onSeeDetail(department)}>See Doctors</Button>
-          </CardFooter>
-      </Card>
-  );
+  const getDoctorsInDepartment = (departmentName: string) => {
+    return doctors.filter(doctor => doctor.department === departmentName).map(d => d.name);
+  }
 
-  const handleSaveDepartments = async (selectedDepts: Omit<Department, 'clinicId'>[]) => {
+  const DepartmentCard = ({ department, onSeeDetail, onDelete }: { department: Department, onSeeDetail: (department: Department) => void, onDelete: (department: Department) => void }) => {
+      const doctorsInDept = getDoctorsInDepartment(department.name);
+      return (
+          <Card className="overflow-hidden flex flex-col">
+              <div className="relative h-40 w-full">
+                  <Image
+                      src={department.image}
+                      alt={department.name}
+                      fill
+                      style={{objectFit: "cover"}}
+                      data-ai-hint={department.imageHint}
+                  />
+              </div>
+              <CardContent className="p-4 flex-grow">
+                  <div className="flex justify-between items-start">
+                    <div>
+                        <h3 className="text-lg font-semibold">{department.name}</h3>
+                        <p className="text-sm text-muted-foreground mt-1 h-10 overflow-hidden">
+                            {department.description}
+                        </p>
+                    </div>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0">
+                                <span className="sr-only">Open menu</span>
+                                <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem onSelect={() => onDelete(department)} className="text-red-600">
+                                <Trash className="mr-2 h-4 w-4" />
+                                Delete
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+              </CardContent>
+              <CardFooter className="bg-muted/30 px-4 py-3 flex items-center justify-between">
+                   <div className="flex items-center">
+                      <div className="flex -space-x-2">
+                          {doctorsInDept.slice(0, 3).map((doctorName, index) => (
+                              <Image
+                                  key={index}
+                                  src={getDoctorAvatar(doctorName)}
+                                  alt={doctorName}
+                                  width={32}
+                                  height={32}
+                                  className="rounded-full border-2 border-white object-cover"
+                                  data-ai-hint="doctor portrait"
+                              />
+                          ))}
+                      </div>
+                      {doctorsInDept.length > 3 && (
+                          <span className="text-xs text-muted-foreground ml-2">
+                              + {doctorsInDept.length - 3} others
+                          </span>
+                      )}
+                  </div>
+                   <Button variant="link" className="p-0 h-auto" onClick={() => onSeeDetail(department)}>See Doctors</Button>
+              </CardFooter>
+          </Card>
+      );
+  }
+
+  const handleSaveDepartments = async (selectedDepts: Department[]) => {
     if (!auth.currentUser) return;
     try {
         const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
         const clinicId = userDoc.data()?.clinicId;
         if (!clinicId) throw new Error("User has no clinic assigned.");
 
-        const batch = writeBatch(db);
-        selectedDepts.forEach(dept => {
-            const deptRef = doc(db, "departments", `${clinicId}_${dept.id}`);
-            batch.set(deptRef, { ...dept, id: `${clinicId}_${dept.id}`, clinicId });
-        });
-        
-        await batch.commit();
+        const clinicRef = doc(db, "clinics", clinicId);
+        const departmentNamesToAdd = selectedDepts.map(d => d.name);
 
-        const departmentsQuery = query(collection(db, "departments"), where("clinicId", "==", clinicId));
-        const departmentsSnapshot = await getDocs(departmentsQuery);
-        const departmentsList = departmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Department));
-        setDepartments(departmentsList);
+        await updateDoc(clinicRef, {
+            departments: arrayUnion(...departmentNamesToAdd)
+        });
+
+        fetchClinicData(); // Re-fetch all data to update the UI
 
         toast({
             title: "Departments Added",
-            description: `${selectedDepts.length} department(s) have been successfully added/updated.`,
+            description: `${selectedDepts.length} department(s) have been successfully added.`,
         });
     } catch (error) {
         console.error("Error saving departments:", error);
@@ -191,8 +199,17 @@ export default function DepartmentsPage() {
   const handleDeleteDepartment = async () => {
     if (!deletingDepartment || !auth.currentUser) return;
     try {
-      await deleteDoc(doc(db, "departments", deletingDepartment.id));
-      setDepartments(prev => prev.filter(d => d.id !== deletingDepartment.id));
+      const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+      const clinicId = userDoc.data()?.clinicId;
+      if (!clinicId) throw new Error("User has no clinic assigned.");
+
+      const clinicRef = doc(db, "clinics", clinicId);
+      await updateDoc(clinicRef, {
+        departments: arrayRemove(deletingDepartment.name)
+      });
+      
+      setClinicDepartments(prev => prev.filter(d => d.id !== deletingDepartment.id));
+
       toast({
         title: "Department Deleted",
         description: `${deletingDepartment.name} has been removed.`,
@@ -210,7 +227,8 @@ export default function DepartmentsPage() {
   }
   
   const handleSeeDetail = (department: Department) => {
-    setSelectedDepartment(department);
+    const doctorsInDept = doctors.filter(doc => doc.department === department.name);
+    setSelectedDepartment({...department, doctors: doctorsInDept.map(d => d.name)});
     setIsDoctorsDialogOpen(true);
   }
 
@@ -233,7 +251,7 @@ export default function DepartmentsPage() {
               />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {departments.map((dept) => (
+              {clinicDepartments.map((dept) => (
                   <DepartmentCard key={dept.id} department={dept} onSeeDetail={handleSeeDetail} onDelete={() => setDeletingDepartment(dept)} />
               ))}
           </div>
@@ -250,7 +268,7 @@ export default function DepartmentsPage() {
                       <SelectItem value="27">27</SelectItem>
                   </SelectContent>
                   </Select>{" "}
-                  out of {departments.length}
+                  out of {clinicDepartments.length}
               </div>
               <div className="flex items-center gap-2">
                   <Button variant="outline" size="icon" disabled>
@@ -263,7 +281,6 @@ export default function DepartmentsPage() {
                       <ChevronRight className="h-4 w-4" />
                   </Button>
               </div>
-          </div>
         </main>
         {selectedDepartment && (
           <DepartmentDoctorsDialog
@@ -279,7 +296,7 @@ export default function DepartmentsPage() {
                   <AlertDialogHeader>
                   <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                   <AlertDialogDescription>
-                      This action cannot be undone. This will permanently delete the {deletingDepartment?.name} department and remove its data from our servers.
+                      This action cannot be undone. This will permanently delete the {deletingDepartment?.name} department from your clinic.
                   </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>

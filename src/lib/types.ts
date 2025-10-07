@@ -61,7 +61,7 @@ export type Appointment = {
 
 export type Visit = {
   appointmentId: string;
-  clinicId: string;
+  clinicId?: string;
   date: string;
   time: string;
   doctor: string;
@@ -72,6 +72,7 @@ export type Visit = {
 
 export type Patient = {
   id: string; // This will be the patient's UID from Firebase Auth
+  clinicId: string;
   name: string;
   age: number;
   gender: 'Male' | 'Female' | 'Other';
@@ -98,7 +99,6 @@ export type Report = {
 
 export type Department = {
     id: string;
-    clinicId: string;
     name: string;
     description: string;
     image: string;

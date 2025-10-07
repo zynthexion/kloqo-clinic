@@ -36,39 +36,22 @@ service cloud.firestore {
       allow read, update: if isOwner(userId);
       allow create: if isSignedIn();
     }
-
-    // Doctors can be created by staff of the same clinic.
-    // Doctors can be read by any signed-in user (for the patient app).
-    // Doctors can only be updated/deleted by staff of the same clinic.
-    match /doctors/{doctorId} {
-      allow read: if isSignedIn();
-      allow create: if isClinicStaff(request.resource.data.clinicId);
-      allow update, delete: if isClinicStaff(resource.data.clinicId);
-    }
     
-    // Departments can be created by staff of the same clinic.
-    // Departments can be read by any signed-in user (for the patient app).
-    // Departments can only be updated/deleted by staff of the same clinic.
-    match /departments/{departmentId} {
-      allow read: if isSignedIn();
-      allow create: if isClinicStaff(request.resource.data.clinicId);
-      allow update, delete: if isClinicStaff(resource.data.clinicId);
-    }
-    
-    // Master list of all possible departments. Any signed-in user can read this.
+    // Master departments can be read by any signed-in user.
+    // This is a "public" read-only collection for populating dialogs.
     match /master-departments/{departmentId} {
-      allow read: if isSignedIn();
+        allow read: if isSignedIn();
     }
 
-    // Appointments can be read/written by staff of the clinic,
-    // or by the patient who owns the appointment.
-    match /appointments/{appointmentId} {
-        allow read, write: if isClinicStaff(request.resource.data.clinicId) || isOwner(request.resource.data.patientId);
+    // Subcollections within a clinic (doctors, appointments) can be accessed
+    // only by staff belonging to that clinic.
+    match /clinics/{clinicId}/{subcollection}/{docId} {
+      allow read, write, delete: if isClinicStaff(clinicId);
     }
-
+    
     // Patients can create their own record.
     // They can only read/update their own record.
-    // Clinic staff can read patient records associated with their clinic (e.g. for booking).
+    // Clinic staff can read patient records.
     match /patients/{patientId} {
       allow create: if isOwner(patientId);
       allow read, update: if isOwner(patientId) || isClinicStaff(getUserClinicId(request.auth.uid));

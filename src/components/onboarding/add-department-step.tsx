@@ -10,7 +10,7 @@ import Image from "next/image";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/firebase";
-import { doc, setDoc, getDoc, collection, writeBatch, getDocs, query, where } from "firebase/firestore";
+import { doc, setDoc, getDoc, collection, writeBatch, getDocs, query, where, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Skeleton } from "../ui/skeleton";
 import { FirestorePermissionError } from "@/firebase/errors";
@@ -20,8 +20,8 @@ import { errorEmitter } from "@/firebase/error-emitter";
 export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { onDepartmentsAdded: (departments: Department[]) => void, onAddDoctorClick: () => void }) {
   const auth = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [existingDepartments, setExistingDepartments] = useState<Department[]>([]);
-  const [masterDepartments, setMasterDepartments] = useState<Omit<Department, "clinicId">[]>([]);
+  const [clinicDepartments, setClinicDepartments] = useState<Department[]>([]);
+  const [masterDepartments, setMasterDepartments] = useState<Department[]>([]);
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
 
@@ -34,12 +34,10 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
     const fetchInitialData = async () => {
       setLoading(true);
       try {
-        // Fetch master departments list
         const masterDeptsSnapshot = await getDocs(collection(db, "master-departments"));
-        const masterDeptsList = masterDeptsSnapshot.docs.map(d => d.data() as Omit<Department, "clinicId">);
+        const masterDeptsList = masterDeptsSnapshot.docs.map(d => d.data() as Department);
         setMasterDepartments(masterDeptsList);
 
-        // Fetch existing departments for the current clinic
         const userDoc = await getDoc(doc(db, "users", auth.currentUser!.uid));
         if (!userDoc.exists()) {
           setLoading(false);
@@ -48,13 +46,16 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
 
         const clinicId = userDoc.data()?.clinicId;
         if (clinicId) {
-          const departmentsRef = collection(db, 'departments');
-          const q = query(departmentsRef, where("clinicId", "==", clinicId));
-          const querySnapshot = await getDocs(q);
-          const depts = querySnapshot.docs.map(d => d.data() as Department);
-          setExistingDepartments(depts);
-          if (depts.length > 0) {
-            onDepartmentsAdded(depts);
+          const clinicDoc = await getDoc(doc(db, "clinics", clinicId));
+          if(clinicDoc.exists()){
+            const clinicData = clinicDoc.data();
+            const departmentNames: string[] = clinicData.departments || [];
+            
+            const depts = masterDeptsList.filter(masterDept => departmentNames.includes(masterDept.name));
+            setClinicDepartments(depts);
+            if (depts.length > 0) {
+              onDepartmentsAdded(depts);
+            }
           }
         }
       } catch (error) {
@@ -68,7 +69,7 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
   }, [auth.currentUser, onDepartmentsAdded]);
 
 
-  const handleSelectDepartments = async (selectedDepts: Omit<Department, "clinicId">[]) => {
+  const handleSelectDepartments = async (selectedDepts: Department[]) => {
     if (!auth.currentUser) {
         toast({ variant: "destructive", title: "Error", description: "You must be logged in." });
         return;
@@ -80,41 +81,37 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
         return;
     }
 
-    const batch = writeBatch(db);
-    selectedDepts.forEach(dept => {
-        // Each department gets its own document in the top-level /departments collection
-        const deptRef = doc(db, "departments", `${clinicId}_${dept.id}`);
-        batch.set(deptRef, { ...dept, id: `${clinicId}_${dept.id}`, clinicId });
-    });
+    const clinicRef = doc(db, "clinics", clinicId);
+    const departmentNamesToAdd = selectedDepts.map(d => d.name);
 
-    batch.commit()
-        .then(() => {
-            const allDepts = [...existingDepartments, ...selectedDepts.map(d => ({...d, id: `${clinicId}_${d.id}`, clinicId}))].reduce((acc, current) => {
-                if (!acc.find(item => item.id === current.id)) {
-                    acc.push(current);
-                }
-                return acc;
-            }, [] as Department[]);
+    updateDoc(clinicRef, {
+        departments: arrayUnion(...departmentNamesToAdd)
+    })
+    .then(() => {
+        const allDepts = [...clinicDepartments, ...selectedDepts].reduce((acc, current) => {
+            if (!acc.find(item => item.id === current.id)) {
+                acc.push(current);
+            }
+            return acc;
+        }, [] as Department[]);
 
-            setExistingDepartments(allDepts);
-            onDepartmentsAdded(allDepts);
+        setClinicDepartments(allDepts);
+        onDepartmentsAdded(allDepts);
 
-            toast({
-                title: "Departments Added",
-                description: `${selectedDepts.length} department(s) have been added to your clinic.`,
-            });
-        })
-        .catch((serverError) => {
-            console.error("Error writing batch:", serverError);
-            selectedDepts.forEach(dept => {
-                const permissionError = new FirestorePermissionError({
-                    path: `/departments/${clinicId}_${dept.id}`,
-                    operation: 'create',
-                    requestResourceData: { ...dept, clinicId },
-                });
-                errorEmitter.emit('permission-error', permissionError);
-            });
+        toast({
+            title: "Departments Added",
+            description: `${selectedDepts.length} department(s) have been added to your clinic.`,
         });
+    })
+    .catch((serverError) => {
+        console.error("Error updating clinic with departments:", serverError);
+        const permissionError = new FirestorePermissionError({
+            path: `/clinics/${clinicId}`,
+            operation: 'update',
+            requestResourceData: { departments: departmentNamesToAdd },
+        });
+        errorEmitter.emit('permission-error', permissionError);
+    });
   };
   
   if (loading) {
@@ -135,7 +132,7 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
 
   return (
     <div className="flex flex-col items-center justify-center h-full text-center w-full">
-      {existingDepartments.length === 0 ? (
+      {clinicDepartments.length === 0 ? (
         <>
           <h1 className="text-2xl font-bold mb-2">Select your initial departments</h1>
           <p className="text-muted-foreground mb-6">
@@ -153,9 +150,9 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
                     <p className="font-bold">Departments Added!</p>
                     <p>You have successfully added departments. The next step is to add doctors.</p>
                 </div>
-                <h2 className="text-xl font-semibold text-left mb-4">Your Departments ({existingDepartments.length})</h2>
+                <h2 className="text-xl font-semibold text-left mb-4">Your Departments ({clinicDepartments.length})</h2>
                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {existingDepartments.map((dept) => (
+                    {clinicDepartments.map((dept) => (
                         <Card key={dept.id} className="text-left overflow-hidden">
                             <div className="relative h-32 w-full">
                                 <Image src={dept.image} alt={dept.name} fill style={{objectFit: 'cover'}} data-ai-hint={dept.imageHint || 'clinic department'} />
