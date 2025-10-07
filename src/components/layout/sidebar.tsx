@@ -37,7 +37,7 @@ import { auth, db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/firebase";
 import { useEffect, useState } from "react";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs } from "firebase/firestore";
 import type { User } from "@/lib/types";
 
 const menuItems = [
@@ -55,6 +55,8 @@ export function Sidebar() {
   const { toast } = useToast();
   const { currentUser } = useAuth();
   const [userProfile, setUserProfile] = useState<User | null>(null);
+  const [hasDepartments, setHasDepartments] = useState(false);
+  const [hasDoctors, setHasDoctors] = useState(false);
 
   const isOnboarding = pathname === "/onboarding";
 
@@ -64,7 +66,19 @@ export function Sidebar() {
         const userDocRef = doc(db, "users", currentUser.uid);
         const userDoc = await getDoc(userDocRef);
         if (userDoc.exists()) {
-          setUserProfile(userDoc.data() as User);
+          const userData = userDoc.data() as User;
+          setUserProfile(userData);
+
+          if (userData.clinicId) {
+            // Check for departments and doctors sub-collections
+            const departmentsQuery = collection(db, "departments");
+            const departmentsSnapshot = await getDocs(query(departmentsQuery, where("clinicId", "==", userData.clinicId)));
+            setHasDepartments(!departmentsSnapshot.empty);
+
+            const doctorsQuery = collection(db, "doctors");
+            const doctorsSnapshot = await getDocs(query(doctorsQuery, where("clinicId", "==", userData.clinicId)));
+            setHasDoctors(!doctorsSnapshot.empty);
+          }
         }
       };
       fetchUserProfile();
@@ -90,14 +104,25 @@ export function Sidebar() {
   };
 
   const NavLink = ({ href, icon: Icon, label }: { href: string, icon: React.ElementType, label: string }) => {
+    let isDisabled = false;
+    if (isOnboarding) {
+        if (label === 'Departments') {
+            isDisabled = false; // Always enabled on onboarding
+        } else if (label === 'Doctors') {
+            isDisabled = !hasDepartments; // Enabled only if departments exist
+        } else {
+            isDisabled = true; // All others disabled on onboarding
+        }
+    }
+
     const linkContent = (
         <div
             className={cn(
-                "flex items-center h-12 p-3 rounded-lg cursor-pointer transition-colors",
+                "flex items-center h-12 p-3 rounded-lg transition-colors",
                 pathname === href && !isOnboarding
                 ? "bg-sidebar-accent text-sidebar-accent-foreground"
                 : "hover:bg-sidebar-accent/50",
-                isOnboarding && "cursor-not-allowed opacity-50",
+                isDisabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
                 "overflow-hidden"
             )}
         >
@@ -108,7 +133,7 @@ export function Sidebar() {
         </div>
     );
 
-    if (isOnboarding) {
+    if (isDisabled) {
         return <div>{linkContent}</div>;
     }
 
