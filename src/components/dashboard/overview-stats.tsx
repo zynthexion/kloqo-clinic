@@ -1,10 +1,10 @@
 
-
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useAuth } from "@/firebase";
 import type { Appointment, Doctor } from "@/lib/types";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { 
@@ -14,7 +14,7 @@ import {
     CheckCircle,
     CalendarClock,
 } from "lucide-react";
-import { isFuture, parse, isPast, isWithinInterval, subDays, differenceInDays } from "date-fns";
+import { isFuture, parse, isPast, isWithinInterval, subDays, differenceInDays, startOfDay } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { cn } from "@/lib/utils";
 
@@ -44,16 +44,29 @@ type Stat = {
 
 
 export default function OverviewStats({ dateRange, doctorId }: OverviewStatsProps) {
+  const auth = useAuth();
   const [stats, setStats] = useState<Stat[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!auth.currentUser || !dateRange?.from) return;
+
     const fetchStats = async () => {
       try {
         setLoading(true);
+
+        const userDocRef = doc(db, "users", auth.currentUser!.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        const clinicId = userDocSnap.data()?.clinicId;
+
+        if (!clinicId) {
+          setLoading(false);
+          return;
+        }
+
         const [appointmentsSnapshot, doctorsSnapshot] = await Promise.all([
-          getDocs(collection(db, "appointments")),
-          getDocs(collection(db, "doctors")),
+          getDocs(query(collection(db, "clinics", clinicId, "appointments"))),
+          getDocs(query(collection(db, "clinics", clinicId, "doctors"))),
         ]);
 
         let allAppointments = appointmentsSnapshot.docs.map(doc => doc.data() as Appointment);
@@ -78,13 +91,13 @@ export default function OverviewStats({ dateRange, doctorId }: OverviewStatsProp
             const periodAppointments = allAppointments.filter(apt => {
                 try {
                     const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
-                    return isWithinInterval(aptDate, { start: from, end: to });
+                    return isWithinInterval(aptDate, { start: startOfDay(from), end: startOfDay(to) });
                 } catch { return false; }
             });
 
             const uniquePatients = new Set(periodAppointments.map(apt => apt.patientName + apt.phone));
             
-            const completedAppointments = periodAppointments.filter(apt => apt.status === 'Confirmed' && isPast(parse(apt.date, 'd MMMM yyyy', new Date()))).length;
+            const completedAppointments = periodAppointments.filter(apt => apt.status === 'Completed' || (apt.status === 'Confirmed' && isPast(parse(apt.date, 'd MMMM yyyy', new Date())))).length;
             const cancelledAppointments = periodAppointments.filter(apt => apt.status === 'Cancelled').length;
             
             return {
@@ -104,7 +117,11 @@ export default function OverviewStats({ dateRange, doctorId }: OverviewStatsProp
             return `${change.toFixed(0)}%`;
         };
         
-        const upcomingAppointments = allAppointments.filter(apt => (apt.status === 'Confirmed' || apt.status === 'Pending') && isFuture(parse(apt.date, 'd MMMM yyyy', new Date()))).length;
+        const upcomingAppointments = allAppointments.filter(apt => {
+            try {
+                return (apt.status === 'Confirmed' || apt.status === 'Pending') && isFuture(parse(apt.date, 'd MMMM yyyy', new Date()));
+            } catch { return false; }
+        }).length;
 
         const allStats: Stat[] = [
           { 
@@ -156,10 +173,8 @@ export default function OverviewStats({ dateRange, doctorId }: OverviewStatsProp
       }
     };
 
-    if (dateRange) {
-      fetchStats();
-    }
-  }, [dateRange, doctorId]);
+    fetchStats();
+  }, [dateRange, doctorId, auth.currentUser]);
 
   const getCardClass = (title: string) => {
     switch (title) {
@@ -214,6 +229,5 @@ export default function OverviewStats({ dateRange, doctorId }: OverviewStatsProp
     </div>
   );
 }
-
 
     
