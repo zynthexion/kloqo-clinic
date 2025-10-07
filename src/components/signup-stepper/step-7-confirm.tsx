@@ -2,12 +2,12 @@
 'use client';
 
 import { useFormContext } from 'react-hook-form';
-import type { SignUpFormData } from '@/app/signup/page';
+import type { SignUpFormData } from '@/app/(public)/signup/page';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { FormControl, FormField, FormItem, FormItemProps, FormLabel, FormMessage } from '../ui/form';
+import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '../ui/form';
 
 const plans = [
     { name: 'Kloqo Lite', price: '₹999' },

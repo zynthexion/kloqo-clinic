@@ -10,18 +10,18 @@ import Image from "next/image";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/firebase";
-import { doc, setDoc, getDoc, collection, writeBatch, getDocs, query } from "firebase/firestore";
+import { doc, setDoc, getDoc, collection, writeBatch, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Skeleton } from "../ui/skeleton";
 import { FirestorePermissionError } from "@/firebase/errors";
 import { errorEmitter } from "@/firebase/error-emitter";
 
-const superAdminDepartments: Department[] = [
-    { id: 'dept-01', clinicId: '', name: 'General Medicine', description: 'Comprehensive primary care.', image: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8bWVkaWNpbmV8ZW58MHx8MHx8fDA%3D', imageHint: "stethoscope pills", doctors: [] },
-    { id: 'dept-02', clinicId: '', name: 'Cardiology', description: 'Specialized heart care.', image: 'https://images.unsplash.com/photo-1530026405182-271453396975?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MjZ8fG1lZGljaW5lfGVufDB8fDB8fHww', imageHint: "heart model", doctors: [] },
-    { id: 'dept-03', clinicId: '', name: 'Pediatrics', description: 'Healthcare for children.', image: 'https://images.unsplash.com/photo-1599586120429-48281b6f0ece?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTR8fGNoaWxkcmVuJTIwZG9jdG9yfGVufDB8fDB8fHww', imageHint: "doctor baby", doctors: [] },
-    { id: 'dept-04', clinicId: '', name: 'Dermatology', description: 'Skin health services.', image: 'https://images.unsplash.com/photo-1631894959934-396b3a8d11b3?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTB8fGRlcm1hdG9sb2d5fGVufDB8fDB8fHww', imageHint: "skin care", doctors: [] },
-    { id: 'dept-05', clinicId: '', name: 'Neurology', description: 'Nervous system disorders.', image: 'https://images.unsplash.com/photo-1695423589949-c9a56f626245?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Nnx8bmV1cm9sb2d5fGVufDB8fDB8fHww', imageHint: "brain model", doctors: [] },
+const superAdminDepartments: Omit<Department, "clinicId">[] = [
+    { id: 'dept-01', name: 'General Medicine', description: 'Comprehensive primary care.', image: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8bWVkaWNpbmV8ZW58MHx8MHx8fDA%3D', imageHint: "stethoscope pills", doctors: [] },
+    { id: 'dept-02', name: 'Cardiology', description: 'Specialized heart care.', image: 'https://images.unsplash.com/photo-1530026405182-271453396975?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MjZ8fG1lZGljaW5lfGVufDB8fDB8fHww', imageHint: "heart model", doctors: [] },
+    { id: 'dept-03', name: 'Pediatrics', description: 'Healthcare for children.', image: 'https://images.unsplash.com/photo-1599586120429-48281b6f0ece?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTR8fGNoaWxkcmVuJTIwZG9jdG9yfGVufDB8fDB8fHww', imageHint: "doctor baby", doctors: [] },
+    { id: 'dept-04', name: 'Dermatology', description: 'Skin health services.', image: 'https://images.unsplash.com/photo-1631894959934-396b3a8d11b3?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTB8fGRlcm1hdG9sb2d5fGVufDB8fDB8fHww', imageHint: "skin care", doctors: [] },
+    { id: 'dept-05', name: 'Neurology', description: 'Nervous system disorders.', image: 'https://images.unsplash.com/photo-1695423589949-c9a56f626245?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Nnx8bmV1cm9sb2d5fGVufDB8fDB8fHww', imageHint: "brain model", doctors: [] },
 ];
 
 
@@ -49,8 +49,8 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
 
         const clinicId = userDoc.data()?.clinicId;
         if (clinicId) {
-          const departmentsRef = collection(db, 'clinics', clinicId, 'departments');
-          const q = query(departmentsRef);
+          const departmentsRef = collection(db, 'departments');
+          const q = query(departmentsRef, where("clinicId", "==", clinicId));
           const querySnapshot = await getDocs(q);
           const depts = querySnapshot.docs.map(d => d.data() as Department);
           setExistingDepartments(depts);
@@ -69,7 +69,7 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
   }, [auth.currentUser, onDepartmentsAdded]);
 
 
-  const handleSelectDepartments = async (departments: Department[]) => {
+  const handleSelectDepartments = async (departments: Omit<Department, "clinicId">[]) => {
     if (!auth.currentUser) {
         toast({ variant: "destructive", title: "Error", description: "You must be logged in." });
         return;
@@ -83,13 +83,13 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
 
     const batch = writeBatch(db);
     departments.forEach(dept => {
-        const deptRef = doc(db, "clinics", clinicId, "departments", dept.id);
+        const deptRef = doc(db, "departments", dept.id);
         batch.set(deptRef, { ...dept, clinicId });
     });
 
     batch.commit()
         .then(() => {
-            const allDepts = [...existingDepartments, ...departments].reduce((acc, current) => {
+            const allDepts = [...existingDepartments, ...departments.map(d => ({...d, clinicId}))].reduce((acc, current) => {
                 if (!acc.find(item => item.id === current.id)) {
                     acc.push(current);
                 }
@@ -108,9 +108,9 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
             console.error("Error writing batch:", serverError);
             departments.forEach(dept => {
                 const permissionError = new FirestorePermissionError({
-                    path: `/clinics/${clinicId}/departments/${dept.id}`,
+                    path: `/departments/${dept.id}`,
                     operation: 'create',
-                    requestResourceData: dept,
+                    requestResourceData: { ...dept, clinicId },
                 });
                 errorEmitter.emit('permission-error', permissionError);
             });

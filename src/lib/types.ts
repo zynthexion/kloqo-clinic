@@ -16,14 +16,14 @@ export type LeaveSlot = {
 
 export type Doctor = {
   id: string;
-  clinicId?: string;
+  clinicId: string;
   name: string;
   specialty: string;
   avatar: string;
   schedule: string;
   preferences: string;
   historicalData: string;
-  department?: string;
+  department: string;
   totalPatients?: number;
   todaysAppointments?: number;
   availability: 'Available' | 'Unavailable';
@@ -40,7 +40,9 @@ export type Doctor = {
 
 export type Appointment = {
   id:string;
-  clinicId?: string;
+  clinicId: string;
+  patientId: string;
+  doctorId: string;
   patientName: string;
   gender: 'Male' | 'Female' | 'Other';
   phone: string;
@@ -59,6 +61,7 @@ export type Appointment = {
 
 export type Visit = {
   appointmentId: string;
+  clinicId: string;
   date: string;
   time: string;
   doctor: string;
@@ -68,12 +71,12 @@ export type Visit = {
 }
 
 export type Patient = {
-  id: string;
-  clinicId?: string;
+  id: string; // This will be the patient's UID from Firebase Auth
   name: string;
   age: number;
   gender: 'Male' | 'Female' | 'Other';
   phone: string;
+  email?: string;
   place?: string;
   totalAppointments: number;
   visitHistory?: Visit[];
@@ -95,7 +98,7 @@ export type Report = {
 
 export type Department = {
     id: string;
-    clinicId?: string;
+    clinicId: string;
     name: string;
     description: string;
     image: string;
@@ -129,6 +132,5 @@ export type User = {
     clinicName: string;
     phone: string;
     designation: 'Doctor' | 'Owner';
+    onboarded?: boolean;
 }
-
-    

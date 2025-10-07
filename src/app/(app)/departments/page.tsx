@@ -42,22 +42,22 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { Department, Doctor } from "@/lib/types";
 import React, { useState, useEffect } from "react";
-import { collection, getDocs, doc, setDoc, deleteDoc, query, getDoc, writeBatch } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc, deleteDoc, query, getDoc, writeBatch, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { DepartmentDoctorsDialog } from "@/components/departments/department-doctors-dialog";
 import { SelectDepartmentDialog } from "@/components/onboarding/select-department-dialog";
 import { useAuth } from "@/firebase";
 
-const superAdminDepartments: Department[] = [
-    { id: 'dept-01', clinicId: '', name: 'General Medicine', description: 'Comprehensive primary care.', image: 'https://picsum.photos/seed/gm/600/400', imageHint: 'stethoscope pills', doctors: [] },
-    { id: 'dept-02', clinicId: '', name: 'Cardiology', description: 'Specialized heart care.', image: 'https://picsum.photos/seed/cardio/600/400', imageHint: 'heart model', doctors: [] },
-    { id: 'dept-03', clinicId: '', name: 'Pediatrics', description: 'Healthcare for children.', image: 'https://picsum.photos/seed/peds/600/400', imageHint: 'doctor baby', doctors: [] },
-    { id: 'dept-04', clinicId: '', name: 'Dermatology', description: 'Skin health services.', image: 'https://picsum.photos/seed/derma/600/400', imageHint: 'skin care', doctors: [] },
-    { id: 'dept-05', clinicId: '', name: 'Neurology', description: 'Nervous system disorders.', image: 'https://picsum.photos/seed/neuro/600/400', imageHint: 'brain model', doctors: [] },
-    { id: 'dept-06', clinicId: '', name: 'Orthopedics', description: 'Musculoskeletal system disorders.', image: 'https://picsum.photos/seed/ortho/600/400', imageHint: 'joint brace', doctors: [] },
-    { id: 'dept-07', clinicId: '', name: 'Oncology', description: 'Cancer diagnosis and treatment.', image: 'https://picsum.photos/seed/onco/600/400', imageHint: 'awareness ribbon', doctors: [] },
-    { id: 'dept-08', clinicId: '', name: 'Obstetrics and Gynecology (OB/GYN)', description: 'Women\'s health services.', image: 'https://picsum.photos/seed/obgyn/600/400', imageHint: 'pregnant woman', doctors: [] },
+const superAdminDepartments: Omit<Department, 'clinicId'>[] = [
+    { id: 'dept-01', name: 'General Medicine', description: 'Comprehensive primary care.', image: 'https://picsum.photos/seed/gm/600/400', imageHint: 'stethoscope pills', doctors: [] },
+    { id: 'dept-02', name: 'Cardiology', description: 'Specialized heart care.', image: 'https://picsum.photos/seed/cardio/600/400', imageHint: 'heart model', doctors: [] },
+    { id: 'dept-03', name: 'Pediatrics', description: 'Healthcare for children.', image: 'https://picsum.photos/seed/peds/600/400', imageHint: 'doctor baby', doctors: [] },
+    { id: 'dept-04', name: 'Dermatology', description: 'Skin health services.', image: 'https://picsum.photos/seed/derma/600/400', imageHint: 'skin care', doctors: [] },
+    { id: 'dept-05', name: 'Neurology', description: 'Nervous system disorders.', image: 'https://picsum.photos/seed/neuro/600/400', imageHint: 'brain model', doctors: [] },
+    { id: 'dept-06', name: 'Orthopedics', description: 'Musculoskeletal system disorders.', image: 'https://picsum.photos/seed/ortho/600/400', imageHint: 'joint brace', doctors: [] },
+    { id: 'dept-07', name: 'Oncology', description: 'Cancer diagnosis and treatment.', image: 'https://picsum.photos/seed/onco/600/400', imageHint: 'awareness ribbon', doctors: [] },
+    { id: 'dept-08', name: 'Obstetrics and Gynecology (OB/GYN)', description: 'Women\'s health services.', image: 'https://picsum.photos/seed/obgyn/600/400', imageHint: 'pregnant woman', doctors: [] },
 ];
 
 
@@ -80,12 +80,12 @@ export default function DepartmentsPage() {
         const clinicId = userDoc.data()?.clinicId;
 
         if (clinicId) {
-            const departmentsQuery = query(collection(db, "clinics", clinicId, "departments"));
+            const departmentsQuery = query(collection(db, "departments"), where("clinicId", "==", clinicId));
             const departmentsSnapshot = await getDocs(departmentsQuery);
             const departmentsList = departmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Department));
             setDepartments(departmentsList);
 
-            const doctorsQuery = query(collection(db, "clinics", clinicId, "doctors"));
+            const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
             const doctorsSnapshot = await getDocs(doctorsQuery);
             const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
             setDoctors(doctorsList);
@@ -161,7 +161,7 @@ export default function DepartmentsPage() {
       </Card>
   );
 
-  const handleSaveDepartments = async (selectedDepts: Department[]) => {
+  const handleSaveDepartments = async (selectedDepts: Omit<Department, 'clinicId'>[]) => {
     if (!auth.currentUser) return;
     try {
         const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
@@ -170,13 +170,13 @@ export default function DepartmentsPage() {
 
         const batch = writeBatch(db);
         selectedDepts.forEach(dept => {
-            const deptRef = doc(db, "clinics", clinicId, "departments", dept.id);
+            const deptRef = doc(db, "departments", dept.id);
             batch.set(deptRef, { ...dept, clinicId });
         });
         
         await batch.commit();
 
-        const departmentsQuery = query(collection(db, "clinics", clinicId, "departments"));
+        const departmentsQuery = query(collection(db, "departments"), where("clinicId", "==", clinicId));
         const departmentsSnapshot = await getDocs(departmentsQuery);
         const departmentsList = departmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Department));
         setDepartments(departmentsList);
@@ -198,11 +198,7 @@ export default function DepartmentsPage() {
   const handleDeleteDepartment = async () => {
     if (!deletingDepartment || !auth.currentUser) return;
     try {
-      const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
-      const clinicId = userDoc.data()?.clinicId;
-      if (!clinicId) throw new Error("User has no clinic assigned.");
-
-      await deleteDoc(doc(db, "clinics", clinicId, "departments", deletingDepartment.id));
+      await deleteDoc(doc(db, "departments", deletingDepartment.id));
       setDepartments(prev => prev.filter(d => d.id !== deletingDepartment.id));
       toast({
         title: "Department Deleted",

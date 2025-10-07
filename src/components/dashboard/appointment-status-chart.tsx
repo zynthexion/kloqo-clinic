@@ -1,10 +1,10 @@
 
-
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, query, where, getDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useAuth } from "@/firebase";
 import type { Appointment, Doctor } from "@/lib/types";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
@@ -34,27 +34,39 @@ type AppointmentStatusChartProps = {
 };
 
 export default function AppointmentStatusChart({ dateRange, doctorId }: AppointmentStatusChartProps) {
+  const auth = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!auth.currentUser) {
+        setLoading(false);
+        return;
+    }
     const fetchAppointments = async () => {
       setLoading(true);
-      const appointmentsCollection = collection(db, "appointments");
-      const appointmentsSnapshot = await getDocs(appointmentsCollection);
+      const userDoc = await getDoc(doc(db, "users", auth.currentUser!.uid));
+      const clinicId = userDoc.data()?.clinicId;
+      if (!clinicId) {
+          setLoading(false);
+          return;
+      }
+      
+      const appointmentsQuery = query(collection(db, "appointments"), where("clinicId", "==", clinicId));
+      const appointmentsSnapshot = await getDocs(appointmentsQuery);
       const appointmentsList = appointmentsSnapshot.docs.map(doc => doc.data() as Appointment);
       setAppointments(appointmentsList);
       
-      const doctorsCollection = collection(db, "doctors");
-      const doctorsSnapshot = await getDocs(doctorsCollection);
+      const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
+      const doctorsSnapshot = await getDocs(doctorsQuery);
       const doctorsList = doctorsSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}) as Doctor);
       setDoctors(doctorsList);
 
       setLoading(false);
     };
     fetchAppointments();
-  }, []);
+  }, [auth.currentUser]);
 
   const chartData = useMemo(() => {
     if (!dateRange?.from) return [];
@@ -80,7 +92,7 @@ export default function AppointmentStatusChart({ dateRange, doctorId }: Appointm
       }
     });
 
-    const completed = rangeAppointments.filter(apt => apt.status === 'Confirmed' && isPast(parse(apt.date, 'd MMMM yyyy', new Date()))).length;
+    const completed = rangeAppointments.filter(apt => apt.status === 'Completed' || (apt.status === 'Confirmed' && isPast(parse(apt.date, 'd MMMM yyyy', new Date())))).length;
     const upcoming = rangeAppointments.filter(apt => (apt.status === 'Confirmed' || apt.status === 'Pending') && isFuture(parse(apt.date, 'd MMMM yyyy', new Date()))).length;
     const cancelled = rangeAppointments.filter(apt => apt.status === 'Cancelled').length;
     const didNotShow = rangeAppointments.filter(apt => apt.status === 'Pending' && isPast(parse(apt.date, 'd MMMM yyyy', new Date()))).length;

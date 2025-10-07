@@ -45,17 +45,7 @@ export default function PatientHistoryPage() {
       try {
         setLoading(true);
 
-        const userDocRef = doc(db, "users", auth.currentUser!.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        const clinicId = userDocSnap.data()?.clinicId;
-
-        if (!clinicId) {
-            console.error("Clinic ID not found for user");
-            setLoading(false);
-            return;
-        }
-        
-        const patientDocRef = doc(db, "clinics", clinicId, "patients", patientId);
+        const patientDocRef = doc(db, "patients", patientId);
         const patientDocSnap = await getDoc(patientDocRef);
 
         if (patientDocSnap.exists()) {

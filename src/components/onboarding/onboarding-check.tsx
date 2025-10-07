@@ -3,7 +3,7 @@
 
 import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { collection, getDocs, doc, getDoc, query, limit } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, query, limit, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/firebase';
 
@@ -36,10 +36,10 @@ export function OnboardingCheck() {
             return;
           }
 
-          const departmentsQuery = query(collection(db, "clinics", clinicId, "departments"), limit(1));
+          const departmentsQuery = query(collection(db, "departments"), where("clinicId", "==", clinicId), limit(1));
           const departmentsSnapshot = await getDocs(departmentsQuery);
           
-          const doctorsQuery = query(collection(db, "clinics", clinicId, "doctors"), limit(1));
+          const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId), limit(1));
           const doctorsSnapshot = await getDocs(doctorsQuery);
 
           const needsOnboarding = departmentsSnapshot.empty || doctorsSnapshot.empty;

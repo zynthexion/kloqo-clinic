@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { collection, getDocs, doc, getDoc, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/firebase";
-import type { Appointment, Doctor } from "@/lib/types";
+import type { Appointment, Doctor, Patient } from "@/lib/types";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { 
     Users, 
@@ -64,14 +64,19 @@ export default function OverviewStats({ dateRange, doctorId }: OverviewStatsProp
           return;
         }
 
-        const [appointmentsSnapshot, doctorsSnapshot] = await Promise.all([
-          getDocs(query(collection(db, "clinics", clinicId, "appointments"))),
-          getDocs(query(collection(db, "clinics", clinicId, "doctors"))),
+        const appointmentsQuery = query(collection(db, "appointments"), where("clinicId", "==", clinicId));
+        const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
+        const patientsQuery = query(collection(db, "patients")); // Patients are global
+
+        const [appointmentsSnapshot, doctorsSnapshot, patientsSnapshot] = await Promise.all([
+          getDocs(appointmentsQuery),
+          getDocs(doctorsQuery),
+          getDocs(patientsSnapshot)
         ]);
 
         let allAppointments = appointmentsSnapshot.docs.map(doc => doc.data() as Appointment);
         const allDoctors = doctorsSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}) as Doctor);
-
+        
         if (doctorId) {
             const doctor = allDoctors.find(d => d.id === doctorId);
             if (doctor) {
@@ -95,7 +100,7 @@ export default function OverviewStats({ dateRange, doctorId }: OverviewStatsProp
                 } catch { return false; }
             });
 
-            const uniquePatients = new Set(periodAppointments.map(apt => apt.patientName + apt.phone));
+            const uniquePatients = new Set(periodAppointments.map(apt => apt.patientId));
             
             const completedAppointments = periodAppointments.filter(apt => apt.status === 'Completed' || (apt.status === 'Confirmed' && isPast(parse(apt.date, 'd MMMM yyyy', new Date())))).length;
             const cancelledAppointments = periodAppointments.filter(apt => apt.status === 'Cancelled').length;
@@ -229,5 +234,3 @@ export default function OverviewStats({ dateRange, doctorId }: OverviewStatsProp
     </div>
   );
 }
-
-    

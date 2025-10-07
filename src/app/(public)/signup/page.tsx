@@ -190,6 +190,7 @@ export default function SignupPage() {
 
         // Add clinic data to the batch
         batch.set(clinicRef, {
+            id: clinicId,
             name: formData.clinicName,
             type: formData.clinicType,
             address: `${formData.address1}, ${formData.city}, ${formData.state} ${formData.pincode}`,
@@ -321,5 +322,3 @@ export default function SignupPage() {
     </div>
   );
 }
-
-    

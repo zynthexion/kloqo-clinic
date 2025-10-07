@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -28,7 +27,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { collection, getDocs, query, where, getDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Appointment, Patient } from "@/lib/types";
+import type { Patient } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -37,7 +36,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { parse } from 'date-fns';
 import Link from "next/link";
 import { useAuth } from "@/firebase";
 
@@ -58,6 +56,9 @@ export default function PatientsPage() {
     const fetchPatients = async () => {
       try {
         setLoading(true);
+        // In the new structure, patients are global, but we might want to filter by patients who visited this clinic.
+        // For now, let's fetch all patients and filter on client-side, which is not ideal for large scale but works for this scope.
+        // A better approach would be a dedicated backend function or a specific field in patient doc.
         const userDoc = await getDoc(doc(db, "users", auth.currentUser!.uid));
         const clinicId = userDoc.data()?.clinicId;
 
@@ -66,11 +67,13 @@ export default function PatientsPage() {
           return;
         }
 
-        const patientsQuery = query(collection(db, "clinics", clinicId, "patients"));
+        const patientsQuery = query(collection(db, "patients"));
         const patientsSnapshot = await getDocs(patientsQuery);
-        const patientList = patientsSnapshot.docs.map(doc => doc.data() as Patient);
+        const allPatients = patientsSnapshot.docs.map(doc => doc.data() as Patient);
 
-        setPatients(patientList);
+        const clinicPatients = allPatients.filter(p => p.visitHistory?.some(v => v.clinicId === clinicId));
+
+        setPatients(clinicPatients);
       } catch (error) {
         console.error("Error fetching patients:", error);
       } finally {
