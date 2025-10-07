@@ -13,6 +13,8 @@ import { useAuth } from "@/firebase";
 import { doc, setDoc, getDoc, collection, writeBatch, getDocs, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Skeleton } from "../ui/skeleton";
+import { FirestorePermissionError } from "@/firebase/errors";
+import { errorEmitter } from "@/firebase/error-emitter";
 
 const superAdminDepartments: Department[] = [
     { id: 'dept-01', clinicId: '', name: 'General Medicine', description: 'Comprehensive primary care.', image: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8bWVkaWNpbmV8ZW58MHx8MHx8fDA%3D', imageHint: "stethoscope pills", doctors: [] },
@@ -37,6 +39,7 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
     }
 
     const fetchExistingDepartments = async () => {
+      setLoading(true);
       try {
         const userDoc = await getDoc(doc(db, "users", auth.currentUser!.uid));
         if (!userDoc.exists()) {
@@ -71,52 +74,57 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
         toast({ variant: "destructive", title: "Error", description: "You must be logged in." });
         return;
     }
-    try {
-        const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
-        const clinicId = userDoc.data()?.clinicId;
-        if (!clinicId) {
-            toast({ variant: "destructive", title: "Error", description: "No clinic ID found for user." });
-            return;
-        }
-
-        const batch = writeBatch(db);
-        departments.forEach(dept => {
-            const deptRef = doc(db, "clinics", clinicId, "departments", dept.id);
-            batch.set(deptRef, { ...dept, clinicId });
-        });
-        await batch.commit();
-        
-        const allDepts = [...existingDepartments, ...departments].reduce((acc, current) => {
-            if (!acc.find(item => item.id === current.id)) {
-                acc.push(current);
-            }
-            return acc;
-        }, [] as Department[]);
-
-        setExistingDepartments(allDepts);
-        onDepartmentsAdded(allDepts);
-
-        toast({
-            title: "Departments Added",
-            description: `${departments.length} department(s) have been added to your clinic.`,
-        });
-
-    } catch (error) {
-        console.error("Error saving departments:", error);
-        toast({
-            variant: "destructive",
-            title: "Error",
-            description: "Failed to save departments. Please try again.",
-        });
+    const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+    const clinicId = userDoc.data()?.clinicId;
+    if (!clinicId) {
+        toast({ variant: "destructive", title: "Error", description: "No clinic ID found for user." });
+        return;
     }
+
+    const batch = writeBatch(db);
+    departments.forEach(dept => {
+        const deptRef = doc(db, "clinics", clinicId, "departments", dept.id);
+        batch.set(deptRef, { ...dept, clinicId });
+    });
+
+    batch.commit()
+        .then(() => {
+            const allDepts = [...existingDepartments, ...departments].reduce((acc, current) => {
+                if (!acc.find(item => item.id === current.id)) {
+                    acc.push(current);
+                }
+                return acc;
+            }, [] as Department[]);
+
+            setExistingDepartments(allDepts);
+            onDepartmentsAdded(allDepts);
+
+            toast({
+                title: "Departments Added",
+                description: `${departments.length} department(s) have been added to your clinic.`,
+            });
+        })
+        .catch((serverError) => {
+            console.error("Error writing batch:", serverError);
+            departments.forEach(dept => {
+                const permissionError = new FirestorePermissionError({
+                    path: `/clinics/${clinicId}/departments/${dept.id}`,
+                    operation: 'create',
+                    requestResourceData: dept,
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            });
+        });
   };
   
   if (loading) {
     return (
         <div className="flex flex-col items-center justify-center h-full text-center w-full max-w-4xl mx-auto">
-            <Skeleton className="h-8 w-1/2 mb-4" />
-            <Skeleton className="h-6 w-3/4 mb-6" />
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
+            <h1 className="text-2xl font-bold mb-2">Select your initial departments</h1>
+            <p className="text-muted-foreground mb-6">
+                Add one or more departments to your clinic to begin using the application.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 w-full mt-4">
                 <Skeleton className="h-48 w-full" />
                 <Skeleton className="h-48 w-full" />
                 <Skeleton className="h-48 w-full" />
