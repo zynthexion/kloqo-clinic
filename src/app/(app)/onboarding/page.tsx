@@ -22,7 +22,8 @@ export default function OnboardingPage() {
       setStep(2);
   }
 
-  const handleDoctorAdded = () => {
+  const handleDoctorAdded = (doctor: Doctor) => {
+      // This function now receives the added doctor
       setStep(3);
   }
 
