@@ -174,6 +174,7 @@ export default function SignupPage() {
 
   const onSubmit = async (formData: SignUpFormData) => {
       try {
+        console.log('Submitting form data:', formData);
         const userCredential = await createUserWithEmailAndPassword(auth, formData.emailAddress, formData.password);
         const user = userCredential.user;
 
