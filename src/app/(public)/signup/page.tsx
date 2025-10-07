@@ -20,6 +20,9 @@ import { useToast } from '@/hooks/use-toast';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { auth, db } from '@/lib/firebase';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { writeBatch, doc, collection } from 'firebase/firestore';
 
 const timeSlotSchema = z.object({
   open: z.string().min(1, 'Required'),
@@ -170,16 +173,59 @@ export default function SignupPage() {
   };
 
   const onSubmit = async (formData: SignUpFormData) => {
-      console.log('--- SIGNUP FORM SUBMITTED (FIREBASE REMOVED) ---');
-      console.log(formData);
-      
-      toast({ 
-          title: 'Registration Submitted (Test)', 
-          description: 'Check the console for form data. Firebase is disconnected.' 
-      });
-      
-      // Simulate success and redirect
-      router.push('/');
+    try {
+        // Step 1: Create the user in Firebase Auth
+        const userCredential = await createUserWithEmailAndPassword(auth, formData.emailAddress, formData.password);
+        const user = userCredential.user;
+
+        // Step 2: Create a new clinic document and get its ID
+        const clinicRef = doc(collection(db, "clinics"));
+        const clinicId = clinicRef.id;
+
+        // Step 3: Create a batch write to save all data in one transaction
+        const batch = writeBatch(db);
+
+        // Add clinic data to the batch
+        batch.set(clinicRef, {
+            name: formData.clinicName,
+            type: formData.clinicType,
+            address: `${formData.address1}, ${formData.city}, ${formData.state} ${formData.pincode}`,
+            operatingHours: formData.hours,
+            plan: formData.plan,
+            ownerEmail: formData.emailAddress,
+        });
+
+        // Add user profile data to the batch, linking it to the clinic
+        const userRef = doc(db, "users", user.uid);
+        batch.set(userRef, {
+            uid: user.uid,
+            clinicId: clinicId,
+            email: formData.emailAddress,
+            name: formData.ownerName,
+            clinicName: formData.clinicName,
+            phone: formData.mobileNumber,
+            designation: formData.designation,
+            onboarded: false, // Set onboarding flag
+        });
+
+        // Step 4: Commit the batch
+        await batch.commit();
+
+        toast({
+            title: "Registration Successful!",
+            description: "Your clinic has been created. Redirecting...",
+        });
+
+        router.push('/dashboard');
+
+    } catch (error: any) {
+        console.error("Signup error:", error);
+        toast({
+            variant: "destructive",
+            title: "Registration Failed",
+            description: error.message || "An unexpected error occurred. Please try again.",
+        });
+    }
   }
 
   const handleBack = () => {
