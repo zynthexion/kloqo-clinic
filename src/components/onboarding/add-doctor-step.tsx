@@ -10,11 +10,12 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from "@/components/ui/card";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
-import { setDoc, doc, collection } from "firebase/firestore";
+import { setDoc, doc, collection, getDoc } from "firebase/firestore";
 import { db, storage } from "@/lib/firebase";
 import { useAuth } from "@/firebase";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 export function AddDoctorStep({ departments, onDoctorAdded }: { departments: Department[], onDoctorAdded: (doctor: Doctor) => void }) {
   const auth = useAuth();
@@ -28,40 +29,40 @@ export function AddDoctorStep({ departments, onDoctorAdded }: { departments: Dep
         return;
     }
 
-    try {
-        const userDoc = await doc(db, "users", auth.currentUser.uid).get();
-        const clinicId = userDoc.data()?.clinicId;
-        if (!clinicId) {
-            toast({ variant: "destructive", title: "Clinic not found", description: "This user is not associated with a clinic." });
-            return;
-        }
+    const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+    const clinicId = userDoc.data()?.clinicId;
+    if (!clinicId) {
+        toast({ variant: "destructive", title: "Clinic not found", description: "This user is not associated with a clinic." });
+        return;
+    }
 
-        let photoUrl = `https://picsum.photos/seed/new-doc-${Date.now()}/100/100`;
-        if (doctorData.photo instanceof File) {
-            const storageRef = ref(storage, `doctor_avatars/${Date.now()}_${doctorData.photo.name}`);
-            await uploadBytes(storageRef, doctorData.photo);
-            photoUrl = await getDownloadURL(storageRef);
-        }
+    let photoUrl = `https://picsum.photos/seed/new-doc-${Date.now()}/100/100`;
+    if (doctorData.photo instanceof File) {
+        const storageRef = ref(storage, `doctor_avatars/${Date.now()}_${doctorData.photo.name}`);
+        await uploadBytes(storageRef, doctorData.photo);
+        photoUrl = await getDownloadURL(storageRef);
+    }
 
-        const docId = `doc-${Date.now()}`;
-        const newDoctor: Doctor = {
-          id: docId,
-          clinicId: clinicId,
-          name: doctorData.name,
-          specialty: doctorData.specialty,
-          avatar: photoUrl,
-          schedule: 'Not set',
-          preferences: 'Not set',
-          historicalData: 'No data',
-          department: doctorData.department,
-          availability: 'Available',
-          bio: doctorData.bio,
-          averageConsultingTime: doctorData.averageConsultingTime,
-          availabilitySlots: doctorData.availabilitySlots,
-        };
-        
-        await setDoc(doc(db, "doctors", docId), newDoctor);
-        
+    const docId = `doc-${Date.now()}`;
+    const newDoctor: Doctor = {
+      id: docId,
+      clinicId: clinicId,
+      name: doctorData.name,
+      specialty: doctorData.specialty,
+      avatar: photoUrl,
+      schedule: 'Not set',
+      preferences: 'Not set',
+      historicalData: 'No data',
+      department: doctorData.department,
+      availability: 'Available',
+      bio: doctorData.bio,
+      averageConsultingTime: doctorData.averageConsultingTime,
+      availabilitySlots: doctorData.availabilitySlots,
+    };
+    
+    const docRef = doc(db, "doctors", docId);
+    setDoc(docRef, newDoctor)
+      .then(() => {
         setAddedDoctor(newDoctor);
         onDoctorAdded(newDoctor);
 
@@ -70,11 +71,15 @@ export function AddDoctorStep({ departments, onDoctorAdded }: { departments: Dep
           description: `${doctorData.name} has been added. You can now proceed.`,
         });
         setIsAddDoctorOpen(false);
-
-    } catch (error) {
-        console.error("Error saving doctor:", error);
-        toast({ variant: "destructive", title: "Error", description: "Failed to save doctor." });
-    }
+      })
+      .catch((serverError) => {
+        const permissionError = new FirestorePermissionError({
+            path: docRef.path,
+            operation: 'create',
+            requestResourceData: newDoctor,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      });
   };
   
   if (addedDoctor) {
