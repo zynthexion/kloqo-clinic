@@ -1,28 +1,25 @@
 
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow public read and write access for development
-    match /doctors/{doctorId} {
-      allow read, write: if true;
+    // Allow anyone to create a clinic during signup
+    match /clinics/{clinicId} {
+      allow create: if true;
+      // Subsequent reads/writes will need more specific rules
+      allow read, update, delete: if false;
     }
 
-    // Allow public read and write access for development
-    match /departments/{departmentId} {
-      allow read, write: if true;
-    }
-    
-     // Allow public read and write access for development
-    match /appointments/{appointmentId} {
-      allow read, write: if true;
-    }
-    
-    match /mobile-app/{credentialId} {
-      allow read, write: if true;
+    // Allow anyone to create a user profile during signup
+    match /users/{userId} {
+      allow create: if true;
+      // Allow a user to manage their own document after creation
+      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
     }
 
-    match /patients/{patientId} {
-      allow read, write: if true;
+    // Default deny all other operations
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
