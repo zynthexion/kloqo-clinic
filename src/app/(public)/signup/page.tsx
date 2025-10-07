@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { StepperNav } from '@/components/signup-stepper/stepper-nav';
 import { Step1ClinicProfile } from '@/components/signup-stepper/step-1-clinic-profile';
@@ -79,22 +79,22 @@ const signupSchema = z.object({
 export type SignUpFormData = z.infer<typeof signupSchema>;
 
 const defaultFormData: SignUpFormData = {
-  clinicName: '',
+  clinicName: 'Test Clinic',
   clinicType: 'Single Doctor',
   numDoctors: 1,
   clinicRegNumber: '',
   
-  ownerName: '',
+  ownerName: 'Test Owner',
   designation: 'Doctor',
-  mobileNumber: '',
-  emailAddress: '',
-  password: '',
+  mobileNumber: '+11234567890',
+  emailAddress: `test-${Date.now()}@example.com`,
+  password: 'password123',
   
-  address1: '',
+  address1: '123 Test St',
   address2: '',
-  city: '',
-  state: '',
-  pincode: '',
+  city: 'Testville',
+  state: 'Testland',
+  pincode: '123456',
   mapsLink: '',
   
   hours: [
@@ -116,8 +116,8 @@ const defaultFormData: SignUpFormData = {
   license: null,
   receptionPhoto: null,
 
-  agreeTerms: false,
-  isAuthorized: false,
+  agreeTerms: true,
+  isAuthorized: true,
 };
 
 const stepFields: (keyof SignUpFormData)[][] = [
@@ -135,12 +135,49 @@ export default function SignupPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const router = useRouter();
   const { toast } = useToast();
+  const [testStatus, setTestStatus] = useState('Attempting automatic registration...');
 
   const methods = useForm<SignUpFormData>({
     resolver: zodResolver(signupSchema),
     defaultValues: defaultFormData,
     mode: "onBlur"
   });
+
+  useEffect(() => {
+    const runTest = async () => {
+      const testData = { ...defaultFormData, emailAddress: `test-${Date.now()}@example.com` };
+      try {
+        setTestStatus('Creating user in Firebase Auth...');
+        const userCredential = await createUserWithEmailAndPassword(auth, testData.emailAddress, testData.password);
+        const user = userCredential.user;
+        
+        setTestStatus('Creating clinic and user documents in Firestore...');
+        const clinicRef = doc(collection(db, "clinics"));
+        const clinicId = clinicRef.id;
+
+        const batch = writeBatch(db);
+        batch.set(clinicRef, { name: testData.clinicName, ownerEmail: testData.emailAddress });
+        
+        const userRef = doc(db, "users", user.uid);
+        batch.set(userRef, { uid: user.uid, clinicId: clinicId, email: testData.emailAddress, name: testData.ownerName, onboarded: false });
+        
+        await batch.commit();
+
+        setTestStatus(`SUCCESS! User ${testData.emailAddress} created successfully.`);
+        toast({ title: "Automatic Test Successful!", description: "Firebase connection is working." });
+
+      } catch (error: any) {
+        setTestStatus(`FAILURE: ${error.message}`);
+        console.error("Automatic signup error:", error);
+        toast({
+            variant: "destructive",
+            title: "Automatic Test Failed",
+            description: error.message,
+        });
+      }
+    };
+    runTest();
+  }, []);
 
   const steps = [
     { number: 1, title: 'Clinic Profile', description: 'Basic clinic details' },
@@ -266,6 +303,10 @@ export default function SignupPage() {
             </Link>
             <div className="flex-grow overflow-y-auto pr-4">
                 <StepperNav steps={steps} currentStep={currentStep} />
+            </div>
+            <div className="mt-8 p-4 bg-slate-200 rounded-lg">
+                <p className="text-xs font-semibold text-slate-600">AUTOMATED TEST STATUS:</p>
+                <p className="text-xs text-slate-800 break-words">{testStatus}</p>
             </div>
           </div>
         </aside>
