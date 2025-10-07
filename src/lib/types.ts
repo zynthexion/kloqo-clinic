@@ -17,6 +17,7 @@ export type LeaveSlot = {
 
 export type Doctor = {
   id: string;
+  clinicId: string;
   name: string;
   specialty: string;
   avatar: string;
@@ -40,6 +41,7 @@ export type Doctor = {
 
 export type Appointment = {
   id:string;
+  clinicId: string;
   patientName: string;
   gender: 'Male' | 'Female' | 'Other';
   phone: string;
@@ -58,6 +60,7 @@ export type Appointment = {
 
 export type Patient = {
   id: string;
+  clinicId: string;
   name: string;
   age: number;
   gender: 'Male' | 'Female' | 'Other';
@@ -84,6 +87,7 @@ export type Report = {
 
 export type Department = {
     id: string;
+    clinicId: string;
     name: string;
     description: string;
     image: string;
@@ -104,6 +108,17 @@ export type LiveStatus = {
     
 export type MobileApp = {
     id: string;
+    clinicId: string;
     username: string;
     password?: string;
+}
+
+export type User = {
+    uid: string;
+    clinicId: string;
+    email: string;
+    name: string;
+    clinicName: string;
+    phone: string;
+    designation: 'Doctor' | 'Owner';
 }

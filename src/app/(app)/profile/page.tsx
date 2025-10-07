@@ -26,12 +26,12 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { collection, getDocs, setDoc, doc } from "firebase/firestore";
+import { collection, getDocs, setDoc, doc, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { MobileApp } from "@/lib/types";
+import type { MobileApp, User } from "@/lib/types";
 import { Eye, EyeOff, UserCircle, KeyRound, Edit, Save, X } from "lucide-react";
-import { user as userData } from "@/lib/data";
 import { Separator } from "@/components/ui/separator";
+import { useAuth } from "@/firebase";
 
 const mobileAppFormSchema = z.object({
   username: z.string().min(2, "Username must be at least 2 characters."),
@@ -62,8 +62,10 @@ type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
 
 export default function ProfilePage() {
+  const auth = useAuth();
   const [loading, setLoading] = useState(true);
   const [credentials, setCredentials] = useState<MobileApp | null>(null);
+  const [userProfile, setUserProfile] = useState<User | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showSavedPassword, setShowSavedPassword] = useState(false);
   const [isEditingMobile, setIsEditingMobile] = useState(false);
@@ -90,41 +92,71 @@ export default function ProfilePage() {
     const profileForm = useForm<ProfileFormValues>({
         resolver: zodResolver(profileFormSchema),
         defaultValues: {
-            name: userData.name,
-            clinicName: userData.clinicName,
-            email: userData.email,
-            phone: userData.phone,
+            name: "",
+            clinicName: "",
+            email: "",
+            phone: "",
         }
     });
 
   useEffect(() => {
-    const fetchCredentials = async () => {
+    if (!auth.currentUser) {
+        setLoading(false);
+        return;
+    }
+
+    const fetchClinicData = async () => {
       setLoading(true);
-      const credsCollection = collection(db, "mobile-app");
-      const credsSnapshot = await getDocs(credsCollection);
-      if (!credsSnapshot.empty) {
-        const credsData = credsSnapshot.docs[0].data() as MobileApp;
-        setCredentials(credsData);
-        mobileAppForm.reset({
-          username: credsData.username,
-          password: "", 
-        });
-        setIsEditingMobile(false);
+      const userDocRef = doc(db, "users", auth.currentUser!.uid);
+      const userDocSnap = await getDocs(query(collection(db, "users"), where("uid", "==", auth.currentUser!.uid)));
+
+      if (!userDocSnap.empty) {
+          const userData = userDocSnap.docs[0].data() as User;
+          setUserProfile(userData);
+          profileForm.reset({
+              name: userData.name,
+              clinicName: userData.clinicName,
+              email: userData.email,
+              phone: userData.phone,
+          });
+
+          if(userData.clinicId) {
+            const credsQuery = query(collection(db, "mobile-app"), where("clinicId", "==", userData.clinicId));
+            const credsSnapshot = await getDocs(credsQuery);
+            if (!credsSnapshot.empty) {
+                const credsData = credsSnapshot.docs[0].data() as MobileApp;
+                setCredentials(credsData);
+                mobileAppForm.reset({
+                username: credsData.username,
+                password: "", 
+                });
+                setIsEditingMobile(false);
+            } else {
+                setIsEditingMobile(true);
+            }
+          }
       } else {
-        setIsEditingMobile(true);
+          setIsEditingMobile(true);
       }
+
       setLoading(false);
     };
-    fetchCredentials();
-  }, [mobileAppForm]);
+    fetchClinicData();
+  }, [auth.currentUser, mobileAppForm, profileForm]);
 
   const onMobileAppSubmit = async (values: MobileAppFormValues) => {
+    if (!userProfile?.clinicId) {
+        toast({ variant: "destructive", title: "Error", description: "No clinic associated with this user."});
+        return;
+    }
+
     try {
-      const docId = credentials ? credentials.id : "credentials";
+      const docId = credentials ? credentials.id : `creds-${userProfile.clinicId}`;
       const docRef = doc(db, "mobile-app", docId);
       
       const dataToSave: MobileApp = {
         id: docId,
+        clinicId: userProfile.clinicId,
         username: values.username,
         password: values.password, // In a real app, this should be hashed!
       };
@@ -183,12 +215,14 @@ export default function ProfilePage() {
   }
   
   const handleCancelProfile = () => {
-    profileForm.reset({
-        name: userData.name,
-        clinicName: userData.clinicName,
-        email: userData.email,
-        phone: userData.phone,
-    });
+    if (userProfile) {
+        profileForm.reset({
+            name: userProfile.name,
+            clinicName: userProfile.clinicName,
+            email: userProfile.email,
+            phone: userProfile.phone,
+        });
+    }
     setIsEditingProfile(false);
   }
 

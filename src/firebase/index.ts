@@ -2,13 +2,13 @@
 "use client";
 
 import { auth, db } from '@/lib/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 
 export const firestore = db;
 
 export function useAuth() {
-    const [user, setUser] = useState<any>(null);
+    const [user, setUser] = useState<FirebaseUser | null>(null);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -18,5 +18,5 @@ export function useAuth() {
         return () => unsubscribe();
     }, []);
 
-    return auth;
+    return { ...auth, currentUser: user };
 }

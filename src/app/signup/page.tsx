@@ -192,7 +192,6 @@ export default function SignupPage() {
           ownerName: formData.ownerName,
           clinicType: formData.clinicType,
           plan: formData.plan,
-          // We can add more fields from formData here if needed
         };
         batch.set(clinicRef, clinicData);
 
@@ -202,6 +201,8 @@ export default function SignupPage() {
           email: user.email,
           name: formData.ownerName,
           designation: formData.designation,
+          clinicName: formData.clinicName,
+          phone: formData.mobileNumber,
         };
         batch.set(userRef, userData);
 

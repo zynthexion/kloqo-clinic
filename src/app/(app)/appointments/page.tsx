@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Appointment, Doctor, Patient } from "@/lib/types";
-import { collection, getDocs, setDoc, doc } from "firebase/firestore";
+import { collection, getDocs, setDoc, doc, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear } from "date-fns";
@@ -55,6 +55,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/firebase";
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -79,6 +80,7 @@ const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Fri
 
 
 export default function AppointmentsPage() {
+  const auth = useAuth();
   // ...
   const handleCancel = (appointment: Appointment) => {
     setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Cancelled' } : a));
@@ -164,29 +166,33 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
 
   useEffect(() => {
     const fetchAppointmentsAndPatients = async () => {
+      if (!auth.currentUser) {
+        setLoading(false);
+        return;
+      }
       try {
         setLoading(true);
-    
-        // Fetch both appointments and patients collections
-        const appointmentsCollection = collection(db, "appointments");
-        const appointmentsSnapshot = await getDocs(appointmentsCollection);
-        const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ 
-          id: doc.id, 
-          ...doc.data() 
-        } as Appointment));
         
+        const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+        const clinicId = userDoc.data()?.clinicId;
+        if (!clinicId) {
+          toast({ variant: "destructive", title: "Error", description: "No clinic associated with this user." });
+          setLoading(false);
+          return;
+        }
+
+        const appointmentsQuery = query(collection(db, "appointments"), where("clinicId", "==", clinicId));
+        const appointmentsSnapshot = await getDocs(appointmentsQuery);
+        const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
         setAppointments(appointmentsList);
     
-        const patientsCollection = collection(db, "patients");
-        const patientsSnapshot = await getDocs(patientsCollection);
-        const patientsList = patientsSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        } as Patient));
+        const patientsQuery = query(collection(db, "patients"), where("clinicId", "==", clinicId));
+        const patientsSnapshot = await getDocs(patientsQuery);
+        const patientsList = patientsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Patient));
         setAllPatients(patientsList);
     
-        const doctorsCollection = collection(db, "doctors");
-        const doctorsSnapshot = await getDocs(doctorsCollection);
+        const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
+        const doctorsSnapshot = await getDocs(doctorsQuery);
         const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
         setDoctors(doctorsList);
     
@@ -202,8 +208,10 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
       }
     };
 
-    fetchAppointmentsAndPatients();
-  }, [toast]);
+    if (auth.currentUser) {
+      fetchAppointmentsAndPatients();
+    }
+  }, [auth.currentUser, toast]);
 
   const resetForm = () => {
     setEditingAppointment(null);
@@ -249,7 +257,19 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
 
 
   async function onSubmit(values: AddAppointmentFormValues) {
+    if (!auth.currentUser) {
+        toast({ variant: "destructive", title: "Not Authenticated", description: "You must be logged in to book an appointment."});
+        return;
+    }
+
     try {
+      const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+      const clinicId = userDoc.data()?.clinicId;
+      if (!clinicId) {
+        toast({ variant: "destructive", title: "Error", description: "No clinic associated with this user." });
+        return;
+      }
+      
       const doctorName = doctors.find(d => d.id === values.doctor)?.name || "Unknown Doctor";
       const appointmentDateStr = format(values.date ?? (Array.isArray(values.date) ? values.date[0] : new Date()), "d MMMM yyyy");
 
@@ -259,6 +279,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
         
         const newPatientData: Patient = {
           id: patientId,
+          clinicId,
           name: values.patientName,
           age: values.age,
           gender: values.gender,
@@ -272,13 +293,14 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
         setAllPatients(prev => [...prev, newPatientData]);
       }
 
-      const dataToSave: Omit<AddAppointmentFormValues, 'date' | 'time'> & { date: string, time: string, status: 'Confirmed' | 'Pending' | 'Cancelled' | 'Completed', treatment: string } = {
+      const dataToSave: Omit<AddAppointmentFormValues, 'date' | 'time'> & { date: string, time: string, status: 'Confirmed' | 'Pending' | 'Cancelled' | 'Completed', treatment: string, clinicId: string } = {
           ...values,
           date: appointmentDateStr,
           time: format(parseDateFns(values.time, "HH:mm", new Date()), "hh:mm a"),
           doctor: doctorName,
           status: "Pending",
           treatment: "General Consultation",
+          clinicId,
       };
 
       if (isEditing) {

@@ -26,7 +26,7 @@ import {
   Search,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, query, where, getDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Appointment, Patient } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -39,8 +39,10 @@ import {
 } from "@/components/ui/select";
 import { parse } from 'date-fns';
 import Link from "next/link";
+import { useAuth } from "@/firebase";
 
 export default function PatientsPage() {
+  const auth = useAuth();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -48,55 +50,27 @@ export default function PatientsPage() {
   const [patientsPerPage, setPatientsPerPage] = useState(10);
 
   useEffect(() => {
+    if (!auth.currentUser) {
+      setLoading(false);
+      return;
+    };
+
     const fetchPatients = async () => {
       try {
-        const appointmentsCollection = collection(db, "appointments");
-        const appointmentsSnapshot = await getDocs(appointmentsCollection);
-        const appointmentsList = appointmentsSnapshot.docs.map(
-          (doc) => ({ ...doc.data() } as Appointment)
-        );
+        setLoading(true);
+        const userDoc = await getDoc(doc(db, "users", auth.currentUser!.uid));
+        const clinicId = userDoc.data()?.clinicId;
 
-        const patientMap = new Map<string, Patient>();
+        if (!clinicId) {
+          setLoading(false);
+          return;
+        }
 
-        appointmentsList.forEach((apt) => {
-          const patientId = encodeURIComponent(`${apt.patientName}-${apt.phone}`);
-          const appointmentDate = parse(apt.date, 'd MMMM yyyy', new Date());
+        const patientsQuery = query(collection(db, "patients"), where("clinicId", "==", clinicId));
+        const patientsSnapshot = await getDocs(patientsQuery);
+        const patientList = patientsSnapshot.docs.map(doc => doc.data() as Patient);
 
-          if (patientMap.has(patientId)) {
-            const existingPatient = patientMap.get(patientId)!;
-            
-            let lastVisitDate = existingPatient.lastVisit;
-            try {
-                const existingDate = parse(existingPatient.lastVisit, 'd MMMM yyyy', new Date());
-                if (appointmentDate > existingDate) {
-                    lastVisitDate = apt.date;
-                }
-            } catch (e) {
-                // Ignore if existing date is invalid
-            }
-
-            patientMap.set(patientId, {
-              ...existingPatient,
-              lastVisit: lastVisitDate,
-              totalAppointments: existingPatient.totalAppointments + 1,
-            });
-
-          } else {
-            patientMap.set(patientId, {
-              id: patientId,
-              name: apt.patientName,
-              age: apt.age,
-              gender: apt.gender,
-              phone: apt.phone,
-              place: apt.place,
-              lastVisit: apt.date,
-              doctor: apt.doctor,
-              totalAppointments: 1,
-            });
-          }
-        });
-        
-        setPatients(Array.from(patientMap.values()));
+        setPatients(patientList);
       } catch (error) {
         console.error("Error fetching patients:", error);
       } finally {
@@ -105,7 +79,7 @@ export default function PatientsPage() {
     };
 
     fetchPatients();
-  }, []);
+  }, [auth.currentUser]);
 
   const filteredPatients = useMemo(() => {
     return patients.filter((patient) =>
