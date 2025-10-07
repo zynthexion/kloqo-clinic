@@ -41,7 +41,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { Department, Doctor } from "@/lib/types";
 import React, { useState, useEffect, useCallback } from "react";
-import { collection, getDocs, doc, getDoc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, updateDoc, arrayUnion, arrayRemove, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { DepartmentDoctorsDialog } from "@/components/departments/department-doctors-dialog";
@@ -77,11 +77,10 @@ export default function DepartmentsPage() {
 
   // Step 2: Fetch clinic-specific data and combine with master list
   const fetchClinicData = useCallback(async () => {
-    if (!auth.currentUser || masterDepartments.length === 0) return;
-
+    if (!auth.currentUser) return;
     setLoading(true);
     try {
-      const userDoc = await getDoc(doc(db, "users", auth.currentUser!.uid));
+      const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
       const clinicId = userDoc.data()?.clinicId;
 
       if (clinicId) {
@@ -91,24 +90,27 @@ export default function DepartmentsPage() {
           const departmentIds: string[] = clinicData.departments || [];
 
           if (departmentIds.length > 0) {
-            const deptsForClinic = masterDepartments.filter(masterDept => departmentIds.includes(masterDept.id));
+            // New logic: Fetch only the master departments that are in the clinic's list
+            const deptsQuery = query(collection(db, 'master-departments'), where('id', 'in', departmentIds));
+            const deptsSnapshot = await getDocs(deptsQuery);
+            const deptsForClinic = deptsSnapshot.docs.map(d => d.data() as Department);
             setClinicDepartments(deptsForClinic);
           } else {
             setClinicDepartments([]);
           }
         }
-
+        // Fetch doctors associated with the clinic
         const doctorsSnapshot = await getDocs(collection(db, "clinics", clinicId, "doctors"));
         const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
         setDoctors(doctorsList);
       }
     } catch(error) {
-        console.error("Error fetching clinic data:", error);
+        console.error("Error fetching departments data:", error);
         toast({ variant: "destructive", title: "Error", description: "Failed to load clinic-specific department data."});
     } finally {
         setLoading(false);
     }
-  }, [auth.currentUser, toast, masterDepartments]);
+  }, [auth.currentUser, toast]);
 
   useEffect(() => {
     fetchClinicData();
@@ -273,9 +275,29 @@ export default function DepartmentsPage() {
               />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {clinicDepartments.map((dept) => (
-                  <DepartmentCard key={dept.id} department={dept} onSeeDetail={handleSeeDetail} onDelete={() => setDeletingDepartment(dept)} />
-              ))}
+              {loading ? (
+                 Array.from({ length: 3 }).map((_, i) => (
+                    <Card key={i} className="h-full flex flex-col animate-pulse">
+                        <div className="h-40 w-full bg-muted"></div>
+                        <CardContent className="p-4 flex-grow">
+                            <div className="h-6 w-3/4 bg-muted rounded"></div>
+                            <div className="h-10 w-full bg-muted rounded mt-2"></div>
+                        </CardContent>
+                        <CardFooter className="bg-muted/30 px-4 py-3 flex items-center justify-between">
+                            <div className="h-8 w-1/2 bg-muted rounded"></div>
+                            <div className="h-6 w-1/4 bg-muted rounded"></div>
+                        </CardFooter>
+                    </Card>
+                 ))
+              ) : clinicDepartments.length > 0 ? (
+                  clinicDepartments.map((dept) => (
+                    <DepartmentCard key={dept.id} department={dept} onSeeDetail={handleSeeDetail} onDelete={() => setDeletingDepartment(dept)} />
+                ))
+              ) : (
+                <div className="col-span-full text-center py-12">
+                  <p className="text-muted-foreground">No departments have been added to this clinic yet.</p>
+                </div>
+              )}
           </div>
           <div className="flex items-center justify-between mt-6">
               <div className="text-sm text-muted-foreground">
@@ -336,5 +358,3 @@ export default function DepartmentsPage() {
     </>
   );
 }
-
-    
