@@ -43,7 +43,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { Department, Doctor } from "@/lib/types";
 import React, { useState, useEffect } from "react";
-import { collection, getDocs, doc, setDoc, deleteDoc, query, where } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc, deleteDoc, query, where, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { DepartmentDoctorsDialog } from "@/components/departments/department-doctors-dialog";
