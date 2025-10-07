@@ -6,7 +6,7 @@ import { LiveStatusHeader } from "@/components/layout/header";
 import { Card } from "@/components/ui/card";
 import { Maximize, ZoomIn, ZoomOut, Users } from "lucide-react";
 import { useEffect, useState } from "react";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/firebase";
 import type { Doctor } from "@/lib/types";
@@ -77,11 +77,12 @@ export default function LiveStatusPage() {
       const fetchDoctors = async () => {
           setLoading(true);
           try {
-              const userDoc = await getDoc(doc(db, "users", auth.currentUser!.uid));
+              const userDocRef = doc(db, "users", auth.currentUser!.uid);
+              const userDoc = await getDoc(userDocRef);
               const clinicId = userDoc.data()?.clinicId;
 
               if (clinicId) {
-                const q = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
+                const q = query(collection(db, "clinics", clinicId, "doctors"));
                 const querySnapshot = await getDocs(q);
                 const doctorsList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
                 setDoctors(doctorsList);

@@ -43,22 +43,28 @@ export default function LiveStatusDetailPage() {
     const fetchDoctorAndAppointments = async () => {
       setLoading(true);
       try {
-        const doctorRef = doc(db, "doctors", id as string);
-        const doctorSnap = await getDoc(doctorRef);
+        const userDocRef = doc(db, "users", auth.currentUser.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        const clinicId = userDocSnap.data()?.clinicId;
 
-        if (doctorSnap.exists()) {
-          const doctorData = { id: doctorSnap.id, ...doctorSnap.data() } as Doctor;
-          setDoctor(doctorData);
+        if (clinicId) {
+            const doctorRef = doc(db, "clinics", clinicId, "doctors", id as string);
+            const doctorSnap = await getDoc(doctorRef);
 
-          const todayStr = format(new Date(), 'd MMMM yyyy');
-          const appointmentsQuery = query(
-            collection(db, "appointments"),
-            where("doctor", "==", doctorData.name),
-            where("date", "==", todayStr)
-          );
-          const appointmentsSnapshot = await getDocs(appointmentsQuery);
-          const appointmentsList = appointmentsSnapshot.docs.map(doc => doc.data() as Appointment);
-          setAppointments(appointmentsList);
+            if (doctorSnap.exists()) {
+              const doctorData = { id: doctorSnap.id, ...doctorSnap.data() } as Doctor;
+              setDoctor(doctorData);
+
+              const todayStr = format(new Date(), 'd MMMM yyyy');
+              const appointmentsQuery = query(
+                collection(db, "clinics", clinicId, "appointments"),
+                where("doctor", "==", doctorData.name),
+                where("date", "==", todayStr)
+              );
+              const appointmentsSnapshot = await getDocs(appointmentsQuery);
+              const appointmentsList = appointmentsSnapshot.docs.map(doc => doc.data() as Appointment);
+              setAppointments(appointmentsList);
+            }
         }
       } catch (error) {
         console.error("Error fetching live status details: ", error);
