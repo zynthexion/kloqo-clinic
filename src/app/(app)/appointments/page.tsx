@@ -193,7 +193,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
         const patientsList = patientsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Patient));
         setAllPatients(patientsList);
     
-        const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
+        const doctorsQuery = query(collection(db, "clinics", clinicId, "doctors"));
         const doctorsSnapshot = await getDocs(doctorsQuery);
         const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
         setDoctors(doctorsList);
@@ -1070,4 +1070,3 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
   );
 }
 
-    
