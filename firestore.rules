@@ -36,22 +36,26 @@ service cloud.firestore {
       allow read, update: if isOwner(userId);
       allow create: if isSignedIn();
     }
-    
-    // Master departments can be read by any signed-in user.
-    // This is a "public" read-only collection for populating dialogs.
-    match /master-departments/{departmentId} {
-        allow read: if isSignedIn();
+
+    // Doctors can be created by staff of the same clinic.
+    // Doctors can be read by any signed-in user (for the patient app).
+    // Doctors can only be updated/deleted by staff of the same clinic.
+    match /doctors/{doctorId} {
+      allow read: if isSignedIn();
+      allow create: if isClinicStaff(request.resource.data.clinicId);
+      allow update, delete: if isClinicStaff(resource.data.clinicId);
     }
 
-    // Subcollections within a clinic (doctors, appointments) can be accessed
-    // only by staff belonging to that clinic.
-    match /clinics/{clinicId}/{subcollection}/{docId} {
-      allow read, write, delete: if isClinicStaff(clinicId);
+    // Appointments can be read by staff of the clinic or the patient.
+    // Appointments can be written by staff of the clinic.
+    match /appointments/{appointmentId} {
+        allow read: if isClinicStaff(resource.data.clinicId) || isOwner(resource.data.patientId);
+        allow write: if isClinicStaff(request.resource.data.clinicId);
     }
-    
+
     // Patients can create their own record.
     // They can only read/update their own record.
-    // Clinic staff can read patient records.
+    // Clinic staff can read patient records associated with their clinic (e.g. for booking).
     match /patients/{patientId} {
       allow create: if isOwner(patientId);
       allow read, update: if isOwner(patientId) || isClinicStaff(getUserClinicId(request.auth.uid));
@@ -62,6 +66,11 @@ service cloud.firestore {
     match /mobile-app/{credentialId} {
       allow read, update: if isClinicStaff(resource.data.clinicId);
       allow create: if isSignedIn();
+    }
+    
+    // Master list of all possible departments. Any signed-in user can read this.
+    match /master-departments/{departmentId} {
+      allow read: if isSignedIn();
     }
   }
 }
