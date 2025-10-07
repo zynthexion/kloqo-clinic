@@ -20,19 +20,19 @@ import type { Department } from "@/lib/types";
 type SelectDepartmentDialogProps = {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
-  departments: Department[];
-  onDepartmentsSelect: (departments: Department[]) => void;
+  departments: Omit<Department, "clinicId">[];
+  onDepartmentsSelect: (departments: Omit<Department, "clinicId">[]) => void;
 };
 
 export function SelectDepartmentDialog({ isOpen, setIsOpen, departments, onDepartmentsSelect }: SelectDepartmentDialogProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [selected, setSelected] = useState<Department[]>([]);
+  const [selected, setSelected] = useState<Omit<Department, "clinicId">[]>([]);
 
   const filteredDepartments = departments.filter((dept) =>
     dept.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const toggleSelection = (department: Department) => {
+  const toggleSelection = (department: Omit<Department, "clinicId">) => {
     setSelected(prev => {
         const isSelected = prev.find(d => d.id === department.id);
         if (isSelected) {
@@ -118,5 +118,3 @@ export function SelectDepartmentDialog({ isOpen, setIsOpen, departments, onDepar
     </Dialog>
   );
 }
-
-    

@@ -16,19 +16,12 @@ import { Skeleton } from "../ui/skeleton";
 import { FirestorePermissionError } from "@/firebase/errors";
 import { errorEmitter } from "@/firebase/error-emitter";
 
-const superAdminDepartments: Omit<Department, "clinicId">[] = [
-    { id: 'dept-01', name: 'General Medicine', description: 'Comprehensive primary care.', image: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8bWVkaWNpbmV8ZW58MHx8MHx8fDA%3D', imageHint: "stethoscope pills", doctors: [] },
-    { id: 'dept-02', name: 'Cardiology', description: 'Specialized heart care.', image: 'https://images.unsplash.com/photo-1530026405182-271453396975?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MjZ8fG1lZGljaW5lfGVufDB8fDB8fHww', imageHint: "heart model", doctors: [] },
-    { id: 'dept-03', name: 'Pediatrics', description: 'Healthcare for children.', image: 'https://images.unsplash.com/photo-1599586120429-48281b6f0ece?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTR8fGNoaWxkcmVuJTIwZG9jdG9yfGVufDB8fDB8fHww', imageHint: "doctor baby", doctors: [] },
-    { id: 'dept-04', name: 'Dermatology', description: 'Skin health services.', image: 'https://images.unsplash.com/photo-1631894959934-396b3a8d11b3?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTB8fGRlcm1hdG9sb2d5fGVufDB8fDB8fHww', imageHint: "skin care", doctors: [] },
-    { id: 'dept-05', name: 'Neurology', description: 'Nervous system disorders.', image: 'https://images.unsplash.com/photo-1695423589949-c9a56f626245?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Nnx8bmV1cm9sb2d5fGVufDB8fDB8fHww', imageHint: "brain model", doctors: [] },
-];
-
 
 export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { onDepartmentsAdded: (departments: Department[]) => void, onAddDoctorClick: () => void }) {
   const auth = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [existingDepartments, setExistingDepartments] = useState<Department[]>([]);
+  const [masterDepartments, setMasterDepartments] = useState<Omit<Department, "clinicId">[]>([]);
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
 
@@ -38,9 +31,15 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
       return;
     }
 
-    const fetchExistingDepartments = async () => {
+    const fetchInitialData = async () => {
       setLoading(true);
       try {
+        // Fetch master departments list
+        const masterDeptsSnapshot = await getDocs(collection(db, "master-departments"));
+        const masterDeptsList = masterDeptsSnapshot.docs.map(d => d.data() as Omit<Department, "clinicId">);
+        setMasterDepartments(masterDeptsList);
+
+        // Fetch existing departments for the current clinic
         const userDoc = await getDoc(doc(db, "users", auth.currentUser!.uid));
         if (!userDoc.exists()) {
           setLoading(false);
@@ -59,17 +58,17 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
           }
         }
       } catch (error) {
-        console.error("Error fetching existing departments:", error);
+        console.error("Error fetching initial department data:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchExistingDepartments();
+    fetchInitialData();
   }, [auth.currentUser, onDepartmentsAdded]);
 
 
-  const handleSelectDepartments = async (departments: Omit<Department, "clinicId">[]) => {
+  const handleSelectDepartments = async (selectedDepts: Omit<Department, "clinicId">[]) => {
     if (!auth.currentUser) {
         toast({ variant: "destructive", title: "Error", description: "You must be logged in." });
         return;
@@ -82,14 +81,15 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
     }
 
     const batch = writeBatch(db);
-    departments.forEach(dept => {
-        const deptRef = doc(db, "departments", dept.id);
-        batch.set(deptRef, { ...dept, clinicId });
+    selectedDepts.forEach(dept => {
+        // Each department gets its own document in the top-level /departments collection
+        const deptRef = doc(db, "departments", `${clinicId}_${dept.id}`);
+        batch.set(deptRef, { ...dept, id: `${clinicId}_${dept.id}`, clinicId });
     });
 
     batch.commit()
         .then(() => {
-            const allDepts = [...existingDepartments, ...departments.map(d => ({...d, clinicId}))].reduce((acc, current) => {
+            const allDepts = [...existingDepartments, ...selectedDepts.map(d => ({...d, id: `${clinicId}_${d.id}`, clinicId}))].reduce((acc, current) => {
                 if (!acc.find(item => item.id === current.id)) {
                     acc.push(current);
                 }
@@ -101,14 +101,14 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
 
             toast({
                 title: "Departments Added",
-                description: `${departments.length} department(s) have been added to your clinic.`,
+                description: `${selectedDepts.length} department(s) have been added to your clinic.`,
             });
         })
         .catch((serverError) => {
             console.error("Error writing batch:", serverError);
-            departments.forEach(dept => {
+            selectedDepts.forEach(dept => {
                 const permissionError = new FirestorePermissionError({
-                    path: `/departments/${dept.id}`,
+                    path: `/departments/${clinicId}_${dept.id}`,
                     operation: 'create',
                     requestResourceData: { ...dept, clinicId },
                 });
@@ -191,7 +191,7 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
       <SelectDepartmentDialog
         isOpen={isDialogOpen}
         setIsOpen={setIsDialogOpen}
-        departments={superAdminDepartments}
+        departments={masterDepartments}
         onDepartmentsSelect={handleSelectDepartments}
       />
     </div>
