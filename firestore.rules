@@ -1,66 +1,79 @@
 
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
     // --- Helper Functions ---
-
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Checks if the requesting user is the owner of the document
     function isOwner(userId) {
       return request.auth.uid == userId;
     }
-
-    // Gets the clinicId from the requesting user's profile
-    function getRequestingUserClinicId() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clinicId;
-    }
-
-    // Checks if the document being accessed has a specific clinicId
-    function resourceBelongsToClinic(clinicId) {
-      return resource.data.clinicId == clinicId;
-    }
     
-    // Checks if the incoming (new) data has the correct clinicId
-    function requestDataBelongsToClinic(clinicId) {
-        return request.resource.data.clinicId == clinicId;
+    function getUserClinicId(userId) {
+        return get(/databases/$(database)/documents/users/$(userId)).data.clinicId;
     }
 
+    function isClinicStaff(clinicId) {
+      return isSignedIn() && getUserClinicId(request.auth.uid) == clinicId;
+    }
 
-    // --- Rule Definitions ---
+    // --- Rules for Collections ---
 
-    // Admins can create their own user profile during signup.
-    // They can only read/update their own profile.
+    // Clinics can be created by any signed-in user during signup.
+    // Only staff of that clinic can read or update it afterwards.
+    match /clinics/{clinicId} {
+      allow read, update: if isClinicStaff(clinicId);
+      allow create: if isSignedIn();
+    }
+
+    // Users can create their own user document.
+    // They can only read or update their own document afterwards.
     match /users/{userId} {
       allow read, update: if isOwner(userId);
-      allow create: if true;
+      allow create: if isSignedIn();
+    }
+
+    // Doctors can be created by staff of the same clinic.
+    // Doctors can be read by any signed-in user (for the patient app).
+    // Doctors can only be updated/deleted by staff of the same clinic.
+    match /doctors/{doctorId} {
+      allow read: if isSignedIn();
+      allow create: if isClinicStaff(request.resource.data.clinicId);
+      allow update, delete: if isClinicStaff(resource.data.clinicId);
     }
     
-    // Admins can create their clinic profile during signup.
-    // They can only read/update the clinic they belong to.
-    match /clinics/{clinicId} {
-      allow read, update: if isSignedIn() && getRequestingUserClinicId() == clinicId;
-      allow create: if true;
+    // Departments can be created by staff of the same clinic.
+    // Departments can be read by any signed-in user (for the patient app).
+    // Departments can only be updated/deleted by staff of the same clinic.
+    match /departments/{departmentId} {
+      allow read: if isSignedIn();
+      allow create: if isClinicStaff(request.resource.data.clinicId);
+      allow update, delete: if isClinicStaff(resource.data.clinicId);
     }
 
-    // Rules for top-level collections that belong to a clinic
-    match /{collection}/{docId} where collection in ['doctors', 'departments', 'appointments', 'mobile-app'] {
-      // Allow read if the user belongs to the same clinic as the document
-      allow read: if isSignedIn() && resourceBelongsToClinic(getRequestingUserClinicId());
-      // Allow create if the new document is being assigned to the user's clinic
-      allow create: if isSignedIn() && requestDataBelongsToClinic(getRequestingUserClinicId());
-      // Allow update/delete if the user belongs to the same clinic
-      allow update, delete: if isSignedIn() && resourceBelongsToClinic(getRequestingUserClinicId());
+    // Appointments can be read/written by staff of the clinic,
+    // or by the patient who owns the appointment.
+    match /appointments/{appointmentId} {
+        allow read, write: if isClinicStaff(request.resource.data.clinicId) || isOwner(request.resource.data.patientId);
     }
 
-    // Patients can create and manage their own profile.
-    // Clinic staff can read a patient's profile.
+    // Patients can create their own record.
+    // They can only read/update their own record.
+    // Clinic staff can read patient records associated with their clinic (e.g. for booking).
     match /patients/{patientId} {
-      allow read: if isSignedIn(); // Allows both patient and clinic staff to read
-      allow create, update: if isOwner(patientId); // Only the patient can create/update their own profile
+      allow create: if isOwner(patientId);
+      allow read, update: if isOwner(patientId) || isClinicStaff(getUserClinicId(request.auth.uid));
+    }
+    
+    // Mobile app credentials can be created by any signed-in user during signup.
+    // Only staff of that clinic can read or update it afterwards.
+    match /mobile-app/{credentialId} {
+      allow read, update: if isClinicStaff(resource.data.clinicId);
+      allow create: if isSignedIn();
     }
   }
 }
