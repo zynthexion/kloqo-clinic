@@ -20,5 +20,5 @@ export function useAuth() {
         return () => unsubscribe();
     }, []);
 
-    return { ...auth, currentUser: user, loading };
+    return { auth, currentUser: user, loading };
 }

@@ -16,14 +16,13 @@ import { Card } from '@/components/ui/card';
 import { PeterdrawLogo } from '@/components/icons';
 import Link from 'next/link';
 
-import { useAuth, db as firestore } from '@/lib/firebase';
+import { db as firestore, auth } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { collection, doc, writeBatch } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { auth } from '@/lib/firebase';
 
 const timeSlotSchema = z.object({
   open: z.string().min(1, 'Required'),
