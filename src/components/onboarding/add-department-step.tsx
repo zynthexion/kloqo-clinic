@@ -10,7 +10,7 @@ import Image from "next/image";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/firebase";
-import { doc, setDoc, getDoc, collection, writeBatch, getDocs, query, where } from "firebase/firestore";
+import { doc, setDoc, getDoc, collection, writeBatch, getDocs, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Skeleton } from "../ui/skeleton";
 
@@ -42,8 +42,8 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
         const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
         const clinicId = userDoc.data()?.clinicId;
         if (clinicId) {
-            const departmentsRef = collection(db, 'departments');
-            const q = query(departmentsRef, where("clinicId", "==", clinicId));
+            const departmentsRef = collection(db, 'clinics', clinicId, 'departments');
+            const q = query(departmentsRef);
             const querySnapshot = await getDocs(q);
             const depts = querySnapshot.docs.map(d => d.data() as Department);
             setExistingDepartments(depts);
@@ -76,7 +76,7 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
 
         const batch = writeBatch(db);
         departments.forEach(dept => {
-            const deptRef = doc(db, "departments", dept.id);
+            const deptRef = doc(db, "clinics", clinicId, "departments", dept.id);
             batch.set(deptRef, { ...dept, clinicId });
         });
         await batch.commit();
@@ -135,11 +135,6 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
         </>
       ) : (
         <div className="w-full max-w-4xl">
-            <div className="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 rounded-md mb-6 text-left">
-                <p className="font-bold">Next Step: Add a Doctor</p>
-                <p>The 'Doctors' menu is now enabled. Add your first doctor to begin managing appointments.</p>
-            </div>
-
             <div className="mb-8">
                 <h2 className="text-xl font-semibold text-left mb-4">Your Departments ({existingDepartments.length})</h2>
                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -158,6 +153,10 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
             </div>
             
             <div className="flex flex-col items-center gap-4">
+                 <div className="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 rounded-md mb-6 text-left w-full">
+                    <p className="font-bold">Next Step: Add a Doctor</p>
+                    <p>The 'Doctors' menu is now enabled. Add your first doctor to begin managing appointments.</p>
+                </div>
                 <h1 className="text-2xl font-bold">Add your first doctor</h1>
                 <p className="text-muted-foreground">
                     With your department set up, it's time to add a doctor to the system.

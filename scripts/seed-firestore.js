@@ -535,24 +535,28 @@ try {
 
 const db = getFirestore();
 
-async function seedCollection(collectionName, data, idField) {
-  const collectionRef = db.collection(collectionName);
-  console.log(`Starting to seed ${collectionName}...`);
+async function seedSubCollection(parentCollection, parentId, subCollectionName, data, idField) {
+  const collectionRef = db.collection(parentCollection).doc(parentId).collection(subCollectionName);
+  console.log(`Starting to seed ${subCollectionName} for ${parentId}...`);
 
   const promises = data.map(async (item) => {
     const docRef = collectionRef.doc(item[idField]);
-    await docRef.set({ ...item, clinicId: defaultClinicId });
-    console.log(`Added ${collectionName} ${item.name || item.patientName || item[idField]} with ID: ${item[idField]}`);
+    await docRef.set({ ...item, clinicId: parentId });
+    console.log(`Added ${subCollectionName} ${item.name || item.patientName || item[idField]} with ID: ${item[idField]}`);
   });
 
   await Promise.all(promises);
-  console.log(`Finished seeding ${collectionName}.`);
+  console.log(`Finished seeding ${subCollectionName} for ${parentId}.`);
 }
 
+
 async function main() {
-    await seedCollection('doctors', doctors, 'id');
-    await seedCollection('departments', departments, 'id');
-    await seedCollection('appointments', appointments, 'id');
+    await db.collection('clinics').doc(defaultClinicId).set({ name: 'Default Clinic' });
+    console.log(`Created clinic with ID: ${defaultClinicId}`);
+
+    await seedSubCollection('clinics', defaultClinicId, 'doctors', doctors, 'id');
+    await seedSubCollection('clinics', defaultClinicId, 'departments', departments, 'id');
+    await seedSubCollection('clinics', defaultClinicId, 'appointments', appointments, 'id');
 }
 
 

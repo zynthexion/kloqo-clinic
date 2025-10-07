@@ -60,7 +60,7 @@ export function AddDoctorStep({ departments, onDoctorAdded }: { departments: Dep
       availabilitySlots: doctorData.availabilitySlots,
     };
     
-    const docRef = doc(db, "doctors", docId);
+    const docRef = doc(db, "clinics", clinicId, "doctors", docId);
     setDoc(docRef, newDoctor)
       .then(() => {
         setAddedDoctor(newDoctor);

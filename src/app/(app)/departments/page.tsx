@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import Image from "next/image";
@@ -43,7 +42,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { Department, Doctor } from "@/lib/types";
 import React, { useState, useEffect } from "react";
-import { collection, getDocs, doc, setDoc, deleteDoc, query, where, getDoc } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc, deleteDoc, query, getDoc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { DepartmentDoctorsDialog } from "@/components/departments/department-doctors-dialog";
@@ -81,12 +80,12 @@ export default function DepartmentsPage() {
         const clinicId = userDoc.data()?.clinicId;
 
         if (clinicId) {
-            const departmentsQuery = query(collection(db, "departments"), where("clinicId", "==", clinicId));
+            const departmentsQuery = query(collection(db, "clinics", clinicId, "departments"));
             const departmentsSnapshot = await getDocs(departmentsQuery);
             const departmentsList = departmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Department));
             setDepartments(departmentsList);
 
-            const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
+            const doctorsQuery = query(collection(db, "clinics", clinicId, "doctors"));
             const doctorsSnapshot = await getDocs(doctorsQuery);
             const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
             setDoctors(doctorsList);
@@ -169,14 +168,15 @@ export default function DepartmentsPage() {
         const clinicId = userDoc.data()?.clinicId;
         if (!clinicId) throw new Error("User has no clinic assigned.");
 
-        const promises = selectedDepts.map(dept => {
-            const deptRef = doc(db, "departments", dept.id);
-            return setDoc(deptRef, { ...dept, clinicId }, { merge: true });
+        const batch = writeBatch(db);
+        selectedDepts.forEach(dept => {
+            const deptRef = doc(db, "clinics", clinicId, "departments", dept.id);
+            batch.set(deptRef, { ...dept, clinicId });
         });
         
-        await Promise.all(promises);
+        await batch.commit();
 
-        const departmentsQuery = query(collection(db, "departments"), where("clinicId", "==", clinicId));
+        const departmentsQuery = query(collection(db, "clinics", clinicId, "departments"));
         const departmentsSnapshot = await getDocs(departmentsQuery);
         const departmentsList = departmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Department));
         setDepartments(departmentsList);
@@ -196,9 +196,13 @@ export default function DepartmentsPage() {
   }
 
   const handleDeleteDepartment = async () => {
-    if (!deletingDepartment) return;
+    if (!deletingDepartment || !auth.currentUser) return;
     try {
-      await deleteDoc(doc(db, "departments", deletingDepartment.id));
+      const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+      const clinicId = userDoc.data()?.clinicId;
+      if (!clinicId) throw new Error("User has no clinic assigned.");
+
+      await deleteDoc(doc(db, "clinics", clinicId, "departments", deletingDepartment.id));
       setDepartments(prev => prev.filter(d => d.id !== deletingDepartment.id));
       toast({
         title: "Department Deleted",
