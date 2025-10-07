@@ -51,7 +51,11 @@ export default function PatientHistoryPage() {
         if (patientDocSnap.exists()) {
           const patientData = patientDocSnap.data() as Patient;
           const sortedHistory = patientData.visitHistory?.sort(
-            (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+            (a, b) => {
+              const dateA = parse(a.date, "d MMMM yyyy", new Date()).getTime();
+              const dateB = parse(b.date, "d MMMM yyyy", new Date()).getTime();
+              return dateB - dateA;
+            }
           ) || [];
           
           setPatient({ ...patientData, visitHistory: sortedHistory });
@@ -185,3 +189,5 @@ export default function PatientHistoryPage() {
     </>
   );
 }
+
+    

@@ -48,7 +48,7 @@ export default function LiveStatusDetailPage() {
         const clinicId = userDocSnap.data()?.clinicId;
 
         if (clinicId) {
-            const doctorRef = doc(db, "clinics", clinicId, "doctors", id as string);
+            const doctorRef = doc(db, "doctors", id as string);
             const doctorSnap = await getDoc(doctorRef);
 
             if (doctorSnap.exists()) {
@@ -57,7 +57,8 @@ export default function LiveStatusDetailPage() {
 
               const todayStr = format(new Date(), 'd MMMM yyyy');
               const appointmentsQuery = query(
-                collection(db, "clinics", clinicId, "appointments"),
+                collection(db, "appointments"),
+                where("clinicId", "==", clinicId),
                 where("doctor", "==", doctorData.name),
                 where("date", "==", todayStr)
               );
@@ -184,3 +185,5 @@ export default function LiveStatusDetailPage() {
     </>
   );
 }
+
+    

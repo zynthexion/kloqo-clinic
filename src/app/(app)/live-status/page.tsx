@@ -82,7 +82,7 @@ export default function LiveStatusPage() {
               const clinicId = userDoc.data()?.clinicId;
 
               if (clinicId) {
-                const q = query(collection(db, "clinics", clinicId, "doctors"));
+                const q = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
                 const querySnapshot = await getDocs(q);
                 const doctorsList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
                 setDoctors(doctorsList);
@@ -116,3 +116,5 @@ export default function LiveStatusPage() {
     </>
   );
 }
+
+    

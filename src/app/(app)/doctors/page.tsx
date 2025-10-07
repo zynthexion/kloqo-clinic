@@ -212,9 +212,12 @@ export default function DoctorsPage() {
           return;
         }
 
+        const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
+        const appointmentsQuery = query(collection(db, "appointments"), where("clinicId", "==", clinicId));
+        
         const [doctorsSnapshot, appointmentsSnapshot] = await Promise.all([
-          getDocs(query(collection(db, "clinics", clinicId, "doctors"))),
-          getDocs(query(collection(db, "clinics", clinicId, "appointments"))),
+          getDocs(doctorsQuery),
+          getDocs(appointmentsQuery),
         ]);
         
         const masterDepartmentsSnapshot = await getDocs(collection(db, "master-departments"));
@@ -336,9 +339,9 @@ export default function DoctorsPage() {
             const userDocSnap = await getDoc(doc(db, "users", auth.currentUser.uid));
             const clinicId = userDocSnap.data()?.clinicId;
             if (clinicId) {
-                await setDoc(doc(db, "clinics", clinicId, "doctors", docId), doctorToSave, { merge: true });
+                await setDoc(doc(db, "doctors", docId), {...doctorToSave, clinicId: clinicId}, { merge: true });
                 
-                const doctorsQuery = query(collection(db, "clinics", clinicId, "doctors"));
+                const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
                 const updatedDoctors = await getDocs(doctorsQuery);
                 const doctorsList = updatedDoctors.docs.map(doc => ({ id: doc.id, ...doc.data(), clinicId } as Doctor));
                 setDoctors(doctorsList);
@@ -373,7 +376,7 @@ export default function DoctorsPage() {
         if (!selectedDoctor) return;
 
         startTransition(async () => {
-            const doctorRef = doc(db, "clinics", selectedDoctor.clinicId!, "doctors", selectedDoctor.id);
+            const doctorRef = doc(db, "doctors", selectedDoctor.id);
             try {
                 await updateDoc(doctorRef, { availability: newStatus });
                 const updatedDoctor = { ...selectedDoctor, availability: newStatus };
@@ -403,7 +406,7 @@ export default function DoctorsPage() {
         }
 
         startTransition(async () => {
-            const doctorRef = doc(db, "clinics", selectedDoctor.clinicId!, "doctors", selectedDoctor.id);
+            const doctorRef = doc(db, "doctors", selectedDoctor.id);
             try {
                 await updateDoc(doctorRef, { averageConsultingTime: timeValue });
                 const updatedDoctor = { ...selectedDoctor, averageConsultingTime: timeValue };
@@ -434,7 +437,7 @@ export default function DoctorsPage() {
         }
 
         startTransition(async () => {
-            const doctorRef = doc(db, "clinics", selectedDoctor.clinicId!, "doctors", selectedDoctor.id);
+            const doctorRef = doc(db, "doctors", selectedDoctor.id);
             try {
                 await updateDoc(doctorRef, { consultationFee: feeValue });
                 const updatedDoctor = { ...selectedDoctor, consultationFee: feeValue };
@@ -464,7 +467,7 @@ export default function DoctorsPage() {
         }
 
         startTransition(async () => {
-            const doctorRef = doc(db, "clinics", selectedDoctor.clinicId!, "doctors", selectedDoctor.id);
+            const doctorRef = doc(db, "doctors", selectedDoctor.id);
             try {
                 const updatedData = { 
                     name: newName,
@@ -492,7 +495,7 @@ export default function DoctorsPage() {
         if (!selectedDoctor) return;
         
         startTransition(async () => {
-            const doctorRef = doc(db, "clinics", selectedDoctor.clinicId!, "doctors", selectedDoctor.id);
+            const doctorRef = doc(db, "doctors", selectedDoctor.id);
             try {
                 await updateDoc(doctorRef, { bio: newBio });
                 const updatedDoctor = { ...selectedDoctor, bio: newBio };
@@ -531,7 +534,7 @@ export default function DoctorsPage() {
         }))}));
     
         startTransition(async () => {
-            const doctorRef = doc(db, "clinics", selectedDoctor.clinicId!, "doctors", selectedDoctor.id);
+            const doctorRef = doc(db, "doctors", selectedDoctor.id);
             try {
                 await updateDoc(doctorRef, {
                     availabilitySlots: availabilitySlotsToSave,
@@ -568,7 +571,7 @@ export default function DoctorsPage() {
         }).filter(slot => slot.timeSlots.length > 0);
     
         startTransition(async () => {
-            const doctorRef = doc(db, "clinics", selectedDoctor.clinicId!, "doctors", selectedDoctor.id);
+            const doctorRef = doc(db, "doctors", selectedDoctor.id);
             try {
                 await updateDoc(doctorRef, { availabilitySlots: updatedAvailabilitySlots });
                 const updatedDoctor = { ...selectedDoctor, availabilitySlots: updatedAvailabilitySlots };
@@ -637,7 +640,7 @@ export default function DoctorsPage() {
     const handleLeaveUpdate = async (updatedLeaveSlots: LeaveSlot[]) => {
         if (!selectedDoctor) return;
         startTransition(async () => {
-            const doctorRef = doc(db, "clinics", selectedDoctor.clinicId!, "doctors", selectedDoctor.id);
+            const doctorRef = doc(db, "doctors", selectedDoctor.id);
             try {
                 await updateDoc(doctorRef, { leaveSlots: updatedLeaveSlots });
                 const updatedDoctor = { ...selectedDoctor, leaveSlots: updatedLeaveSlots };
@@ -1280,3 +1283,5 @@ export default function DoctorsPage() {
     </>
   );
 }
+
+    

@@ -132,7 +132,7 @@ export default function DoctorAvailability({ selectedDate }: DoctorAvailabilityP
                                         data-ai-hint="doctor portrait"
                                     />
                                     <div>
-                                        <Link href={`/doctors/${doctor.id}`} className="font-semibold text-sm hover:underline">{doctor.name}</Link>
+                                        <Link href={`/doctors?id=${doctor.id}`} className="font-semibold text-sm hover:underline">{doctor.name}</Link>
                                         <p className="text-xs text-muted-foreground">{doctor.specialty}</p>
                                         <StarRating rating={doctor.rating || 0} />
                                     </div>
@@ -169,3 +169,5 @@ export default function DoctorAvailability({ selectedDate }: DoctorAvailabilityP
     </Card>
   );
 }
+
+    

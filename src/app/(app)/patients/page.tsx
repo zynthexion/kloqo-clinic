@@ -56,9 +56,6 @@ export default function PatientsPage() {
     const fetchPatients = async () => {
       try {
         setLoading(true);
-        // In the new structure, patients are global, but we might want to filter by patients who visited this clinic.
-        // For now, let's fetch all patients and filter on client-side, which is not ideal for large scale but works for this scope.
-        // A better approach would be a dedicated backend function or a specific field in patient doc.
         const userDoc = await getDoc(doc(db, "users", auth.currentUser!.uid));
         const clinicId = userDoc.data()?.clinicId;
 
@@ -67,11 +64,9 @@ export default function PatientsPage() {
           return;
         }
 
-        const patientsQuery = query(collection(db, "patients"));
+        const patientsQuery = query(collection(db, "patients"), where("clinicId", "==", clinicId));
         const patientsSnapshot = await getDocs(patientsQuery);
-        const allPatients = patientsSnapshot.docs.map(doc => doc.data() as Patient);
-
-        const clinicPatients = allPatients.filter(p => p.visitHistory?.some(v => v.clinicId === clinicId));
+        const clinicPatients = patientsSnapshot.docs.map(doc => doc.data() as Patient);
 
         setPatients(clinicPatients);
       } catch (error) {
@@ -291,3 +286,5 @@ export default function PatientsPage() {
     </>
   );
 }
+
+    
