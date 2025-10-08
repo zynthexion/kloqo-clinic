@@ -25,7 +25,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { collection, getDocs, setDoc, doc, query, where } from "firebase/firestore";
+import { collection, getDocs, setDoc, doc, query, where, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { MobileApp, User } from "@/lib/types";
 import { Eye, EyeOff, UserCircle, KeyRound, Edit, Save, X } from "lucide-react";
@@ -107,10 +107,10 @@ export default function ProfilePage() {
     const fetchClinicData = async () => {
       setLoading(true);
       const userDocRef = doc(db, "users", auth.currentUser!.uid);
-      const userDocSnap = await getDocs(query(collection(db, "users"), where("uid", "==", auth.currentUser!.uid)));
+      const userDocSnap = await getDoc(userDocRef);
 
-      if (!userDocSnap.empty) {
-          const userData = userDocSnap.docs[0].data() as User;
+      if (userDocSnap.exists()) {
+          const userData = userDocSnap.data() as User;
           setUserProfile(userData);
           profileForm.reset({
               name: userData.name,
@@ -470,3 +470,5 @@ export default function ProfilePage() {
     </>
   );
 }
+
+    
