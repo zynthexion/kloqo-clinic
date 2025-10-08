@@ -49,7 +49,7 @@ export type Appointment = {
   id:string;
   clinicId: string;
   patientId: string;
-  doctorId: string;
+  doctorId?: string; // Made optional
   patientName: string;
   gender: 'Male' | 'Female' | 'Other';
   phone: string;
