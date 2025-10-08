@@ -14,6 +14,12 @@ export type LeaveSlot = {
     slots: TimeSlot[];
 }
 
+export type BookedSlot = {
+    date: string;
+    time: string;
+    tokenNumber: string;
+};
+
 export type Doctor = {
   id: string;
   clinicId: string;
@@ -36,6 +42,7 @@ export type Doctor = {
   rating?: number;
   reviews?: number;
   consultationFee?: number;
+  bookedSlots?: BookedSlot[];
 };
 
 export type Appointment = {
