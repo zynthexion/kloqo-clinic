@@ -71,7 +71,7 @@ export default function OverviewStats({ dateRange, doctorId }: OverviewStatsProp
         const [appointmentsSnapshot, doctorsSnapshot, patientsSnapshot] = await Promise.all([
           getDocs(appointmentsQuery),
           getDocs(doctorsQuery),
-          getDocs(patientsSnapshot)
+          getDocs(patientsQuery)
         ]);
 
         let allAppointments = appointmentsSnapshot.docs.map(doc => doc.data() as Appointment);
