@@ -183,17 +183,17 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
           return;
         }
 
-        const appointmentsQuery = query(collection(db, "clinics", clinicId, "appointments"));
+        const appointmentsQuery = query(collection(db, "appointments"), where("clinicId", "==", clinicId));
         const appointmentsSnapshot = await getDocs(appointmentsQuery);
         const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
         setAppointments(appointmentsList);
     
-        const patientsQuery = query(collection(db, "clinics", clinicId, "patients"));
+        const patientsQuery = query(collection(db, "patients"), where("clinicId", "==", clinicId));
         const patientsSnapshot = await getDocs(patientsQuery);
         const patientsList = patientsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Patient));
         setAllPatients(patientsList);
     
-        const doctorsQuery = query(collection(db, "clinics", clinicId, "doctors"));
+        const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
         const doctorsSnapshot = await getDocs(doctorsQuery);
         const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
         setDoctors(doctorsList);
@@ -287,7 +287,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
       };
 
       const patientId = encodeURIComponent(`${values.patientName}-${values.phone}`);
-      const patientRef = doc(db, "clinics", clinicId, "patients", patientId);
+      const patientRef = doc(db, "patients", patientId);
       const patientDoc = await getFirestoreDoc(patientRef);
 
       if (patientDoc.exists()) {
@@ -317,6 +317,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
       const dataToSave: Appointment = {
           ...values,
           id: appointmentId,
+          patientId: patientId,
           date: appointmentDateStr,
           time: appointmentTimeStr,
           doctor: doctorName,
@@ -325,7 +326,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
           clinicId,
       };
 
-      const appointmentRef = doc(db, "clinics", clinicId, "appointments", appointmentId);
+      const appointmentRef = doc(db, "appointments", appointmentId);
       await setDoc(appointmentRef, dataToSave, { merge: true });
 
       if (isEditing) {
@@ -1070,3 +1071,4 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
   );
 }
 
+    
