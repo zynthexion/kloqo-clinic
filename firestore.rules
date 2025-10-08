@@ -53,11 +53,10 @@ service cloud.firestore {
         allow write: if isClinicStaff(request.resource.data.clinicId);
     }
 
-    // Patients can create their own record.
-    // They can only read/update their own record.
-    // Clinic staff can read patient records associated with their clinic (e.g. for booking).
+    // Patients can be created by staff of the same clinic.
+    // Patients can be read/updated by themselves or clinic staff.
     match /patients/{patientId} {
-      allow create: if isOwner(patientId);
+      allow create: if isClinicStaff(request.resource.data.clinicId);
       allow read, update: if isOwner(patientId) || isClinicStaff(getUserClinicId(request.auth.uid));
     }
     

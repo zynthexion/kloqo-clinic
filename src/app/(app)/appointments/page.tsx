@@ -273,19 +273,52 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
             toast({ variant: "destructive", title: "Error", description: "No clinic associated with this user." });
             return;
           }
+
+          const patientsQuery = query(collection(db, "patients"), where("phone", "==", values.phone), where("clinicId", "==", clinicId));
+          const patientSnapshot = await getDocs(patientsQuery);
+
+          let patientId: string;
+          let patientRef: any;
+
+          if (!patientSnapshot.empty) {
+            patientId = patientSnapshot.docs[0].id;
+            patientRef = patientSnapshot.docs[0].ref;
+          } else {
+            patientRef = doc(collection(db, "patients"));
+            patientId = patientRef.id;
+            const newPatientData: Patient = {
+              id: patientId,
+              clinicId,
+              name: values.patientName,
+              age: values.age,
+              gender: values.gender,
+              phone: values.phone,
+              place: values.place,
+              totalAppointments: 0,
+              visitHistory: [],
+            };
+            await setDoc(patientRef, newPatientData);
+            
+            const clinicRef = doc(db, "clinics", clinicId);
+            await updateDoc(clinicRef, {
+                patients: arrayUnion(patientId)
+            });
+
+            setAllPatients(prev => [...prev, newPatientData]);
+          }
           
           const doctorName = doctors.find(d => d.id === values.doctor)?.name || "Unknown Doctor";
           const appointmentDateStr = format(values.date, "d MMMM yyyy");
           const appointmentTimeStr = format(parseDateFns(values.time, "HH:mm", new Date()), "hh:mm a");
 
-          const appointmentId = isEditing ? values.id! : `APT-${Date.now()}`;
+          const appointmentId = isEditing ? values.id! : doc(collection(db, "appointments")).id;
           const prefix = values.bookedVia === 'Phone' ? 'P' : values.bookedVia === 'Walk-in' ? 'W' : 'A';
           const tokenNumber = isEditing ? values.tokenNumber! : `${prefix}${(appointments.length + 1).toString().padStart(3, '0')}`;
           
           const dataToSave: Appointment = {
               ...values,
               id: appointmentId,
-              patientId: values.phone, // Using phone as a pseudo-unique ID for now
+              patientId: patientId,
               date: appointmentDateStr,
               time: appointmentTimeStr,
               doctor: doctorName,
@@ -297,6 +330,21 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
 
           const appointmentRef = doc(db, "appointments", appointmentId);
           await setDoc(appointmentRef, dataToSave, { merge: true });
+
+          const newVisit: Visit = {
+              appointmentId: appointmentId,
+              date: appointmentDateStr,
+              time: appointmentTimeStr,
+              doctor: doctorName,
+              department: values.department,
+              treatment: "General Consultation",
+              status: "Pending"
+          };
+           await updateDoc(patientRef, {
+              visitHistory: arrayUnion(newVisit),
+              totalAppointments: increment(1)
+          });
+
 
           // Update doctor's booked slots
           const doctorRef = doc(db, "doctors", values.doctor);
