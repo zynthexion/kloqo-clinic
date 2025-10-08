@@ -15,6 +15,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import { Input } from "@/components/ui/input";
 import {
   Form,
@@ -237,201 +243,216 @@ export default function ProfilePage() {
       <div>
         <ProfileHeader />
         <main className="flex-1 p-6 bg-background">
-          <div className="max-w-4xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-             <div className="space-y-6">
-                <Card>
-                    <CardHeader>
-                        <div className="flex items-center justify-between">
-                            <CardTitle>Your Profile</CardTitle>
-                            {!isEditingProfile && (
-                                <Button variant="outline" size="icon" onClick={() => setIsEditingProfile(true)} disabled={isPending}>
-                                    <Edit className="w-4 h-4"/>
-                                </Button>
-                            )}
-                        </div>
-                        <CardDescription>Your personal and login information.</CardDescription>
-                    </CardHeader>
-                    <Form {...profileForm}>
-                        <form onSubmit={profileForm.handleSubmit(onProfileSubmit)}>
-                            <CardContent className="space-y-4">
-                                <FormField control={profileForm.control} name="name" render={({ field }) => (
-                                    <FormItem><FormLabel>Admin Name</FormLabel><FormControl><Input {...field} disabled={!isEditingProfile || isPending} /></FormControl><FormMessage /></FormItem>
-                                )}/>
-                                <FormItem><FormLabel>Email Address</FormLabel><Input type="email" value={userProfile?.email || ""} disabled /></FormItem>
-                                <FormField control={profileForm.control} name="phone" render={({ field }) => (
-                                    <FormItem><FormLabel>Phone</FormLabel><FormControl><Input {...field} disabled={!isEditingProfile || isPending} /></FormControl><FormMessage /></FormItem>
-                                )}/>
-                                {isEditingProfile && (
-                                    <div className="flex justify-end gap-2 pt-4">
-                                        <Button type="button" variant="ghost" onClick={handleCancelProfile} disabled={isPending}>Cancel</Button>
-                                        <Button type="submit" disabled={isPending}>
-                                            {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />}
-                                            Save Changes
+          <div className="max-w-4xl mx-auto">
+            <Accordion type="single" collapsible defaultValue="item-1" className="w-full">
+                <AccordionItem value="item-1">
+                    <AccordionTrigger className="text-lg font-semibold">Your Profile</AccordionTrigger>
+                    <AccordionContent>
+                        <Card className="border-0 shadow-none">
+                            <CardHeader>
+                                <div className="flex items-center justify-between">
+                                    <CardTitle>Login & Personal Information</CardTitle>
+                                    {!isEditingProfile && (
+                                        <Button variant="outline" size="icon" onClick={() => setIsEditingProfile(true)} disabled={isPending}>
+                                            <Edit className="w-4 h-4"/>
                                         </Button>
-                                    </div>
-                                )}
-                            </CardContent>
-                        </form>
-                    </Form>
-                    <Separator />
-                    <CardFooter className="pt-6">
-                        <Form {...passwordForm}>
-                            <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="w-full space-y-4">
-                                <p className="font-medium text-sm">Change Password</p>
-                                <FormField control={passwordForm.control} name="newPassword" render={({ field }) => (
-                                    <FormItem><FormLabel>New Password</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>
-                                )}/>
-                                <FormField control={passwordForm.control} name="confirmPassword" render={({ field }) => (
-                                    <FormItem><FormLabel>Confirm New Password</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>
-                                )}/>
-                                <Button type="submit" variant="secondary" className="w-full">Set New Password</Button>
-                            </form>
-                        </Form>
-                    </CardFooter>
-                </Card>
-                <Card>
-                    <CardHeader>
-                        <div className="flex items-center justify-between">
-                             <CardTitle>Clinic Details</CardTitle>
-                             {!isEditingClinic && (
-                                <Button variant="outline" size="icon" onClick={() => setIsEditingClinic(true)} disabled={isPending}>
-                                    <Edit className="w-4 h-4"/>
-                                </Button>
-                            )}
-                        </div>
-                        <CardDescription>General information about your clinic.</CardDescription>
-                    </CardHeader>
-                     <Form {...clinicForm}>
-                        <form onSubmit={clinicForm.handleSubmit(onClinicSubmit)}>
-                            <CardContent className="space-y-4">
-                                 <FormField control={clinicForm.control} name="clinicName" render={({ field }) => (
-                                    <FormItem><FormLabel>Clinic Name</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
-                                )}/>
-                                 <FormField control={clinicForm.control} name="clinicType" render={({ field }) => (
-                                    <FormItem><FormLabel>Clinic Type</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value} disabled={!isEditingClinic || isPending}>
-                                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                                        <SelectContent>
-                                            <SelectItem value="Single Doctor">Single Doctor</SelectItem>
-                                            <SelectItem value="Multi-Doctor">Multi-Doctor</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    <FormMessage /></FormItem>
-                                 )}/>
-                                 <FormField control={clinicForm.control} name="numDoctors" render={({ field }) => (
-                                    <FormItem><FormLabel>Number of Doctors</FormLabel><FormControl><Input type="number" {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
-                                 )}/>
-                                 <FormField control={clinicForm.control} name="clinicRegNumber" render={({ field }) => (
-                                    <FormItem><FormLabel>Clinic Registration Number</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
-                                 )}/>
-                                <FormItem>
-                                    <FormLabel>Address</FormLabel>
-                                    <Input value={clinicDetails?.address || "Not set"} disabled />
-                                </FormItem>
-                                <FormField control={clinicForm.control} name="mapsLink" render={({ field }) => (
-                                    <FormItem><FormLabel>Google Maps Link</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
-                                 )}/>
-                                <FormItem>
-                                    <FormLabel>Operating Hours</FormLabel>
-                                    <div className="space-y-2 rounded-md border p-3 text-sm">
-                                        {clinicDetails?.operatingHours?.map((hour: {day: string, isClosed: boolean, timeSlots: TimeSlot[]}) => (
-                                            <div key={hour.day} className="flex justify-between">
-                                                <span>{hour.day}</span>
-                                                <span className="font-semibold">{hour.isClosed ? "Closed" : hour.timeSlots.map(ts => `${ts.open} - ${ts.close}`).join(', ')}</span>
+                                    )}
+                                </div>
+                                <CardDescription>Your personal and login information.</CardDescription>
+                            </CardHeader>
+                             <Form {...profileForm}>
+                                <form onSubmit={profileForm.handleSubmit(onProfileSubmit)}>
+                                    <CardContent className="space-y-4">
+                                        <FormField control={profileForm.control} name="name" render={({ field }) => (
+                                            <FormItem><FormLabel>Admin Name</FormLabel><FormControl><Input {...field} disabled={!isEditingProfile || isPending} /></FormControl><FormMessage /></FormItem>
+                                        )}/>
+                                        <FormItem><FormLabel>Email Address</FormLabel><Input type="email" value={userProfile?.email || ""} disabled /></FormItem>
+                                        <FormField control={profileForm.control} name="phone" render={({ field }) => (
+                                            <FormItem><FormLabel>Phone</FormLabel><FormControl><Input {...field} disabled={!isEditingProfile || isPending} /></FormControl><FormMessage /></FormItem>
+                                        )}/>
+                                        {isEditingProfile && (
+                                            <div className="flex justify-end gap-2 pt-4">
+                                                <Button type="button" variant="ghost" onClick={handleCancelProfile} disabled={isPending}>Cancel</Button>
+                                                <Button type="submit" disabled={isPending}>
+                                                    {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />}
+                                                    Save Changes
+                                                </Button>
                                             </div>
-                                        ))}
-                                    </div>
-                                </FormItem>
-                                <FormItem>
-                                     <FormLabel>Plan</FormLabel>
-                                     <div><Badge>{clinicDetails?.plan || "Not set"}</Badge></div>
-                                </FormItem>
-
-                                {isEditingClinic && (
-                                    <div className="flex justify-end gap-2 pt-4">
-                                        <Button type="button" variant="ghost" onClick={handleCancelClinic} disabled={isPending}>Cancel</Button>
-                                        <Button type="submit" disabled={isPending}>
-                                            {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />}
-                                            Save Changes
-                                        </Button>
-                                    </div>
-                                )}
-                            </CardContent>
-                        </form>
-                    </Form>
-                </Card>
-             </div>
-             <div className="space-y-6">
-                <Card>
-                    {loading ? (
-                        <CardHeader><CardTitle>Loading...</CardTitle></CardHeader>
-                    ) : isEditingMobile || !credentials ? (
-                        <>
-                        <CardHeader>
-                        <CardTitle>{credentials ? "Update Mobile App Login" : "Set Mobile App Login"}</CardTitle>
-                        <CardDescription>Set or update the username and password for the mobile token management app.</CardDescription>
-                        </CardHeader>
-                        <Form {...mobileAppForm}>
-                        <form onSubmit={mobileAppForm.handleSubmit(onMobileAppSubmit)}>
-                            <CardContent className="space-y-4">
-                            <FormField control={mobileAppForm.control} name="username" render={({ field }) => (
-                                <FormItem><FormLabel>Username</FormLabel><FormControl><Input placeholder="mobile-user" {...field} disabled={isPending} /></FormControl><FormMessage /></FormItem>
-                            )}/>
-                            <FormField control={mobileAppForm.control} name="password" render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>{credentials ? "New Password" : "Password"}</FormLabel>
-                                    <div className="relative">
-                                    <FormControl>
-                                        <Input type={showPassword ? "text" : "password"} placeholder="••••••••" {...field} className="pr-10" disabled={isPending}/>
-                                    </FormControl>
-                                    <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground" onClick={() => setShowPassword(!showPassword)}>
-                                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                    </Button>
-                                    </div>
-                                    <FormMessage />
-                                </FormItem>
-                            )}/>
-                            </CardContent>
-                            <CardFooter className="flex justify-end gap-2">
-                            {credentials && <Button type="button" variant="outline" onClick={handleCancelMobile} disabled={isPending}>Cancel</Button>}
-                            <Button type="submit" disabled={isPending}>
-                                {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : "Save Credentials"}
-                            </Button>
+                                        )}
+                                    </CardContent>
+                                </form>
+                            </Form>
+                            <Separator />
+                            <CardFooter className="pt-6">
+                                <Form {...passwordForm}>
+                                    <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="w-full space-y-4">
+                                        <p className="font-medium text-sm">Change Password</p>
+                                        <FormField control={passwordForm.control} name="newPassword" render={({ field }) => (
+                                            <FormItem><FormLabel>New Password</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>
+                                        )}/>
+                                        <FormField control={passwordForm.control} name="confirmPassword" render={({ field }) => (
+                                            <FormItem><FormLabel>Confirm New Password</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>
+                                        )}/>
+                                        <Button type="submit" variant="secondary" className="w-full">Set New Password</Button>
+                                    </form>
+                                </Form>
                             </CardFooter>
-                        </form>
-                        </Form>
-                        </>
-                    ) : (
-                        <>
-                        <CardHeader>
-                            <CardTitle>Mobile App Credentials</CardTitle>
-                            <CardDescription>This is the login information for the mobile token management app.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="flex items-center gap-4 rounded-lg border p-4 bg-muted/40">
-                                <UserCircle className="h-10 w-10 text-muted-foreground" />
-                                <div><p className="text-sm text-muted-foreground">Username</p><p className="text-lg font-semibold">{credentials.username}</p></div>
-                            </div>
-                            <div className="flex items-center gap-4 rounded-lg border p-4 bg-muted/40">
-                                <KeyRound className="h-10 w-10 text-muted-foreground" />
-                                <div><p className="text-sm text-muted-foreground">Password</p><p className="text-lg font-semibold">{showSavedPassword ? credentials.password : "••••••••"}</p></div>
-                            </div>
-                            <CardDescription className="text-xs text-center">The password shown is the last one saved to the database.</CardDescription>
-                        </CardContent>
-                        <CardFooter className="flex justify-end gap-2">
-                            <Button variant="secondary" onClick={() => setShowSavedPassword(prev => !prev)}>
-                                {showSavedPassword ? <EyeOff className="mr-2"/> : <Eye className="mr-2"/>}
-                                {showSavedPassword ? 'Hide' : 'Reveal'} Password
-                            </Button>
-                            <Button onClick={() => setIsEditingMobile(true)}>Update Credentials</Button>
-                        </CardFooter>
-                        </>
-                    )}
-                </Card>
-             </div>
+                        </Card>
+                    </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="item-2">
+                    <AccordionTrigger className="text-lg font-semibold">Clinic Details</AccordionTrigger>
+                    <AccordionContent>
+                         <Card className="border-0 shadow-none">
+                            <CardHeader>
+                                <div className="flex items-center justify-between">
+                                    <CardTitle>General Information</CardTitle>
+                                    {!isEditingClinic && (
+                                        <Button variant="outline" size="icon" onClick={() => setIsEditingClinic(true)} disabled={isPending}>
+                                            <Edit className="w-4 h-4"/>
+                                        </Button>
+                                    )}
+                                </div>
+                                <CardDescription>General information about your clinic.</CardDescription>
+                            </CardHeader>
+                            <Form {...clinicForm}>
+                                <form onSubmit={clinicForm.handleSubmit(onClinicSubmit)}>
+                                    <CardContent className="space-y-4">
+                                        <FormField control={clinicForm.control} name="clinicName" render={({ field }) => (
+                                            <FormItem><FormLabel>Clinic Name</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
+                                        )}/>
+                                        <FormField control={clinicForm.control} name="clinicType" render={({ field }) => (
+                                            <FormItem><FormLabel>Clinic Type</FormLabel>
+                                            <Select onValueChange={field.onChange} value={field.value} disabled={!isEditingClinic || isPending}>
+                                                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                                <SelectContent>
+                                                    <SelectItem value="Single Doctor">Single Doctor</SelectItem>
+                                                    <SelectItem value="Multi-Doctor">Multi-Doctor</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            <FormMessage /></FormItem>
+                                        )}/>
+                                        <FormField control={clinicForm.control} name="numDoctors" render={({ field }) => (
+                                            <FormItem><FormLabel>Number of Doctors</FormLabel><FormControl><Input type="number" {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
+                                        )}/>
+                                        <FormField control={clinicForm.control} name="clinicRegNumber" render={({ field }) => (
+                                            <FormItem><FormLabel>Clinic Registration Number</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
+                                        )}/>
+                                        <FormItem>
+                                            <FormLabel>Address</FormLabel>
+                                            <Input value={clinicDetails?.address || "Not set"} disabled />
+                                        </FormItem>
+                                        <FormField control={clinicForm.control} name="mapsLink" render={({ field }) => (
+                                            <FormItem><FormLabel>Google Maps Link</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
+                                        )}/>
+                                        <FormItem>
+                                            <FormLabel>Operating Hours</FormLabel>
+                                            <div className="space-y-2 rounded-md border p-3 text-sm">
+                                                {clinicDetails?.operatingHours?.map((hour: {day: string, isClosed: boolean, timeSlots: TimeSlot[]}) => (
+                                                    <div key={hour.day} className="flex justify-between">
+                                                        <span>{hour.day}</span>
+                                                        <span className="font-semibold">{hour.isClosed ? "Closed" : hour.timeSlots.map(ts => `${ts.open} - ${ts.close}`).join(', ')}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </FormItem>
+                                        <FormItem>
+                                            <FormLabel>Plan</FormLabel>
+                                            <div><Badge>{clinicDetails?.plan || "Not set"}</Badge></div>
+                                        </FormItem>
+
+                                        {isEditingClinic && (
+                                            <div className="flex justify-end gap-2 pt-4">
+                                                <Button type="button" variant="ghost" onClick={handleCancelClinic} disabled={isPending}>Cancel</Button>
+                                                <Button type="submit" disabled={isPending}>
+                                                    {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />}
+                                                    Save Changes
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </form>
+                            </Form>
+                        </Card>
+                    </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="item-3">
+                    <AccordionTrigger className="text-lg font-semibold">Mobile App</AccordionTrigger>
+                    <AccordionContent>
+                         <Card className="border-0 shadow-none">
+                            {loading ? (
+                                <CardHeader><CardTitle>Loading...</CardTitle></CardHeader>
+                            ) : isEditingMobile || !credentials ? (
+                                <>
+                                <CardHeader>
+                                <CardTitle>{credentials ? "Update Mobile App Login" : "Set Mobile App Login"}</CardTitle>
+                                <CardDescription>Set or update the username and password for the mobile token management app.</CardDescription>
+                                </CardHeader>
+                                <Form {...mobileAppForm}>
+                                <form onSubmit={mobileAppForm.handleSubmit(onMobileAppSubmit)}>
+                                    <CardContent className="space-y-4">
+                                    <FormField control={mobileAppForm.control} name="username" render={({ field }) => (
+                                        <FormItem><FormLabel>Username</FormLabel><FormControl><Input placeholder="mobile-user" {...field} disabled={isPending} /></FormControl><FormMessage /></FormItem>
+                                    )}/>
+                                    <FormField control={mobileAppForm.control} name="password" render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>{credentials ? "New Password" : "Password"}</FormLabel>
+                                            <div className="relative">
+                                            <FormControl>
+                                                <Input type={showPassword ? "text" : "password"} placeholder="••••••••" {...field} className="pr-10" disabled={isPending}/>
+                                            </FormControl>
+                                            <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground" onClick={() => setShowPassword(!showPassword)}>
+                                                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                            </Button>
+                                            </div>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}/>
+                                    </CardContent>
+                                    <CardFooter className="flex justify-end gap-2">
+                                    {credentials && <Button type="button" variant="outline" onClick={handleCancelMobile} disabled={isPending}>Cancel</Button>}
+                                    <Button type="submit" disabled={isPending}>
+                                        {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : "Save Credentials"}
+                                    </Button>
+                                    </CardFooter>
+                                </form>
+                                </Form>
+                                </>
+                            ) : (
+                                <>
+                                <CardHeader>
+                                    <CardTitle>Mobile App Credentials</CardTitle>
+                                    <CardDescription>This is the login information for the mobile token management app.</CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div className="flex items-center gap-4 rounded-lg border p-4 bg-muted/40">
+                                        <UserCircle className="h-10 w-10 text-muted-foreground" />
+                                        <div><p className="text-sm text-muted-foreground">Username</p><p className="text-lg font-semibold">{credentials.username}</p></div>
+                                    </div>
+                                    <div className="flex items-center gap-4 rounded-lg border p-4 bg-muted/40">
+                                        <KeyRound className="h-10 w-10 text-muted-foreground" />
+                                        <div><p className="text-sm text-muted-foreground">Password</p><p className="text-lg font-semibold">{showSavedPassword ? credentials.password : "••••••••"}</p></div>
+                                    </div>
+                                    <CardDescription className="text-xs text-center">The password shown is the last one saved to the database.</CardDescription>
+                                </CardContent>
+                                <CardFooter className="flex justify-end gap-2">
+                                    <Button variant="secondary" onClick={() => setShowSavedPassword(prev => !prev)}>
+                                        {showSavedPassword ? <EyeOff className="mr-2"/> : <Eye className="mr-2"/>}
+                                        {showSavedPassword ? 'Hide' : 'Reveal'} Password
+                                    </Button>
+                                    <Button onClick={() => setIsEditingMobile(true)}>Update Credentials</Button>
+                                </CardFooter>
+                                </>
+                            )}
+                        </Card>
+                    </AccordionContent>
+                </AccordionItem>
+            </Accordion>
           </div>
         </main>
       </div>
     </>
   );
 }
+
+    
