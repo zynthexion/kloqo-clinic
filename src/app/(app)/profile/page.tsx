@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { useForm } from "react-hook-form";
+import { useForm } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { ProfileHeader } from "@/components/layout/header";
@@ -34,6 +34,7 @@ import { useAuth } from "@/firebase";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
 
 const mobileAppFormSchema = z.object({
   username: z.string().min(2, "Username must be at least 2 characters."),
@@ -42,6 +43,7 @@ const mobileAppFormSchema = z.object({
 type MobileAppFormValues = z.infer<typeof mobileAppFormSchema>;
 
 const passwordFormSchema = z.object({
+    currentPassword: z.string().min(1, "Please enter your current password."),
     newPassword: z.string().min(6, "New password must be at least 6 characters."),
     confirmPassword: z.string().min(6, "Please confirm your new password."),
 }).refine(data => data.newPassword === data.confirmPassword, {
@@ -84,7 +86,7 @@ export default function ProfilePage() {
   const { toast } = useToast();
 
   const mobileAppForm = useForm<MobileAppFormValues>({ resolver: zodResolver(mobileAppFormSchema), defaultValues: { username: "", password: "" } });
-  const passwordForm = useForm<PasswordFormValues>({ resolver: zodResolver(passwordFormSchema), defaultValues: { newPassword: "", confirmPassword: "" } });
+  const passwordForm = useForm<PasswordFormValues>({ resolver: zodResolver(passwordFormSchema), defaultValues: { currentPassword: "", newPassword: "", confirmPassword: "" } });
   const profileForm = useForm<ProfileFormValues>({ resolver: zodResolver(profileFormSchema), defaultValues: { name: "", phone: "" } });
   const clinicForm = useForm<ClinicFormValues>({ 
       resolver: zodResolver(clinicFormSchema), 
@@ -173,10 +175,27 @@ export default function ProfilePage() {
     });
   };
 
-  const onPasswordSubmit = (values: PasswordFormValues) => {
-    console.log(values);
-    toast({ title: "Password Updated", description: "Your password has been changed successfully." });
-    passwordForm.reset();
+  const onPasswordSubmit = async (values: PasswordFormValues) => {
+    if (!auth.currentUser || !auth.currentUser.email) return;
+
+    startTransition(async () => {
+        const credential = EmailAuthProvider.credential(auth.currentUser!.email!, values.currentPassword);
+        try {
+            await reauthenticateWithCredential(auth.currentUser!, credential);
+            await updatePassword(auth.currentUser!, values.newPassword);
+            toast({ title: "Password Updated", description: "Your password has been changed successfully." });
+            passwordForm.reset();
+        } catch (error: any) {
+            console.error("Password update error:", error);
+            toast({
+                variant: "destructive",
+                title: "Update Failed",
+                description: error.code === 'auth/wrong-password' 
+                    ? "Incorrect current password. Please try again."
+                    : "Failed to update password. Please try again later.",
+            });
+        }
+    });
   }
 
   const onProfileSubmit = async (values: ProfileFormValues) => {
@@ -277,13 +296,19 @@ export default function ProfilePage() {
                           <Form {...passwordForm}>
                               <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="w-full space-y-4">
                                   <p className="font-medium text-sm">Change Password</p>
+                                  <FormField control={passwordForm.control} name="currentPassword" render={({ field }) => (
+                                      <FormItem><FormLabel>Current Password</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>
+                                  )}/>
                                   <FormField control={passwordForm.control} name="newPassword" render={({ field }) => (
                                       <FormItem><FormLabel>New Password</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>
                                   )}/>
                                   <FormField control={passwordForm.control} name="confirmPassword" render={({ field }) => (
                                       <FormItem><FormLabel>Confirm New Password</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>
                                   )}/>
-                                  <Button type="submit" variant="secondary" className="w-full">Set New Password</Button>
+                                  <Button type="submit" variant="secondary" className="w-full" disabled={isPending}>
+                                    {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                                    Set New Password
+                                  </Button>
                               </form>
                           </Form>
                       </CardFooter>
@@ -472,3 +497,5 @@ export default function ProfilePage() {
     </>
   );
 }
+
+    
