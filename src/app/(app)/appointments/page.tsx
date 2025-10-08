@@ -93,7 +93,7 @@ export default function AppointmentsPage() {
   const handleComplete = async (appointment: Appointment) => {
     setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Completed' } : a));
     if (appointment.id) {
-        const appointmentRef = doc(db, "clinics", auth.currentUser!.uid, "appointments", appointment.id);
+        const appointmentRef = doc(db, "appointments", appointment.id);
         await setDoc(appointmentRef, { status: "Completed" }, { merge: true });
     }
   };
@@ -106,7 +106,7 @@ export default function AppointmentsPage() {
     ];
   });
   if (appointment.id) {
-    const appointmentRef = doc(db, "clinics", auth.currentUser!.uid, "appointments", appointment.id);
+    const appointmentRef = doc(db, "appointments", appointment.id);
     await setDoc(appointmentRef, { isSkipped: true }, { merge: true });
   }
 };
@@ -1086,4 +1086,3 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
   );
 }
 
-    
