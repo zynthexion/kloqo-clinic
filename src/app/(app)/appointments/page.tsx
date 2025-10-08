@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Appointment, Doctor, Patient, Visit } from "@/lib/types";
-import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, addDoc } from "firebase/firestore";
+import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, addDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear } from "date-fns";
@@ -39,7 +39,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints } from "lucide-react";
+import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2 } from "lucide-react";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
@@ -68,14 +68,15 @@ const formSchema = z.object({
   department: z.string().min(1, { message: "Department is required." }),
   date: z.date({
     required_error: "A date is required."
-  }).optional(),
+  }),
   time: z.string().min(1, "Please select a time."),
   place: z.string().min(2, { message: "Place must be at least 2 characters." }),
   bookedVia: z.enum(["Phone", "Walk-in", "Online"]),
   tokenNumber: z.string().optional(),
+  patientId: z.string().optional(),
 });
 
-type AddAppointmentFormValues = z.infer<typeof formSchema>;
+type AppointmentFormValues = z.infer<typeof formSchema>;
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -122,6 +123,7 @@ export default function AppointmentsPage() {
   const [patientSearchResults, setPatientSearchResults] = useState<Patient[]>([]);
   const [isPatientPopoverOpen, setIsPatientPopoverOpen] = useState(false);
   const [bookingType, setBookingType] = useState("existing");
+  const [isPending, startTransition] = useTransition();
 
   const [drawerSearchTerm, setDrawerSearchTerm] = useState("");
   const [filterAvailableDoctors, setFilterAvailableDoctors] = useState(false);
@@ -136,7 +138,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
 
   const isEditing = !!editingAppointment;
 
-  const form = useForm<AddAppointmentFormValues>({
+  const form = useForm<AppointmentFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       patientName: "",
@@ -257,138 +259,102 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
   const selectedDate = form.watch("date");
 
 
-  async function onSubmit(values: AddAppointmentFormValues) {
+  async function onSubmit(values: AppointmentFormValues) {
     if (!auth.currentUser) {
         toast({ variant: "destructive", title: "Not Authenticated", description: "You must be logged in to book an appointment."});
         return;
     }
+    
+    startTransition(async () => {
+        try {
+          const userDoc = await getFirestoreDoc(doc(db, "users", auth.currentUser!.uid));
+          const clinicId = userDoc.data()?.clinicId;
+          if (!clinicId) {
+            toast({ variant: "destructive", title: "Error", description: "No clinic associated with this user." });
+            return;
+          }
+          
+          const doctorName = doctors.find(d => d.id === values.doctor)?.name || "Unknown Doctor";
+          const appointmentDateStr = format(values.date, "d MMMM yyyy");
+          const appointmentTimeStr = format(parseDateFns(values.time, "HH:mm", new Date()), "hh:mm a");
 
-    try {
-      const userDoc = await getFirestoreDoc(doc(db, "users", auth.currentUser.uid));
-      const clinicId = userDoc.data()?.clinicId;
-      if (!clinicId) {
-        toast({ variant: "destructive", title: "Error", description: "No clinic associated with this user." });
-        return;
-      }
-      
-      const doctorName = doctors.find(d => d.id === values.doctor)?.name || "Unknown Doctor";
-      const appointmentDateStr = format(values.date ?? (Array.isArray(values.date) ? values.date[0] : new Date()), "d MMMM yyyy");
-      const appointmentTimeStr = format(parseDateFns(values.time, "HH:mm", new Date()), "hh:mm a");
-
-      let patientId: string;
-      let patientRef;
-      
-      // Check for existing patient
-      const patientQuery = query(collection(db, "patients"), where("clinicId", "==", clinicId), where("phone", "==", values.phone));
-      const patientSnapshot = await getDocs(patientQuery);
-      
-      if (!patientSnapshot.empty) {
-        // Patient exists
-        const patientDoc = patientSnapshot.docs[0];
-        patientId = patientDoc.id;
-        patientRef = patientDoc.ref;
-
-        await updateDoc(patientRef, {
-            totalAppointments: increment(1)
-        });
-      } else {
-        // New patient
-        const newPatientData: Omit<Patient, 'id'> = {
-            clinicId,
-            name: values.patientName,
-            age: values.age,
-            gender: values.gender,
-            phone: values.phone,
-            place: values.place,
-            totalAppointments: 1,
-            visitHistory: []
-        };
-        const newPatientRef = await addDoc(collection(db, "patients"), newPatientData);
-        patientId = newPatientRef.id;
-        patientRef = newPatientRef;
-        setAllPatients(prev => [...prev, {id: patientId, ...newPatientData}]);
-      }
-      
-      const appointmentId = isEditing ? values.id! : `APT-${Date.now()}`;
-      
-      const newVisit: Visit = {
-          appointmentId: appointmentId,
-          date: appointmentDateStr,
-          time: appointmentTimeStr,
-          doctor: doctorName,
-          department: values.department,
-          treatment: "General Consultation",
-          status: "Pending"
-      };
-
-      await updateDoc(patientRef, {
-        visitHistory: arrayUnion(newVisit)
-      });
-      
-
-      const prefix = values.bookedVia === 'Phone' ? 'P' : values.bookedVia === 'Walk-in' ? 'W' : 'A';
-      const tokenNumber = `${prefix}${(appointments.length + 1).toString().padStart(3, '0')}`;
-
-      const dataToSave: Appointment = {
-          ...values,
-          id: appointmentId,
-          patientId: patientId,
-          date: appointmentDateStr,
-          time: appointmentTimeStr,
-          doctor: doctorName,
-          status: "Pending",
-          treatment: "General Consultation",
-          clinicId,
-          tokenNumber,
-      };
-
-      const appointmentRef = doc(db, "appointments", appointmentId);
-      await setDoc(appointmentRef, dataToSave, { merge: true });
-
-      // Update doctor's booked slots
-      const doctorRef = doc(db, "doctors", values.doctor);
-      await updateDoc(doctorRef, {
-          bookedSlots: arrayUnion({
+          const appointmentId = isEditing ? values.id! : `APT-${Date.now()}`;
+          const prefix = values.bookedVia === 'Phone' ? 'P' : values.bookedVia === 'Walk-in' ? 'W' : 'A';
+          const tokenNumber = isEditing ? values.tokenNumber! : `${prefix}${(appointments.length + 1).toString().padStart(3, '0')}`;
+          
+          const dataToSave: Appointment = {
+              ...values,
+              id: appointmentId,
+              patientId: values.phone, // Using phone as a pseudo-unique ID for now
               date: appointmentDateStr,
               time: appointmentTimeStr,
-              tokenNumber: tokenNumber
-          })
-      });
+              doctor: doctorName,
+              status: isEditing ? "Confirmed" : "Pending",
+              treatment: "General Consultation",
+              clinicId,
+              tokenNumber,
+          };
 
-      if (isEditing) {
-          setAppointments(prev => prev.map(apt => apt.id === appointmentId ? dataToSave : apt));
-          toast({
-              title: "Appointment Rescheduled",
-              description: `Appointment for ${dataToSave.patientName} has been updated.`,
+          const appointmentRef = doc(db, "appointments", appointmentId);
+          await setDoc(appointmentRef, dataToSave, { merge: true });
+
+          // Update doctor's booked slots
+          const doctorRef = doc(db, "doctors", values.doctor);
+          await updateDoc(doctorRef, {
+              bookedSlots: arrayUnion({
+                  date: appointmentDateStr,
+                  time: appointmentTimeStr,
+                  tokenNumber: tokenNumber
+              })
           });
-      } else {
-          setAppointments(prev => [...prev, dataToSave]);
+
+          if (isEditing) {
+              setAppointments(prev => prev.map(apt => apt.id === appointmentId ? dataToSave : apt));
+              toast({
+                  title: "Appointment Rescheduled",
+                  description: `Appointment for ${dataToSave.patientName} has been updated.`,
+              });
+          } else {
+              setAppointments(prev => [...prev, dataToSave]);
+              toast({
+                  title: "Appointment Booked",
+                  description: `Appointment for ${dataToSave.patientName} has been successfully booked.`,
+              });
+          }
+          resetForm();
+        } catch (error) {
+          console.error("Error saving appointment: ", error);
           toast({
-              title: "Appointment Booked",
-              description: `Appointment for ${dataToSave.patientName} has been successfully booked.`,
+              variant: "destructive",
+              title: "Error",
+              description: "Failed to save appointment. Please try again.",
           });
-      }
-    } catch (error) {
-      console.error("Error saving appointment: ", error);
-      toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to save appointment. Please try again.",
-      });
-    } finally {
-      resetForm();
-    }
+        }
+    });
   }
+
+  const handleDelete = async (appointmentId: string) => {
+    startTransition(async () => {
+      try {
+        await deleteDoc(doc(db, "appointments", appointmentId));
+        setAppointments(prev => prev.filter(apt => apt.id !== appointmentId));
+        toast({ title: "Success", description: "Appointment deleted successfully." });
+      } catch (error) {
+        console.error("Error deleting appointment: ", error);
+        toast({ variant: "destructive", title: "Error", description: "Failed to delete appointment." });
+      }
+    });
+  };
 
   const onDoctorChange = (doctorId: string) => {
-  form.setValue("doctor", doctorId);
-  setSelectedDoctorId(doctorId);
-  const doctor = doctors.find(d => d.id === doctorId);
-  if (doctor) {
-    form.setValue("department", doctor.department || "");
-    form.setValue("date", undefined, { shouldValidate: true });
-    form.setValue("time", "", { shouldValidate: true });
-  }
+    form.setValue("doctor", doctorId);
+    setSelectedDoctorId(doctorId);
+    const doctor = doctors.find(d => d.id === doctorId);
+    if (doctor) {
+      form.setValue("department", doctor.department || "");
+      form.setValue("date", undefined, { shouldValidate: true });
+      form.setValue("time", "", { shouldValidate: true });
+    }
 }
 
   const handlePatientSelect = (patient: Patient) => {
@@ -490,7 +456,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
             });
         }
 
-        currentTime.setMinutes(currentTime.getMinutes() + avgTime);
+        currentTime = new Date(currentTime.getTime() + avgTime * 60000);
       }
     });
 
@@ -559,7 +525,10 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
   });
 } else if (activeTab === 'completed') {
   filtered = filtered.filter(apt => apt.status === 'Completed');
+} else if (activeTab !== 'all') { // For other statuses like 'cancelled' etc.
+    filtered = filtered.filter(apt => apt.status.toLowerCase() === activeTab);
 }
+
 
     return filtered.sort((a,b) => {
         try {
@@ -748,28 +717,26 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                             <FormField control={form.control} name="date" render={({ field }) => (
                                 <FormItem className="flex flex-col">
                                     <Calendar
-  className="bg-primary text-primary-foreground rounded-md [&_button:hover]:bg-primary/80 [&_.rdp-day_today]:bg-primary-foreground/20 [&_button]:text-primary-foreground"
-  mode="single"
-  selected={field.value}
-  onSelect={(date) => {
-    if (date && date instanceof Date && !isNaN(date.getTime())) {
-      field.onChange(date);
-      form.clearErrors("date");
-    }
-  }}
-  disabled={(date) => 
-    date < new Date(new Date().setHours(0,0,0,0)) || 
-    !selectedDoctor ||
-    !availableDaysOfWeek.includes(getDay(date)) ||
-    leaveDates.some(leaveDate => isSameDay(date, leaveDate))
-  }
-  initialFocus
-  modifiers={selectedDoctor ? { available: { dayOfWeek: availableDaysOfWeek }, leave: leaveDates } : { leave: leaveDates }}
-  modifiersStyles={{
-    available: { backgroundColor: 'hsl(var(--accent))', color: 'hsl(var(--accent-foreground))' },
-    leave: { backgroundColor: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' },
-  }}
-/>
+                                        className="bg-primary text-primary-foreground rounded-md [&_button:hover]:bg-primary/80 [&_.rdp-day_today]:bg-primary-foreground/20 [&_button]:text-primary-foreground"
+                                        mode="single"
+                                        selected={field.value}
+                                        onSelect={(date) => {
+                                          if (date) field.onChange(date);
+                                          form.clearErrors("date");
+                                        }}
+                                        disabled={(date) => 
+                                          date < new Date(new Date().setHours(0,0,0,0)) || 
+                                          !selectedDoctor ||
+                                          !availableDaysOfWeek.includes(getDay(date)) ||
+                                          leaveDates.some(leaveDate => isSameDay(date, leaveDate))
+                                        }
+                                        initialFocus
+                                        modifiers={selectedDoctor ? { available: { dayOfWeek: availableDaysOfWeek }, leave: leaveDates } : { leave: leaveDates }}
+                                        modifiersStyles={{
+                                          available: { backgroundColor: 'hsl(var(--accent))', color: 'hsl(var(--accent-foreground))' },
+                                          leave: { backgroundColor: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' },
+                                        }}
+                                        />
                                     <FormMessage />
                                 </FormItem>
                                 )}
@@ -780,33 +747,33 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                               <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
                               <div className="space-y-4">
                               <FormField control={form.control} name="doctor" render={({ field }) => (
-  <FormItem>
-    <FormLabel>Doctor</FormLabel>
-    <Select onValueChange={onDoctorChange} value={field.value}>
-      <FormControl>
-        <SelectTrigger>
-          <SelectValue placeholder="Select a doctor" />
-        </SelectTrigger>
-      </FormControl>
-      <SelectContent>
-        {doctors.map(doc => (
-          <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-    <FormMessage />
-  </FormItem>
-)} />
-<FormField control={form.control} name="department" render={({ field }) => (
-  <FormItem>
-    <FormLabel>Department</FormLabel>
-    <FormControl>
-      <Input readOnly placeholder="Department" {...field} value={field.value ?? ''} />
-    </FormControl>
-    <FormMessage />
-  </FormItem>
-)} />
-                                                        </div>
+                                  <FormItem>
+                                    <FormLabel>Doctor</FormLabel>
+                                    <Select onValueChange={onDoctorChange} value={field.value}>
+                                      <FormControl>
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Select a doctor" />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                        {doctors.map(doc => (
+                                          <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                  </FormItem>
+                                )} />
+                                <FormField control={form.control} name="department" render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Department</FormLabel>
+                                    <FormControl>
+                                      <Input readOnly placeholder="Department" {...field} value={field.value ?? ''} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )} />
+                           </div>
 
                           {selectedDoctor && selectedDate && (
                               <FormField control={form.control} name="time" render={({ field }) => (
@@ -814,22 +781,20 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                   <FormLabel>Select Time Slot</FormLabel>
                                   <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-2">
                                       {timeSlots.length > 0 ? timeSlots.map(slot => (
-                                      <Button
-  key={slot.time}
-  type="button"
-  variant={field.value === format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm') ? "default" : "outline"}
-  onClick={() => {
-    const val = format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm');
-    field.onChange(val);
-    if (val) {
-      form.clearErrors("time");
-    }
-  }}
-  disabled={slot.disabled}
-  className={cn("text-xs", slot.disabled && "line-through")}
->
-  {slot.time}
-</Button>
+                                          <Button
+                                            key={slot.time}
+                                            type="button"
+                                            variant={field.value === format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm') ? "default" : "outline"}
+                                            onClick={() => {
+                                              const val = format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm');
+                                              field.onChange(val);
+                                              if (val) form.clearErrors("time");
+                                            }}
+                                            disabled={slot.disabled}
+                                            className={cn("text-xs", slot.disabled && "line-through")}
+                                          >
+                                            {slot.time}
+                                          </Button>
                                       )) : <p className="text-sm text-muted-foreground col-span-2">No available slots for this day.</p>}
                                   </div>
                                   <FormMessage />
@@ -844,7 +809,10 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                     <div className="flex justify-end items-center pt-4">
                       <div className="flex justify-end gap-2">
                           {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
-                          <Button type="submit">{isEditing ? "Save Changes" : "Book Appointment"}</Button>
+                          <Button type="submit" disabled={isPending}>
+                            {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                            {isEditing ? "Save Changes" : "Book Appointment"}
+                          </Button>
                       </div>
                     </div>
                   </form>
@@ -956,8 +924,8 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {filteredAppointments.map((appointment, index) => (
-                          <TableRow key={appointment.id ? `${appointment.id}-${appointment.tokenNumber}` : `${Date.now()}-${index}`} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
+                        {filteredAppointments.map((appointment) => (
+                          <TableRow key={appointment.id} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
                             <TableCell className="font-medium">{appointment.patientName}</TableCell>
                             <TableCell>{appointment.age}</TableCell>
                             <TableCell>{appointment.gender}</TableCell>
@@ -986,7 +954,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                     <Edit className="mr-2 h-4 w-4" />
                                     Edit
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem className="text-red-600">
+                                  <DropdownMenuItem onClick={() => handleDelete(appointment.id)} className="text-red-600">
                                     <Trash2 className="mr-2 h-4 w-4" />
                                     Delete
                                   </DropdownMenuItem>
@@ -1021,7 +989,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
       .filter((appointment) => appointment.date === today)
       .map((appointment, index) => (
         <TableRow
-          key={appointment.id ? `${appointment.id}-${appointment.tokenNumber}` : `${Date.now()}-${index}`}
+          key={appointment.id}
           className={cn(
             appointment.isSkipped ? "bg-red-200 dark:bg-red-900/60" : isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30"
           )}
@@ -1085,4 +1053,3 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     </>
   );
 }
-
