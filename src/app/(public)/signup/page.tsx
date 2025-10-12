@@ -212,6 +212,9 @@ export default function SignupPage() {
             numDoctors: formData.numDoctors,
             clinicRegNumber: formData.clinicRegNumber,
             mapsLink: formData.mapsLink,
+            planStartDate: new Date().toISOString(),
+            registrationStatus: "Pending",
+            onboardingStatus: "Pending",
         });
 
         // Add user profile data to the batch, linking it to the clinic
