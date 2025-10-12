@@ -39,6 +39,7 @@ const plans = [
 export function Step5Pricing() {
   const { control, watch } = useFormContext<SignUpFormData>();
   const plan = watch('plan');
+  const isFree = plan === 'Free Plan (Beta)';
 
   return (
     <div>
@@ -64,16 +65,31 @@ export function Step5Pricing() {
                                 <FormControl>
                                     <RadioGroupItem value={p.name} id={p.name} className="sr-only" />
                                 </FormControl>
-                                <Label htmlFor={p.name} className="flex flex-col p-4 border rounded-lg cursor-pointer h-full data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground transition-colors [&:has([data-state=checked])]:bg-primary [&:has([data-state=checked])]:text-primary-foreground">
+                                <Label 
+                                  htmlFor={p.name} 
+                                  className={`flex flex-col p-4 border rounded-lg cursor-pointer h-full transition-all ${
+                                    field.value === p.name
+                                      ? 'bg-primary text-primary-foreground border-primary shadow-lg'
+                                      : 'bg-white border-gray-200 hover:border-primary'
+                                  }`}
+                                >
                                     <div className="text-center">
                                         <span className="text-lg font-bold">{p.name}</span>
-                                        <p className="text-sm text-muted-foreground data-[state=checked]:text-primary-foreground">{p.doctors}</p>
+                                        <p className={`text-sm ${field.value === p.name ? 'text-primary-foreground' : 'text-muted-foreground'}`}>
+                                          {p.doctors}
+                                        </p>
                                     </div>
                                     <div className="text-center my-4">
                                         <span className="text-3xl font-bold">{p.price}</span>
-                                        {p.price !== 'Free' && <span className="text-sm text-muted-foreground data-[state=checked]:text-primary-foreground">/month</span>}
+                                        {p.price !== 'Free' && (
+                                          <span className={`text-sm ${field.value === p.name ? 'text-primary-foreground' : 'text-muted-foreground'}`}>
+                                            /month
+                                          </span>
+                                        )}
                                     </div>
-                                    <p className="text-xs text-center text-muted-foreground flex-grow data-[state=checked]:text-primary-foreground">{p.roi}</p>
+                                    <p className={`text-xs text-center flex-grow ${field.value === p.name ? 'text-primary-foreground' : 'text-muted-foreground'}`}>
+                                      {p.roi}
+                                    </p>
                                 </Label>
                             </FormItem>
                         ))}
@@ -84,8 +100,8 @@ export function Step5Pricing() {
           )}
         />
 
-        {plan && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 border-t pt-6">
+        {plan && !isFree && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 border-t pt-6 animate-in fade-in">
             <FormField
               control={control}
               name="promoCode"
