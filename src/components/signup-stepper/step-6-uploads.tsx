@@ -37,10 +37,10 @@ const FileUpload = ({ field, label }: { field: any, label: string }) => {
           {preview ? <Image src={preview} alt="preview" width={80} height={80} className="object-cover" /> : <Upload className="h-6 w-6 text-muted-foreground"/>}
         </div>
         <FormControl>
-            <Input type="file" accept="image/*" onChange={handleFileChange} className="hidden" id={field.name} />
+          <Input type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} id={`file-input-${field.name}`} />
         </FormControl>
-        <label htmlFor={field.name} className="cursor-pointer">
-          <Button type="button" variant="outline">
+        <label htmlFor={`file-input-${field.name}`} className="cursor-pointer">
+          <Button type="button" variant="outline" tabIndex={-1}>
             <Upload className="mr-2 h-4 w-4" />
             Choose File
           </Button>

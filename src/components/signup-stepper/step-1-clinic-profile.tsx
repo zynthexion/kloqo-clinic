@@ -48,6 +48,9 @@ export function Step1ClinicProfile() {
     <div>
       <p className="text-sm text-muted-foreground">Step 1/7</p>
       <h2 className="text-2xl font-bold mb-1">Clinic Profile</h2>
+      <div className="mb-2 p-3 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-800 rounded">
+        <strong>Note:</strong> For accurate location, please ensure you are physically present at your clinic when signing up.
+      </div>
       <p className="text-muted-foreground mb-6">Provide your clinic's primary information.</p>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -58,7 +61,7 @@ export function Step1ClinicProfile() {
             <FormItem>
               <FormLabel>Clinic Name <span className="text-destructive">*</span></FormLabel>
               <FormControl>
-                <Input placeholder="CareWell Multi-Speciality Clinic" {...field} />
+                <Input placeholder="e.g., Sree Narayana Medical Centre" {...field} value={field.value ?? ''} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -92,7 +95,7 @@ export function Step1ClinicProfile() {
             <FormItem>
               <FormLabel>Number of Doctors</FormLabel>
               <FormControl>
-                <Input type="number" min="1" placeholder="e.g., 5" {...field} />
+                <Input type="number" min="1" placeholder="e.g., 3" {...field} value={field.value ?? ''} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -105,7 +108,7 @@ export function Step1ClinicProfile() {
             <FormItem>
               <FormLabel>Clinic Registration Number (if any)</FormLabel>
               <FormControl>
-                <Input placeholder="KER/HSP/2025/203" {...field} />
+                <Input placeholder="e.g., KER/HSP/2025/203" {...field} value={field.value ?? ''} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -124,7 +127,7 @@ export function Step1ClinicProfile() {
             <FormItem>
               <FormLabel>Latitude</FormLabel>
               <FormControl>
-                <Input type="number" placeholder="e.g., 9.9312" {...field} />
+                <Input type="number" placeholder="e.g., 9.9312 (Kerala)" {...field} value={field.value ?? ''} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -137,7 +140,7 @@ export function Step1ClinicProfile() {
             <FormItem>
               <FormLabel>Longitude</FormLabel>
               <FormControl>
-                <Input type="number" placeholder="e.g., 76.2673" {...field} />
+                <Input type="number" placeholder="e.g., 76.2673 (Kerala)" {...field} value={field.value ?? ''} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -150,7 +153,7 @@ export function Step1ClinicProfile() {
             <FormItem>
               <FormLabel>Skipped Token Recurrence</FormLabel>
               <FormControl>
-                <Input type="number" placeholder="e.g., 5" {...field} />
+                <Input type="number" placeholder="e.g., 5" {...field} value={field.value ?? ''} />
               </FormControl>
                <p className="text-xs text-muted-foreground">Call skipped token after these many tokens</p>
               <FormMessage />
@@ -164,7 +167,7 @@ export function Step1ClinicProfile() {
             <FormItem>
               <FormLabel>Walk-in Token Allotment (minutes)</FormLabel>
               <FormControl>
-                <Input type="number" placeholder="e.g., 15" {...field} />
+                <Input type="number" placeholder="e.g., 15" {...field} value={field.value ?? ''} />
               </FormControl>
               <p className="text-xs text-muted-foreground">Allot walk-in token after this many minutes</p>
               <FormMessage />

@@ -56,7 +56,7 @@ const signupSchema = z.object({
 
   // Step 3
   address1: z.string().min(5, { message: "Address must be at least 5 characters." }),
-  address2: z.string().optional(),
+  address2: z.string(),
   city: z.string().min(2, { message: "City must be at least 2 characters." }),
   state: z.string().min(2, { message: "State must be at least 2 characters." }),
   pincode: z.string().regex(/^\d{6}$/, "Please enter a valid 6-digit pincode."),
@@ -68,13 +68,13 @@ const signupSchema = z.object({
   
   // Step 5
   plan: z.enum(['Free Plan (Beta)', 'Kloqo Lite', 'Kloqo Grow', 'Kloqo Prime'], { required_error: "Please select a plan." }),
-  promoCode: z.string().optional(),
-  paymentMethod: z.enum(['Card', 'UPI', 'NetBanking'], { required_error: "Please select a payment method." }).optional(),
+  promoCode: z.string(),
+  paymentMethod: z.enum(['Card', 'UPI', 'NetBanking'], { required_error: "Please select a payment method." }),
 
   // Step 6
-  logo: z.any().optional(),
-  license: z.any().optional(),
-  receptionPhoto: z.any().optional(),
+  logo: z.any(),
+  license: z.any(),
+  receptionPhoto: z.any(),
 
   // Step 7
   agreeTerms: z.boolean().refine(val => val === true, { message: "You must agree to the terms." }),
@@ -84,56 +84,56 @@ const signupSchema = z.object({
 export type SignUpFormData = z.infer<typeof signupSchema>;
 
 const defaultFormData: SignUpFormData = {
-  clinicName: 'Test Clinic',
+  clinicName: '',
   clinicType: 'Single Doctor',
   numDoctors: 1,
   clinicRegNumber: '',
-  latitude: 9.9312,
-  longitude: 76.2673,
-  skippedTokenRecurrence: 5,
-  walkInTokenAllotment: 15,
+  latitude: 0,
+  longitude: 0,
+  skippedTokenRecurrence: 3,
+  walkInTokenAllotment: 30,
   
-  ownerName: 'Test Owner',
+  ownerName: '',
   designation: 'Doctor',
-  mobileNumber: '+11234567890',
-  emailAddress: `test@example.com`,
-  password: 'password123',
+  mobileNumber: '',
+  emailAddress: '',
+  password: '',
   
-  address1: '123 Test St',
+  address1: '',
   address2: '',
-  city: 'Testville',
-  state: 'Testland',
-  pincode: '123456',
+  city: '',
+  state: '',
+  pincode: '',
   mapsLink: '',
   
   hours: [
-    { day: 'Monday', timeSlots: [{ open: '09:00', close: '17:00' }], isClosed: false },
-    { day: 'Tuesday', timeSlots: [{ open: '09:00', close: '17:00' }], isClosed: false },
-    { day: 'Wednesday', timeSlots: [{ open: '09:00', close: '17:00' }], isClosed: false },
-    { day: 'Thursday', timeSlots: [{ open: '09:00', close: '17:00' }], isClosed: false },
-    { day: 'Friday', timeSlots: [{ open: '09:00', close: '17:00' }], isClosed: false },
-    { day: 'Saturday', timeSlots: [{ open: '10:00', close: '14:00' }], isClosed: false },
-    { day: 'Sunday', timeSlots: [], isClosed: true },
+    { day: 'Monday', timeSlots: [{ open: '09:00', close: '13:00' }], isClosed: false },
+    { day: 'Tuesday', timeSlots: [{ open: '09:00', close: '13:00' }], isClosed: false },
+    { day: 'Wednesday', timeSlots: [{ open: '09:00', close: '13:00' }], isClosed: false },
+    { day: 'Thursday', timeSlots: [{ open: '09:00', close: '13:00' }], isClosed: false },
+    { day: 'Friday', timeSlots: [{ open: '09:00', close: '13:00' }], isClosed: false },
+    { day: 'Saturday', timeSlots: [{ open: '09:00', close: '13:00' }], isClosed: false },
+    { day: 'Sunday', timeSlots: [{ open: '09:00', close: '13:00' }], isClosed: true },
   ],
-  avgPatientsPerDay: 40,
+  avgPatientsPerDay: 0,
   
-  plan: 'Kloqo Grow',
+  plan: 'Free Plan (Beta)',
   promoCode: '',
-  paymentMethod: undefined,
+  paymentMethod: 'Card',
   
   logo: null,
   license: null,
   receptionPhoto: null,
 
-  agreeTerms: true,
-  isAuthorized: true,
+  agreeTerms: false,
+  isAuthorized: false,
 };
 
 const stepFields: (keyof SignUpFormData)[][] = [
     ['clinicName', 'clinicType', 'numDoctors', 'latitude', 'longitude', 'skippedTokenRecurrence', 'walkInTokenAllotment'], // Step 1
     ['ownerName', 'designation', 'mobileNumber', 'emailAddress', 'password'], // Step 2
     ['address1', 'city', 'state', 'pincode'], // Step 3
-    [], // Step 4
+    ['hours', 'avgPatientsPerDay'], // Step 4
     ['plan'], // Step 5
     [], // Step 6
     ['agreeTerms', 'isAuthorized'], // Step 7
@@ -189,6 +189,20 @@ export default function SignupPage() {
         const userCredential = await createUserWithEmailAndPassword(auth, formData.emailAddress, formData.password);
         const user = userCredential.user;
 
+        // --- File upload logic ---
+        const uploadFileToStorage = async (file: File | null, path: string) => {
+          if (!file) return null;
+          const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+          const { storage } = await import('@/lib/firebase');
+          const fileRef = ref(storage, path);
+          await uploadBytes(fileRef, file);
+          return await getDownloadURL(fileRef);
+        };
+        const logoUrl = await uploadFileToStorage(formData.logo, `clinics/${user.uid}/logo`);
+        const licenseUrl = await uploadFileToStorage(formData.license, `clinics/${user.uid}/license`);
+        const receptionPhotoUrl = await uploadFileToStorage(formData.receptionPhoto, `clinics/${user.uid}/receptionPhoto`);
+        // --- End file upload logic ---
+
         const clinicRef = doc(collection(db, "clinics"));
         const clinicId = clinicRef.id;
         const clinicData = {
@@ -206,6 +220,9 @@ export default function SignupPage() {
             numDoctors: formData.numDoctors,
             clinicRegNumber: formData.clinicRegNumber,
             mapsLink: formData.mapsLink,
+            logoUrl,
+            licenseUrl,
+            receptionPhotoUrl,
             planStartDate: new Date().toISOString(),
             registrationStatus: "Pending",
             onboardingStatus: "Pending",
