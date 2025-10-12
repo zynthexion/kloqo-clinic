@@ -66,7 +66,7 @@ const signupSchema = z.object({
   avgPatientsPerDay: z.coerce.number().min(0, "Cannot be negative."),
   
   // Step 5
-  plan: z.enum(['Kloqo Lite', 'Kloqo Grow', 'Kloqo Prime'], { required_error: "Please select a plan." }),
+  plan: z.enum(['Free Plan (Beta)', 'Kloqo Lite', 'Kloqo Grow', 'Kloqo Prime'], { required_error: "Please select a plan." }),
   promoCode: z.string().optional(),
   paymentMethod: z.enum(['Card', 'UPI', 'NetBanking'], { required_error: "Please select a payment method." }).optional(),
 

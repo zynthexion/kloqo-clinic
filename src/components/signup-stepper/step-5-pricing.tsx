@@ -6,7 +6,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
-import type { SignUpFormData } from '@/app/signup/page';
+import type { SignUpFormData } from '@/app/(public)/signup/page';
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '../ui/form';
 
 type StepProps = {
@@ -15,6 +15,12 @@ type StepProps = {
 };
 
 const plans = [
+    {
+        name: 'Free Plan (Beta)',
+        doctors: 'For testing & feedback',
+        price: 'Free',
+        roi: 'Provide valuable feedback to help us improve Kloqo for everyone.'
+    },
     {
         name: 'Kloqo Lite',
         doctors: '1 doctor',
@@ -56,21 +62,21 @@ export function Step5Pricing() {
                 <RadioGroup 
                   onValueChange={field.onChange}
                   defaultValue={field.value}
-                  className="grid grid-cols-1 md:grid-cols-3 gap-4"
+                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
                 >
                   {plans.map(p => (
                     <FormItem key={p.name}>
                       <FormControl>
                         <RadioGroupItem value={p.name} id={p.name} className="sr-only" />
                       </FormControl>
-                      <Label htmlFor={p.name} className="flex flex-col p-4 border rounded-lg cursor-pointer has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:*:text-primary-foreground transition-all">
+                      <Label htmlFor={p.name} className="flex flex-col p-4 border rounded-lg cursor-pointer h-full has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:*:text-primary-foreground transition-all">
                         <div className="text-center">
                             <span className="text-lg font-bold">{p.name}</span>
                             <p className="text-sm text-muted-foreground">{p.doctors}</p>
                         </div>
                         <div className="text-center my-4">
                             <span className="text-3xl font-bold">{p.price}</span>
-                            <span className="text-sm text-muted-foreground">/month</span>
+                            {p.price !== 'Free' && <span className="text-sm text-muted-foreground">/month</span>}
                         </div>
                         <p className="text-xs text-center text-muted-foreground flex-grow">{p.roi}</p>
                       </Label>
