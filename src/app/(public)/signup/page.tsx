@@ -41,6 +41,10 @@ const signupSchema = z.object({
   clinicType: z.enum(['Single Doctor', 'Multi-Doctor'], { required_error: "Please select a clinic type." }),
   numDoctors: z.coerce.number().min(1, "There must be at least one doctor."),
   clinicRegNumber: z.string().optional(),
+  latitude: z.coerce.number().min(-90, "Invalid latitude").max(90, "Invalid latitude"),
+  longitude: z.coerce.number().min(-180, "Invalid longitude").max(180, "Invalid longitude"),
+  skippedTokenRecurrence: z.coerce.number().min(1, "Value must be at least 1."),
+  walkInTokenAllotment: z.coerce.number().min(1, "Value must be at least 1 minute."),
 
   // Step 2
   ownerName: z.string().min(2, { message: "Owner name must be at least 2 characters." }),
@@ -83,6 +87,10 @@ const defaultFormData: SignUpFormData = {
   clinicType: 'Single Doctor',
   numDoctors: 1,
   clinicRegNumber: '',
+  latitude: 9.9312,
+  longitude: 76.2673,
+  skippedTokenRecurrence: 5,
+  walkInTokenAllotment: 15,
   
   ownerName: 'Test Owner',
   designation: 'Doctor',
@@ -121,7 +129,7 @@ const defaultFormData: SignUpFormData = {
 };
 
 const stepFields: (keyof SignUpFormData)[][] = [
-    ['clinicName', 'clinicType', 'numDoctors'], // Step 1
+    ['clinicName', 'clinicType', 'numDoctors', 'latitude', 'longitude', 'skippedTokenRecurrence', 'walkInTokenAllotment'], // Step 1
     ['ownerName', 'designation', 'mobileNumber', 'emailAddress', 'password'], // Step 2
     ['address1', 'city', 'state', 'pincode'], // Step 3
     [], // Step 4
@@ -197,6 +205,13 @@ export default function SignupPage() {
             operatingHours: formData.hours,
             plan: formData.plan,
             ownerEmail: formData.emailAddress,
+            latitude: formData.latitude,
+            longitude: formData.longitude,
+            skippedTokenRecurrence: formData.skippedTokenRecurrence,
+            walkInTokenAllotment: formData.walkInTokenAllotment,
+            numDoctors: formData.numDoctors,
+            clinicRegNumber: formData.clinicRegNumber,
+            mapsLink: formData.mapsLink,
         });
 
         // Add user profile data to the batch, linking it to the clinic

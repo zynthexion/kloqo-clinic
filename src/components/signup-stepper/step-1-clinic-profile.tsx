@@ -4,7 +4,7 @@
 import { useFormContext } from 'react-hook-form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import type { SignUpFormData } from '@/app/signup/page';
+import type { SignUpFormData } from '@/app/(public)/signup/page';
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '../ui/form';
 
 export function Step1ClinicProfile() {
@@ -73,6 +73,60 @@ export function Step1ClinicProfile() {
               <FormControl>
                 <Input placeholder="KER/HSP/2025/203" {...field} />
               </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+         <FormField
+          control={control}
+          name="latitude"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Latitude</FormLabel>
+              <FormControl>
+                <Input type="number" placeholder="e.g., 9.9312" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+         <FormField
+          control={control}
+          name="longitude"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Longitude</FormLabel>
+              <FormControl>
+                <Input type="number" placeholder="e.g., 76.2673" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+         <FormField
+          control={control}
+          name="skippedTokenRecurrence"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Skipped Token Recurrence</FormLabel>
+              <FormControl>
+                <Input type="number" placeholder="e.g., 5" {...field} />
+              </FormControl>
+               <p className="text-xs text-muted-foreground">Call skipped token after these many tokens</p>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={control}
+          name="walkInTokenAllotment"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Walk-in Token Allotment (minutes)</FormLabel>
+              <FormControl>
+                <Input type="number" placeholder="e.g., 15" {...field} />
+              </FormControl>
+              <p className="text-xs text-muted-foreground">Allot walk-in token after this many minutes</p>
               <FormMessage />
             </FormItem>
           )}
