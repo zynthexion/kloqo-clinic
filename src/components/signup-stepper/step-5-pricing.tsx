@@ -9,11 +9,6 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import type { SignUpFormData } from '@/app/(public)/signup/page';
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '../ui/form';
 
-type StepProps = {
-  data: SignUpFormData;
-  updateData: (update: Partial<SignUpFormData>) => void;
-};
-
 const plans = [
     {
         name: 'Free Plan (Beta)',
@@ -57,31 +52,33 @@ export function Step5Pricing() {
           name="plan"
           render={({ field }) => (
             <FormItem className="space-y-3">
-              <FormLabel className="font-semibold">Choose Your Plan <span className="text-destructive">*</span></FormLabel>
-              <FormControl>
-                <RadioGroup 
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
-                >
-                  {plans.map(p => (
-                    <div key={p.name}>
-                      <RadioGroupItem value={p.name} id={p.name} className="sr-only" />
-                      <Label htmlFor={p.name} className="flex flex-col p-4 border rounded-lg cursor-pointer h-full has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:*:text-primary-foreground transition-all">
-                        <div className="text-center">
-                            <span className="text-lg font-bold">{p.name}</span>
-                            <p className="text-sm text-muted-foreground">{p.doctors}</p>
-                        </div>
-                        <div className="text-center my-4">
-                            <span className="text-3xl font-bold">{p.price}</span>
-                            {p.price !== 'Free' && <span className="text-sm text-muted-foreground">/month</span>}
-                        </div>
-                        <p className="text-xs text-center text-muted-foreground flex-grow">{p.roi}</p>
-                      </Label>
-                    </div>
-                  ))}
-                </RadioGroup>
-              </FormControl>
+               <FormLabel className="font-semibold">Choose Your Plan <span className="text-destructive">*</span></FormLabel>
+                <FormControl>
+                    <RadioGroup
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
+                    >
+                        {plans.map(p => (
+                            <FormItem key={p.name}>
+                                <FormControl>
+                                    <RadioGroupItem value={p.name} id={p.name} className="sr-only" />
+                                </FormControl>
+                                <Label htmlFor={p.name} className="flex flex-col p-4 border rounded-lg cursor-pointer h-full data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground transition-colors [&:has([data-state=checked])]:bg-primary [&:has([data-state=checked])]:text-primary-foreground">
+                                    <div className="text-center">
+                                        <span className="text-lg font-bold">{p.name}</span>
+                                        <p className="text-sm text-muted-foreground data-[state=checked]:text-primary-foreground">{p.doctors}</p>
+                                    </div>
+                                    <div className="text-center my-4">
+                                        <span className="text-3xl font-bold">{p.price}</span>
+                                        {p.price !== 'Free' && <span className="text-sm text-muted-foreground data-[state=checked]:text-primary-foreground">/month</span>}
+                                    </div>
+                                    <p className="text-xs text-center text-muted-foreground flex-grow data-[state=checked]:text-primary-foreground">{p.roi}</p>
+                                </Label>
+                            </FormItem>
+                        ))}
+                    </RadioGroup>
+                </FormControl>
               <FormMessage />
             </FormItem>
           )}
