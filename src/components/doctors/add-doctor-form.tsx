@@ -63,6 +63,8 @@ const formSchema = z.object({
   averageConsultingTime: z.coerce.number().min(5, "Must be at least 5 minutes."),
   availabilitySlots: z.array(availabilitySlotSchema).min(1, "At least one availability slot is required."),
   photo: z.any().optional(),
+  freeFollowUpDays: z.coerce.number().min(0, "Cannot be negative.").optional(),
+  advanceBookingDays: z.coerce.number().min(0, "Cannot be negative.").optional(),
 });
 
 type AddDoctorFormValues = z.infer<typeof formSchema>;
@@ -97,6 +99,8 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
       consultationFee: 0,
       averageConsultingTime: 15,
       availabilitySlots: [],
+      freeFollowUpDays: 7,
+      advanceBookingDays: 30,
     },
   });
 
@@ -119,6 +123,8 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         consultationFee: doctor.consultationFee || 0,
         averageConsultingTime: doctor.averageConsultingTime || 15,
         availabilitySlots: availabilitySlots,
+        freeFollowUpDays: doctor.freeFollowUpDays || 7,
+        advanceBookingDays: doctor.advanceBookingDays || 30,
       });
       setPhotoPreview(doctor.avatar);
       if(availabilitySlots.length > 0) {
@@ -134,6 +140,8 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         consultationFee: 0,
         averageConsultingTime: 15,
         availabilitySlots: [],
+        freeFollowUpDays: 7,
+        advanceBookingDays: 30,
       });
       setPhotoPreview(null);
       setSharedTimeSlots([{ from: "09:00", to: "17:00" }]);
@@ -354,6 +362,32 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                       </FormItem>
                     )}
                   />
+                   <FormField
+                    control={form.control}
+                    name="freeFollowUpDays"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Free Follow-up Period (Days)</FormLabel>
+                        <FormControl>
+                          <Input type="number" placeholder="e.g., 7" {...field} value={field.value !== undefined ? field.value : ''} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                   <FormField
+                    control={form.control}
+                    name="advanceBookingDays"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Advance Booking (Days)</FormLabel>
+                        <FormControl>
+                          <Input type="number" placeholder="e.g., 30" {...field} value={field.value !== undefined ? field.value : ''} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
 
                 {/* Right Column */}
@@ -454,5 +488,3 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
     </Dialog>
   );
 }
-
-    

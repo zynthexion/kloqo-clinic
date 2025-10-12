@@ -43,6 +43,8 @@ export type Doctor = {
   reviews?: number;
   consultationFee?: number;
   bookedSlots?: BookedSlot[];
+  freeFollowUpDays?: number;
+  advanceBookingDays?: number;
 };
 
 export type Appointment = {

@@ -73,23 +73,6 @@ const availabilitySlotSchema = z.object({
   timeSlots: z.array(timeSlotSchema).min(1, "At least one time slot is required."),
 });
 
-const addDoctorFormSchema = z.object({
-  id: z.string().optional(),
-  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
-  specialty: z.string().min(2, { message: "Specialty must be at least 2 characters." }),
-  department: z.string().min(1, { message: "Please select a department." }),
-  bio: z.string().min(10, { message: "Bio must be at least 10 characters." }),
-  experience: z.coerce.number().min(0, "Years of experience cannot be negative."),
-  consultationFee: z.coerce.number().min(0, "Consultation fee cannot be negative."),
-  averageConsultingTime: z.coerce.number().min(5, "Must be at least 5 minutes."),
-  availableDays: z.array(z.string()).refine((value) => value.some((item) => item), {
-    message: "You have to select at least one day.",
-  }),
-  availabilitySlots: z.array(availabilitySlotSchema),
-  photo: z.any().optional(),
-});
-type AddDoctorFormValues = z.infer<typeof addDoctorFormSchema>;
-
 const weeklyAvailabilityFormSchema = z.object({
   availableDays: z.array(z.string()).default([]),
   availabilitySlots: z.array(availabilitySlotSchema).refine(
@@ -100,6 +83,22 @@ const weeklyAvailabilityFormSchema = z.object({
   ),
 });
 type WeeklyAvailabilityFormValues = z.infer<typeof weeklyAvailabilityFormSchema>;
+
+const addDoctorFormSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
+  specialty: z.string().min(2, { message: "Specialty must be at least 2 characters." }),
+  department: z.string().min(1, { message: "Please select a department." }),
+  bio: z.string().min(10, { message: "Bio must be at least 10 characters." }),
+  experience: z.coerce.number().min(0, "Years of experience cannot be negative."),
+  consultationFee: z.coerce.number().min(0, "Consultation fee cannot be negative."),
+  averageConsultingTime: z.coerce.number().min(5, "Must be at least 5 minutes."),
+  availabilitySlots: z.array(availabilitySlotSchema).min(1, "At least one availability slot is required."),
+  photo: z.any().optional(),
+  freeFollowUpDays: z.coerce.number().min(0, "Cannot be negative.").optional(),
+  advanceBookingDays: z.coerce.number().min(0, "Cannot be negative.").optional(),
+});
+type AddDoctorFormValues = z.infer<typeof addDoctorFormSchema>;
 
 const StarRating = ({ rating }: { rating: number }) => (
   <div className="flex items-center">
@@ -319,7 +318,7 @@ export default function DoctorsPage() {
 
         const docId = doctorData.id || `doc-${Date.now()}`;
 
-        const doctorToSave: Omit<Doctor, 'id' | 'clinicId'> & { id?: string } = {
+        const doctorToSave: Partial<Doctor> & {name: string, specialty: string, department: string, avatar: string, bio: string, experience: number, consultationFee: number, averageConsultingTime: number, availabilitySlots: any[], schedule: string} = {
           name: doctorData.name,
           specialty: doctorData.specialty,
           department: doctorData.department,
@@ -336,6 +335,8 @@ export default function DoctorsPage() {
             from: format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a"),
             to: format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")
           }))})),
+          freeFollowUpDays: doctorData.freeFollowUpDays,
+          advanceBookingDays: doctorData.advanceBookingDays,
         };
         
         if (doctorData.id) {
@@ -1290,6 +1291,3 @@ export default function DoctorsPage() {
     </>
   );
 }
-
-
-    
