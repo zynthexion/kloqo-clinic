@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -23,6 +22,8 @@ import * as z from 'zod';
 import { auth, db } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { writeBatch, doc, collection } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 const timeSlotSchema = z.object({
   open: z.string().min(1, 'Required'),
@@ -185,19 +186,12 @@ export default function SignupPage() {
 
   const onSubmit = async (formData: SignUpFormData) => {
     try {
-        // Step 1: Create the user in Firebase Auth
         const userCredential = await createUserWithEmailAndPassword(auth, formData.emailAddress, formData.password);
         const user = userCredential.user;
 
-        // Step 2: Create a new clinic document and get its ID
         const clinicRef = doc(collection(db, "clinics"));
         const clinicId = clinicRef.id;
-
-        // Step 3: Create a batch write to save all data in one transaction
-        const batch = writeBatch(db);
-
-        // Add clinic data to the batch
-        batch.set(clinicRef, {
+        const clinicData = {
             id: clinicId,
             name: formData.clinicName,
             type: formData.clinicType,
@@ -215,11 +209,10 @@ export default function SignupPage() {
             planStartDate: new Date().toISOString(),
             registrationStatus: "Pending",
             onboardingStatus: "Pending",
-        });
+        };
 
-        // Add user profile data to the batch, linking it to the clinic
         const userRef = doc(db, "users", user.uid);
-        batch.set(userRef, {
+        const userData = {
             uid: user.uid,
             clinicId: clinicId,
             email: formData.emailAddress,
@@ -227,23 +220,42 @@ export default function SignupPage() {
             clinicName: formData.clinicName,
             phone: formData.mobileNumber,
             designation: formData.designation,
-            onboarded: false, // Set onboarding flag
-        });
+            onboarded: false,
+        };
 
-        // Add mobile app credentials to the batch
         const mobileAppCredsRef = doc(collection(db, "mobile-app"));
         const mobileUsername = formData.clinicName.toLowerCase().replace(/\s+/g, '-') + '-mobile';
-        const mobilePassword = 'password123'; // Default password
-        batch.set(mobileAppCredsRef, {
+        const mobilePassword = 'password123';
+        const mobileCredsData = {
             id: mobileAppCredsRef.id,
             clinicId: clinicId,
             username: mobileUsername,
-            password: mobilePassword, // This should be securely hashed in a real application
+            password: mobilePassword,
+        };
+
+        const batch = writeBatch(db);
+        batch.set(clinicRef, clinicData);
+        batch.set(userRef, userData);
+        batch.set(mobileAppCredsRef, mobileCredsData);
+        
+        await batch.commit().catch(async (serverError) => {
+            const errorContexts = [
+                { path: clinicRef.path, data: clinicData },
+                { path: userRef.path, data: userData },
+                { path: mobileAppCredsRef.path, data: mobileCredsData }
+            ];
+            
+            errorContexts.forEach(context => {
+                const permissionError = new FirestorePermissionError({
+                    path: context.path,
+                    operation: 'create',
+                    requestResourceData: context.data,
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            });
+            throw serverError; // Re-throw to prevent subsequent success logic
         });
-
-        // Step 4: Commit the batch
-        await batch.commit();
-
+        
         if (typeof window !== 'undefined') {
           localStorage.setItem('signupEmail', formData.emailAddress);
         }
@@ -256,12 +268,14 @@ export default function SignupPage() {
         router.push('/dashboard');
 
     } catch (error: any) {
-        console.error("Signup error:", error);
-        toast({
-            variant: "destructive",
-            title: "Registration Failed",
-            description: error.message || "An unexpected error occurred. Please try again.",
-        });
+        if (error.name !== 'FirestorePermissionError') {
+            console.error("Signup error:", error);
+            toast({
+                variant: "destructive",
+                title: "Registration Failed",
+                description: error.message || "An unexpected error occurred. Please try again.",
+            });
+        }
     }
   }
 

@@ -1,9 +1,8 @@
-
 'use client';
 
 import { useFormContext } from 'react-hook-form';
 import { Input } from '@/components/ui/input';
-import type { SignUpFormData } from '@/app/signup/page';
+import type { SignUpFormData } from '@/app/(public)/signup/page';
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '../ui/form';
 
 export function Step3ClinicLocation() {
