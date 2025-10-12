@@ -6,9 +6,43 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { SignUpFormData } from '@/app/(public)/signup/page';
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '../ui/form';
+import { Button } from '../ui/button';
+import { MapPin } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 export function Step1ClinicProfile() {
-  const { control } = useFormContext<SignUpFormData>();
+  const { control, setValue } = useFormContext<SignUpFormData>();
+  const { toast } = useToast();
+
+  const handleDetectLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setValue('latitude', latitude, { shouldValidate: true });
+          setValue('longitude', longitude, { shouldValidate: true });
+          toast({
+            title: "Location Detected",
+            description: "Latitude and Longitude have been filled automatically.",
+          });
+        },
+        (error) => {
+          console.error("Geolocation error:", error);
+          toast({
+            variant: "destructive",
+            title: "Location Error",
+            description: "Could not detect location. Please grant permission or enter manually.",
+          });
+        }
+      );
+    } else {
+        toast({
+            variant: "destructive",
+            title: "Not Supported",
+            description: "Geolocation is not supported by your browser.",
+        });
+    }
+  };
   
   return (
     <div>
@@ -77,6 +111,12 @@ export function Step1ClinicProfile() {
             </FormItem>
           )}
         />
+        <div className="md:col-span-2">
+            <Button type="button" variant="outline" onClick={handleDetectLocation} className="w-full">
+                <MapPin className="mr-2 h-4 w-4" />
+                Detect My Location
+            </Button>
+        </div>
          <FormField
           control={control}
           name="latitude"
