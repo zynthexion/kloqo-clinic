@@ -5,7 +5,7 @@ import { useFormContext } from 'react-hook-form';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Upload } from 'lucide-react';
-import type { SignUpFormData } from '@/app/signup/page';
+import type { SignUpFormData } from '@/app/(public)/signup/page';
 import Image from 'next/image';
 import { useState } from 'react';
 import { FormControl, FormField, FormItem, FormMessage } from '../ui/form';

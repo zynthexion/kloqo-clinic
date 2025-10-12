@@ -5,7 +5,7 @@ import { useFormContext, useFieldArray } from 'react-hook-form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import type { SignUpFormData } from '@/app/signup/page';
+import type { SignUpFormData } from '@/app/(public)/signup/page';
 import { cn } from '@/lib/utils';
 import { Button } from '../ui/button';
 import { PlusCircle, Trash2 } from 'lucide-react';
