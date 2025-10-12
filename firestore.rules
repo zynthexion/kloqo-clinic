@@ -4,72 +4,56 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- Helper Functions ---
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-    
-    function getUserClinicId(userId) {
-        return get(/databases/$(database)/documents/users/$(userId)).data.clinicId;
-    }
-
-    function isClinicStaff(clinicId) {
-      return isSignedIn() && getUserClinicId(request.auth.uid) == clinicId;
-    }
-
     // --- Rules for Collections ---
 
-    // Clinics can be created by any signed-in user during signup.
-    // Only staff of that clinic can read or update it afterwards.
+    // Clinics can be read by anyone. A new clinic can be created by a signed-in user.
+    // Only the owner can update their clinic document.
     match /clinics/{clinicId} {
-      allow read, update: if isClinicStaff(clinicId);
-      allow create: if isSignedIn();
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && request.auth.uid == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.uid;
     }
 
-    // Users can create their own user document.
+    // A user can create their own document.
     // They can only read or update their own document afterwards.
     match /users/{userId} {
-      allow read, update: if isOwner(userId);
-      allow create: if isSignedIn();
+      allow read, update: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Doctors can be created by staff of the same clinic.
-    // Doctors can be read by any signed-in user (for the patient app).
-    // Doctors can only be updated/deleted by staff of the same clinic.
+    // Doctors can be read by anyone.
+    // Write operations are simplified for now.
     match /doctors/{doctorId} {
-      allow read: if isSignedIn();
-      allow create: if isClinicStaff(request.resource.data.clinicId);
-      allow update, delete: if isClinicStaff(resource.data.clinicId);
+      allow read, write: if true;
     }
 
-    // Appointments can be read by staff of the clinic or the patient.
-    // Appointments can be written by staff of the clinic.
+    // Appointments can be read by anyone.
+    // Write operations are simplified for now.
     match /appointments/{appointmentId} {
-        allow read: if isClinicStaff(resource.data.clinicId) || isOwner(resource.data.patientId);
-        allow write: if isClinicStaff(request.resource.data.clinicId);
+        allow read, write: if true;
     }
-
-    // Patients can be created by staff of the same clinic.
-    // Patients can be read/updated by themselves or clinic staff.
+   
+    // Patients can be read or written to by anyone for now.
     match /patients/{patientId} {
-      allow create: if isClinicStaff(request.resource.data.clinicId);
-      allow read, update: if isOwner(patientId) || isClinicStaff(getUserClinicId(request.auth.uid));
+      allow read, write: if true;
     }
     
-    // Mobile app credentials can be created by any signed-in user during signup.
-    // Only staff of that clinic can read or update it afterwards.
+    // Mobile app credentials can be listed by anyone for login query.
+    // Creation is allowed for authenticated users during signup.
     match /mobile-app/{credentialId} {
-      allow read, update: if isClinicStaff(resource.data.clinicId);
-      allow create: if isSignedIn();
+      allow list: if true;
+      allow create: if request.auth != null;
+      allow get, update: if request.auth != null && request.auth.uid == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.uid;
     }
     
     // Master list of all possible departments. Any signed-in user can read this.
     match /master-departments/{departmentId} {
-      allow read: if isSignedIn();
+      allow read: if request.auth != null;
+    }
+
+    // Department list per clinic
+    match /departments/{departmentId} {
+        allow read, write: if true;
     }
   }
 }
