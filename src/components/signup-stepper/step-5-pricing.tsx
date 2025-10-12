@@ -65,10 +65,8 @@ export function Step5Pricing() {
                   className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
                 >
                   {plans.map(p => (
-                    <FormItem key={p.name}>
-                      <FormControl>
-                        <RadioGroupItem value={p.name} id={p.name} className="sr-only" />
-                      </FormControl>
+                    <div key={p.name}>
+                      <RadioGroupItem value={p.name} id={p.name} className="sr-only" />
                       <Label htmlFor={p.name} className="flex flex-col p-4 border rounded-lg cursor-pointer h-full has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:*:text-primary-foreground transition-all">
                         <div className="text-center">
                             <span className="text-lg font-bold">{p.name}</span>
@@ -80,7 +78,7 @@ export function Step5Pricing() {
                         </div>
                         <p className="text-xs text-center text-muted-foreground flex-grow">{p.roi}</p>
                       </Label>
-                    </FormItem>
+                    </div>
                   ))}
                 </RadioGroup>
               </FormControl>
