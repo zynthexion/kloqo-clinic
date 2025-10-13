@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -8,29 +7,57 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import type { SignUpFormData } from '@/app/(public)/signup/page';
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '../ui/form';
 import { Button } from '../ui/button';
-import { MapPin, CheckCircle } from 'lucide-react';
+import { MapPin, CheckCircle, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export function Step1ClinicProfile() {
   const { control, setValue, watch } = useFormContext<SignUpFormData>();
   const { toast } = useToast();
   const [locationDetected, setLocationDetected] = useState(false);
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [locationName, setLocationName] = useState<string | null>(null);
   
   const latitude = watch('latitude');
   const longitude = watch('longitude');
 
   const handleDetectLocation = () => {
     if (navigator.geolocation) {
+      setIsDetecting(true);
       navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords;
-          setValue('latitude', latitude, { shouldValidate: true });
-          setValue('longitude', longitude, { shouldValidate: true });
-          setLocationDetected(true);
-          toast({
-            title: "Location Detected",
-            description: "Latitude and Longitude have been filled automatically.",
-          });
+        async (position) => {
+          try {
+            const { latitude, longitude } = position.coords;
+            setValue('latitude', latitude, { shouldValidate: true });
+            setValue('longitude', longitude, { shouldValidate: true });
+
+            // Reverse geocode
+            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`);
+            const data = await response.json();
+            
+            if (data && data.address) {
+                const { city, town, village, country } = data.address;
+                setLocationName(`${city || town || village || 'Unknown Location'}, ${country || ''}`);
+            } else {
+                setLocationName(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+            }
+
+            setLocationDetected(true);
+            toast({
+              title: "Location Detected",
+              description: "Your clinic's location has been set.",
+            });
+          } catch (error) {
+             console.error("Reverse geocoding error:", error);
+             toast({
+                variant: "destructive",
+                title: "Location Error",
+                description: "Could not fetch place name. Coordinates saved.",
+             });
+             setLocationName(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+             setLocationDetected(true);
+          } finally {
+            setIsDetecting(false);
+          }
         },
         (error) => {
           console.error("Geolocation error:", error);
@@ -39,6 +66,7 @@ export function Step1ClinicProfile() {
             title: "Location Error",
             description: "Could not detect location. Please grant permission or enter manually.",
           });
+          setIsDetecting(false);
         }
       );
     } else {
@@ -121,13 +149,13 @@ export function Step1ClinicProfile() {
           )}
         />
         <div className="md:col-span-2">
-            <Button type="button" variant={locationDetected ? "secondary" : "outline"} onClick={handleDetectLocation} className="w-full">
-                {locationDetected ? <CheckCircle className="mr-2 h-4 w-4" /> : <MapPin className="mr-2 h-4 w-4" />}
-                {locationDetected ? 'Location Detected' : 'Detect My Location'}
+            <Button type="button" variant={locationDetected ? "secondary" : "outline"} onClick={handleDetectLocation} className="w-full" disabled={isDetecting}>
+                {isDetecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (locationDetected ? <CheckCircle className="mr-2 h-4 w-4" /> : <MapPin className="mr-2 h-4 w-4" />)}
+                {isDetecting ? 'Detecting...' : (locationDetected ? 'Location Detected' : 'Detect My Location')}
             </Button>
-            {locationDetected && (
+            {locationDetected && locationName && (
                 <p className="text-sm text-muted-foreground text-center mt-2">
-                    Coordinates: {latitude.toFixed(4)}, {longitude.toFixed(4)}
+                    {locationName}
                 </p>
             )}
             <FormField control={control} name="latitude" render={() => <FormMessage />} />
