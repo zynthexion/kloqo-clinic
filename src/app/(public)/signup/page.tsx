@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { StepperNav } from '@/components/signup-stepper/stepper-nav';
 import { Step1ClinicProfile } from '@/components/signup-stepper/step-1-clinic-profile';
@@ -167,7 +167,46 @@ export default function SignupPage() {
     mode: "onChange"
   });
   
-  const { formState, watch } = methods;
+  const { formState, watch, getValues, trigger } = methods;
+
+  const isStepValidNow = useCallback(() => {
+    const fieldsForStep = stepFields[currentStep - 1];
+    if (!fieldsForStep) return false;
+
+    const values = getValues();
+    const hasErrors = Object.keys(formState.errors).some(errorKey => fieldsForStep.includes(errorKey as any));
+    
+    if (hasErrors) return false;
+
+    for (const field of fieldsForStep) {
+        const value = values[field];
+        if (typeof value === 'string' && !value) return false;
+        if (typeof value === 'number' && value === undefined) return false;
+    }
+    
+    if (currentStep === 1) {
+        if (values.latitude === 0) return false;
+    }
+
+    if (currentStep === 2) {
+        if (!isPhoneVerified) return false;
+    }
+
+    if (currentStep === 7) {
+        if (!values.agreeTerms || !values.isAuthorized) return false;
+    }
+
+    return true;
+  }, [currentStep, getValues, formState.errors, isPhoneVerified]);
+
+  const [isStepValid, setIsStepValid] = useState(false);
+
+  useEffect(() => {
+    const subscription = watch(() => {
+        setIsStepValid(isStepValidNow());
+    });
+    return () => subscription.unsubscribe();
+  }, [watch, isStepValidNow]);
 
   const steps = [
     { number: 1, title: 'Clinic Profile', description: 'Basic clinic details' },
@@ -179,42 +218,9 @@ export default function SignupPage() {
     { number: 7, title: 'Confirmation', description: 'Review and finish' },
   ];
   
-  const isStepValid = useMemo(() => {
-    const { isValid, errors } = formState;
-    const latitude = watch('latitude');
-
-    console.log('[DEBUG] Checking step validity...');
-    console.log(`[DEBUG] formState.isValid: ${isValid}`);
-    console.log(`[DEBUG] formState.errors:`, JSON.stringify(errors, null, 2));
-    console.log(`[DEBUG] latitude: ${latitude}`);
-    
-    if (!isValid) {
-      console.log('[DEBUG] FINAL RESULT: INVALID because formState.isValid is false.');
-      return false;
-    }
-
-    if (currentStep === 1) {
-      if (latitude === 0) {
-        console.log('[DEBUG] FINAL RESULT: INVALID because latitude is 0.');
-        return false;
-      }
-    }
-    
-    if (currentStep === 2) {
-      if (!isPhoneVerified) {
-        console.log('[DEBUG] FINAL RESULT: INVALID because phone is not verified.');
-        return false;
-      }
-    }
-    
-    console.log('[DEBUG] FINAL RESULT: VALID.');
-    return true;
-
-  }, [formState, watch, currentStep, isPhoneVerified]);
-
   const handleNext = async () => {
     const fieldsToValidate = stepFields[currentStep - 1];
-    const isStepValidNow = await methods.trigger(fieldsToValidate as any);
+    const isStepValidNow = await trigger(fieldsToValidate as any);
 
     if (!isStepValidNow) {
         toast({
