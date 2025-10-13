@@ -14,11 +14,11 @@ import { useToast } from '@/hooks/use-toast';
 export function Step1ClinicProfile() {
   const { control, setValue, watch } = useFormContext<SignUpFormData>();
   const { toast } = useToast();
-  const [locationDetected, setLocationDetected] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
   const [locationName, setLocationName] = useState<string | null>(null);
   
   const clinicType = watch('clinicType');
+  const latitude = watch('latitude');
 
   useEffect(() => {
     if (clinicType === 'Single Doctor') {
@@ -38,7 +38,6 @@ export function Step1ClinicProfile() {
             setValue('latitude', latitude, { shouldValidate: true });
             setValue('longitude', longitude, { shouldValidate: true });
 
-            // Reverse geocode
             const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`);
             const data = await response.json();
             
@@ -49,7 +48,6 @@ export function Step1ClinicProfile() {
                 setLocationName(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
             }
 
-            setLocationDetected(true);
             toast({
               title: "Location Detected",
               description: "Your clinic's location has been set.",
@@ -62,7 +60,6 @@ export function Step1ClinicProfile() {
                 description: "Could not fetch place name. Coordinates saved.",
              });
              setLocationName(`${watch('latitude').toFixed(4)}, ${watch('longitude').toFixed(4)}`);
-             setLocationDetected(true);
           } finally {
             setIsDetecting(false);
           }
@@ -156,19 +153,6 @@ export function Step1ClinicProfile() {
             </FormItem>
           )}
         />
-        <div className="md:col-span-2">
-            <Button type="button" variant={locationDetected ? "secondary" : "outline"} onClick={handleDetectLocation} className="w-full" disabled={isDetecting}>
-                {isDetecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (locationDetected ? <CheckCircle className="mr-2 h-4 w-4" /> : <MapPin className="mr-2 h-4 w-4" />)}
-                {isDetecting ? 'Detecting...' : (locationDetected ? 'Location Detected' : 'Detect My Location')}
-            </Button>
-            {locationDetected && locationName && (
-                <p className="text-sm text-muted-foreground text-center mt-2">
-                    {locationName}
-                </p>
-            )}
-            <FormField control={control} name="latitude" render={() => <FormMessage />} />
-            <FormField control={control} name="longitude" render={() => <FormMessage />} />
-        </div>
          <FormField
           control={control}
           name="skippedTokenRecurrence"
@@ -176,7 +160,7 @@ export function Step1ClinicProfile() {
             <FormItem>
               <FormLabel>Skipped Token Recurrence</FormLabel>
               <FormControl>
-                <Input type="number" placeholder="e.g., 5" {...field} value={field.value ?? ''} />
+                <Input type="number" min="2" placeholder="e.g., 3" {...field} value={field.value ?? ''} />
               </FormControl>
                <p className="text-xs text-muted-foreground">Call skipped token after these many tokens</p>
               <FormMessage />
@@ -190,13 +174,25 @@ export function Step1ClinicProfile() {
             <FormItem>
               <FormLabel>Walk-in Token Allotment</FormLabel>
               <FormControl>
-                <Input type="number" placeholder="e.g., 5" {...field} value={field.value ?? ''} />
+                <Input type="number" min="2" placeholder="e.g., 5" {...field} value={field.value ?? ''} />
               </FormControl>
               <p className="text-xs text-muted-foreground">Allot one walk-in token after every X online tokens</p>
               <FormMessage />
             </FormItem>
           )}
         />
+        <div className="md:col-span-2">
+            <Button type="button" variant={latitude !== 0 ? "secondary" : "outline"} onClick={handleDetectLocation} className="w-full" disabled={isDetecting}>
+                {isDetecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (latitude !== 0 ? <CheckCircle className="mr-2 h-4 w-4" /> : <MapPin className="mr-2 h-4 w-4" />)}
+                {isDetecting ? 'Detecting...' : (latitude !== 0 ? 'Location Detected' : 'Detect My Location')}
+            </Button>
+            {latitude !== 0 && locationName && (
+                <p className="text-sm text-muted-foreground text-center mt-2">
+                    {locationName}
+                </p>
+            )}
+            <FormField control={control} name="latitude" render={() => <FormMessage />} />
+        </div>
       </div>
     </div>
   );

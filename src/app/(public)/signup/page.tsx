@@ -43,10 +43,10 @@ const signupSchema = z.object({
   clinicType: z.enum(['Single Doctor', 'Multi-Doctor'], { required_error: "Please select a clinic type." }),
   numDoctors: z.coerce.number().min(1, "There must be at least one doctor."),
   clinicRegNumber: z.string().optional(),
-  latitude: z.coerce.number().min(-90, "Invalid latitude").max(90, "Invalid latitude"),
-  longitude: z.coerce.number().min(-180, "Invalid longitude").max(180, "Invalid longitude"),
-  skippedTokenRecurrence: z.coerce.number().min(1, "Value must be at least 1."),
-  walkInTokenAllotment: z.coerce.number().min(1, "Value must be at least 1 token."),
+  latitude: z.coerce.number().min(-90, "Invalid latitude").max(90, "Invalid latitude").refine(val => val !== 0, "Please detect your location."),
+  longitude: z.coerce.number().min(-180, "Invalid longitude").max(180, "Invalid longitude").refine(val => val !== 0, "Please detect your location."),
+  skippedTokenRecurrence: z.coerce.number().min(2, "Value must be at least 2."),
+  walkInTokenAllotment: z.coerce.number().min(2, "Value must be at least 2."),
 
   // Step 2
   ownerName: z.string().min(2, { message: "Owner name must be at least 2 characters." }),
@@ -160,6 +160,8 @@ export default function SignupPage() {
     defaultValues: defaultFormData,
     mode: "onBlur"
   });
+  
+  const { formState: { errors, touchedFields } } = methods;
 
   const steps = [
     { number: 1, title: 'Clinic Profile', description: 'Basic clinic details' },
@@ -318,6 +320,22 @@ export default function SignupPage() {
     }
   };
 
+  const isStepValid = useMemo(() => {
+    const fieldsForStep = stepFields[currentStep - 1];
+    if (fieldsForStep.length === 0) return true;
+    
+    const hasErrors = fieldsForStep.some(field => errors[field]);
+    const allTouched = fieldsForStep.every(field => touchedFields[field]);
+
+    // For step 2, also check phone verification
+    if (currentStep === 2) {
+        return allTouched && !hasErrors && isPhoneVerified;
+    }
+
+    return allTouched && !hasErrors;
+  }, [errors, touchedFields, currentStep, isPhoneVerified]);
+
+
   const currentStepComponent = useMemo(() => {
     switch (currentStep) {
       case 1:
@@ -380,7 +398,7 @@ export default function SignupPage() {
                     type="button" 
                     size="lg" 
                     onClick={handleNext}
-                    disabled={currentStep === 2 && !isPhoneVerified}
+                    disabled={!isStepValid}
                 >
                   {currentStep === steps.length ? 'Register Clinic' : 'Next'}
                 </Button>
