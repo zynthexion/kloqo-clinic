@@ -264,95 +264,91 @@ export default function SignupPage() {
   };
 
   const onSubmit = async (formData: SignUpFormData) => {
+    let userCredential;
     try {
-        const userCredential = await createUserWithEmailAndPassword(auth, formData.emailAddress, formData.password);
-        const user = userCredential.user;
-
-        // --- File upload logic ---
-        const uploadFileToStorage = async (file: File | null, path: string) => {
-          if (!file) return null;
-          const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
-          const { storage } = await import('@/lib/firebase');
-          const fileRef = ref(storage, path);
-          await uploadBytes(fileRef, file);
-          return await getDownloadURL(fileRef);
-        };
-        const logoUrl = await uploadFileToStorage(formData.logo, `clinics/${user.uid}/logo`);
-        const licenseUrl = await uploadFileToStorage(formData.license, `clinics/${user.uid}/license`);
-        const receptionPhotoUrl = await uploadFileToStorage(formData.receptionPhoto, `clinics/${user.uid}/receptionPhoto`);
-        // --- End file upload logic ---
-
-        const clinicRef = doc(collection(db, "clinics"));
-        const clinicId = clinicRef.id;
-        const clinicData = {
-            id: clinicId,
-            name: formData.clinicName,
-            type: formData.clinicType,
-            address: `${formData.address1}, ${formData.city}, ${formData.state} ${formData.pincode}`,
-            operatingHours: formData.hours,
-            plan: formData.plan,
-            ownerEmail: formData.emailAddress,
-            latitude: formData.latitude,
-            longitude: formData.longitude,
-            skippedTokenRecurrence: formData.skippedTokenRecurrence,
-            walkInTokenAllotment: formData.walkInTokenAllotment,
-            numDoctors: formData.numDoctors,
-            clinicRegNumber: formData.clinicRegNumber,
-            mapsLink: formData.mapsLink,
-            logoUrl,
-            licenseUrl,
-            receptionPhotoUrl,
-            planStartDate: new Date().toISOString(),
-            registrationStatus: "Pending",
-            onboardingStatus: "Pending",
-        };
-
-        const userRef = doc(db, "users", user.uid);
-        const userData = {
-            uid: user.uid,
-            clinicId: clinicId,
-            email: formData.emailAddress,
-            name: formData.ownerName,
-            clinicName: formData.clinicName,
-            phone: `+91${formData.mobileNumber}`,
-            designation: formData.designation,
-            onboarded: false,
-        };
-
-        const mobileAppCredsRef = doc(collection(db, "mobile-app"));
-        const mobileUsername = formData.clinicName.toLowerCase().replace(/\s+/g, '-') + '-mobile';
-        const mobilePassword = 'password123';
-        const mobileCredsData = {
-            id: mobileAppCredsRef.id,
-            clinicId: clinicId,
-            username: mobileUsername,
-            password: mobilePassword,
-        };
-
-        const batch = writeBatch(db);
-        batch.set(clinicRef, clinicData);
-        batch.set(userRef, userData);
-        batch.set(mobileAppCredsRef, mobileCredsData);
-        
-        await batch.commit().catch(async (serverError) => {
-            const errorContexts = [
-                { path: clinicRef.path, data: clinicData, operation: 'create' as const },
-                { path: userRef.path, data: userData, operation: 'create' as const },
-                { path: mobileAppCredsRef.path, data: mobileCredsData, operation: 'create' as const }
-            ];
-            
-            for (const context of errorContexts) {
-                const permissionError = new FirestorePermissionError({
-                    path: context.path,
-                    operation: context.operation,
-                    requestResourceData: context.data,
-                });
-                errorEmitter.emit('permission-error', permissionError);
-            }
-            
-            throw serverError;
+        userCredential = await createUserWithEmailAndPassword(auth, formData.emailAddress, formData.password);
+    } catch (error: any) {
+        toast({
+            variant: "destructive",
+            title: "Authentication Failed",
+            description: error.code === 'auth/email-already-in-use' 
+                ? "This email is already registered. Please login or use a different email."
+                : error.message || "An unexpected authentication error occurred.",
         });
-        
+        return;
+    }
+
+    const user = userCredential.user;
+
+    // --- File upload logic ---
+    const uploadFileToStorage = async (file: File | null, path: string) => {
+      if (!file) return null;
+      const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+      const { storage } = await import('@/lib/firebase');
+      const fileRef = ref(storage, path);
+      await uploadBytes(fileRef, file);
+      return await getDownloadURL(fileRef);
+    };
+
+    const logoUrl = await uploadFileToStorage(formData.logo, `clinics/${user.uid}/logo`);
+    const licenseUrl = await uploadFileToStorage(formData.license, `clinics/${user.uid}/license`);
+    const receptionPhotoUrl = await uploadFileToStorage(formData.receptionPhoto, `clinics/${user.uid}/receptionPhoto`);
+    // --- End file upload logic ---
+
+    const clinicRef = doc(collection(db, "clinics"));
+    const clinicId = clinicRef.id;
+    const clinicData = {
+        id: clinicId,
+        name: formData.clinicName,
+        type: formData.clinicType,
+        address: `${formData.address1}, ${formData.city}, ${formData.state} ${formData.pincode}`,
+        operatingHours: formData.hours,
+        plan: formData.plan,
+        ownerEmail: formData.emailAddress,
+        latitude: formData.latitude,
+        longitude: formData.longitude,
+        skippedTokenRecurrence: formData.skippedTokenRecurrence,
+        walkInTokenAllotment: formData.walkInTokenAllotment,
+        numDoctors: formData.numDoctors,
+        clinicRegNumber: formData.clinicRegNumber,
+        mapsLink: formData.mapsLink,
+        logoUrl,
+        licenseUrl,
+        receptionPhotoUrl,
+        planStartDate: new Date().toISOString(),
+        registrationStatus: "Pending",
+        onboardingStatus: "Pending",
+    };
+
+    const userRef = doc(db, "users", user.uid);
+    const userData = {
+        uid: user.uid,
+        clinicId: clinicId,
+        email: formData.emailAddress,
+        name: formData.ownerName,
+        clinicName: formData.clinicName,
+        phone: `+91${formData.mobileNumber}`,
+        designation: formData.designation,
+        onboarded: false,
+    };
+
+    const mobileAppCredsRef = doc(collection(db, "mobile-app"));
+    const mobileUsername = formData.clinicName.toLowerCase().replace(/\s+/g, '-') + '-mobile';
+    const mobilePassword = 'password123';
+    const mobileCredsData = {
+        id: mobileAppCredsRef.id,
+        clinicId: clinicId,
+        username: mobileUsername,
+        password: mobilePassword,
+    };
+
+    const batch = writeBatch(db);
+    batch.set(clinicRef, clinicData);
+    batch.set(userRef, userData);
+    batch.set(mobileAppCredsRef, mobileCredsData);
+    
+    batch.commit()
+    .then(() => {
         if (typeof window !== 'undefined') {
           localStorage.setItem('signupEmail', formData.emailAddress);
         }
@@ -363,16 +359,23 @@ export default function SignupPage() {
         });
 
         router.push('/dashboard');
-
-    } catch (error: any) {
-      if (error.name !== 'FirestorePermissionError') {
-        toast({
-            variant: "destructive",
-            title: "Registration Failed",
-            description: error.message || "An unexpected error occurred. Please try again.",
-        });
-      }
-    }
+    })
+    .catch(async (serverError) => {
+        const errorContexts = [
+            { path: clinicRef.path, data: clinicData, operation: 'create' as const },
+            { path: userRef.path, data: userData, operation: 'create' as const },
+            { path: mobileAppCredsRef.path, data: mobileCredsData, operation: 'create' as const }
+        ];
+        
+        for (const context of errorContexts) {
+            const permissionError = new FirestorePermissionError({
+                path: context.path,
+                operation: context.operation,
+                requestResourceData: context.data,
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        }
+    });
   }
 
   const handleBack = () => {
