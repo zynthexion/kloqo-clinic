@@ -327,31 +327,38 @@ export default function SignupPage() {
   };
 
   const isStepValid = useMemo(() => {
-    const fieldsForStep = stepFields[currentStep - 1];
-    if (fieldsForStep.length === 0) {
-        return true;
-    }
-    
+    const fieldsForStep = stepFields[currentStep - 1] as (keyof SignUpFormData)[];
+    if (fieldsForStep.length === 0) return true;
+
+    // Check for validation errors
     const hasErrors = fieldsForStep.some(field => errors[field]);
-    if (hasErrors) {
-        return false;
-    }
+    if (hasErrors) return false;
+
+    // Check if required fields have values (are "dirty" or have been touched)
+    const allFieldsHaveValue = fieldsForStep.every(field => {
+      const value = watch(field);
+      // For optional fields, they don't need a value.
+      // We assume Zod handles the required checks, but for enabling the button,
+      // we just need to ensure non-optional fields aren't empty/default.
+      if (typeof value === 'string') return value.trim() !== '';
+      if (typeof value === 'number') return true; // Zod handles number validation
+      if (typeof value === 'boolean') return true;
+      if (Array.isArray(value)) return true; // Zod handles array validation (e.g., min length)
+      return value != null;
+    });
+
+    if (!allFieldsHaveValue) return false;
 
     // Special checks for specific steps
     if (currentStep === 1) {
-      const lat = watch('latitude');
-      if (lat === 0) {
-        return false;
-      }
+      if (watch('latitude') === 0) return false;
     }
     
     if (currentStep === 2) {
-      if (!isPhoneVerified) {
-        return false;
-      }
+      if (!isPhoneVerified) return false;
     }
     
-    return true; // If no errors and special conditions are met, the step is valid.
+    return true;
   }, [errors, currentStep, isPhoneVerified, watch]);
 
 
