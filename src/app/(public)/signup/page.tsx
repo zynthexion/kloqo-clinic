@@ -329,33 +329,41 @@ export default function SignupPage() {
   const isStepValid = useMemo(() => {
     const fieldsForStep = stepFields[currentStep - 1] as (keyof SignUpFormData)[];
     if (fieldsForStep.length === 0) return true;
-
-    // Check for validation errors
+  
+    // Check for validation errors reported by Zod
     const hasErrors = fieldsForStep.some(field => errors[field]);
-    if (hasErrors) return false;
-
-    // Check if required fields have values (are "dirty" or have been touched)
+    if (hasErrors) {
+      return false;
+    }
+  
+    // Check if required fields have non-default values
     const allFieldsHaveValue = fieldsForStep.every(field => {
       const value = watch(field);
-      // For optional fields, they don't need a value.
-      // We assume Zod handles the required checks, but for enabling the button,
-      // we just need to ensure non-optional fields aren't empty/default.
-      if (typeof value === 'string') return value.trim() !== '';
-      if (typeof value === 'number') return true; // Zod handles number validation
-      if (typeof value === 'boolean') return true;
-      if (Array.isArray(value)) return true; // Zod handles array validation (e.g., min length)
+      
+      // Optional fields are always valid in this check
+      if (field === 'clinicRegNumber' || field === 'address2' || field === 'mapsLink' || field === 'promoCode' || field === 'logo' || field === 'license' || field === 'receptionPhoto') {
+        return true;
+      }
+      
+      // Required fields check
+      if (typeof value === 'string') {
+        return value.trim() !== '';
+      }
+      if (typeof value === 'number') {
+        // Specifically for latitude, it can't be the default 0
+        if (field === 'latitude') return value !== 0;
+        return true;
+      }
       return value != null;
     });
-
-    if (!allFieldsHaveValue) return false;
-
-    // Special checks for specific steps
-    if (currentStep === 1) {
-      if (watch('latitude') === 0) return false;
+  
+    if (!allFieldsHaveValue) {
+      return false;
     }
     
-    if (currentStep === 2) {
-      if (!isPhoneVerified) return false;
+    // Special check for step 2 phone verification
+    if (currentStep === 2 && !isPhoneVerified) {
+      return false;
     }
     
     return true;
