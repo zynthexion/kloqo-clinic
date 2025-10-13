@@ -1,4 +1,3 @@
-
 rules_version = '2';
 
 service cloud.firestore {
@@ -6,18 +5,19 @@ service cloud.firestore {
 
     // --- Rules for Collections ---
 
-    // Clinics can be read by anyone. A new clinic can be created by a signed-in user for themselves.
-    // Only the owner can update their clinic document.
+    // Clinics can be read by anyone. A new clinic can be created by a signed-in user.
+    // The user associated with the clinic is the only one who can update it.
     match /clinics/{clinicId} {
       allow read: if true;
-      allow create: if request.auth != null && request.resource.data.ownerEmail == request.auth.token.email;
-      allow update: if request.auth != null && request.auth.uid == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.uid;
+      allow create: if request.auth != null && request.auth.token.email == request.resource.data.ownerEmail;
+      allow update: if request.auth != null && request.auth.uid == get(/databases/$(database)/documents/clinics/$(clinicId)).data.ownerUid;
     }
 
-    // A user can create their own document.
-    // They can only read or update their own document afterwards.
+    // A user's public profile can be read by anyone.
+    // They can only update or delete their own document.
     match /users/{userId} {
-      allow read, update: if request.auth != null && request.auth.uid == userId;
+      allow read: if true;
+      allow update: if request.auth != null && request.auth.uid == userId;
       allow create: if request.auth != null && request.auth.uid == userId;
     }
 
@@ -38,12 +38,13 @@ service cloud.firestore {
       allow read, write: if true;
     }
     
-    // Mobile app credentials can be listed by anyone for login query.
+    // Mobile app credentials can be listed for login queries.
     // Creation is allowed for authenticated users during signup.
+    // Only the associated clinic owner can get or update credentials.
     match /mobile-app/{credentialId} {
       allow list: if true;
       allow create: if request.auth != null;
-      allow get, update: if request.auth != null && request.auth.uid == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.uid;
+      allow get, update: if request.auth != null && request.auth.uid == get(/databases/$(database)/documents/clinics/$(resource.data.clinicId)).data.ownerUid;
     }
     
     // Master list of all possible departments. Any signed-in user can read this.
