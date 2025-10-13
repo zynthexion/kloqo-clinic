@@ -321,22 +321,44 @@ export default function SignupPage() {
   };
 
   const isStepValid = useMemo(() => {
+    console.log("Checking step validity. Current errors:", JSON.stringify(errors, null, 2));
     const fieldsForStep = stepFields[currentStep - 1];
-    if (fieldsForStep.length === 0) return true;
+    if (fieldsForStep.length === 0) {
+        console.log("Step valid: No fields to validate.");
+        return true;
+    }
     
-    // Check for errors in the current step's fields
     const hasErrors = fieldsForStep.some(field => errors[field]);
-    if (hasErrors) return false;
+    if (hasErrors) {
+        console.log("Step invalid: hasErrors is true.");
+        const stepErrors = fieldsForStep.reduce((acc, field) => {
+            if (errors[field]) {
+                // @ts-ignore
+                acc[field] = errors[field].message;
+            }
+            return acc;
+        }, {} as Record<string, string>);
+        console.log("Errors in this step:", stepErrors);
+        return false;
+    }
 
     // Special checks for specific steps
     if (currentStep === 1) {
-      if (watch('latitude') === 0) return false; // Ensure location is detected
+      const lat = watch('latitude');
+      if (lat === 0) {
+        console.log("Step invalid: Latitude is 0.");
+        return false;
+      }
     }
     
     if (currentStep === 2) {
-      if (!isPhoneVerified) return false; // Ensure phone is verified
+      if (!isPhoneVerified) {
+        console.log("Step invalid: Phone not verified.");
+        return false;
+      }
     }
-
+    
+    console.log("Step is valid.");
     return true; // If no errors and special conditions are met, the step is valid.
   }, [errors, currentStep, isPhoneVerified, watch]);
 
