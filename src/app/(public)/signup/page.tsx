@@ -39,12 +39,12 @@ const hoursSchema = z.object({
 
 const signupSchema = z.object({
   // Step 1
-  clinicName: z.string().min(3, { message: "Clinic name must be at least 3 characters." }),
+  clinicName: z.string().min(3, { message: "Clinic name must be at least 3 characters." }).regex(/^[a-zA-Z\s]*$/, { message: "Clinic name should only contain alphabets and spaces." }),
   clinicType: z.enum(['Single Doctor', 'Multi-Doctor'], { required_error: "Please select a clinic type." }),
   numDoctors: z.coerce.number().min(1, "There must be at least one doctor."),
   clinicRegNumber: z.string().optional(),
-  latitude: z.coerce.number().min(-90, "Invalid latitude").max(90, "Invalid latitude").refine(val => val !== 0, "Please detect your location."),
-  longitude: z.coerce.number().min(-180, "Invalid longitude").max(180, "Invalid longitude").refine(val => val !== 0, "Please detect your location."),
+  latitude: z.coerce.number().min(-90, "Invalid latitude").max(90, "Invalid latitude"),
+  longitude: z.coerce.number().min(-180, "Invalid longitude").max(180, "Invalid longitude"),
   skippedTokenRecurrence: z.coerce.number().min(2, "Value must be at least 2."),
   walkInTokenAllotment: z.coerce.number().min(2, "Value must be at least 2."),
 
