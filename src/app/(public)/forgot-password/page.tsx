@@ -46,14 +46,30 @@ export default function ForgotPasswordPage() {
   const [foundUser, setFoundUser] = useState<User | null>(null);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && !window.recaptchaVerifier && step === 'enterPhone') {
-        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-            'size': 'invisible',
-            'callback': () => { /* reCAPTCHA solved */ }
+    // Initialize reCAPTCHA verifier once when the component mounts
+    if (typeof window !== 'undefined' && !window.recaptchaVerifier) {
+      window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        'size': 'invisible',
+        'callback': () => { /* reCAPTCHA solved */ }
+      });
+      window.recaptchaVerifier.render().catch((error) => {
+        console.error("reCAPTCHA render error:", error);
+        toast({
+          variant: "destructive",
+          title: "reCAPTCHA Error",
+          description: "Could not render reCAPTCHA. Please refresh the page.",
         });
-        window.recaptchaVerifier.render();
+      });
     }
-  }, [step]);
+
+    // Cleanup function
+    return () => {
+      if (typeof window !== 'undefined' && window.recaptchaVerifier) {
+        // It's good practice to clear the verifier on unmount
+        // to avoid memory leaks, though Firebase handles some of this.
+      }
+    };
+  }, [toast]);
 
 
   const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -104,6 +120,8 @@ export default function ForgotPasswordPage() {
     } catch (error) {
         console.error("Error sending OTP:", error);
         toast({ variant: "destructive", title: "Failed to Send OTP", description: "Please try again." });
+        // It's possible the verifier needs to be re-rendered on error
+        window.recaptchaVerifier.render().catch(console.error);
     } finally {
         setLoading(false);
     }
