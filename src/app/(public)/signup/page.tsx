@@ -39,7 +39,12 @@ const hoursSchema = z.object({
 
 const signupSchema = z.object({
   // Step 1
-  clinicName: z.string().min(3, { message: "Clinic name must be at least 3 characters." }).regex(/^[a-zA-Z\s]*$/, { message: "Clinic name should only contain alphabets and spaces." }),
+  clinicName: z.string()
+    .trim()
+    .min(3, { message: "Clinic name must be at least 3 characters." })
+    .max(100, { message: "Clinic name must be 100 characters or less." })
+    .regex(/^[a-zA-Z0-9\s&'\.-]*$/, { message: "Clinic name contains invalid characters." })
+    .refine(name => !/\s{2,}/.test(name), { message: "Clinic name cannot have multiple consecutive spaces." }),
   clinicType: z.enum(['Single Doctor', 'Multi-Doctor'], { required_error: "Please select a clinic type." }),
   numDoctors: z.coerce.number().min(1, "There must be at least one doctor."),
   clinicRegNumber: z.string().optional(),
