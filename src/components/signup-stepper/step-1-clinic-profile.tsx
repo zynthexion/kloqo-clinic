@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -187,11 +188,11 @@ export function Step1ClinicProfile() {
           name="walkInTokenAllotment"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Walk-in Token Allotment (minutes)</FormLabel>
+              <FormLabel>Walk-in Token Allotment</FormLabel>
               <FormControl>
-                <Input type="number" placeholder="e.g., 15" {...field} value={field.value ?? ''} />
+                <Input type="number" placeholder="e.g., 5" {...field} value={field.value ?? ''} />
               </FormControl>
-              <p className="text-xs text-muted-foreground">Allot walk-in token after this many minutes</p>
+              <p className="text-xs text-muted-foreground">Allot one walk-in token after every X online tokens</p>
               <FormMessage />
             </FormItem>
           )}

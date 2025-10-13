@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -45,7 +46,7 @@ const signupSchema = z.object({
   latitude: z.coerce.number().min(-90, "Invalid latitude").max(90, "Invalid latitude"),
   longitude: z.coerce.number().min(-180, "Invalid longitude").max(180, "Invalid longitude"),
   skippedTokenRecurrence: z.coerce.number().min(1, "Value must be at least 1."),
-  walkInTokenAllotment: z.coerce.number().min(1, "Value must be at least 1 minute."),
+  walkInTokenAllotment: z.coerce.number().min(1, "Value must be at least 1 token."),
 
   // Step 2
   ownerName: z.string().min(2, { message: "Owner name must be at least 2 characters." }),
@@ -99,7 +100,7 @@ const defaultFormData: SignUpFormData = {
   latitude: 0,
   longitude: 0,
   skippedTokenRecurrence: 3,
-  walkInTokenAllotment: 30,
+  walkInTokenAllotment: 5,
   
   ownerName: '',
   designation: 'Doctor',
