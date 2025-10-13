@@ -330,6 +330,7 @@ export default function SignupPage() {
         phone: `+91${formData.mobileNumber}`,
         designation: formData.designation,
         onboarded: false,
+        role: 'clinicAdmin' as const,
     };
 
     const mobileAppCredsRef = doc(collection(db, "mobile-app"));
@@ -348,6 +349,22 @@ export default function SignupPage() {
     batch.set(mobileAppCredsRef, mobileCredsData);
     
     batch.commit()
+    .catch(async (serverError) => {
+        const errorContexts = [
+            { path: clinicRef.path, data: clinicData },
+            { path: userRef.path, data: userData },
+            { path: mobileAppCredsRef.path, data: mobileCredsData }
+        ];
+
+        for (const context of errorContexts) {
+            const permissionError = new FirestorePermissionError({
+                path: context.path,
+                operation: 'create',
+                requestResourceData: context.data,
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        }
+    })
     .then(() => {
         if (typeof window !== 'undefined') {
           localStorage.setItem('signupEmail', formData.emailAddress);
@@ -360,22 +377,7 @@ export default function SignupPage() {
 
         router.push('/dashboard');
     })
-    .catch(async (serverError) => {
-        const errorContexts = [
-            { path: clinicRef.path, data: clinicData, operation: 'create' as const },
-            { path: userRef.path, data: userData, operation: 'create' as const },
-            { path: mobileAppCredsRef.path, data: mobileCredsData, operation: 'create' as const }
-        ];
-        
-        for (const context of errorContexts) {
-            const permissionError = new FirestorePermissionError({
-                path: context.path,
-                operation: context.operation,
-                requestResourceData: context.data,
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        }
-    });
+
   }
 
   const handleBack = () => {

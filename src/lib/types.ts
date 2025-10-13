@@ -142,4 +142,5 @@ export type User = {
     phone: string;
     designation: 'Doctor' | 'Owner';
     onboarded?: boolean;
+    role?: 'clinicAdmin';
 }
