@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { StepperNav } from '@/components/signup-stepper/stepper-nav';
 import { Step1ClinicProfile } from '@/components/signup-stepper/step-1-clinic-profile';
@@ -171,12 +171,10 @@ export default function SignupPage() {
   
   const { formState, watch, getValues, trigger, clearErrors } = methods;
 
-  const isStepValidNow = useCallback(() => {
-    const fieldsForStep = stepFields[currentStep - 1] as (keyof SignUpFormData)[] | undefined;
+  const isStepValid = useMemo(() => {
+    const fieldsForStep = stepFields[currentStep - 1];
     if (!fieldsForStep) return false;
 
-    const currentValues = getValues();
-    
     // Check for validation errors from Zod schema for the current step
     for (const field of fieldsForStep) {
         if (formState.errors[field]) {
@@ -185,10 +183,13 @@ export default function SignupPage() {
     }
     
     // Check if required fields are filled (not just valid)
+    const currentValues = getValues();
     for (const field of fieldsForStep) {
-      const value = currentValues[field];
+      const value = currentValues[field as keyof SignUpFormData];
       if (typeof value === 'string' && !value.trim()) {
-        return false;
+        if(field !== 'clinicRegNumber' && field !== 'mapsLink') { // These are optional
+            return false;
+        }
       }
       if (typeof value === 'number' && value === undefined) {
         return false;
@@ -208,16 +209,8 @@ export default function SignupPage() {
     }
 
     return true;
-  }, [currentStep, getValues, formState.errors, isPhoneVerified]);
+  }, [currentStep, formState.errors, getValues, isPhoneVerified, watch()]);
 
-  const [isStepValid, setIsStepValid] = useState(false);
-
-  useEffect(() => {
-    const subscription = watch(() => {
-        setIsStepValid(isStepValidNow());
-    });
-    return () => subscription.unsubscribe();
-  }, [watch, isStepValidNow]);
 
   const steps = [
     { number: 1, title: 'Clinic Profile', description: 'Basic clinic details' },
@@ -234,10 +227,9 @@ export default function SignupPage() {
     if (!fieldsToValidate) return;
 
     // Trigger validation for all fields in the current step
-    await trigger(fieldsToValidate);
+    const isValid = await trigger(fieldsToValidate);
 
-    // After triggering, check our comprehensive validity function
-    if (!isStepValidNow()) {
+    if (!isValid) {
         toast({
             variant: "destructive",
             title: "Incomplete Step",
