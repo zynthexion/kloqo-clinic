@@ -164,10 +164,10 @@ export default function SignupPage() {
   const methods = useForm<SignUpFormData>({
     resolver: zodResolver(signupSchema),
     defaultValues: defaultFormData,
-    mode: "onBlur"
+    mode: "onChange"
   });
   
-  const { formState: { errors, isValid }, watch } = methods;
+  const { formState, watch } = methods;
 
   const steps = [
     { number: 1, title: 'Clinic Profile', description: 'Basic clinic details' },
@@ -179,11 +179,44 @@ export default function SignupPage() {
     { number: 7, title: 'Confirmation', description: 'Review and finish' },
   ];
   
+  const isStepValid = useMemo(() => {
+    const { isValid, errors } = formState;
+    const latitude = watch('latitude');
+
+    console.log('[DEBUG] Checking step validity...');
+    console.log(`[DEBUG] formState.isValid: ${isValid}`);
+    console.log(`[DEBUG] formState.errors:`, JSON.stringify(errors, null, 2));
+    console.log(`[DEBUG] latitude: ${latitude}`);
+    
+    if (!isValid) {
+      console.log('[DEBUG] FINAL RESULT: INVALID because formState.isValid is false.');
+      return false;
+    }
+
+    if (currentStep === 1) {
+      if (latitude === 0) {
+        console.log('[DEBUG] FINAL RESULT: INVALID because latitude is 0.');
+        return false;
+      }
+    }
+    
+    if (currentStep === 2) {
+      if (!isPhoneVerified) {
+        console.log('[DEBUG] FINAL RESULT: INVALID because phone is not verified.');
+        return false;
+      }
+    }
+    
+    console.log('[DEBUG] FINAL RESULT: VALID.');
+    return true;
+
+  }, [formState, watch, currentStep, isPhoneVerified]);
+
   const handleNext = async () => {
     const fieldsToValidate = stepFields[currentStep - 1];
-    const isStepValid = await methods.trigger(fieldsToValidate as any);
+    const isStepValidNow = await methods.trigger(fieldsToValidate as any);
 
-    if (!isStepValid) {
+    if (!isStepValidNow) {
         toast({
             variant: "destructive",
             title: "Validation Error",
@@ -326,28 +359,7 @@ export default function SignupPage() {
       setCurrentStep(currentStep - 1);
     }
   };
-
-  const isStepValid = useMemo(() => {
-    const fieldsForStep = stepFields[currentStep - 1];
-    if (fieldsForStep.length === 0) return true;
-
-    const hasErrors = fieldsForStep.some(field => errors[field as keyof SignUpFormData]);
-    if (hasErrors) {
-      return false;
-    }
-
-    if (currentStep === 1 && watch('latitude') === 0) {
-      return false;
-    }
-
-    if (currentStep === 2 && !isPhoneVerified) {
-      return false;
-    }
-
-    return true;
-  }, [errors, currentStep, isPhoneVerified, watch]);
-
-
+  
   const currentStepComponent = useMemo(() => {
     switch (currentStep) {
       case 1:
