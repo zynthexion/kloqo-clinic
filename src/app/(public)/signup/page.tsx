@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { StepperNav } from '@/components/signup-stepper/stepper-nav';
 import { Step1ClinicProfile } from '@/components/signup-stepper/step-1-clinic-profile';
@@ -122,11 +122,11 @@ const defaultFormData: SignUpFormData = {
   skippedTokenRecurrence: 3,
   walkInTokenAllotment: 5,
   
-  ownerName: '',
+  ownerName: "",
   designation: 'Doctor',
-  mobileNumber: '',
-  emailAddress: '',
-  password: '',
+  mobileNumber: "",
+  emailAddress: "",
+  password: "",
   
   address1: '',
   address2: '',
@@ -177,7 +177,7 @@ export default function SignupPage() {
   const methods = useForm<SignUpFormData>({
     resolver: zodResolver(signupSchema),
     defaultValues: defaultFormData,
-    mode: "onBlur"
+    mode: "onChange"
   });
   
   const { formState, watch, getValues, trigger } = methods;
