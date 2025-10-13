@@ -49,6 +49,25 @@ export function Step4Hours() {
       <p className="text-muted-foreground mb-6">Set your clinic's working hours and weekly offs.</p>
       
       <div className="space-y-4">
+        <FormField
+          control={control}
+          name="avgPatientsPerDay"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Average Patients per Day</FormLabel>
+              <FormControl>
+                <Input 
+                    type="number" 
+                    min="1" 
+                    placeholder="e.g. 40" 
+                    {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
         {fields.map((hour, dayIndex) => (
           <div key={hour.id} className={cn("p-4 border rounded-lg", hour.isClosed && "bg-muted/50")}>
             <div className="flex items-center justify-between mb-4">
@@ -103,26 +122,6 @@ export function Step4Hours() {
             )}
           </div>
         ))}
-        <div className="pt-4">
-            <FormField
-              control={control}
-              name="avgPatientsPerDay"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Average Patients per Day</FormLabel>
-                  <FormControl>
-                    <Input 
-                        type="number" 
-                        min="0" 
-                        placeholder="e.g. 40" 
-                        {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-        </div>
       </div>
     </div>
   );

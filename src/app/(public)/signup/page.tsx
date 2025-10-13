@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { StepperNav } from '@/components/signup-stepper/stepper-nav';
 import { Step1ClinicProfile } from '@/components/signup-stepper/step-1-clinic-profile';
@@ -85,7 +85,7 @@ const signupSchema = z.object({
 
   // Step 4
   hours: z.array(hoursSchema),
-  avgPatientsPerDay: z.coerce.number().min(0, "Cannot be negative."),
+  avgPatientsPerDay: z.coerce.number().min(1, "Value must be at least 1."),
   
   // Step 5
   plan: z.enum(['Free Plan (Beta)', 'Kloqo Lite', 'Kloqo Grow', 'Kloqo Prime'], { required_error: "Please select a plan." }),
@@ -136,15 +136,15 @@ const defaultFormData: SignUpFormData = {
   mapsLink: '',
   
   hours: [
-    { day: 'Monday', timeSlots: [{ open: '09:00', close: '13:00' }], isClosed: false },
-    { day: 'Tuesday', timeSlots: [{ open: '09:00', close: '13:00' }], isClosed: false },
-    { day: 'Wednesday', timeSlots: [{ open: '09:00', close: '13:00' }], isClosed: false },
-    { day: 'Thursday', timeSlots: [{ open: '09:00', close: '13:00' }], isClosed: false },
-    { day: 'Friday', timeSlots: [{ open: '09:00', close: '13:00' }], isClosed: false },
-    { day: 'Saturday', timeSlots: [{ open: '09:00', close: '13:00' }], isClosed: false },
-    { day: 'Sunday', timeSlots: [{ open: '09:00', close: '13:00' }], isClosed: true },
+    { day: 'Monday', timeSlots: [{ open: '09:00', close: '17:00' }], isClosed: true },
+    { day: 'Tuesday', timeSlots: [{ open: '09:00', close: '17:00' }], isClosed: true },
+    { day: 'Wednesday', timeSlots: [{ open: '09:00', close: '17:00' }], isClosed: true },
+    { day: 'Thursday', timeSlots: [{ open: '09:00', close: '17:00' }], isClosed: true },
+    { day: 'Friday', timeSlots: [{ open: '09:00', close: '17:00' }], isClosed: true },
+    { day: 'Saturday', timeSlots: [{ open: '09:00', close: '13:00' }], isClosed: true },
+    { day: 'Sunday', timeSlots: [], isClosed: true },
   ],
-  avgPatientsPerDay: 0,
+  avgPatientsPerDay: 1,
   
   plan: 'Free Plan (Beta)',
   promoCode: '',
@@ -382,7 +382,7 @@ export default function SignupPage() {
     }
   };
   
-  const currentStepComponent = useMemo(() => {
+  const currentStepComponent = useCallback(() => {
     switch (currentStep) {
       case 1:
         return <Step1ClinicProfile />;
@@ -431,7 +431,7 @@ export default function SignupPage() {
               </header>
 
               <div className="flex-grow overflow-y-auto pr-4">
-                {currentStepComponent}
+                {currentStepComponent()}
               </div>
 
               <footer className="flex justify-between items-center mt-8 pt-6 border-t">
