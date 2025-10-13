@@ -1,18 +1,23 @@
 
 'use client';
 
+import { useState } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { SignUpFormData } from '@/app/(public)/signup/page';
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '../ui/form';
 import { Button } from '../ui/button';
-import { MapPin } from 'lucide-react';
+import { MapPin, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export function Step1ClinicProfile() {
-  const { control, setValue } = useFormContext<SignUpFormData>();
+  const { control, setValue, watch } = useFormContext<SignUpFormData>();
   const { toast } = useToast();
+  const [locationDetected, setLocationDetected] = useState(false);
+  
+  const latitude = watch('latitude');
+  const longitude = watch('longitude');
 
   const handleDetectLocation = () => {
     if (navigator.geolocation) {
@@ -21,6 +26,7 @@ export function Step1ClinicProfile() {
           const { latitude, longitude } = position.coords;
           setValue('latitude', latitude, { shouldValidate: true });
           setValue('longitude', longitude, { shouldValidate: true });
+          setLocationDetected(true);
           toast({
             title: "Location Detected",
             description: "Latitude and Longitude have been filled automatically.",
@@ -115,37 +121,18 @@ export function Step1ClinicProfile() {
           )}
         />
         <div className="md:col-span-2">
-            <Button type="button" variant="outline" onClick={handleDetectLocation} className="w-full">
-                <MapPin className="mr-2 h-4 w-4" />
-                Detect My Location
+            <Button type="button" variant={locationDetected ? "secondary" : "outline"} onClick={handleDetectLocation} className="w-full">
+                {locationDetected ? <CheckCircle className="mr-2 h-4 w-4" /> : <MapPin className="mr-2 h-4 w-4" />}
+                {locationDetected ? 'Location Detected' : 'Detect My Location'}
             </Button>
+            {locationDetected && (
+                <p className="text-sm text-muted-foreground text-center mt-2">
+                    Coordinates: {latitude.toFixed(4)}, {longitude.toFixed(4)}
+                </p>
+            )}
+            <FormField control={control} name="latitude" render={() => <FormMessage />} />
+            <FormField control={control} name="longitude" render={() => <FormMessage />} />
         </div>
-         <FormField
-          control={control}
-          name="latitude"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Latitude</FormLabel>
-              <FormControl>
-                <Input type="number" placeholder="e.g., 9.9312 (Kerala)" {...field} value={field.value ?? ''} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-         <FormField
-          control={control}
-          name="longitude"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Longitude</FormLabel>
-              <FormControl>
-                <Input type="number" placeholder="e.g., 76.2673 (Kerala)" {...field} value={field.value ?? ''} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
          <FormField
           control={control}
           name="skippedTokenRecurrence"
