@@ -142,15 +142,13 @@ const stepFields: (keyof SignUpFormData)[][] = [
 
 export default function SignupPage() {
   const [currentStep, setCurrentStep] = useState(1);
+  const [isPhoneVerified, setIsPhoneVerified] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
 
   const methods = useForm<SignUpFormData>({
     resolver: zodResolver(signupSchema),
-    defaultValues: {
-      ...defaultFormData,
-      emailAddress: `test-${Date.now()}@example.com`,
-    },
+    defaultValues: defaultFormData,
     mode: "onBlur"
   });
 
@@ -173,6 +171,15 @@ export default function SignupPage() {
             variant: "destructive",
             title: "Validation Error",
             description: "Please fill out all required fields correctly.",
+        });
+        return;
+    }
+    
+    if (currentStep === 2 && !isPhoneVerified) {
+        toast({
+            variant: "destructive",
+            title: "Verification Required",
+            description: "Please verify your mobile number to continue.",
         });
         return;
     }
@@ -257,15 +264,15 @@ export default function SignupPage() {
         
         await batch.commit().catch(async (serverError) => {
             const errorContexts = [
-                { path: clinicRef.path, data: clinicData },
-                { path: userRef.path, data: userData },
-                { path: mobileAppCredsRef.path, data: mobileCredsData }
+                { path: clinicRef.path, data: clinicData, operation: 'create' as const },
+                { path: userRef.path, data: userData, operation: 'create' as const },
+                { path: mobileAppCredsRef.path, data: mobileCredsData, operation: 'create' as const }
             ];
             
             errorContexts.forEach(context => {
                 const permissionError = new FirestorePermissionError({
                     path: context.path,
-                    operation: 'create',
+                    operation: context.operation,
                     requestResourceData: context.data,
                 });
                 errorEmitter.emit('permission-error', permissionError);
@@ -307,7 +314,7 @@ export default function SignupPage() {
       case 1:
         return <Step1ClinicProfile />;
       case 2:
-        return <Step2OwnerInfo />;
+        return <Step2OwnerInfo onVerified={() => setIsPhoneVerified(true)} />;
       case 3:
         return <Step3ClinicLocation />;
       case 4:
@@ -360,7 +367,12 @@ export default function SignupPage() {
                     Back
                   </Button>
                 ) : <div />}
-                <Button type="button" size="lg" onClick={handleNext}>
+                <Button 
+                    type="button" 
+                    size="lg" 
+                    onClick={handleNext}
+                    disabled={currentStep === 2 && !isPhoneVerified}
+                >
                   {currentStep === steps.length ? 'Register Clinic' : 'Next'}
                 </Button>
               </footer>
