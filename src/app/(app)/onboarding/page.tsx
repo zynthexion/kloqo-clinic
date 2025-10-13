@@ -97,10 +97,27 @@ export default function OnboardingPage() {
 
   const handleCompletion = async () => {
     if (!auth.currentUser) return;
-    const userRef = doc(db, 'users', auth.currentUser.uid);
+    const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+    const clinicId = userDoc.data()?.clinicId;
+
+    if (!clinicId) {
+        toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Could not find clinic to finalize onboarding."
+        });
+        return;
+    }
+    
+    const clinicRef = doc(db, 'clinics', clinicId);
+
     try {
-        await updateDoc(userRef, { onboarded: true });
+        await updateDoc(clinicRef, { onboardingStatus: "Completed" });
         router.push('/dashboard');
+        toast({
+            title: "Onboarding Complete!",
+            description: "Welcome to your dashboard."
+        });
     } catch (error) {
         console.error("Failed to update onboarding status: ", error);
         toast({

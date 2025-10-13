@@ -3,7 +3,7 @@
 
 import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { collection, getDocs, doc, getDoc, query, limit, where } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/firebase';
 
@@ -15,6 +15,7 @@ export function OnboardingCheck() {
   useEffect(() => {
     if (!auth.currentUser || auth.loading) return;
     
+    // If the user is already on the onboarding page, don't do anything.
     if (pathname === '/onboarding') return;
 
     const checkOnboardingStatus = async () => {
@@ -24,34 +25,35 @@ export function OnboardingCheck() {
 
         if (userDoc.exists()) {
           const userData = userDoc.data();
-          
-          if (userData.onboarded) {
-              return;
-          }
-
           const clinicId = userData.clinicId;
-          
-          if (!clinicId) {
-            router.push('/onboarding');
-            return;
-          }
 
-          const departmentsQuery = query(collection(db, "departments"), where("clinicId", "==", clinicId), limit(1));
-          const departmentsSnapshot = await getDocs(departmentsQuery);
-          
-          const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId), limit(1));
-          const doctorsSnapshot = await getDocs(doctorsQuery);
+          if (clinicId) {
+            const clinicDocRef = doc(db, "clinics", clinicId);
+            const clinicDoc = await getDoc(clinicDocRef);
 
-          const needsOnboarding = departmentsSnapshot.empty || doctorsSnapshot.empty;
-
-          if (needsOnboarding) {
+            if (clinicDoc.exists()) {
+              const clinicData = clinicDoc.data();
+              // Redirect to onboarding if the clinic's status is "Pending"
+              if (clinicData.onboardingStatus === "Pending") {
+                router.push('/onboarding');
+              }
+              // If "Completed", do nothing and let the user access the app.
+            } else {
+              // Clinic document doesn't exist, something is wrong, go to onboarding.
+              router.push('/onboarding');
+            }
+          } else {
+            // No clinicId on user, go to onboarding.
             router.push('/onboarding');
           }
         } else {
+          // User document doesn't exist, go to onboarding.
           router.push('/onboarding');
         }
       } catch (error) {
         console.error("Error checking onboarding status:", error);
+        // In case of an error, it might be safer to redirect to a safe page or show an error,
+        // but for now, we'll let them stay. A more robust app might redirect to an error page.
       }
     };
 
