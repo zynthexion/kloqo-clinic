@@ -7,10 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import type { SignUpFormData } from '@/app/(public)/signup/page';
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '../ui/form';
 import { Button } from '../ui/button';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { auth } from '@/lib/firebase';
 import { RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult } from 'firebase/auth';
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 
 declare global {
     interface Window {
@@ -27,6 +28,7 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
   const [otp, setOtp] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [captchaFailed, setCaptchaFailed] = useState(false);
 
   const mobileNumber = watch('mobileNumber');
   const isMobileNumberValid = !errors.mobileNumber && mobileNumber?.length > 10;
@@ -45,6 +47,7 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
   const handleSendOtp = async () => {
     if (!isMobileNumberValid) return;
     setIsSending(true);
+    setCaptchaFailed(false);
     try {
       const appVerifier = window.recaptchaVerifier;
       const confirmationResult = await signInWithPhoneNumber(auth, mobileNumber, appVerifier);
@@ -54,11 +57,12 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
     } catch (error: any) {
       console.error("Error sending OTP:", error);
       if (error.code === 'auth/captcha-check-failed') {
+          setCaptchaFailed(true);
           toast({
               variant: "destructive",
-              title: "CAPTCHA Check Failed",
-              description: "Please authorize your domain in the Firebase console for authentication.",
-              duration: 9000,
+              title: "Action Required: Authorize Domain",
+              description: "Please authorize your app's domain in the Firebase console.",
+              duration: 10000,
           });
       } else {
           toast({
@@ -67,9 +71,9 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
             description: "Please check the mobile number or try again.",
           });
       }
-       // Render the reCAPTCHA again
+       // Re-render the reCAPTCHA widget to allow for another attempt
       window.recaptchaVerifier.render().then((widgetId) => {
-        if(typeof window !== 'undefined'){
+        if(typeof window !== 'undefined' && window.recaptchaVerifier){
             window.recaptchaVerifier.reset(widgetId);
         }
       });
@@ -105,6 +109,16 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
       <p className="text-muted-foreground mb-6">Details of the main contact person or owner.</p>
       
       <div id="recaptcha-container"></div>
+
+      {captchaFailed && (
+          <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Authorization Required</AlertTitle>
+              <AlertDescription>
+                  To proceed, you must authorize your domain in the Firebase Console. Go to <strong>Authentication &gt; Settings &gt; Authorized domains</strong> and add your app's URL. Then, please try sending the OTP again.
+              </AlertDescription>
+          </Alert>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <FormField
