@@ -51,13 +51,22 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
       window.confirmationResult = confirmationResult;
       setOtpSent(true);
       toast({ title: "OTP Sent", description: "An OTP has been sent to your mobile number." });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error sending OTP:", error);
-      toast({
-        variant: "destructive",
-        title: "Failed to Send OTP",
-        description: "Please check the mobile number or try again.",
-      });
+      if (error.code === 'auth/captcha-check-failed') {
+          toast({
+              variant: "destructive",
+              title: "CAPTCHA Check Failed",
+              description: "Please authorize your domain in the Firebase console for authentication.",
+              duration: 9000,
+          });
+      } else {
+          toast({
+            variant: "destructive",
+            title: "Failed to Send OTP",
+            description: "Please check the mobile number or try again.",
+          });
+      }
        // Render the reCAPTCHA again
       window.recaptchaVerifier.render().then((widgetId) => {
         if(typeof window !== 'undefined'){
