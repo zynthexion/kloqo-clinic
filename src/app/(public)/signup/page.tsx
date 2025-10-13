@@ -161,7 +161,7 @@ export default function SignupPage() {
     mode: "onBlur"
   });
   
-  const { formState: { errors, touchedFields } } = methods;
+  const { formState: { errors }, watch } = methods;
 
   const steps = [
     { number: 1, title: 'Clinic Profile', description: 'Basic clinic details' },
@@ -324,16 +324,21 @@ export default function SignupPage() {
     const fieldsForStep = stepFields[currentStep - 1];
     if (fieldsForStep.length === 0) return true;
     
+    // Check for errors in the current step's fields
     const hasErrors = fieldsForStep.some(field => errors[field]);
-    const allTouched = fieldsForStep.every(field => touchedFields[field]);
+    if (hasErrors) return false;
 
-    // For step 2, also check phone verification
+    // Special checks for specific steps
+    if (currentStep === 1) {
+      if (watch('latitude') === 0) return false; // Ensure location is detected
+    }
+    
     if (currentStep === 2) {
-        return allTouched && !hasErrors && isPhoneVerified;
+      if (!isPhoneVerified) return false; // Ensure phone is verified
     }
 
-    return allTouched && !hasErrors;
-  }, [errors, touchedFields, currentStep, isPhoneVerified]);
+    return true; // If no errors and special conditions are met, the step is valid.
+  }, [errors, currentStep, isPhoneVerified, watch]);
 
 
   const currentStepComponent = useMemo(() => {
