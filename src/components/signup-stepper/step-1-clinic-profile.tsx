@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -17,8 +17,15 @@ export function Step1ClinicProfile() {
   const [isDetecting, setIsDetecting] = useState(false);
   const [locationName, setLocationName] = useState<string | null>(null);
   
-  const latitude = watch('latitude');
-  const longitude = watch('longitude');
+  const clinicType = watch('clinicType');
+
+  useEffect(() => {
+    if (clinicType === 'Single Doctor') {
+      setValue('numDoctors', 1);
+    } else if (clinicType === 'Multi-Doctor') {
+      setValue('numDoctors', 2);
+    }
+  }, [clinicType, setValue]);
 
   const handleDetectLocation = () => {
     if (navigator.geolocation) {
@@ -53,7 +60,7 @@ export function Step1ClinicProfile() {
                 title: "Location Error",
                 description: "Could not fetch place name. Coordinates saved.",
              });
-             setLocationName(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+             setLocationName(`${watch('latitude').toFixed(4)}, ${watch('longitude').toFixed(4)}`);
              setLocationDetected(true);
           } finally {
             setIsDetecting(false);
@@ -129,7 +136,7 @@ export function Step1ClinicProfile() {
             <FormItem>
               <FormLabel>Number of Doctors</FormLabel>
               <FormControl>
-                <Input type="number" min="1" placeholder="e.g., 3" {...field} value={field.value ?? ''} />
+                <Input type="number" min="1" placeholder="e.g., 3" {...field} value={field.value ?? ''} disabled={clinicType === 'Single Doctor'} />
               </FormControl>
               <FormMessage />
             </FormItem>
