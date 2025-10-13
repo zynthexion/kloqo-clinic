@@ -327,18 +327,29 @@ export default function SignupPage() {
   };
 
   const isStepValid = useMemo(() => {
+    console.log(`[DEBUG] Checking step ${currentStep} validity. Current errors:`, JSON.parse(JSON.stringify(errors)));
     const fieldsForStep = stepFields[currentStep - 1] as (keyof SignUpFormData)[];
     if (fieldsForStep.length === 0) return true;
   
     // Check for validation errors reported by Zod
-    const hasErrors = fieldsForStep.some(field => errors[field]);
+    const hasErrors = fieldsForStep.some(field => {
+      if (errors[field]) {
+        console.log(`[DEBUG] Zod error found for field '${field}':`, errors[field]?.message);
+        return true;
+      }
+      return false;
+    });
+    
     if (hasErrors) {
+      console.log(`[DEBUG] Step ${currentStep} is INVALID due to Zod errors.`);
       return false;
     }
   
     // Check if required fields have non-default values
     const allFieldsHaveValue = fieldsForStep.every(field => {
       const value = watch(field);
+      
+      console.log(`[DEBUG] Checking field '${field}':`, value);
       
       // Optional fields are always valid in this check
       if (field === 'clinicRegNumber' || field === 'address2' || field === 'mapsLink' || field === 'promoCode' || field === 'logo' || field === 'license' || field === 'receptionPhoto') {
@@ -347,25 +358,38 @@ export default function SignupPage() {
       
       // Required fields check
       if (typeof value === 'string') {
-        return value.trim() !== '';
+        if (value.trim() === '') {
+           console.log(`[DEBUG] Field '${field}' is an empty string. INVALID.`);
+           return false;
+        }
       }
-      if (typeof value === 'number') {
-        // Specifically for latitude, it can't be the default 0
-        if (field === 'latitude') return value !== 0;
-        return true;
+      if (value === null || value === undefined) {
+        console.log(`[DEBUG] Field '${field}' is null or undefined. INVALID.`);
+        return false;
       }
-      return value != null;
+
+      // Special check for latitude which can't be its default 0
+      if (field === 'latitude' && value === 0) {
+        console.log(`[DEBUG] Field 'latitude' is 0. INVALID.`);
+        return false;
+      }
+
+      console.log(`[DEBUG] Field '${field}' is VALID.`);
+      return true;
     });
   
     if (!allFieldsHaveValue) {
+      console.log(`[DEBUG] Step ${currentStep} is INVALID because not all required fields have a value.`);
       return false;
     }
     
     // Special check for step 2 phone verification
     if (currentStep === 2 && !isPhoneVerified) {
+      console.log(`[DEBUG] Step ${currentStep} is INVALID because phone is not verified.`);
       return false;
     }
     
+    console.log(`[DEBUG] Step ${currentStep} is VALID.`);
     return true;
   }, [errors, currentStep, isPhoneVerified, watch]);
 
