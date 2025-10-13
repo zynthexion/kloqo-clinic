@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { StepperNav } from '@/components/signup-stepper/stepper-nav';
 import { Step1ClinicProfile } from '@/components/signup-stepper/step-1-clinic-profile';
@@ -61,7 +61,19 @@ const signupSchema = z.object({
   designation: z.enum(['Doctor', 'Owner'], { required_error: "Please select a designation." }),
   mobileNumber: z.string().regex(/^\d{10}$/, "Please enter a valid 10-digit mobile number."),
   emailAddress: z.string().email({ message: "Please enter a valid email address." }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters." }),
+  password: z.string().min(6, "Password must be at least 6 characters.")
+    .refine((data) => /[A-Z]/.test(data), {
+        message: "Password must contain at least one uppercase letter.",
+    })
+    .refine((data) => /[a-z]/.test(data), {
+        message: "Password must contain at least one lowercase letter.",
+    })
+    .refine((data) => /[0-9]/.test(data), {
+        message: "Password must contain at least one number.",
+    })
+    .refine((data) => /[^a-zA-Z0-9]/.test(data), {
+        message: "Password must contain at least one special character.",
+    }),
 
   // Step 3
   address1: z.string().min(5, { message: "Address must be at least 5 characters." }),
@@ -147,7 +159,7 @@ const defaultFormData: SignUpFormData = {
 };
 
 const stepFields: (keyof SignUpFormData)[][] = [
-    ['clinicName', 'clinicType', 'numDoctors', 'latitude', 'longitude', 'skippedTokenRecurrence', 'walkInTokenAllotment'], // Step 1
+    ['clinicName', 'clinicType', 'numDoctors', 'skippedTokenRecurrence', 'walkInTokenAllotment'], // Step 1, latitude/longitude are special
     ['ownerName', 'designation', 'mobileNumber', 'emailAddress', 'password'], // Step 2
     ['address1', 'city', 'state', 'pincode'], // Step 3
     ['hours', 'avgPatientsPerDay'], // Step 4
@@ -155,7 +167,6 @@ const stepFields: (keyof SignUpFormData)[][] = [
     [], // Step 6
     ['agreeTerms', 'isAuthorized'], // Step 7
 ]
-
 
 export default function SignupPage() {
   const [currentStep, setCurrentStep] = useState(1);
@@ -166,50 +177,54 @@ export default function SignupPage() {
   const methods = useForm<SignUpFormData>({
     resolver: zodResolver(signupSchema),
     defaultValues: defaultFormData,
-    mode: "onChange"
+    mode: "onBlur"
   });
   
-  const { formState, watch, getValues, trigger, clearErrors } = methods;
+  const { formState, watch, getValues, trigger } = methods;
 
-  const isStepValid = useMemo(() => {
-    const fieldsForStep = stepFields[currentStep - 1];
-    if (!fieldsForStep) return false;
+  const isStepValidNow = useCallback(() => {
+    const values = getValues();
+    const currentStepFields = stepFields[currentStep - 1];
 
-    // Check for validation errors from Zod schema for the current step
-    for (const field of fieldsForStep) {
+    for (const field of currentStepFields) {
         if (formState.errors[field]) {
             return false;
         }
+        const value = values[field as keyof SignUpFormData];
+        if (typeof value === 'string' && !value.trim()) {
+            if(field !== 'clinicRegNumber' && field !== 'mapsLink') {
+                return false;
+            }
+        }
+    }
+
+    if (currentStep === 1 && values.latitude === 0) {
+        return false;
+    }
+
+    if (currentStep === 2 && !isPhoneVerified) {
+        return false;
     }
     
-    // Check if required fields are filled (not just valid)
-    const currentValues = getValues();
-    for (const field of fieldsForStep) {
-      const value = currentValues[field as keyof SignUpFormData];
-      if (typeof value === 'string' && !value.trim()) {
-        if(field !== 'clinicRegNumber' && field !== 'mapsLink') { // These are optional
-            return false;
-        }
-      }
-      if (typeof value === 'number' && value === undefined) {
+    if (currentStep === 7 && (!values.agreeTerms || !values.isAuthorized)) {
         return false;
-      }
-    }
-
-    if (currentStep === 1) {
-        if (currentValues.latitude === 0) return false;
-    }
-
-    if (currentStep === 2) {
-        if (!isPhoneVerified) return false;
-    }
-
-    if (currentStep === 7) {
-        if (!currentValues.agreeTerms || !currentValues.isAuthorized) return false;
     }
 
     return true;
-  }, [currentStep, formState.errors, getValues, isPhoneVerified, watch()]);
+  }, [currentStep, getValues, formState.errors, isPhoneVerified]);
+  
+  const [isStepValid, setIsStepValid] = useState(false);
+
+  useEffect(() => {
+    const subscription = watch(() => {
+      setIsStepValid(isStepValidNow());
+    });
+    return () => subscription.unsubscribe();
+  }, [watch, isStepValidNow]);
+
+   useEffect(() => {
+    setIsStepValid(isStepValidNow());
+  }, [currentStep, isPhoneVerified, isStepValidNow]);
 
 
   const steps = [
@@ -226,10 +241,13 @@ export default function SignupPage() {
     const fieldsToValidate = stepFields[currentStep - 1] as (keyof SignUpFormData)[] | undefined;
     if (!fieldsToValidate) return;
 
-    // Trigger validation for all fields in the current step
+    if (currentStep === 1) {
+        fieldsToValidate.push('latitude');
+    }
+
     const isValid = await trigger(fieldsToValidate);
 
-    if (!isValid) {
+    if (!isValid || !isStepValidNow()) {
         toast({
             variant: "destructive",
             title: "Incomplete Step",
