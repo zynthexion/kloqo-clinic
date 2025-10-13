@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import {
@@ -90,8 +90,9 @@ export default function LoginPage() {
               <div className="flex items-center">
                 <Label htmlFor="password">Password</Label>
                 <Link
-                  href="#"
+                  href="/forgot-password"
                   className="ml-auto inline-block text-sm underline"
+                  prefetch={false}
                 >
                   Forgot your password?
                 </Link>
