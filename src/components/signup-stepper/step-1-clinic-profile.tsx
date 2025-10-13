@@ -22,10 +22,10 @@ export function Step1ClinicProfile() {
   useEffect(() => {
     if (clinicType === 'Single Doctor') {
       setValue('numDoctors', 1);
-    } else if (clinicType === 'Multi-Doctor') {
+    } else if (clinicType === 'Multi-Doctor' && watch('numDoctors') < 2) {
       setValue('numDoctors', 2);
     }
-  }, [clinicType, setValue]);
+  }, [clinicType, setValue, watch]);
 
   const handleDetectLocation = () => {
     if (navigator.geolocation) {
@@ -136,7 +136,7 @@ export function Step1ClinicProfile() {
             <FormItem>
               <FormLabel>Number of Doctors</FormLabel>
               <FormControl>
-                <Input type="number" min="1" placeholder="e.g., 3" {...field} value={field.value ?? ''} disabled={clinicType === 'Single Doctor'} />
+                <Input type="number" min={clinicType === 'Multi-Doctor' ? 2 : 1} max={clinicType === 'Multi-Doctor' ? 15 : 1} placeholder="e.g., 3" {...field} value={field.value ?? ''} disabled={clinicType === 'Single Doctor'} />
               </FormControl>
               <FormMessage />
             </FormItem>

@@ -79,6 +79,14 @@ const signupSchema = z.object({
   // Step 7
   agreeTerms: z.boolean().refine(val => val === true, { message: "You must agree to the terms." }),
   isAuthorized: z.boolean().refine(val => val === true, { message: "You must confirm authorization." }),
+}).refine(data => {
+    if (data.clinicType === 'Multi-Doctor') {
+        return data.numDoctors >= 2 && data.numDoctors <= 15;
+    }
+    return true;
+}, {
+    message: "For a multi-doctor clinic, please enter between 2 and 15 doctors.",
+    path: ["numDoctors"],
 });
 
 export type SignUpFormData = z.infer<typeof signupSchema>;
