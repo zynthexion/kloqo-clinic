@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -21,7 +22,7 @@ declare global {
 }
 
 export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
-  const { control, watch, formState: { errors } } = useFormContext<SignUpFormData>();
+  const { control, watch, formState: { errors }, setValue } = useFormContext<SignUpFormData>();
   const { toast } = useToast();
 
   const [otpSent, setOtpSent] = useState(false);
@@ -31,7 +32,7 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
   const [captchaFailed, setCaptchaFailed] = useState(false);
 
   const mobileNumber = watch('mobileNumber');
-  const isMobileNumberValid = !errors.mobileNumber && mobileNumber?.length > 10;
+  const isMobileNumberValid = !errors.mobileNumber && mobileNumber?.length === 10;
 
   useEffect(() => {
     if (typeof window !== 'undefined' && !window.recaptchaVerifier) {
@@ -48,9 +49,10 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
     if (!isMobileNumberValid) return;
     setIsSending(true);
     setCaptchaFailed(false);
+    const fullNumber = `+91${mobileNumber}`;
     try {
       const appVerifier = window.recaptchaVerifier;
-      const confirmationResult = await signInWithPhoneNumber(auth, mobileNumber, appVerifier);
+      const confirmationResult = await signInWithPhoneNumber(auth, fullNumber, appVerifier);
       window.confirmationResult = confirmationResult;
       setOtpSent(true);
       toast({ title: "OTP Sent", description: "An OTP has been sent to your mobile number." });
@@ -101,6 +103,12 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
         setIsVerifying(false);
     }
   };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/\D/g, ''); // Remove non-digit characters
+    setValue('mobileNumber', value.slice(0, 10)); // Limit to 10 digits
+  };
+
 
   return (
     <div>
@@ -163,9 +171,17 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
                 <FormItem>
                   <FormLabel>Mobile Number <span className="text-destructive">*</span></FormLabel>
                     <div className="flex gap-2">
-                        <FormControl>
-                            <Input type="tel" placeholder="+91 98765 43210" {...field} />
-                        </FormControl>
+                        <div className="relative flex-grow">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">+91</span>
+                            <FormControl>
+                                <Input 
+                                    placeholder="98765 43210" 
+                                    {...field}
+                                    onChange={handlePhoneChange}
+                                    className="pl-10"
+                                />
+                            </FormControl>
+                        </div>
                         {!otpSent && (
                              <Button type="button" onClick={handleSendOtp} disabled={!isMobileNumberValid || isSending}>
                                 {isSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}

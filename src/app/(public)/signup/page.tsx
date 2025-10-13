@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { StepperNav } from '@/components/signup-stepper/stepper-nav';
 import { Step1ClinicProfile } from '@/components/signup-stepper/step-1-clinic-profile';
@@ -55,9 +55,11 @@ const signupSchema = z.object({
   walkInTokenAllotment: z.coerce.number().min(2, "Value must be at least 2."),
 
   // Step 2
-  ownerName: z.string().min(2, { message: "Owner name must be at least 2 characters." }),
+  ownerName: z.string()
+    .min(2, { message: "Owner name must be at least 2 characters." })
+    .regex(/^[a-zA-Z\s]*$/, { message: "Name should only contain alphabets and spaces." }),
   designation: z.enum(['Doctor', 'Owner'], { required_error: "Please select a designation." }),
-  mobileNumber: z.string().regex(/^\+?[1-9]\d{1,14}$/, "Please enter a valid mobile number."),
+  mobileNumber: z.string().regex(/^\d{10}$/, "Please enter a valid 10-digit mobile number."),
   emailAddress: z.string().email({ message: "Please enter a valid email address." }),
   password: z.string().min(6, { message: "Password must be at least 6 characters." }),
 
@@ -167,25 +169,34 @@ export default function SignupPage() {
     mode: "onChange"
   });
   
-  const { formState, watch, getValues, trigger } = methods;
+  const { formState, watch, getValues, trigger, clearErrors } = methods;
 
   const isStepValidNow = useCallback(() => {
-    const fieldsForStep = stepFields[currentStep - 1];
+    const fieldsForStep = stepFields[currentStep - 1] as (keyof SignUpFormData)[] | undefined;
     if (!fieldsForStep) return false;
 
-    const values = getValues();
-    const hasErrors = Object.keys(formState.errors).some(errorKey => fieldsForStep.includes(errorKey as any));
+    const currentValues = getValues();
     
-    if (hasErrors) return false;
-
+    // Check for validation errors from Zod schema for the current step
     for (const field of fieldsForStep) {
-        const value = values[field];
-        if (typeof value === 'string' && !value) return false;
-        if (typeof value === 'number' && value === undefined) return false;
+        if (formState.errors[field]) {
+            return false;
+        }
     }
     
+    // Check if required fields are filled (not just valid)
+    for (const field of fieldsForStep) {
+      const value = currentValues[field];
+      if (typeof value === 'string' && !value.trim()) {
+        return false;
+      }
+      if (typeof value === 'number' && value === undefined) {
+        return false;
+      }
+    }
+
     if (currentStep === 1) {
-        if (values.latitude === 0) return false;
+        if (currentValues.latitude === 0) return false;
     }
 
     if (currentStep === 2) {
@@ -193,7 +204,7 @@ export default function SignupPage() {
     }
 
     if (currentStep === 7) {
-        if (!values.agreeTerms || !values.isAuthorized) return false;
+        if (!currentValues.agreeTerms || !currentValues.isAuthorized) return false;
     }
 
     return true;
@@ -219,23 +230,18 @@ export default function SignupPage() {
   ];
   
   const handleNext = async () => {
-    const fieldsToValidate = stepFields[currentStep - 1];
-    const isStepValidNow = await trigger(fieldsToValidate as any);
+    const fieldsToValidate = stepFields[currentStep - 1] as (keyof SignUpFormData)[] | undefined;
+    if (!fieldsToValidate) return;
 
-    if (!isStepValidNow) {
+    // Trigger validation for all fields in the current step
+    await trigger(fieldsToValidate);
+
+    // After triggering, check our comprehensive validity function
+    if (!isStepValidNow()) {
         toast({
             variant: "destructive",
-            title: "Validation Error",
-            description: "Please fill out all required fields correctly.",
-        });
-        return;
-    }
-    
-    if (currentStep === 2 && !isPhoneVerified) {
-        toast({
-            variant: "destructive",
-            title: "Verification Required",
-            description: "Please verify your mobile number to continue.",
+            title: "Incomplete Step",
+            description: "Please fill out all required fields correctly before continuing.",
         });
         return;
     }
@@ -298,7 +304,7 @@ export default function SignupPage() {
             email: formData.emailAddress,
             name: formData.ownerName,
             clinicName: formData.clinicName,
-            phone: formData.mobileNumber,
+            phone: `+91${formData.mobileNumber}`,
             designation: formData.designation,
             onboarded: false,
         };
