@@ -341,20 +341,15 @@ export default function SignupPage() {
                 { path: mobileAppCredsRef.path, data: mobileCredsData, operation: 'create' as const }
             ];
             
-            // This is a simplified approach. A real app might try to identify
-            // which specific set() call failed if the batch error provides that info.
             for (const context of errorContexts) {
                 const permissionError = new FirestorePermissionError({
                     path: context.path,
                     operation: context.operation,
                     requestResourceData: context.data,
                 });
-                // We emit an error for each potential failure point in the batch.
-                // The developer console will show which one was actually denied.
                 errorEmitter.emit('permission-error', permissionError);
             }
             
-            // We still throw the original error to halt execution.
             throw serverError;
         });
         
@@ -370,15 +365,13 @@ export default function SignupPage() {
         router.push('/dashboard');
 
     } catch (error: any) {
-        // Only show generic toast if it's not a permission error we've already handled
-        if (error.name !== 'FirestorePermissionError') {
-            console.error("Signup error:", error);
-            toast({
-                variant: "destructive",
-                title: "Registration Failed",
-                description: error.message || "An unexpected error occurred. Please try again.",
-            });
-        }
+      if (error.name !== 'FirestorePermissionError') {
+        toast({
+            variant: "destructive",
+            title: "Registration Failed",
+            description: error.message || "An unexpected error occurred. Please try again.",
+        });
+      }
     }
   }
 
