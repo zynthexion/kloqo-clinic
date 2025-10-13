@@ -167,7 +167,7 @@ export default function SignupPage() {
     mode: "onBlur"
   });
   
-  const { formState: { errors }, watch } = methods;
+  const { formState: { errors, isValid }, watch } = methods;
 
   const steps = [
     { number: 1, title: 'Clinic Profile', description: 'Basic clinic details' },
@@ -181,9 +181,9 @@ export default function SignupPage() {
   
   const handleNext = async () => {
     const fieldsToValidate = stepFields[currentStep - 1];
-    const isValid = await methods.trigger(fieldsToValidate as any);
+    const isStepValid = await methods.trigger(fieldsToValidate as any);
 
-    if (!isValid) {
+    if (!isStepValid) {
         toast({
             variant: "destructive",
             title: "Validation Error",
@@ -290,6 +290,7 @@ export default function SignupPage() {
                 const permissionError = new FirestorePermissionError({
                     path: context.path,
                     operation: context.operation,
+
                     requestResourceData: context.data,
                 });
                 errorEmitter.emit('permission-error', permissionError);
@@ -327,69 +328,22 @@ export default function SignupPage() {
   };
 
   const isStepValid = useMemo(() => {
-    console.log(`[DEBUG] Checking step ${currentStep} validity. Current errors:`, JSON.parse(JSON.stringify(errors)));
-    const fieldsForStep = stepFields[currentStep - 1] as (keyof SignUpFormData)[];
+    const fieldsForStep = stepFields[currentStep - 1];
     if (fieldsForStep.length === 0) return true;
-  
-    // Check for validation errors reported by Zod
-    const hasErrors = fieldsForStep.some(field => {
-      if (errors[field]) {
-        console.log(`[DEBUG] Zod error found for field '${field}':`, errors[field]?.message);
-        return true;
-      }
-      return false;
-    });
-    
+
+    const hasErrors = fieldsForStep.some(field => errors[field as keyof SignUpFormData]);
     if (hasErrors) {
-      console.log(`[DEBUG] Step ${currentStep} is INVALID due to Zod errors.`);
       return false;
     }
-  
-    // Check if required fields have non-default values
-    const allFieldsHaveValue = fieldsForStep.every(field => {
-      const value = watch(field);
-      
-      console.log(`[DEBUG] Checking field '${field}':`, value);
-      
-      // Optional fields are always valid in this check
-      if (field === 'clinicRegNumber' || field === 'address2' || field === 'mapsLink' || field === 'promoCode' || field === 'logo' || field === 'license' || field === 'receptionPhoto') {
-        return true;
-      }
-      
-      // Required fields check
-      if (typeof value === 'string') {
-        if (value.trim() === '') {
-           console.log(`[DEBUG] Field '${field}' is an empty string. INVALID.`);
-           return false;
-        }
-      }
-      if (value === null || value === undefined) {
-        console.log(`[DEBUG] Field '${field}' is null or undefined. INVALID.`);
-        return false;
-      }
 
-      // Special check for latitude which can't be its default 0
-      if (field === 'latitude' && value === 0) {
-        console.log(`[DEBUG] Field 'latitude' is 0. INVALID.`);
-        return false;
-      }
-
-      console.log(`[DEBUG] Field '${field}' is VALID.`);
-      return true;
-    });
-  
-    if (!allFieldsHaveValue) {
-      console.log(`[DEBUG] Step ${currentStep} is INVALID because not all required fields have a value.`);
+    if (currentStep === 1 && watch('latitude') === 0) {
       return false;
     }
-    
-    // Special check for step 2 phone verification
+
     if (currentStep === 2 && !isPhoneVerified) {
-      console.log(`[DEBUG] Step ${currentStep} is INVALID because phone is not verified.`);
       return false;
     }
-    
-    console.log(`[DEBUG] Step ${currentStep} is VALID.`);
+
     return true;
   }, [errors, currentStep, isPhoneVerified, watch]);
 
