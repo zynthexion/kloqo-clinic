@@ -77,14 +77,14 @@ export default function ForgotPasswordPage() {
     setLoading(true);
     try {
       const usersRef = collection(db, 'users');
-      const q = query(usersRef, where("email", "==", email));
+      const q = query(usersRef, where("email", "==", email), where("role", "==", "clinicAdmin"));
       const querySnapshot = await getDocs(q);
       
       if (querySnapshot.empty) {
         toast({
           variant: "destructive",
           title: "User Not Found",
-          description: "No user found with this email address.",
+          description: "No admin user found with this email address.",
         });
       } else {
         const userData = querySnapshot.docs[0].data() as User;
