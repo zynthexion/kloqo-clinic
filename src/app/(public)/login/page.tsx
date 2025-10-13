@@ -24,16 +24,6 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
-  const [defaultEmail, setDefaultEmail] = useState('');
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const storedEmail = localStorage.getItem('signupEmail');
-      if (storedEmail) {
-        setDefaultEmail(storedEmail);
-      }
-    }
-  }, []);
 
   const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -94,8 +84,6 @@ export default function LoginPage() {
                 type="email"
                 placeholder="m@example.com"
                 required
-                defaultValue={defaultEmail}
-                key={defaultEmail} 
               />
             </div>
             <div className="grid gap-2">
@@ -114,7 +102,6 @@ export default function LoginPage() {
                   name="password"
                   type={showPassword ? 'text' : 'password'}
                   required
-                  defaultValue="password123"
                 />
                 <Button
                   type="button"
