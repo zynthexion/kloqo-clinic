@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,47 +15,154 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PeterdrawLogo } from '@/components/icons';
 import { useRouter } from 'next/navigation';
-import { sendPasswordResetEmail } from 'firebase/auth';
+import { signInWithPhoneNumber, RecaptchaVerifier, type ConfirmationResult, updatePassword } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
-import { auth } from '@/lib/firebase';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { auth, db } from '@/lib/firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { ArrowLeft, Loader2, KeyRound, Phone, Mail } from 'lucide-react';
+import type { User } from '@/lib/types';
+
+type Step = 'enterEmail' | 'enterPhone' | 'verifyOtp' | 'resetPassword' | 'success';
+
+declare global {
+  interface Window {
+    recaptchaVerifier: RecaptchaVerifier;
+    confirmationResult?: ConfirmationResult;
+  }
+}
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
+  const [step, setStep] = useState<Step>('enterEmail');
 
-  const handlePasswordReset = async (event: React.FormEvent<HTMLFormElement>) => {
+  const [email, setEmail] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [otp, setOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  const [foundUser, setFoundUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !window.recaptchaVerifier && step === 'enterPhone') {
+        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+            'size': 'invisible',
+            'callback': () => { /* reCAPTCHA solved */ }
+        });
+        window.recaptchaVerifier.render();
+    }
+  }, [step]);
+
+
+  const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLoading(true);
-
-    if (!auth) {
-      toast({
-        variant: "destructive",
-        title: "Initialization Error",
-        description: "Authentication service is not ready. Please try again in a moment.",
-      });
-      setLoading(false);
-      return;
-    }
-    
     try {
-        await sendPasswordResetEmail(auth, email);
-        toast({ title: "Password Reset Email Sent", description: "Please check your inbox for instructions to reset your password." });
-        setEmailSent(true);
-    } catch (error: any) {
-        console.error("Password reset failed:", error);
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where("email", "==", email));
+      const querySnapshot = await getDocs(q);
+      
+      if (querySnapshot.empty) {
         toast({
-            variant: "destructive",
-            title: "Password Reset Failed",
-            description: "Could not send reset email. Please ensure the email address is correct.",
+          variant: "destructive",
+          title: "User Not Found",
+          description: "No user found with this email address.",
         });
+      } else {
+        const userData = querySnapshot.docs[0].data() as User;
+        setFoundUser(userData);
+        setStep('enterPhone');
+      }
+    } catch (error) {
+        console.error("Error checking email:", error);
+        toast({ variant: "destructive", title: "Error", description: "An error occurred. Please try again." });
     } finally {
         setLoading(false);
     }
   };
+
+  const handlePhoneSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!foundUser) return;
+    setLoading(true);
+
+    const enteredPhone = `+91${phoneNumber}`;
+    if (enteredPhone !== foundUser.phone) {
+        toast({ variant: "destructive", title: "Incorrect Phone Number", description: "This phone number does not match the registered user." });
+        setLoading(false);
+        return;
+    }
+
+    try {
+        const appVerifier = window.recaptchaVerifier;
+        const confirmationResult = await signInWithPhoneNumber(auth, enteredPhone, appVerifier);
+        window.confirmationResult = confirmationResult;
+        setStep('verifyOtp');
+        toast({ title: "OTP Sent", description: "An OTP has been sent to your mobile number." });
+    } catch (error) {
+        console.error("Error sending OTP:", error);
+        toast({ variant: "destructive", title: "Failed to Send OTP", description: "Please try again." });
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const handleOtpSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!window.confirmationResult) return;
+    setLoading(true);
+    try {
+        await window.confirmationResult.confirm(otp);
+        toast({ title: "Verification Successful", description: "You can now reset your password." });
+        setStep('resetPassword');
+    } catch (error) {
+        toast({ variant: "destructive", title: "Invalid OTP", description: "Please try again." });
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (newPassword !== confirmPassword) {
+          toast({ variant: "destructive", title: "Passwords Do Not Match" });
+          return;
+      }
+      if (!auth.currentUser) {
+          toast({ variant: "destructive", title: "Authentication Error", description: "User session expired. Please start over." });
+          router.push('/login');
+          return;
+      }
+      setLoading(true);
+      try {
+          await updatePassword(auth.currentUser, newPassword);
+          setStep('success');
+          toast({ title: "Password Reset Successful", description: "You can now log in with your new password." });
+      } catch (error) {
+          console.error("Error resetting password:", error);
+          toast({ variant: "destructive", title: "Error", description: "Could not reset password. Please try again." });
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  const titles: Record<Step, string> = {
+    enterEmail: 'Forgot Your Password?',
+    enterPhone: 'Verify Your Identity',
+    verifyOtp: 'Enter OTP',
+    resetPassword: 'Set New Password',
+    success: 'Success!'
+  }
+
+  const descriptions: Record<Step, string> = {
+    enterEmail: "No problem. Enter your email and we'll start the recovery process.",
+    enterPhone: 'Enter the mobile number associated with your account.',
+    verifyOtp: 'A 6-digit code has been sent to your mobile number.',
+    resetPassword: 'Create a new, strong password for your account.',
+    success: 'Your password has been reset successfully.'
+  }
 
   return (
     <div
@@ -65,6 +172,7 @@ export default function ForgotPasswordPage() {
           "url('https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=1920&h=1080&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8bWVkaWNpbmV8ZW58MHx8MHx8fDA%3D')",
       }}
     >
+      <div id="recaptcha-container" />
       <div className="absolute inset-0 bg-primary/80" />
       <Card className="mx-auto w-[400px] z-10">
         <CardHeader className="text-center">
@@ -72,35 +180,120 @@ export default function ForgotPasswordPage() {
             <PeterdrawLogo className="h-8 w-8 text-primary" />
             <h1 className="text-3xl font-bold font-headline">Kloqo</h1>
           </div>
-          <CardTitle className="text-3xl font-bold">Forgot Your Password?</CardTitle>
+          <CardTitle className="text-3xl font-bold">{titles[step]}</CardTitle>
           <CardDescription className="text-balance text-muted-foreground">
-            {emailSent 
-              ? "A password reset link has been sent to your email."
-              : "No problem. Enter your email and we'll send you a reset link."}
+            {descriptions[step]}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {!emailSent ? (
-            <form className="grid gap-4" onSubmit={handlePasswordReset}>
+          {step === 'enterEmail' && (
+            <form className="grid gap-4" onSubmit={handleEmailSubmit}>
               <div className="grid gap-2">
                 <Label htmlFor="email">Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="m@example.com"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Continue
+              </Button>
+            </form>
+          )}
+
+          {step === 'enterPhone' && (
+            <form className="grid gap-4" onSubmit={handlePhoneSubmit}>
+              <div className="grid gap-2">
+                <Label htmlFor="phone">Phone Number</Label>
+                <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        id="phone"
+                        type="tel"
+                        placeholder="98765 43210"
+                        required
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                        className="pl-10"
+                    />
+                </div>
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Send OTP
+              </Button>
+            </form>
+          )}
+
+          {step === 'verifyOtp' && (
+            <form className="grid gap-4" onSubmit={handleOtpSubmit}>
+              <div className="grid gap-2">
+                <Label htmlFor="otp">OTP Code</Label>
                 <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  placeholder="m@example.com"
+                  id="otp"
+                  type="text"
+                  placeholder="Enter 6-digit code"
                   required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                  maxLength={6}
                 />
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Send Reset Link
+                Verify & Proceed
               </Button>
             </form>
-          ) : (
-            <Button variant="outline" className="w-full" asChild>
+          )}
+
+          {step === 'resetPassword' && (
+             <form className="grid gap-4" onSubmit={handlePasswordReset}>
+              <div className="grid gap-2">
+                <Label htmlFor="newPassword">New Password</Label>
+                 <div className="relative">
+                  <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="newPassword"
+                    type="password"
+                    required
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                 <div className="relative">
+                  <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Reset Password
+              </Button>
+            </form>
+          )}
+
+          {(step === 'success' || step !== 'enterEmail') && (
+            <Button variant="outline" className="w-full mt-4" asChild>
                 <Link href="/login">
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     Back to Login
