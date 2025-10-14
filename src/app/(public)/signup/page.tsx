@@ -299,7 +299,7 @@ export default function SignupPage() {
     const clinicId = clinicRef.id;
     const clinicData = {
         id: clinicId,
-        ownerId: user.uid, // Add ownerId to the clinic document
+        ownerId: user.uid,
         name: formData.clinicName,
         type: formData.clinicType,
         address: `${formData.address1}, ${formData.city}, ${formData.state} ${formData.pincode}`,
