@@ -198,16 +198,6 @@ export default function DepartmentsPage() {
         const clinicRef = doc(db, "clinics", clinicId);
         const departmentIdsToAdd = selectedDepts.map(d => d.id);
         
-        // DEBUGGING: Log clinic ID and document content before update
-        const clinicSnap = await getDoc(clinicRef);
-        console.log("DEBUG: Attempting to update clinic with ID:", clinicId);
-        if (clinicSnap.exists()) {
-            console.log("DEBUG: Existing clinic data:", clinicSnap.data());
-        } else {
-            console.log("DEBUG: Clinic document does not exist.");
-        }
-
-
         await updateDoc(clinicRef, {
             departments: arrayUnion(...departmentIdsToAdd)
         });
@@ -362,3 +352,5 @@ export default function DepartmentsPage() {
     </>
   );
 }
+
+    
