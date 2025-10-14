@@ -46,6 +46,7 @@ import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { SelectDepartmentDialog } from "@/components/onboarding/select-department-dialog";
 import { useAuth } from "@/firebase";
+import { DepartmentDoctorsDialog } from "@/components/departments/department-doctors-dialog";
 
 export default function DepartmentsPage() {
   const auth = useAuth();
@@ -56,6 +57,7 @@ export default function DepartmentsPage() {
   const [isAddDepartmentOpen, setIsAddDepartmentOpen] = useState(false);
   const [deletingDepartment, setDeletingDepartment] = useState<Department | null>(null);
   const [loading, setLoading] = useState(true);
+  const [viewingDoctorsDept, setViewingDoctorsDept] = useState<Department | null>(null);
 
   useEffect(() => {
     const fetchMasterDepartments = async () => {
@@ -122,7 +124,7 @@ export default function DepartmentsPage() {
     return doctors.filter(doctor => doctor.department === departmentName).map(d => d.name);
   }
 
-  const DepartmentCard = ({ department, onDelete }: { department: Department, onDelete: (department: Department) => void }) => {
+  const DepartmentCard = ({ department, onDelete, onViewDoctors }: { department: Department, onDelete: (department: Department) => void, onViewDoctors: (department: Department) => void }) => {
       const doctorsInDept = getDoctorsInDepartment(department.name);
       return (
           <Card className="overflow-hidden flex flex-col">
@@ -180,6 +182,7 @@ export default function DepartmentsPage() {
                           </span>
                       )}
                   </div>
+                  <Button variant="link" size="sm" className="p-0 h-auto" onClick={() => onViewDoctors(department)}>See Doctors</Button>
               </CardFooter>
           </Card>
       );
@@ -283,7 +286,7 @@ export default function DepartmentsPage() {
                  ))
               ) : clinicDepartments.length > 0 ? (
                   clinicDepartments.map((dept) => (
-                    <DepartmentCard key={dept.id} department={dept} onDelete={() => setDeletingDepartment(dept)} />
+                    <DepartmentCard key={dept.id} department={dept} onDelete={() => setDeletingDepartment(dept)} onViewDoctors={setViewingDoctorsDept} />
                 ))
               ) : (
                 <div className="col-span-full text-center py-12">
@@ -334,6 +337,13 @@ export default function DepartmentsPage() {
                   </AlertDialogFooter>
               </AlertDialogContent>
         </AlertDialog>
+
+        <DepartmentDoctorsDialog 
+            isOpen={!!viewingDoctorsDept}
+            setIsOpen={(isOpen) => !isOpen && setViewingDoctorsDept(null)}
+            department={viewingDoctorsDept}
+            allDoctors={doctors}
+        />
 
         <footer className="text-center text-sm text-muted-foreground p-4">
             Copyright &copy; 2024 Peterdraw &middot; Privacy Policy &middot; Term and conditions &middot; Contact
