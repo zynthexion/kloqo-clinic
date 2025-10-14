@@ -87,11 +87,10 @@ export function Step5Pricing() {
                                         </p>
                                     </div>
                                     <div className="text-center my-4">
-                                        <span className="text-3xl font-bold">{p.price}</span>
-                                        {p.price !== 'Free' && (
-                                          <span className={`text-sm ${field.value === p.name ? 'text-primary-foreground/90' : 'text-muted-foreground'}`}>
-                                            /month
-                                          </span>
+                                        {isFreePlan ? (
+                                            <span className="text-3xl font-bold">{p.price}</span>
+                                        ) : (
+                                            <span className="text-xl font-bold text-muted-foreground">Coming Soon</span>
                                         )}
                                     </div>
                                     <p className={`text-xs text-center flex-grow ${field.value === p.name ? 'text-primary-foreground/90' : 'text-muted-foreground'}`}>

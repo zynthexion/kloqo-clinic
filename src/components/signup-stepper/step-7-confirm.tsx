@@ -13,12 +13,14 @@ const plans = [
     { name: 'Kloqo Lite', price: '₹999' },
     { name: 'Kloqo Grow', price: '₹1,999' },
     { name: 'Kloqo Prime', price: '₹3,999' },
+    { name: 'Free Plan (Beta)', price: 'Free' },
 ];
 
 export function Step7Confirm() {
   const { control, watch } = useFormContext<SignUpFormData>();
   const data = watch();
   const selectedPlan = plans.find(p => p.name === data.plan);
+  const isFreePlan = data.plan === 'Free Plan (Beta)';
 
   return (
     <div>
@@ -73,16 +75,18 @@ export function Step7Confirm() {
                     <span>Selected Plan:</span>
                     <Badge>{data.plan || 'Not Selected'}</Badge>
                 </div>
-                {selectedPlan && (
+                {selectedPlan && !isFreePlan && (
                     <div className="flex justify-between items-center">
                         <span>Monthly Amount:</span>
                         <span className="font-semibold">{selectedPlan.price}/month</span>
                     </div>
                 )}
-                <div className="flex justify-between items-center">
-                    <span>Payment Method:</span>
-                    <span className="font-semibold">{data.paymentMethod || 'Not Selected'}</span>
-                </div>
+                {!isFreePlan && (
+                    <div className="flex justify-between items-center">
+                        <span>Payment Method:</span>
+                        <span className="font-semibold">{data.paymentMethod || 'Not Selected'}</span>
+                    </div>
+                )}
             </CardContent>
           </Card>
         </div>
