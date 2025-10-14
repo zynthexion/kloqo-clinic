@@ -1,60 +1,40 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // --- Rules for Collections ---
-
-    // Clinics can be read by anyone. A new clinic can be created by a signed-in user.
-    // The user associated with the clinic is the only one who can update it.
+    
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+    
     match /clinics/{clinicId} {
       allow read: if true;
-      allow create: if request.auth != null && request.auth.token.email == request.resource.data.ownerEmail;
-      allow update: if request.auth != null && request.auth.uid == get(/databases/$(database)/documents/clinics/$(clinicId)).data.ownerUid;
-    }
-
-    // A user's public profile can be read by anyone.
-    // They can only update or delete their own document.
-    match /users/{userId} {
-      allow read: if true;
-      allow update: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null && request.auth.uid == userId;
-    }
-
-    // Doctors can be read by anyone.
-    // Write operations are simplified for now.
-    match /doctors/{doctorId} {
-      allow read, write: if true;
-    }
-
-    // Appointments can be read by anyone.
-    // Write operations are simplified for now.
-    match /appointments/{appointmentId} {
-        allow read, write: if true;
-    }
-   
-    // Patients can be read or written to by anyone for now.
-    match /patients/{patientId} {
-      allow read, write: if true;
-    }
-    
-    // Mobile app credentials can be listed for login queries.
-    // Creation is allowed for authenticated users during signup.
-    // Only the associated clinic owner can get or update credentials.
-    match /mobile-app/{credentialId} {
-      allow list: if true;
       allow create: if request.auth != null;
-      allow get, update: if request.auth != null && request.auth.uid == get(/databases/$(database)/documents/clinics/$(resource.data.clinicId)).data.ownerUid;
+      allow update: if request.auth != null && request.auth.uid == get(/databases/$(database)/documents/clinics/$(clinicId)).data.ownerId;
     }
     
-    // Master list of all possible departments. Any signed-in user can read this.
     match /master-departments/{departmentId} {
-      allow read: if request.auth != null;
+      allow get: if request.auth != null;
     }
 
-    // Department list per clinic
-    match /departments/{departmentId} {
-        allow read, write: if true;
+    match /doctors/{doctorId} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == get(/databases/$(database)/documents/clinics/$(request.resource.data.clinicId)).data.ownerId;
+    }
+    
+    match /appointments/{appointmentId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    match /patients/{patientId} {
+        allow read, write: if request.auth != null;
+    }
+    
+    match /mobile-app/{credId} {
+      allow read, write: if request.auth != null;
     }
   }
 }
