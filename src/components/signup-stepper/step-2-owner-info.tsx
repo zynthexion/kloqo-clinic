@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import type { SignUpFormData } from '@/app/(public)/signup/page';
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '../ui/form';
 import { Button } from '../ui/button';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { auth } from '@/lib/firebase';
 import { RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult } from 'firebase/auth';
@@ -30,6 +30,7 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
   const [isVerifying, setIsVerifying] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [captchaFailed, setCaptchaFailed] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const mobileNumber = watch('mobileNumber');
   const isMobileNumberValid = !errors.mobileNumber && mobileNumber?.length === 10;
@@ -238,9 +239,20 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
           render={({ field }) => (
             <FormItem>
                 <FormLabel>Password (for login)</FormLabel>
-                <FormControl>
-                    <Input type="password" {...field} />
-                </FormControl>
+                <div className="relative">
+                  <FormControl>
+                      <Input type={showPassword ? 'text' : 'password'} {...field} />
+                  </FormControl>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
                 <FormMessage />
             </FormItem>
           )}

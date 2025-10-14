@@ -8,6 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '../ui/form';
+import { format, parse } from 'date-fns';
 
 const plans = [
     { name: 'Kloqo Lite', price: '₹999' },
@@ -15,6 +16,14 @@ const plans = [
     { name: 'Kloqo Prime', price: '₹3,999' },
     { name: 'Free Plan (Beta)', price: 'Free' },
 ];
+
+const formatTime = (time: string) => {
+    try {
+        return format(parse(time, 'HH:mm', new Date()), 'hh:mm a');
+    } catch (e) {
+        return time; // Return original if parsing fails
+    }
+}
 
 export function Step7Confirm() {
   const { control, watch } = useFormContext<SignUpFormData>();
@@ -60,7 +69,7 @@ export function Step7Confirm() {
               {data.hours.map((hour, i) => (
                 <div key={i} className="flex justify-between">
                   <span>{hour.day}</span>
-                  <span className="font-semibold">{hour.isClosed ? 'Closed' : hour.timeSlots.map(ts => `${ts.open} - ${ts.close}`).join(', ')}</span>
+                  <span className="font-semibold">{hour.isClosed ? 'Closed' : hour.timeSlots.map(ts => `${formatTime(ts.open)} - ${formatTime(ts.close)}`).join(', ')}</span>
                 </div>
               ))}
             </CardContent>
