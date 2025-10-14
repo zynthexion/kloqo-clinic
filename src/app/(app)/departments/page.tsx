@@ -44,7 +44,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { collection, getDocs, doc, getDoc, updateDoc, arrayUnion, arrayRemove, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
-import { DepartmentDoctorsDialog } from "@/components/departments/department-doctors-dialog";
 import { SelectDepartmentDialog } from "@/components/onboarding/select-department-dialog";
 import { useAuth } from "@/firebase";
 
@@ -55,8 +54,6 @@ export default function DepartmentsPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const { toast } = useToast();
   const [isAddDepartmentOpen, setIsAddDepartmentOpen] = useState(false);
-  const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
-  const [isDoctorsDialogOpen, setIsDoctorsDialogOpen] = useState(false);
   const [deletingDepartment, setDeletingDepartment] = useState<Department | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -126,7 +123,7 @@ export default function DepartmentsPage() {
     return doctors.filter(doctor => doctor.department === departmentName).map(d => d.name);
   }
 
-  const DepartmentCard = ({ department, onSeeDetail, onDelete }: { department: Department, onSeeDetail: (department: Department) => void, onDelete: (department: Department) => void }) => {
+  const DepartmentCard = ({ department, onDelete }: { department: Department, onDelete: (department: Department) => void }) => {
       const doctorsInDept = getDoctorsInDepartment(department.name);
       return (
           <Card className="overflow-hidden flex flex-col">
@@ -184,7 +181,6 @@ export default function DepartmentsPage() {
                           </span>
                       )}
                   </div>
-                   <Button variant="link" className="p-0 h-auto" onClick={() => onSeeDetail(department)}>See Doctors</Button>
               </CardFooter>
           </Card>
       );
@@ -249,12 +245,6 @@ export default function DepartmentsPage() {
         setDeletingDepartment(null);
     }
   }
-  
-  const handleSeeDetail = (department: Department) => {
-    const doctorsInDept = doctors.filter(doc => doc.department === department.name);
-    setSelectedDepartment({...department, doctors: doctorsInDept.map(d => d.name)});
-    setIsDoctorsDialogOpen(true);
-  }
 
 
   return (
@@ -291,7 +281,7 @@ export default function DepartmentsPage() {
                  ))
               ) : clinicDepartments.length > 0 ? (
                   clinicDepartments.map((dept) => (
-                    <DepartmentCard key={dept.id} department={dept} onSeeDetail={handleSeeDetail} onDelete={() => setDeletingDepartment(dept)} />
+                    <DepartmentCard key={dept.id} department={dept} onDelete={() => setDeletingDepartment(dept)} />
                 ))
               ) : (
                 <div className="col-span-full text-center py-12">
@@ -327,14 +317,6 @@ export default function DepartmentsPage() {
               </div>
             </div>
         </main>
-        {selectedDepartment && (
-          <DepartmentDoctorsDialog
-            isOpen={isDoctorsDialogOpen}
-            setIsOpen={setIsDoctorsDialogOpen}
-            department={selectedDepartment}
-            allDoctors={doctors}
-          />
-        )}
 
         <AlertDialog open={!!deletingDepartment} onOpenChange={(open) => !open && setDeletingDepartment(null)}>
               <AlertDialogContent>
@@ -358,5 +340,3 @@ export default function DepartmentsPage() {
     </>
   );
 }
-
-    
