@@ -245,6 +245,9 @@ export default function DepartmentsPage() {
     }
   }
 
+  const availableMasterDepartments = masterDepartments.filter(
+    (masterDept) => !clinicDepartments.some((clinicDept) => clinicDept.id === masterDept.id)
+  );
 
   return (
     <>
@@ -259,7 +262,7 @@ export default function DepartmentsPage() {
               <SelectDepartmentDialog
                   isOpen={isAddDepartmentOpen}
                   setIsOpen={setIsAddDepartmentOpen}
-                  departments={masterDepartments}
+                  departments={availableMasterDepartments}
                   onDepartmentsSelect={handleSaveDepartments}
               />
           </div>
