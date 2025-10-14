@@ -1,3 +1,4 @@
+
 rules_version = '2';
 
 service cloud.firestore {
@@ -9,7 +10,7 @@ service cloud.firestore {
     // The user associated with the clinic is the only one who can update it.
     match /clinics/{clinicId} {
       allow read: if true;
-      allow create: if request.auth != null && request.auth.token.email == request.resource.data.ownerEmail;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.ownerId;
       allow update: if request.auth != null && request.auth.uid == get(/databases/$(database)/documents/clinics/$(clinicId)).data.ownerId;
     }
 
@@ -49,7 +50,7 @@ service cloud.firestore {
     
     // Master list of all possible departments. Any signed-in user can read this.
     match /master-departments/{departmentId} {
-      allow get: if request.auth != null;
+      allow read: if request.auth != null;
     }
 
     // Department list per clinic

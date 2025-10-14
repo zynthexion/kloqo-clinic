@@ -299,6 +299,7 @@ export default function SignupPage() {
     const clinicId = clinicRef.id;
     const clinicData = {
         id: clinicId,
+        ownerId: user.uid, // Add ownerId to the clinic document
         name: formData.clinicName,
         type: formData.clinicType,
         address: `${formData.address1}, ${formData.city}, ${formData.state} ${formData.pincode}`,
@@ -318,6 +319,7 @@ export default function SignupPage() {
         planStartDate: new Date().toISOString(),
         registrationStatus: "Pending",
         onboardingStatus: "Pending",
+        departments: [],
     };
 
     const userRef = doc(db, "users", user.uid);
