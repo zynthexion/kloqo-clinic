@@ -57,10 +57,9 @@ export default function DepartmentsPage() {
   const [deletingDepartment, setDeletingDepartment] = useState<Department | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Step 1: Fetch master departments once
   useEffect(() => {
     const fetchMasterDepartments = async () => {
-      if (!auth.currentUser) return; // Wait for user
+      if (!auth.currentUser) return;
       try {
         const masterDeptsSnapshot = await getDocs(collection(db, "master-departments"));
         const masterDeptsList = masterDeptsSnapshot.docs.map(d => d.data() as Department);
@@ -73,7 +72,6 @@ export default function DepartmentsPage() {
     fetchMasterDepartments();
   }, [auth.currentUser, toast]);
 
-  // Step 2: Fetch clinic-specific data and combine with master list
   const fetchClinicData = useCallback(async () => {
     if (!auth.currentUser) return;
     setLoading(true);
@@ -88,16 +86,17 @@ export default function DepartmentsPage() {
           const departmentIds: string[] = clinicData.departments || [];
 
           if (departmentIds.length > 0) {
-            const deptsQuery = query(collection(db, 'master-departments'), where('id', 'in', departmentIds));
-            const deptsSnapshot = await getDocs(deptsQuery);
-            const deptsForClinic = deptsSnapshot.docs.map(d => d.data() as Department);
+            const departmentPromises = departmentIds.map(id => getDoc(doc(db, 'master-departments', id)));
+            const departmentSnapshots = await Promise.all(departmentPromises);
+            const deptsForClinic = departmentSnapshots
+              .filter(snap => snap.exists())
+              .map(snap => snap.data() as Department);
             setClinicDepartments(deptsForClinic);
           } else {
             setClinicDepartments([]);
           }
         }
-        // Fetch doctors associated with the clinic
-        const doctorsSnapshot = await getDocs(collection(db, "clinics", clinicId, "doctors"));
+        const doctorsSnapshot = await getDocs(query(collection(db, "doctors"), where("clinicId", "==", clinicId)));
         const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
         setDoctors(doctorsList);
       }
@@ -200,7 +199,7 @@ export default function DepartmentsPage() {
             departments: arrayUnion(...departmentIdsToAdd)
         });
 
-        fetchClinicData(); // Re-fetch all data to update the UI
+        fetchClinicData();
 
         toast({
             title: "Departments Added",
