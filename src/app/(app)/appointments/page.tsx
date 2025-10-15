@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useTransition, useCallback } from "react";
@@ -201,11 +202,13 @@ export default function AppointmentsPage() {
         setDoctors(doctorsList);
       } catch (error) {
         console.error("Error fetching data:", error);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to load initial data. Please refresh the page.",
-        });
+        if (!(error instanceof FirestorePermissionError)) {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Failed to load initial data. Please refresh the page.",
+          });
+        }
       } finally {
         setLoading(false);
       }
@@ -330,19 +333,29 @@ export default function AppointmentsPage() {
 
   const calculateWalkInDetails = useCallback(async (): Promise<{ estimatedTime: Date; patientsAhead: number } | null> => {
     if (!db || !selectedDoctor || !clinicDetails) return null;
+    
     const now = new Date();
     const consultationTime = selectedDoctor.averageConsultingTime || 15;
     const walkInTokenAllotment = clinicDetails?.walkInTokenAllotment || 5;
 
     const parseTime = (timeStr: string, date: Date): Date => {
-      const newDate = new Date(date);
-      const [time, modifier] = timeStr.split(' ');
-      let [hours, minutes] = time.split(':').map(Number);
-      if (modifier === 'PM' && hours < 12) hours += 12;
-      if (modifier === 'AM' && hours === 12) hours = 0;
-      newDate.setHours(hours, minutes, 0, 0);
-      return newDate;
+        const newDate = new Date(date);
+        const [time, modifier] = timeStr.split(' ');
+        let [hours, minutes] = time.split(':').map(Number);
+        if (modifier === 'PM' && hours < 12) hours += 12;
+        if (modifier === 'AM' && hours === 12) hours = 0;
+        newDate.setHours(hours, minutes, 0, 0);
+        return newDate;
     };
+
+    const dayOfWeek = format(now, 'EEEE');
+    const availabilityForDay = selectedDoctor.availabilitySlots?.find(slot => slot.day === dayOfWeek);
+    if (!availabilityForDay) return null;
+
+    const workingSessions = availabilityForDay.timeSlots.map(session => ({
+        start: parseTime(session.from, now),
+        end: parseTime(session.to, now)
+    }));
 
     const dateStr = format(now, "d MMMM yyyy");
     const appointmentsRef = collection(db, 'appointments');
@@ -350,11 +363,11 @@ export default function AppointmentsPage() {
     const querySnapshot = await getDocs(q);
 
     const allAppointmentsToday = querySnapshot.docs.map(doc => {
-      const data = doc.data();
-      return {
-        time: parseTime(data.time, now),
-        token: data.tokenNumber as string,
-      };
+        const data = doc.data();
+        return {
+            time: parseTime(data.time, now),
+            token: data.tokenNumber as string,
+        };
     }).sort((a, b) => a.time.getTime() - b.time.getTime());
 
     const futureAppointments = allAppointmentsToday.filter(appt => appt.time >= now);
@@ -362,31 +375,27 @@ export default function AppointmentsPage() {
     const queueStartTime = lastWalkIn ? lastWalkIn.time : now;
 
     const appointmentsAfterQueueStart = futureAppointments.filter(appt =>
-      !appt.token.startsWith('W') && appt.time > queueStartTime
+        !appt.token.startsWith('W') && appt.time > queueStartTime
     );
 
     let slotAfterAllotment: Date | null = null;
     if (appointmentsAfterQueueStart.length >= walkInTokenAllotment) {
-      slotAfterAllotment = addMinutes(appointmentsAfterQueueStart[walkInTokenAllotment - 1].time, consultationTime);
+        slotAfterAllotment = addMinutes(appointmentsAfterQueueStart[walkInTokenAllotment - 1].time, consultationTime);
     } else if (appointmentsAfterQueueStart.length > 0) {
-      const lastPerson = appointmentsAfterQueueStart[appointmentsAfterQueueStart.length - 1];
-      slotAfterAllotment = addMinutes(lastPerson.time, consultationTime * (walkInTokenAllotment - appointmentsAfterQueueStart.length));
+        const lastPerson = appointmentsAfterQueueStart[appointmentsAfterQueueStart.length - 1];
+        slotAfterAllotment = addMinutes(lastPerson.time, consultationTime * (walkInTokenAllotment - appointmentsAfterQueueStart.length));
     } else {
-      slotAfterAllotment = addMinutes(queueStartTime, consultationTime * walkInTokenAllotment);
+        slotAfterAllotment = addMinutes(queueStartTime, consultationTime * walkInTokenAllotment);
     }
-
-    const dayOfWeek = format(now, 'EEEE');
-    const availabilityForDay = selectedDoctor.availabilitySlots?.find(slot => slot.day === dayOfWeek);
-    if (!availabilityForDay) return null;
-
+    
     const allPossibleSlots: Date[] = [];
     availabilityForDay.timeSlots.forEach(timeSlot => {
-      let currentTime = parseTime(timeSlot.from, now);
-      const endTime = parseTime(timeSlot.to, now);
-      while (isBefore(currentTime, endTime)) {
-        allPossibleSlots.push(new Date(currentTime));
-        currentTime = addMinutes(currentTime, consultationTime);
-      }
+        let currentTime = parseTime(timeSlot.from, now);
+        const endTime = parseTime(timeSlot.to, now);
+        while (isBefore(currentTime, endTime)) {
+            allPossibleSlots.push(new Date(currentTime));
+            currentTime = addMinutes(currentTime, consultationTime);
+        }
     });
 
     const bookedTimes = allAppointmentsToday.map(appt => appt.time.getTime());
@@ -394,18 +403,48 @@ export default function AppointmentsPage() {
 
     let estimatedTime: Date;
     if (nextAvailableSlot && slotAfterAllotment) {
-      estimatedTime = nextAvailableSlot > slotAfterAllotment ? nextAvailableSlot : slotAfterAllotment;
+        estimatedTime = nextAvailableSlot > slotAfterAllotment ? nextAvailableSlot : slotAfterAllotment;
     } else if (slotAfterAllotment) {
-      estimatedTime = slotAfterAllotment;
+        estimatedTime = slotAfterAllotment;
     } else if (nextAvailableSlot) {
-      estimatedTime = nextAvailableSlot;
+        estimatedTime = nextAvailableSlot;
     } else {
-      const lastAppointmentTime = allAppointmentsToday.length > 0 ? allAppointmentsToday[allAppointmentsToday.length - 1].time : now;
-      estimatedTime = addMinutes(lastAppointmentTime, consultationTime);
+        const lastAppointmentTime = allAppointmentsToday.length > 0 ? allAppointmentsToday[allAppointmentsToday.length - 1].time : now;
+        estimatedTime = addMinutes(lastAppointmentTime, consultationTime);
+    }
+    
+    // Ensure the estimated time is within working hours
+    let finalValidTime = null;
+    for (const session of workingSessions) {
+        if (estimatedTime >= session.start && estimatedTime < session.end) {
+            finalValidTime = estimatedTime;
+            break;
+        }
+        // If the estimated time is before the start of this session, the valid time is the session start
+        if (estimatedTime < session.start) {
+            finalValidTime = session.start;
+            break;
+        }
     }
 
-    const patientsAhead = futureAppointments.filter(time => time.time < estimatedTime).length;
-    return { estimatedTime, patientsAhead };
+    // If no valid slot is found (e.g., doctor's day is over), return null
+    if (!finalValidTime) {
+        const lastSessionEnd = workingSessions[workingSessions.length -1].end;
+        if(estimatedTime > lastSessionEnd) return null;
+        
+        // Fallback to the start of the next session if available
+        const nextSession = workingSessions.find(s => s.start > now);
+        if (nextSession) {
+            finalValidTime = nextSession.start;
+        } else {
+            return null;
+        }
+    }
+
+
+    const patientsAhead = futureAppointments.filter(time => time.time < finalValidTime!).length;
+    return { estimatedTime: finalValidTime!, patientsAhead };
+
   }, [db, selectedDoctor, clinicDetails]);
 
   useEffect(() => {
@@ -631,7 +670,9 @@ export default function AppointmentsPage() {
         toast({ title: "Success", description: "Appointment deleted successfully." });
       } catch (error) {
         console.error("Error deleting appointment: ", error);
-        toast({ variant: "destructive", title: "Error", description: "Failed to delete appointment." });
+        if (!(error instanceof FirestorePermissionError)) {
+          toast({ variant: "destructive", title: "Error", description: "Failed to delete appointment." });
+        }
       }
     });
   };
@@ -852,7 +893,7 @@ export default function AppointmentsPage() {
         return 0;
       }
     });
-  }, [appointments, drawerSearchTerm, doctors, activeTab, drawerDateRange, selectedDrawerDoctor]);
+  }, [appointments, drawerSearchTerm, activeTab, drawerDateRange, selectedDrawerDoctor]);
 
   const today = format(new Date(), "d MMMM yyyy");
   const todaysAppointments = filteredAppointments.filter(apt => apt.date === today);
@@ -1465,5 +1506,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
-    
