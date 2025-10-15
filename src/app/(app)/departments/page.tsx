@@ -2,7 +2,6 @@
 "use client";
 
 import Image from "next/image";
-import { DepartmentsHeader } from "@/components/layout/header";
 import {
   Card,
   CardContent,
@@ -15,6 +14,7 @@ import {
   PlusCircle,
   MoreHorizontal,
   Trash,
+  Search,
 } from "lucide-react";
 import {
   Select,
@@ -40,13 +40,14 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { Department, Doctor } from "@/lib/types";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { collection, getDocs, doc, getDoc, updateDoc, arrayUnion, arrayRemove, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { SelectDepartmentDialog } from "@/components/onboarding/select-department-dialog";
 import { useAuth } from "@/firebase";
 import { DepartmentDoctorsDialog } from "@/components/departments/department-doctors-dialog";
+import { Input } from "@/components/ui/input";
 
 export default function DepartmentsPage() {
   const auth = useAuth();
@@ -58,6 +59,13 @@ export default function DepartmentsPage() {
   const [deletingDepartment, setDeletingDepartment] = useState<Department | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewingDoctorsDept, setViewingDoctorsDept] = useState<Department | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const filteredDepartments = useMemo(() => {
+    return clinicDepartments.filter(department =>
+      department.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [clinicDepartments, searchTerm]);
 
   useEffect(() => {
     const fetchMasterDepartments = async () => {
@@ -124,7 +132,7 @@ export default function DepartmentsPage() {
     return doctors.filter(doctor => doctor.department === departmentName).map(d => d.name);
   }
 
-  const DepartmentCard = ({ department, onDelete, onViewDoctors }: { department: Department, onDelete: (department: Department) => void, onViewDoctors: (department: Department) => void }) => {
+  const DepartmentCard = ({ department, onDelete }: { department: Department, onDelete: (department: Department) => void }) => {
       const doctorsInDept = getDoctorsInDepartment(department.name);
       return (
           <Card className="overflow-hidden flex flex-col">
@@ -161,7 +169,7 @@ export default function DepartmentsPage() {
                     </DropdownMenu>
                   </div>
               </CardContent>
-              <CardFooter className="bg-muted/30 px-4 py-3 flex items-center justify-between">
+              <CardFooter className="bg-muted/30 px-4 py-3">
                    <div className="flex items-center">
                       <div className="flex -space-x-2">
                           {doctorsInDept.slice(0, 3).map((doctorName, index) => (
@@ -182,7 +190,6 @@ export default function DepartmentsPage() {
                           </span>
                       )}
                   </div>
-                  <Button variant="link" size="sm" className="p-0 h-auto" onClick={() => onViewDoctors(department)}>See Doctors</Button>
               </CardFooter>
           </Card>
       );
@@ -255,7 +262,19 @@ export default function DepartmentsPage() {
   return (
     <>
       <div className="flex flex-col">
-        <DepartmentsHeader />
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static smh-auto sm:border-0 sm:bg-transparent sm:px-6">
+            <h1 className="text-xl font-semibold md:text-2xl">Departments</h1>
+            <div className="relative ml-auto flex-1 md:grow-0">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                    type="search"
+                    placeholder="Search departments..."
+                    className="w-full rounded-lg bg-background pl-8 md:w-[200px] lg:w-[320px]"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                />
+            </div>
+        </header>
         <main className="flex-1 p-4 sm:p-6">
           <div className="flex justify-end mb-4">
               <Button onClick={() => setIsAddDepartmentOpen(true)}>
@@ -284,43 +303,16 @@ export default function DepartmentsPage() {
                         </CardFooter>
                     </Card>
                  ))
-              ) : clinicDepartments.length > 0 ? (
-                  clinicDepartments.map((dept) => (
-                    <DepartmentCard key={dept.id} department={dept} onDelete={() => setDeletingDepartment(dept)} onViewDoctors={setViewingDoctorsDept} />
+              ) : filteredDepartments.length > 0 ? (
+                  filteredDepartments.map((dept) => (
+                    <DepartmentCard key={dept.id} department={dept} onDelete={() => setDeletingDepartment(dept)} />
                 ))
               ) : (
                 <div className="col-span-full text-center py-12">
-                  <p className="text-muted-foreground">No departments have been added to this clinic yet.</p>
+                  <p className="text-muted-foreground">{clinicDepartments.length > 0 ? 'No departments match your search.' : 'No departments have been added to this clinic yet.'}</p>
                 </div>
               )}
           </div>
-          <div className="flex items-center justify-between mt-6">
-              <div className="text-sm text-muted-foreground">
-                  Showing{" "}
-                  <Select defaultValue="9">
-                  <SelectTrigger className="inline-flex w-auto h-auto p-1 text-sm">
-                      <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                      <SelectItem value="9">9</SelectItem>
-                      <SelectItem value="18">18</SelectItem>
-                      <SelectItem value="27">27</SelectItem>
-                  </SelectContent>
-                  </Select>{" "}
-                  out of {clinicDepartments.length}
-              </div>
-              <div className="flex items-center gap-2">
-                  <Button variant="outline" size="icon" disabled>
-                      <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" size="icon" className="bg-primary/10 text-primary">
-                  1
-                  </Button>
-                  <Button variant="outline" size="icon" disabled>
-                      <ChevronRight className="h-4 w-4" />
-                  </Button>
-              </div>
-            </div>
         </main>
 
         <AlertDialog open={!!deletingDepartment} onOpenChange={(open) => !open && setDeletingDepartment(null)}>
