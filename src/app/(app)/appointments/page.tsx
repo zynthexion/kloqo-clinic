@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useTransition, useCallback } from "react";
@@ -301,30 +302,30 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     
     startTransition(async () => {
         try {
-          let patientId = isEditing ? values.patientId : selectedPatient?.id;
+          let patientId = selectedPatient?.id;
           let patientDataForApt = selectedPatient;
           
-          const isKloqoMember = selectedPatient && !selectedPatient.clinicIds?.includes(clinicId);
-
-          if (!patientId || isKloqoMember) {
+          if (!patientId || (selectedPatient && !selectedPatient.clinicIds?.includes(clinicId))) {
              const newPatientId = patientId || doc(collection(db, "patients")).id;
              const patientRef = doc(db, 'patients', newPatientId);
 
-             const patientToSave: Patient = {
+             const patientToSave = {
                   id: newPatientId,
                   name: values.patientName,
                   age: values.age,
                   sex: values.sex,
                   phone: `+91${values.phone}`,
                   place: values.place,
-                  clinicIds: arrayUnion(clinicId),
-                  ...(selectedPatient ? { visitHistory: selectedPatient.visitHistory || [], totalAppointments: selectedPatient.totalAppointments || 0 } : {visitHistory: [], totalAppointments: 0}),
+                  clinicIds: selectedPatient?.clinicIds ? arrayUnion(clinicId) : [clinicId],
+                  visitHistory: selectedPatient?.visitHistory || [],
+                  totalAppointments: selectedPatient?.totalAppointments || 0,
+                  relatedPatientIds: selectedPatient?.relatedPatientIds || [],
                   createdAt: selectedPatient?.createdAt || new Date(),
                   updatedAt: new Date(),
              }
              await setDoc(patientRef, patientToSave, { merge: true });
              patientId = newPatientId;
-             patientDataForApt = patientToSave;
+             patientDataForApt = patientToSave as Patient;
           }
 
           if (!patientId || !patientDataForApt) {
