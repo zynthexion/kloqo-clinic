@@ -37,7 +37,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "../ui/scroll-area";
 import Image from "next/image";
 import { Textarea } from "../ui/textarea";
-import { format, parse } from "date-fns";
+import { format, parse, parse as parseDateFns } from "date-fns";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -108,10 +108,16 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
     if (doctor) {
       const availabilitySlots = doctor.availabilitySlots?.map(s => ({
           ...s,
-          timeSlots: s.timeSlots.map(ts => ({
-            from: format(parse(ts.from, 'hh:mm a', new Date()), 'HH:mm'),
-            to: format(parse(ts.to, 'hh:mm a', new Date()), 'HH:mm')
-          }))
+          timeSlots: s.timeSlots.map(ts => {
+            try {
+              return {
+                from: format(parseDateFns(ts.from, 'hh:mm a', new Date()), 'HH:mm'),
+                to: format(parseDateFns(ts.to, 'hh:mm a', new Date()), 'HH:mm')
+              }
+            } catch {
+                return { from: ts.from, to: ts.to };
+            }
+          })
         })) || [];
       form.reset({
         id: doctor.id,
@@ -456,16 +462,13 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                                         <p className="font-semibold">{field.day}</p>
                                         <div className="flex flex-wrap gap-1 mt-1">
                                           {field.timeSlots.map((ts, i) => {
-  if (!ts.from || !ts.to) return null;
-  // Convert 'HH:mm' to 12-hour format
-  const from12 = format(parse(ts.from, 'HH:mm', new Date()), 'hh:mm a');
-  const to12 = format(parse(ts.to, 'HH:mm', new Date()), 'hh:mm a');
-  return (
-    <Badge key={i} variant="secondary" className="font-normal">
-      {from12} - {to12}
-    </Badge>
-  );
-})}
+                                              if (!ts.from || !ts.to) return null;
+                                              return (
+                                                <Badge key={i} variant="secondary" className="font-normal">
+                                                  {format(parseDateFns(ts.from, 'HH:mm', new Date()), 'p')} - {format(parseDateFns(ts.to, 'HH:mm', new Date()), 'p')}
+                                                </Badge>
+                                              );
+                                          })}
                                         </div>
                                     </div>
                                 )) : <p className="text-xs text-muted-foreground text-center pt-6">No availability applied yet.</p>}
@@ -490,4 +493,3 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 }
 
     
-

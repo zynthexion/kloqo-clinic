@@ -286,19 +286,7 @@ export default function DoctorsPage() {
       setNewDepartment(selectedDoctor.department || "");
       setNewExperience(selectedDoctor.experience || 0);
       form.reset({
-        availabilitySlots: selectedDoctor.availabilitySlots?.map(s => ({
-            ...s,
-            timeSlots: s.timeSlots.map(ts => {
-                try {
-                    return {
-                        from: format(parseDateFns(ts.from, 'hh:mm a', new Date()), 'HH:mm'),
-                        to: format(parseDateFns(ts.to, 'hh:mm a', new Date()), 'HH:mm')
-                    }
-                } catch {
-                    return { from: ts.from, to: ts.to }; // already in HH:mm
-                }
-            })
-        })) || [],
+        availabilitySlots: selectedDoctor.availabilitySlots || [],
       });
       setIsEditingDetails(false);
       setIsEditingBio(false);
@@ -309,6 +297,31 @@ export default function DoctorsPage() {
       setIsEditingBooking(false);
     }
   }, [selectedDoctor, appointments, form]);
+
+  const handleEditAvailability = () => {
+    if (!selectedDoctor) return;
+  
+    // Convert times from hh:mm a to HH:mm for the form input
+    const availabilitySlotsForForm = selectedDoctor.availabilitySlots?.map(s => ({
+        ...s,
+        timeSlots: s.timeSlots.map(ts => {
+            try {
+                return {
+                    from: format(parseDateFns(ts.from, 'hh:mm a', new Date()), 'HH:mm'),
+                    to: format(parseDateFns(ts.to, 'hh:mm a', new Date()), 'HH:mm')
+                }
+            } catch {
+                return { from: ts.from, to: ts.to }; // already in HH:mm
+            }
+        })
+    })) || [];
+  
+    form.reset({
+        availabilitySlots: availabilitySlotsForForm,
+    });
+  
+    setIsEditingAvailability(true);
+  };
 
     const handleSaveDoctor = async (doctorData: AddDoctorFormValues) => {
     startTransition(async () => {
@@ -587,15 +600,19 @@ export default function DoctorsPage() {
           })
           .filter(slot => slot.timeSlots.length > 0);
     
-        const scheduleString = validSlots
+        // Convert times from HH:mm to hh:mm a for storage and display
+        const availabilitySlotsToSave = validSlots.map(s => ({
+          ...s,
+          timeSlots: s.timeSlots.map(ts => ({
+            from: format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a"),
+            to: format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")
+          }))
+        }));
+
+        const scheduleString = availabilitySlotsToSave
           ?.sort((a, b) => daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day))
-          .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a")}-${format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")}`).join(', ')}`)
+          .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${ts.from}-${ts.to}`).join(', ')}`)
           .join('; ');
-    
-        const availabilitySlotsToSave = validSlots.map(s => ({...s, timeSlots: s.timeSlots.map(ts => ({
-          from: format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a"),
-          to: format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")
-        }))}));
     
         startTransition(async () => {
             const doctorRef = doc(db, "doctors", selectedDoctor.id);
@@ -1205,7 +1222,7 @@ export default function DoctorsPage() {
                                     <CardDescription>Recurring weekly schedule.</CardDescription>
                                 </div>
                                 {!isEditingAvailability && (
-                                    <Button variant="outline" size="sm" onClick={() => setIsEditingAvailability(true)}>
+                                    <Button variant="outline" size="sm" onClick={handleEditAvailability}>
                                         <Edit className="mr-2 h-4 w-4" /> Edit
                                     </Button>
                                 )}
@@ -1303,27 +1320,17 @@ export default function DoctorsPage() {
                                                 <div className="flex flex-wrap gap-2 items-center mt-2">
                                                     {slot.timeSlots.map((ts, i) => {
                                                         if (!ts.from || !ts.to) return null;
-                                                        try {
-                                                            const fromFormatted = format(parseDateFns(ts.from, "hh:mm a", new Date()), 'p');
-                                                            const toFormatted = format(parseDateFns(ts.to, "hh:mm a", new Date()), 'p');
-                                                            return (
-                                                                <Badge key={i} variant="outline" className="text-sm group relative pr-7">
-                                                                    {fromFormatted} - {toFormatted}
-                                                                    <button 
-                                                                        onClick={() => handleDeleteTimeSlot(slot.day, ts)}
-                                                                        className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                    >
-                                                                        <X className="h-3 w-3 text-red-500" />
-                                                                    </button>
-                                                                </Badge>
-                                                            );
-                                                        } catch (e) {
-                                                            return (
-                                                                <Badge key={i} variant="destructive" className="text-sm group relative pr-7">
-                                                                    Invalid Time
-                                                                </Badge>
-                                                            );
-                                                        }
+                                                        return (
+                                                            <Badge key={i} variant="outline" className="text-sm group relative pr-7">
+                                                                {ts.from} - {ts.to}
+                                                                <button 
+                                                                    onClick={() => handleDeleteTimeSlot(slot.day, ts)}
+                                                                    className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                >
+                                                                    <X className="h-3 w-3 text-red-500" />
+                                                                </button>
+                                                            </Badge>
+                                                        );
                                                     })}
                                                 </div>
                                             </div>
