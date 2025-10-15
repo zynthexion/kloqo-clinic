@@ -160,7 +160,11 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
         p.phone.includes(patientSearchTerm)
       );
       setPatientSearchResults(results);
-      setIsPatientPopoverOpen(true);
+      if (results.length > 0) {
+        setIsPatientPopoverOpen(true);
+      } else {
+        setIsPatientPopoverOpen(false);
+      }
     } else {
       setPatientSearchResults([]);
       setIsPatientPopoverOpen(false);
@@ -398,7 +402,6 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     form.setValue("place", patient.place || "");
     setPatientSearchTerm(patient.phone);
     setIsPatientPopoverOpen(false);
-    patientInputRef.current?.blur();
   }
   
     const handlePatientSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1035,3 +1038,5 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     </>
   );
 }
+
+    
