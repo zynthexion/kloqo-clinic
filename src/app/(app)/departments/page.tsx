@@ -344,13 +344,7 @@ export default function DepartmentsPage() {
             department={viewingDoctorsDept}
             allDoctors={doctors}
         />
-
-        <footer className="text-center text-sm text-muted-foreground p-4">
-            Copyright &copy; 2024 Peterdraw &middot; Privacy Policy &middot; Term and conditions &middot; Contact
-        </footer>
       </div>
     </>
   );
 }
-
-    
