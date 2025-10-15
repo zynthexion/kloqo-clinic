@@ -95,7 +95,7 @@ const addDoctorFormSchema = z.object({
   averageConsultingTime: z.coerce.number().min(5, "Must be at least 5 minutes."),
   availabilitySlots: z.array(availabilitySlotSchema).min(1, "At least one availability slot is required."),
   photo: z.any().optional(),
-  freeFollowUpDays: z.coerce.number().min(0, "Cannot be negative.").optional(),
+  freeFollowUpDays: z.coerce.number().min(1, "Must be at least 1 day.").optional(),
   advanceBookingDays: z.coerce.number().min(0, "Cannot be negative.").optional(),
 });
 type AddDoctorFormValues = z.infer<typeof addDoctorFormSchema>;
@@ -479,8 +479,8 @@ export default function DoctorsPage() {
     const handleFollowUpSave = async () => {
         if (!selectedDoctor || newFollowUp === "") return;
         const value = Number(newFollowUp);
-        if (isNaN(value) || value < 0) {
-            toast({ variant: "destructive", title: "Invalid Value", description: "Please enter a valid non-negative number of days." });
+        if (isNaN(value) || value < 1) {
+            toast({ variant: "destructive", title: "Invalid Value", description: "Please enter a valid number of days (1 or more)." });
             return;
         }
         startTransition(async () => {
@@ -1088,7 +1088,7 @@ export default function DoctorsPage() {
                           </div>
                         ) : (
                           <div className="flex items-center gap-2">
-                              <p className="text-2xl font-bold">{selectedDoctor.freeFollowUpDays || 0} days</p>
+                              <p className="text-2xl font-bold">{selectedDoctor.freeFollowUpDays || 0} {selectedDoctor.freeFollowUpDays === 1 ? 'day' : 'days'}</p>
                               <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingFollowUp(true)}><Edit className="h-3 w-3"/></Button>
                           </div>
                         )}
@@ -1108,7 +1108,7 @@ export default function DoctorsPage() {
                           </div>
                         ) : (
                           <div className="flex items-center gap-2">
-                            <div className="text-2xl font-bold">{selectedDoctor.advanceBookingDays || 0} days</div>
+                            <div className="text-2xl font-bold">{selectedDoctor.advanceBookingDays || 0} {selectedDoctor.advanceBookingDays === 1 ? 'day' : 'days'}</div>
                             <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingBooking(true)}><Edit className="h-3 w-3"/></Button>
                           </div>
                         )}
@@ -1386,6 +1386,8 @@ export default function DoctorsPage() {
     </>
   );
 }
+
+    
 
     
 
