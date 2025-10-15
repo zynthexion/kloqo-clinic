@@ -741,7 +741,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                             <FormMessage />
                         </FormItem>
                          <div className="flex justify-end">
-                            <Button type="button" variant="secondary" disabled={!patientSearchTerm || patientSearchResults.length > 0}>
+                            <Button type="button" variant="secondary">
                                 <LinkIcon className="mr-2 h-4 w-4" />
                                 Send Booking Link
                             </Button>
