@@ -39,7 +39,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2 } from "lucide-react";
+import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link } from "lucide-react";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
@@ -122,7 +122,7 @@ export default function AppointmentsPage() {
   const [patientSearchTerm, setPatientSearchTerm] = useState("");
   const [patientSearchResults, setPatientSearchResults] = useState<Patient[]>([]);
   const [isPatientPopoverOpen, setIsPatientPopoverOpen] = useState(false);
-  const [bookingType, setBookingType] = useState("existing");
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const [drawerSearchTerm, setDrawerSearchTerm] = useState("");
@@ -132,10 +132,6 @@ const [selectedDrawerDoctor, setSelectedDrawerDoctor] = useState<string | null>(
 const currentYearStart = startOfYear(new Date());
 const currentYearEnd = endOfYear(new Date());
 const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ from: currentYearStart, to: currentYearEnd });
-
-  const [newPatientFieldsEnabled, setNewPatientFieldsEnabled] = useState(false);
-  const [isCheckingPhone, setIsCheckingPhone] = useState(false);
-  const [isKloqoMember, setIsKloqoMember] = useState(false);
 
 
   const { toast } = useToast();
@@ -225,8 +221,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     setEditingAppointment(null);
     setSelectedDoctorId(null);
     setPatientSearchTerm("");
-    setIsKloqoMember(false);
-    setNewPatientFieldsEnabled(false);
+    setSelectedPatient(null);
     form.reset({
       patientName: "", gender: "Male", phone: "", age: 0, doctor: "",
       department: "",
@@ -241,6 +236,8 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
         const doctor = doctors.find(d => d.name === editingAppointment.doctor);
         if (doctor) {
             const appointmentDate = parse(editingAppointment.date, "d MMMM yyyy", new Date());
+            const patient = allPatients.find(p => p.phone === editingAppointment.phone);
+            setSelectedPatient(patient || null);
             form.reset({
                 ...editingAppointment,
                 date: isNaN(appointmentDate.getTime()) ? undefined : appointmentDate,
@@ -250,12 +247,11 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
             });
             setPatientSearchTerm(editingAppointment.phone);
             setSelectedDoctorId(doctor.id);
-            setBookingType("existing");
         }
     } else {
         resetForm();
     }
-  }, [editingAppointment, form, doctors]);
+  }, [editingAppointment, form, doctors, allPatients]);
 
 
   const selectedDoctor = useMemo(() => {
@@ -270,6 +266,10 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
         toast({ variant: "destructive", title: "Not Authenticated", description: "You must be logged in to book an appointment."});
         return;
     }
+    if (!selectedPatient && !isEditing) {
+        toast({ variant: "destructive", title: "No Patient Selected", description: "Please select a patient before booking."});
+        return;
+    }
     
     startTransition(async () => {
         try {
@@ -280,43 +280,13 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
             return;
           }
 
-          const fullPhoneNumber = `+91${values.phone}`;
-          const patientsQuery = query(collection(db, "patients"), where("phone", "==", fullPhoneNumber));
-          const patientSnapshot = await getDocs(patientsQuery);
-
-          let patientId: string;
-          let patientRef: any;
-
-          if (!patientSnapshot.empty) {
-            patientRef = patientSnapshot.docs[0].ref;
-            patientId = patientRef.id;
-            // Add clinicId to existing patient if not already there
-            const patientData = patientSnapshot.docs[0].data();
-            const clinicIds = patientData.clinicIds || [];
-            if (!clinicIds.includes(clinicId)) {
-                await updateDoc(patientRef, {
-                    clinicIds: arrayUnion(clinicId)
-                });
-            }
-          } else {
-            patientRef = doc(collection(db, "patients"));
-            patientId = patientRef.id;
-            const newPatientData: Omit<Patient, 'id'> & { createdAt: Date, updatedAt: Date, clinicIds: string[] } = {
-              clinicIds: [clinicId],
-              name: values.patientName,
-              age: values.age,
-              gender: values.gender,
-              phone: fullPhoneNumber,
-              place: values.place,
-              totalAppointments: 0,
-              visitHistory: [],
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            };
-            await setDoc(patientRef, newPatientData);
-            setAllPatients(prev => [...prev, { ...newPatientData, id: patientId, clinicId }]);
+          const patientId = isEditing ? values.patientId : selectedPatient?.id;
+          if (!patientId) {
+             toast({ variant: "destructive", title: "Error", description: "Patient ID is missing." });
+             return;
           }
-          
+          const patientRef = doc(db, 'patients', patientId);
+
           const doctorName = doctors.find(d => d.id === values.doctor)?.name || "Unknown Doctor";
           const appointmentDateStr = format(values.date, "d MMMM yyyy");
           const appointmentTimeStr = format(parseDateFns(values.time, "HH:mm", new Date()), "hh:mm a");
@@ -327,7 +297,8 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
           
           const dataToSave: Appointment = {
               ...values,
-              phone: fullPhoneNumber,
+              phone: selectedPatient?.phone || values.phone,
+              patientName: selectedPatient?.name || values.patientName,
               id: appointmentId,
               patientId: patientId,
               date: appointmentDateStr,
@@ -342,21 +313,22 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
           const appointmentRef = doc(db, "appointments", appointmentId);
           await setDoc(appointmentRef, dataToSave, { merge: true });
 
-          const newVisit: Visit = {
-              appointmentId: appointmentId,
-              date: appointmentDateStr,
-              time: appointmentTimeStr,
-              doctor: doctorName,
-              department: values.department,
-              status: "Pending",
-              treatment: "General Consultation",
-          };
-           await updateDoc(patientRef, {
-              visitHistory: arrayUnion(newVisit),
-              totalAppointments: increment(1),
-              updatedAt: new Date(),
-          });
-
+          if (!isEditing) {
+            const newVisit: Visit = {
+                appointmentId: appointmentId,
+                date: appointmentDateStr,
+                time: appointmentTimeStr,
+                doctor: doctorName,
+                department: values.department,
+                status: "Pending",
+                treatment: "General Consultation",
+            };
+             await updateDoc(patientRef, {
+                visitHistory: arrayUnion(newVisit),
+                totalAppointments: increment(1),
+                updatedAt: new Date(),
+            });
+          }
 
           // Update doctor's booked slots
           const doctorRef = doc(db, "doctors", values.doctor);
@@ -418,6 +390,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
 }
 
   const handlePatientSelect = (patient: Patient) => {
+    setSelectedPatient(patient);
     form.setValue("patientName", patient.name);
     form.setValue("age", patient.age);
     form.setValue("gender", patient.gender);
@@ -428,73 +401,14 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     patientInputRef.current?.blur();
   }
   
-  const handlePatientSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setPatientSearchTerm(e.target.value);
-  };
-
-  const handleBookingTypeChange = (value: string) => {
-    setBookingType(value);
-    resetForm();
-  };
-  
-    const handleNewPatientPhoneBlur = async () => {
-        const phoneValue = form.getValues("phone");
-        if (phoneValue.length < 10) return;
-
-        setIsCheckingPhone(true);
-        setIsKloqoMember(false);
-        try {
-            const userDoc = await getFirestoreDoc(doc(db, "users", auth.currentUser!.uid));
-            const currentClinicId = userDoc.data()?.clinicId;
-
-            const fullPhoneNumber = `+91${phoneValue}`;
-            const patientsRef = collection(db, "patients");
-            const q = query(patientsRef, where("phone", "==", fullPhoneNumber));
-            const querySnapshot = await getDocs(q);
-
-            if (!querySnapshot.empty) {
-                const existingPatient = querySnapshot.docs[0].data() as Patient;
-                const patientClinicIds = (existingPatient as any).clinicIds || [existingPatient.clinicId];
-
-                if (patientClinicIds.includes(currentClinicId)) {
-                    // Patient is already in this clinic, switch to existing user flow
-                    toast({
-                        title: "Patient Found",
-                        description: `This patient is already registered. Switching to existing patient booking.`,
-                    });
-                    setBookingType('existing');
-                    handlePatientSelect(existingPatient);
-                } else {
-                    // Patient exists in another clinic
-                    toast({
-                        title: "Kloqo Member Found",
-                        description: `Patient ${existingPatient.name} is already a Kloqo member. Their details have been filled in.`,
-                    });
-                    setIsKloqoMember(true);
-                    form.setValue("patientName", existingPatient.name);
-                    form.setValue("age", existingPatient.age);
-                    form.setValue("gender", existingPatient.gender);
-                    form.setValue("place", existingPatient.place || "");
-                    setNewPatientFieldsEnabled(true);
-                }
-            } else {
-                // New patient
-                toast({
-                    title: "New Patient",
-                    description: "No existing patient found. Please fill in the details.",
-                });
-                setNewPatientFieldsEnabled(true);
-            }
-        } catch (error) {
-            console.error("Error checking for patient:", error);
-            toast({
-                variant: "destructive",
-                title: "Error",
-                description: "Could not check for existing patient. Please enter details manually.",
-            });
-            setNewPatientFieldsEnabled(true);
-        } finally {
-            setIsCheckingPhone(false);
+    const handlePatientSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setPatientSearchTerm(e.target.value);
+        if (selectedPatient) {
+            setSelectedPatient(null);
+            form.reset({
+                ...form.getValues(),
+                patientName: "", age: 0, gender: "Male", place: ""
+            })
         }
     };
 
@@ -686,138 +600,75 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
               <CardContent>
                 <Form {...form}>
                   <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                    <div className={cn("grid grid-cols-1 gap-x-8 gap-y-4", !isDrawerExpanded && "md:grid-cols-3")}>
+                    <div className="space-y-4">
+                        <FormItem>
+                            <FormLabel>Search Patient by Phone</FormLabel>
+                            <Popover open={isPatientPopoverOpen} onOpenChange={setIsPatientPopoverOpen}>
+                            <PopoverTrigger asChild>
+                                <div className="relative">
+                                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                    <FormControl>
+                                    <Input
+                                        ref={patientInputRef}
+                                        placeholder="Start typing phone number..."
+                                        value={patientSearchTerm}
+                                        onChange={handlePatientSearchChange}
+                                        className="pl-8"
+                                    />
+                                    </FormControl>
+                                </div>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                <Command>
+                                <CommandList>
+                                    <CommandEmpty>No patient found in this clinic.</CommandEmpty>
+                                    <CommandGroup>
+                                    {patientSearchResults.map((patient) => (
+                                        <CommandItem
+                                        key={patient.id}
+                                        value={patient.phone}
+                                        onSelect={() => handlePatientSelect(patient)}
+                                        >
+                                        {patient.name}
+                                        <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
+                                        </CommandItem>
+                                    ))}
+                                    </CommandGroup>
+                                </CommandList>
+                                </Command>
+                            </PopoverContent>
+                            </Popover>
+                            <FormMessage />
+                        </FormItem>
+                         <div className="flex justify-end">
+                            <Button type="button" variant="secondary" disabled={!patientSearchTerm || patientSearchResults.length > 0}>
+                                <Link className="mr-2 h-4 w-4" />
+                                Send Booking Link
+                            </Button>
+                        </div>
+                    </div>
+                    {(selectedPatient || isEditing) && (
+                    <div className={cn("grid grid-cols-1 gap-x-8 gap-y-4 pt-4 border-t", !isDrawerExpanded && "md:grid-cols-3")}>
                       <div className="space-y-4 md:col-span-1">
                         <h3 className="text-lg font-medium border-b pb-2">Patient Details</h3>
-                        
-                        <Tabs value={bookingType} onValueChange={handleBookingTypeChange} className="w-full">
-                            <TabsList className="grid w-full grid-cols-2">
-                                <TabsTrigger value="existing">Existing Patient</TabsTrigger>
-                                <TabsTrigger value="new">New Patient</TabsTrigger>
-                            </TabsList>
-                            <TabsContent value="existing" className="space-y-4 pt-4">
-                                <FormItem>
-                                    <FormLabel>Search Patient by Phone</FormLabel>
-                                    <Popover open={isPatientPopoverOpen} onOpenChange={setIsPatientPopoverOpen}>
-                                    <PopoverTrigger asChild>
-                                        <div className="relative">
-                                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                            <FormControl>
-                                            <Input
-                                                ref={patientInputRef}
-                                                placeholder="Start typing phone number..."
-                                                value={patientSearchTerm}
-                                                onChange={handlePatientSearchChange}
-                                                className="pl-8"
-                                            />
-                                            </FormControl>
-                                        </div>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                                        <Command>
-                                        <CommandList>
-                                            <CommandEmpty>No patient found.</CommandEmpty>
-                                            <CommandGroup>
-                                            {patientSearchResults.map((patient) => (
-                                                <CommandItem
-                                                key={patient.id}
-                                                value={patient.phone}
-                                                onSelect={() => handlePatientSelect(patient)}
-                                                >
-                                                {patient.name}
-                                                <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
-                                                </CommandItem>
-                                            ))}
-                                            </CommandGroup>
-                                        </CommandList>
-                                        </Command>
-                                    </PopoverContent>
-                                    </Popover>
-                                    <FormMessage />
-                                </FormItem>
-                                 {form.getValues("patientName") && bookingType === 'existing' && (
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <FormItem>
-                                            <FormLabel>Name</FormLabel>
-                                            <FormControl><Input readOnly {...form.register("patientName")} value={form.watch('patientName') ?? ''} /></FormControl>
-                                        </FormItem>
-                                        <FormItem>
-                                            <FormLabel>Age</FormLabel>
-                                            <FormControl><Input readOnly {...form.register("age")} value={form.watch('age') !== undefined ? form.watch('age') : ''} /></FormControl>
-                                        </FormItem>
-                                        <FormItem>
-                                            <FormLabel>Gender</FormLabel>
-                                            <FormControl><Input readOnly {...form.register("gender")} value={form.watch('gender') ?? ''} /></FormControl>
-                                        </FormItem>
-                                        <FormItem>
-                                            <FormLabel>Place</FormLabel>
-                                            <FormControl><Input readOnly {...form.register("place")} value={form.watch('place') ?? ''} /></FormControl>
-                                        </FormItem>
-                                    </div>
-                                )}
-                            </TabsContent>
-                            <TabsContent value="new" className="space-y-4 pt-4">
-                                <FormField control={form.control} name="phone" render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Phone Number</FormLabel>
-                                        <div className="relative">
-                                            <FormControl>
-                                                <Input 
-                                                    placeholder="Enter 10-digit number" {...field} value={field.value ?? ''} 
-                                                    onBlur={handleNewPatientPhoneBlur}
-                                                    maxLength={10}
-                                                />
-                                            </FormControl>
-                                            {isCheckingPhone && <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin" />}
-                                        </div>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}/>
-                                <FormField control={form.control} name="patientName" render={({ field }) => (
-                                    <FormItem>
-                                        <div className="flex justify-between items-center">
-                                            <FormLabel>Patient Name</FormLabel>
-                                            {isKloqoMember && <Badge variant="success">Kloqo Member</Badge>}
-                                        </div>
-                                        <FormControl><Input placeholder="Full Name" {...field} value={field.value ?? ''} disabled={!newPatientFieldsEnabled} /></FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )} />
-                                <FormField control={form.control} name="age" render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Age</FormLabel>
-                                        <FormControl><Input type="number" placeholder="35" {...field} value={field.value !== undefined ? field.value : ''} disabled={!newPatientFieldsEnabled} /></FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )} />
-                                <FormField control={form.control} name="gender" render={({ field }) => (
-                                    <FormItem className="space-y-3">
-                                        <FormLabel>Gender</FormLabel>
-                                        <FormControl>
-                                        <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4" disabled={!newPatientFieldsEnabled}>
-                                            <FormItem className="flex items-center space-x-2 space-y-0">
-                                            <FormControl><RadioGroupItem value="Male" /></FormControl>
-                                            <FormLabel className="font-normal">Male</FormLabel>
-                                            </FormItem>
-                                            <FormItem className="flex items-center space-x-2 space-y-0">
-                                            <FormControl><RadioGroupItem value="Female" /></FormControl>
-                                            <FormLabel className="font-normal">Female</FormLabel>
-                                            </FormItem>
-                                        </RadioGroup>
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )} />
-                                <FormField control={form.control} name="place" render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Place</FormLabel>
-                                        <FormControl><Input placeholder="New York, USA" {...field} value={field.value ?? ''} disabled={!newPatientFieldsEnabled} /></FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )} />
-                            </TabsContent>
-                        </Tabs>
-
+                        <div className="grid grid-cols-2 gap-4">
+                            <FormItem>
+                                <FormLabel>Name</FormLabel>
+                                <FormControl><Input readOnly value={form.watch('patientName') ?? ''} /></FormControl>
+                            </FormItem>
+                            <FormItem>
+                                <FormLabel>Age</FormLabel>
+                                <FormControl><Input readOnly value={form.watch('age') !== undefined ? form.watch('age') : ''} /></FormControl>
+                            </FormItem>
+                            <FormItem>
+                                <FormLabel>Gender</FormLabel>
+                                <FormControl><Input readOnly value={form.watch('gender') ?? ''} /></FormControl>
+                            </FormItem>
+                            <FormItem>
+                                <FormLabel>Place</FormLabel>
+                                <FormControl><Input readOnly value={form.watch('place') ?? ''} /></FormControl>
+                            </FormItem>
+                        </div>
                         <FormField control={form.control} name="bookedVia" render={({ field }) => (
                             <FormItem className="space-y-3">
                                 <FormLabel>Booked Via</FormLabel>
@@ -934,6 +785,8 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                       </>
                       )}
                     </div>
+                    )}
+                    {(selectedPatient || isEditing) && (
                     <div className="flex justify-end items-center pt-4">
                       <div className="flex justify-end gap-2">
                           {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
@@ -943,6 +796,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                           </Button>
                       </div>
                     </div>
+                    )}
                   </form>
                 </Form>
               </CardContent>
