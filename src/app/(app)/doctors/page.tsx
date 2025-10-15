@@ -1002,7 +1002,7 @@ export default function DoctorsPage() {
             </div>
 
             {activeTab !== 'analytics' && (
-              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
                   <Card>
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                           <CardTitle className="text-sm font-medium">Avg. Consulting Time</CardTitle>
@@ -1301,17 +1301,30 @@ export default function DoctorsPage() {
                                             <div>
                                                 <p className="font-semibold text-sm">{slot.day}</p>
                                                 <div className="flex flex-wrap gap-2 items-center mt-2">
-                                                    {slot.timeSlots.map((ts, i) => (
-                                                        <Badge key={i} variant="outline" className="text-sm group relative pr-7">
-                                                            {ts.from} - {ts.to}
-                                                            <button 
-                                                                onClick={() => handleDeleteTimeSlot(slot.day, ts)}
-                                                                className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                            >
-                                                                <X className="h-3 w-3 text-red-500" />
-                                                            </button>
-                                                        </Badge>
-                                                    ))}
+                                                    {slot.timeSlots.map((ts, i) => {
+                                                        if (!ts.from || !ts.to) return null;
+                                                        try {
+                                                            const fromFormatted = format(parseDateFns(ts.from, "hh:mm a", new Date()), 'p');
+                                                            const toFormatted = format(parseDateFns(ts.to, "hh:mm a", new Date()), 'p');
+                                                            return (
+                                                                <Badge key={i} variant="outline" className="text-sm group relative pr-7">
+                                                                    {fromFormatted} - {toFormatted}
+                                                                    <button 
+                                                                        onClick={() => handleDeleteTimeSlot(slot.day, ts)}
+                                                                        className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                    >
+                                                                        <X className="h-3 w-3 text-red-500" />
+                                                                    </button>
+                                                                </Badge>
+                                                            );
+                                                        } catch (e) {
+                                                            return (
+                                                                <Badge key={i} variant="destructive" className="text-sm group relative pr-7">
+                                                                    Invalid Time
+                                                                </Badge>
+                                                            );
+                                                        }
+                                                    })}
                                                 </div>
                                             </div>
                                             {index < selectedDoctor.availabilitySlots!.length -1 && <Separator className="my-3"/>}
