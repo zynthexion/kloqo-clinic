@@ -18,7 +18,7 @@ import type { Appointment, Doctor, Patient, Visit } from "@/lib/types";
 import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, addDoc, deleteDoc, writeBatch, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
-import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear } from "date-fns";
+import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
   Form,
@@ -39,7 +39,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck, UserPlus, Users } from "lucide-react";
+import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck, UserPlus, Users, Plus, X, Clock, Calendar as CalendarLucide, CheckCircle2 } from "lucide-react";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
@@ -59,6 +59,10 @@ import { useAuth } from "@/firebase";
 import { useSearchParams } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AddRelativeDialog } from "@/components/patients/add-relative-dialog";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { FirestorePermissionError } from "@/firebase/errors";
+import { errorEmitter } from "@/firebase/error-emitter";
+import Link from "next/link";
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -73,7 +77,7 @@ const formSchema = z.object({
   }),
   time: z.string().min(1, "Please select a time."),
   place: z.string().min(2, { message: "Place must be at least 2 characters." }),
-  bookedVia: z.enum(["Advanced Booking", "Walk-in", "Online"]),
+  bookedVia: z.enum(["Advanced Booking", "Walk-in"]),
   tokenNumber: z.string().optional(),
   patientId: z.string().optional(),
 });
@@ -116,6 +120,7 @@ export default function AppointmentsPage() {
 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [clinicDetails, setClinicDetails] = useState<any>(null);
   const [clinicId, setClinicId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
@@ -138,6 +143,11 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
   const [relatives, setRelatives] = useState<Patient[]>([]);
   const [isAddRelativeDialogOpen, setIsAddRelativeDialogOpen] = useState(false);
 
+  const [isEstimateModalOpen, setIsEstimateModalOpen] = useState(false);
+  const [isTokenModalOpen, setIsTokenModalOpen] = useState(false);
+  const [generatedToken, setGeneratedToken] = useState<string | null>(null);
+  const [estimatedConsultationTime, setEstimatedConsultationTime] = useState<Date | null>(null);
+  const [patientsAhead, setPatientsAhead] = useState(0);
 
   const { toast } = useToast();
 
@@ -204,6 +214,11 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
           return;
         }
         setClinicId(userClinicId);
+        
+        const clinicDoc = await getFirestoreDoc(doc(db, 'clinics', userClinicId));
+        if (clinicDoc.exists()) {
+            setClinicDetails(clinicDoc.data());
+        }
 
         const appointmentsQuery = query(collection(db, "appointments"), where("clinicId", "==", userClinicId));
         const appointmentsSnapshot = await getDocs(appointmentsQuery);
@@ -274,7 +289,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                 date: isNaN(appointmentDate.getTime()) ? undefined : appointmentDate,
                 doctor: doctor.id,
                 time: format(parseDateFns(editingAppointment.time, "hh:mm a", new Date()), 'HH:mm'),
-                bookedVia: (editingAppointment.bookedVia === "Advanced Booking" || editingAppointment.bookedVia === "Walk-in" || editingAppointment.bookedVia === "Online") ? editingAppointment.bookedVia : "Advanced Booking"
+                bookedVia: (editingAppointment.bookedVia === "Advanced Booking" || editingAppointment.bookedVia === "Walk-in") ? editingAppointment.bookedVia : "Advanced Booking"
             });
             setPatientSearchTerm(editingAppointment.phone.replace('+91', ''));
         }
@@ -289,7 +304,118 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
   }, [doctors, form.watch("doctor")]);
 
   const selectedDate = form.watch("date");
+  const appointmentType = form.watch("bookedVia");
 
+    const generateNextToken = async (date: Date, type: 'A' | 'W'): Promise<string> => {
+        if (!clinicId || !selectedDoctor) return `${type}001`;
+
+        const dateStr = format(date, "d MMMM yyyy");
+        const appointmentsRef = collection(db, 'appointments');
+        const q = query(
+            appointmentsRef,
+            where('clinicId', '==', clinicId),
+            where('doctor', '==', selectedDoctor.name),
+            where('date', '==', dateStr),
+        );
+        
+        const querySnapshot = await getDocs(q);
+        const tokenNumbers = querySnapshot.docs.map(doc => {
+            const token = doc.data().tokenNumber;
+            if (typeof token === 'string' && (token.startsWith('A') || token.startsWith('W'))) {
+              return parseInt(token.substring(1));
+            }
+            return 0;
+        }).filter(num => !isNaN(num) && num > 0);
+
+
+        const lastToken = tokenNumbers.length > 0 ? Math.max(...tokenNumbers) : 0;
+        const nextTokenNum = lastToken + 1;
+        
+        return `${type}${String(nextTokenNum).padStart(3, '0')}`;
+    };
+
+    const calculateWalkInDetails = async (): Promise<{ estimatedTime: Date; patientsAhead: number }> => {
+        if (!clinicId || !selectedDoctor) throw new Error("Doctor not selected");
+        
+        const now = new Date();
+        const consultationTime = selectedDoctor.averageConsultingTime || 15;
+        const walkInTokenAllotment = clinicDetails?.walkInTokenAllotment || 5;
+
+        const parseTime = (timeStr: string, date: Date): Date => {
+            const newDate = new Date(date);
+            const [time, modifier] = timeStr.split(' ');
+            let [hours, minutes] = time.split(':').map(Number);
+            if (modifier === 'PM' && hours < 12) hours += 12;
+            if (modifier === 'AM' && hours === 12) hours = 0;
+            newDate.setHours(hours, minutes, 0, 0);
+            return newDate;
+        };
+
+        const dateStr = format(now, "d MMMM yyyy");
+        const appointmentsRef = collection(db, 'appointments');
+        const q = query(appointmentsRef, where('clinicId', '==', clinicId), where('doctor', '==', selectedDoctor.name), where('date', '==', dateStr));
+        const querySnapshot = await getDocs(q);
+
+        const allAppointmentsToday = querySnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                time: parseTime(data.time, now),
+                token: data.tokenNumber as string
+            };
+        }).sort((a,b) => a.time.getTime() - b.time.getTime());
+
+        const futureAppointments = allAppointmentsToday.filter(appt => appt.time >= now);
+
+        const lastWalkIn = futureAppointments.filter(appt => appt.token.startsWith('W')).pop();
+        const queueStartTime = lastWalkIn ? lastWalkIn.time : now;
+
+        const appointmentsAfterQueueStart = futureAppointments.filter(appt => 
+            !appt.token.startsWith('W') && appt.time > queueStartTime
+        );
+        
+        let slotAfterAllotment: Date | null = null;
+        if (appointmentsAfterQueueStart.length >= walkInTokenAllotment) {
+            slotAfterAllotment = addMinutes(appointmentsAfterQueueStart[walkInTokenAllotment - 1].time, consultationTime);
+        } else if (appointmentsAfterQueueStart.length > 0) {
+            const lastPerson = appointmentsAfterQueueStart[appointmentsAfterQueueStart.length - 1];
+            slotAfterAllotment = addMinutes(lastPerson.time, consultationTime * (walkInTokenAllotment - appointmentsAfterQueueStart.length));
+        } else {
+            slotAfterAllotment = addMinutes(queueStartTime, consultationTime * walkInTokenAllotment);
+        }
+
+        const dayOfWeek = format(now, 'EEEE');
+        const availabilityForDay = selectedDoctor.availabilitySlots?.find(slot => slot.day === dayOfWeek);
+        if (!availabilityForDay) throw new Error("Doctor not available today");
+
+        const allPossibleSlots: Date[] = [];
+        availabilityForDay.timeSlots.forEach(timeSlot => {
+            let currentTime = parseTime(timeSlot.from, now);
+            const endTime = parseTime(timeSlot.to, now);
+            while (isBefore(currentTime, endTime)) {
+                allPossibleSlots.push(new Date(currentTime));
+                currentTime = addMinutes(currentTime, consultationTime);
+            }
+        });
+
+        const bookedTimes = allAppointmentsToday.map(appt => appt.time.getTime());
+        const nextAvailableSlot = allPossibleSlots.find(slot => slot > now && !bookedTimes.includes(slot.getTime()));
+        
+        let estimatedTime : Date;
+        if (nextAvailableSlot && slotAfterAllotment) {
+            estimatedTime = nextAvailableSlot > slotAfterAllotment ? nextAvailableSlot : slotAfterAllotment;
+        } else if (slotAfterAllotment) {
+            estimatedTime = slotAfterAllotment;
+        } else if(nextAvailableSlot){
+            estimatedTime = nextAvailableSlot;
+        } else {
+            const lastAppointmentTime = allAppointmentsToday.length > 0 ? allAppointmentsToday[allAppointmentsToday.length - 1].time : now;
+            estimatedTime = addMinutes(lastAppointmentTime, consultationTime);
+        }
+        
+        const patientsAhead = futureAppointments.filter(time => time.time < estimatedTime).length;
+
+        return { estimatedTime, patientsAhead };
+    };
 
   async function onSubmit(values: AppointmentFormValues) {
     if (!auth.currentUser || !clinicId || !selectedDoctor) {
@@ -312,7 +438,6 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
           phone: values.phone.startsWith('+91') ? values.phone : `+91${values.phone}`,
         };
   
-        // Case 1: Editing an existing appointment
         if (isEditing && editingAppointment) {
           patientForAppointmentId = editingAppointment.patientId;
           const patientRef = doc(db, 'patients', patientForAppointmentId);
@@ -320,8 +445,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
           patientForAppointmentName = values.patientName;
           patientForAppointmentPhone = patientDataToUpdate.phone;
         }
-        // Case 2: Booking for a selected existing patient (primary or relative)
-        else if (selectedPatient) {
+        else if (selectedPatient && !isEditing) {
           patientForAppointmentId = selectedPatient.id;
           const patientRef = doc(db, 'patients', patientForAppointmentId);
   
@@ -335,7 +459,6 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
           patientForAppointmentName = values.patientName;
           patientForAppointmentPhone = patientDataToUpdate.phone;
         }
-        // Case 3: Booking for a brand new patient (not found via search)
         else {
           const newPatientRef = doc(collection(db, 'patients'));
           const newPatientData: Patient = {
@@ -353,70 +476,108 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
           patientForAppointmentName = values.patientName;
           patientForAppointmentPhone = patientDataToUpdate.phone;
         }
-  
-        // Create or update the appointment document
-        const appointmentId = isEditing && editingAppointment ? editingAppointment.id : doc(collection(db, "appointments")).id;
-        const prefix = values.bookedVia === 'Advanced Booking' ? 'A' : values.bookedVia === 'Walk-in' ? 'W' : 'O';
-        const tokenNumber = isEditing && editingAppointment ? editingAppointment.tokenNumber : `${prefix}${(appointments.length + 1).toString().padStart(3, '0')}`;
         
-        const appointmentDateStr = format(values.date, "d MMMM yyyy");
-        const appointmentTimeStr = format(parseDateFns(values.time, "HH:mm", new Date()), "hh:mm a");
-  
-        const appointmentData: Appointment = {
-          id: appointmentId,
-          clinicId: clinicId,
-          patientId: patientForAppointmentId,
-          patientName: patientForAppointmentName,
-          sex: values.sex,
-          phone: patientForAppointmentPhone,
-          age: values.age,
-          doctor: selectedDoctor.name,
-          date: appointmentDateStr,
-          time: appointmentTimeStr,
-          department: values.department,
-          status: isEditing ? editingAppointment!.status : "Pending",
-          treatment: "General Consultation",
-          tokenNumber: tokenNumber,
-          bookedVia: values.bookedVia,
-          place: values.place
-        };
-  
-        const appointmentRef = doc(db, 'appointments', appointmentId);
-        batch.set(appointmentRef, appointmentData, { merge: true });
-  
-        // If it's a new appointment, update patient's visit history
-        if (!isEditing) {
-          const patientRef = doc(db, 'patients', patientForAppointmentId);
-          const newVisit: Visit = {
-            appointmentId: appointmentId,
-            date: appointmentDateStr,
-            time: appointmentTimeStr,
-            doctor: selectedDoctor.name,
-            department: values.department,
-            status: 'Pending',
-            treatment: 'General Consultation',
-          };
-          batch.update(patientRef, {
-            visitHistory: arrayUnion(newVisit),
-            totalAppointments: increment(1),
-            updatedAt: serverTimestamp(),
-          });
-        }
-  
-        await batch.commit();
-  
-        // Update local state and show toast
-        if (isEditing) {
-          setAppointments(prev => prev.map(apt => apt.id === appointmentId ? appointmentData : apt));
-          toast({ title: "Appointment Rescheduled", description: `Appointment for ${appointmentData.patientName} has been updated.` });
-        } else {
-          setAppointments(prev => [...prev, appointmentData]);
-          toast({ title: "Appointment Booked", description: `Appointment for ${appointmentData.patientName} has been successfully booked.` });
+        await batch.commit().catch(e => {
+            const permissionError = new FirestorePermissionError({
+                path: 'batch write', operation: 'write', requestResourceData: values 
+            });
+            errorEmitter.emit('permission-error', permissionError);
+            throw permissionError;
+        });
+
+        if (appointmentType === 'Walk-in') {
+            const { estimatedTime, patientsAhead } = await calculateWalkInDetails();
+            const date = new Date();
+            const tokenNumber = await generateNextToken(date, 'W');
+
+            const appointmentData = {
+                bookedVia: appointmentType,
+                clinicId: selectedDoctor.clinicId,
+                date: format(date, "d MMMM yyyy"),
+                department: selectedDoctor.department,
+                doctor: selectedDoctor.name,
+                sex: values.sex,
+                patientId: patientForAppointmentId,
+                patientName: values.patientName,
+                age: values.age,
+                phone: patientForAppointmentPhone,
+                place: values.place,
+                status: 'Pending',
+                time: format(estimatedTime, "hh:mm a"),
+                tokenNumber: tokenNumber,
+                treatment: "General Consultation",
+                createdAt: serverTimestamp(),
+            };
+            const appointmentRef = doc(collection(db, 'appointments'));
+            await setDoc(appointmentRef, {...appointmentData, id: appointmentRef.id});
+            setAppointments(prev => [...prev, {...appointmentData, id: appointmentRef.id}]);
+
+            setGeneratedToken(tokenNumber);
+            setPatientsAhead(patientsAhead);
+            setEstimatedConsultationTime(estimatedTime);
+            setIsEstimateModalOpen(true);
+            
+        } else { // Advanced Booking
+             const appointmentId = isEditing && editingAppointment ? editingAppointment.id : doc(collection(db, "appointments")).id;
+             const tokenNumber = isEditing && editingAppointment ? editingAppointment.tokenNumber : await generateNextToken(values.date, 'A');
+            
+             const appointmentDateStr = format(values.date, "d MMMM yyyy");
+             const appointmentTimeStr = format(parseDateFns(values.time, "HH:mm", new Date()), "hh:mm a");
+
+            const appointmentData: Appointment = {
+                id: appointmentId,
+                clinicId: clinicId,
+                patientId: patientForAppointmentId,
+                patientName: patientForAppointmentName,
+                sex: values.sex,
+                phone: patientForAppointmentPhone,
+                age: values.age,
+                doctor: selectedDoctor.name,
+                date: appointmentDateStr,
+                time: appointmentTimeStr,
+                department: values.department,
+                status: isEditing ? editingAppointment!.status : "Pending",
+                treatment: "General Consultation",
+                tokenNumber: tokenNumber,
+                bookedVia: values.bookedVia,
+                place: values.place
+            };
+    
+            const appointmentRef = doc(db, 'appointments', appointmentId);
+            await setDoc(appointmentRef, appointmentData, { merge: true });
+    
+            if (!isEditing) {
+              const patientRef = doc(db, 'patients', patientForAppointmentId);
+              const newVisit: Visit = {
+                appointmentId: appointmentId,
+                date: appointmentDateStr,
+                time: appointmentTimeStr,
+                doctor: selectedDoctor.name,
+                department: values.department,
+                status: 'Pending',
+                treatment: 'General Consultation',
+              };
+              await updateDoc(patientRef, {
+                visitHistory: arrayUnion(newVisit),
+                totalAppointments: increment(1),
+                updatedAt: serverTimestamp(),
+              });
+            }
+
+            if (isEditing) {
+              setAppointments(prev => prev.map(apt => apt.id === appointmentId ? appointmentData : apt));
+              toast({ title: "Appointment Rescheduled", description: `Appointment for ${appointmentData.patientName} has been updated.` });
+            } else {
+              setAppointments(prev => [...prev, appointmentData]);
+              toast({ title: "Appointment Booked", description: `Appointment for ${appointmentData.patientName} has been successfully booked.` });
+            }
         }
         resetForm();
       } catch (error) {
         console.error("Error saving appointment: ", error);
-        toast({ variant: "destructive", title: "Error", description: "Failed to save appointment. Please try again." });
+         if (!(error instanceof FirestorePermissionError)) {
+            toast({ variant: "destructive", title: "Error", description: "Failed to save appointment. Please try again." });
+        }
       }
     });
   }
@@ -505,6 +666,15 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     }
     setPatientSearchTerm(value);
   };
+
+  const handleProceedToToken = () => {
+    setIsEstimateModalOpen(false);
+    setIsTokenModalOpen(true);
+    
+    setTimeout(() => {
+        setIsTokenModalOpen(false);
+    }, 5000);
+}
 
 
   const availableDaysOfWeek = useMemo(() => {
@@ -867,34 +1037,36 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                           
                           <div className="space-y-4 md:col-span-1">
                                 <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
-                                <FormField control={form.control} name="date" render={({ field }) => (
-                                <FormItem className="flex flex-col">
-                                    <FormLabel>Select Date</FormLabel>
-                                    <Calendar
-                                        className="bg-primary text-primary-foreground rounded-md [&_button:hover]:bg-primary/80 [&_.rdp-day_today]:bg-primary-foreground/20 [&_button]:text-primary-foreground"
-                                        mode="single"
-                                        selected={field.value}
-                                        onSelect={(date) => {
-                                            if (date) field.onChange(date);
-                                            form.clearErrors("date");
-                                        }}
-                                        disabled={(date) => 
-                                            date < new Date(new Date().setHours(0,0,0,0)) || 
-                                            !selectedDoctor ||
-                                            !availableDaysOfWeek.includes(getDay(date)) ||
-                                            leaveDates.some(leaveDate => isSameDay(date, leaveDate))
-                                        }
-                                        initialFocus
-                                        modifiers={selectedDoctor ? { available: { dayOfWeek: availableDaysOfWeek }, leave: leaveDates } : { leave: leaveDates }}
-                                        modifiersStyles={{
-                                            available: { backgroundColor: 'hsl(var(--accent))', color: 'hsl(var(--accent-foreground))' },
-                                            leave: { backgroundColor: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' },
-                                        }}
-                                        />
-                                    <FormMessage />
-                                </FormItem>
+                                {appointmentType === 'Advanced Booking' && (
+                                    <FormField control={form.control} name="date" render={({ field }) => (
+                                    <FormItem className="flex flex-col">
+                                        <FormLabel>Select Date</FormLabel>
+                                        <Calendar
+                                            className="bg-primary text-primary-foreground rounded-md [&_button:hover]:bg-primary/80 [&_.rdp-day_today]:bg-primary-foreground/20 [&_button]:text-primary-foreground"
+                                            mode="single"
+                                            selected={field.value}
+                                            onSelect={(date) => {
+                                                if (date) field.onChange(date);
+                                                form.clearErrors("date");
+                                            }}
+                                            disabled={(date) => 
+                                                date < new Date(new Date().setHours(0,0,0,0)) || 
+                                                !selectedDoctor ||
+                                                !availableDaysOfWeek.includes(getDay(date)) ||
+                                                leaveDates.some(leaveDate => isSameDay(date, leaveDate))
+                                            }
+                                            initialFocus
+                                            modifiers={selectedDoctor ? { available: { dayOfWeek: availableDaysOfWeek }, leave: leaveDates } : { leave: leaveDates }}
+                                            modifiersStyles={{
+                                                available: { backgroundColor: 'hsl(var(--accent))', color: 'hsl(var(--accent-foreground))' },
+                                                leave: { backgroundColor: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' },
+                                            }}
+                                            />
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                />
                                 )}
-                            />
                             </div>
 
                             <div className="space-y-4 md:col-span-1">
@@ -928,7 +1100,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                     <FormMessage />
                                     </FormItem>
                                 )} />
-                            {selectedDoctor && selectedDate && (
+                            {appointmentType === 'Advanced Booking' && selectedDoctor && selectedDate && (
                                 <FormField control={form.control} name="time" render={({ field }) => (
                                     <FormItem>
                                     <FormLabel>Select Time Slot</FormLabel>
@@ -1219,9 +1391,62 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
             onRelativeAdded={handleNewRelativeAdded}
           />
       )}
+       <Dialog open={isEstimateModalOpen} onOpenChange={setIsEstimateModalOpen}>
+            <DialogContent className="sm:max-w-sm w-[90%]" >
+                <DialogHeader>
+                    <DialogTitle className="text-center">Estimated Wait Time</DialogTitle>
+                    <DialogDescription className="text-center">The clinic is busy at the moment. Here's the current wait status.</DialogDescription>
+                </DialogHeader>
+                <div className="flex items-center justify-center gap-6 text-center py-4">
+                    <div className="flex flex-col items-center">
+                        <Clock className="w-8 h-8 text-primary mb-2" />
+                        <span className="text-xl font-bold">{estimatedConsultationTime ? `~ ${format(estimatedConsultationTime, 'hh:mm a')}` : 'Calculating...'}</span>
+                        <span className="text-xs text-muted-foreground">Est. Time</span>
+                    </div>
+                     <div className="flex flex-col items-center">
+                        <Users className="w-8 h-8 text-primary mb-2" />
+                        <span className="text-2xl font-bold">{patientsAhead}</span>
+                        <span className="text-xs text-muted-foreground">Patients Ahead</span>
+                    </div>
+                </div>
+                <DialogFooter className="flex-col space-y-2">
+                     <Button onClick={handleProceedToToken} className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
+                        I'm OK to wait, Proceed
+                    </Button>
+                    <Button variant="outline" className="w-full" asChild>
+                        <Link href="/appointments"><CalendarLucide className="mr-2 h-4 w-4"/>Book for Another Day</Link>
+                    </Button>
+                    <DialogClose asChild>
+                         <Button variant="ghost" className="w-full">Cancel</Button>
+                    </DialogClose>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
+        <Dialog open={isTokenModalOpen} onOpenChange={setIsTokenModalOpen}>
+            <DialogContent className="sm:max-w-xs w-[90%] text-center p-6 sm:p-8">
+                <DialogClose asChild>
+                    <Button variant="ghost" size="icon" className="absolute top-4 right-4 h-6 w-6 text-muted-foreground">
+                        <X className="h-4 w-4" />
+                        <span className="sr-only">Close</span>
+                    </Button>
+                </DialogClose>
+                 <div className="flex flex-col items-center space-y-4">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+                        <CheckCircle2 className="h-8 w-8 text-green-600" />
+                    </div>
+                    <div className="space-y-1">
+                        <h2 className="text-xl font-bold">Walk-in Token Generated!</h2>
+                        <p className="text-muted-foreground text-sm">Please wait for your turn. You can monitor the live queue.</p>
+                    </div>
+                     <div>
+                        <p className="text-sm text-muted-foreground">Your Token Number</p>
+                        <p className="text-5xl font-bold text-primary">{generatedToken}</p>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
       <WeeklyDoctorAvailability />
     </>
   );
 }
-
-    
