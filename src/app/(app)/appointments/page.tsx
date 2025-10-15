@@ -178,7 +178,9 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
 
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
-      searchPatients(patientSearchTerm);
+      startTransition(() => {
+        searchPatients(patientSearchTerm);
+      });
     }, 300);
 
     return () => clearTimeout(delayDebounceFn);
@@ -236,6 +238,8 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     setPatientSearchTerm("");
     setSelectedPatient(null);
     setPrimaryKloqoMember(null);
+    setRelatives([]);
+    setBookingFor('member');
     form.reset({
       patientName: "", sex: "Male", phone: "", age: 0, doctor: "",
       department: "",
@@ -416,15 +420,14 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
   };
 
   const onDoctorChange = (doctorId: string) => {
-    form.setValue("doctor", doctorId);
     setSelectedDoctorId(doctorId);
     const doctor = doctors.find(d => d.id === doctorId);
     if (doctor) {
-      form.setValue("department", doctor.department || "");
+      form.setValue("department", doctor.department || "", { shouldValidate: true });
       form.setValue("date", undefined, { shouldValidate: true });
       form.setValue("time", "", { shouldValidate: true });
     }
-}
+  }
 
   const handlePatientSelect = async (patient: Patient) => {
     setSelectedPatient(patient);
@@ -466,7 +469,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     form.setValue("patientId", relative.id);
     form.setValue("patientName", relative.name);
     form.setValue("age", relative.age);
-    const capitalizedSex = relative.sex.charAt(0).toUpperCase() + relative.sex.slice(1);
+    const capitalizedSex = relative.sex.charAt(0).toUpperCase() + relative.sex.slice(1).toLowerCase();
     form.setValue("sex", capitalizedSex as "Male" | "Female" | "Other");
     form.setValue("phone", relative.phone.replace('+91', ''));
     form.setValue("place", relative.place || "");
@@ -482,17 +485,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
   const handlePatientSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/\D/g, '');
     if (selectedPatient && value !== selectedPatient.phone.replace('+91', '')) {
-      setSelectedPatient(null);
-      setPrimaryKloqoMember(null);
-      setRelatives([]);
-      form.reset({
-        ...form.getValues(),
-        patientId: undefined,
-        patientName: "",
-        age: 0,
-        sex: "Male",
-        place: "",
-      });
+      resetForm();
     }
     setPatientSearchTerm(value);
   };
@@ -909,7 +902,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                   <FormField control={form.control} name="doctor" render={({ field }) => (
                                       <FormItem>
                                         <FormLabel>Doctor</FormLabel>
-                                        <Select onValueChange={onDoctorChange} value={field.value}>
+                                        <Select onValueChange={(value) => { field.onChange(value); onDoctorChange(value); }} value={field.value}>
                                           <FormControl>
                                             <SelectTrigger>
                                               <SelectValue placeholder="Select a doctor" />
