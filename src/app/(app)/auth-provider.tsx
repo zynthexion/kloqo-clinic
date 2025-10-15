@@ -25,6 +25,5 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
     };
 
-    // Render children only when not loading to prevent flicker or premature rendering of protected content
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
