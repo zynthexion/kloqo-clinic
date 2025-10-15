@@ -980,142 +980,154 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
 
             <aside className={cn(
                 "relative flex-shrink-0 transition-all duration-300 ease-in-out h-[calc(100vh-7rem)]",
-                isDrawerExpanded ? "w-9/12 pl-4" : "w-3/12 pl-4"
+                isDrawerExpanded ? "w-9/12" : "w-3/12"
             )}>
-              <Card className="h-full rounded-2xl">
-                <CardHeader className="p-4 border-b">
-                  <div className="flex items-center justify-between">
-                    <CardTitle>{!isDrawerExpanded ? "Today's Queue" : "Appointment Details"}</CardTitle>
-                    {isDrawerExpanded && (
-                      <Tabs value={activeTab} onValueChange={setActiveTab}>
-                        <TabsList>
-                          <TabsTrigger value="all">All</TabsTrigger>
-                          <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
-                          <TabsTrigger value="completed">Completed</TabsTrigger>
-                        </TabsList>
-                      </Tabs>
-                    )}
-                  </div>
-                  {isDrawerExpanded && (
-                    <div className="flex items-center gap-2 mt-2 w-full">
-                      <div className="relative flex-1">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          type="search"
-                          placeholder="Search by patient, doctor, department..."
-                          className="w-full rounded-lg bg-background pl-8 h-9"
-                          value={drawerSearchTerm}
-                          onChange={(e) => setDrawerSearchTerm(e.target.value)}
-                        />
-                      </div>
-                      <DateRangePicker
-                        initialDateRange={drawerDateRange}
-                        onDateChange={setDrawerDateRange}
-                        className="mx-2"
-                      />
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="icon">
-                            <Stethoscope className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start">
-                          <DropdownMenuItem onClick={() => setSelectedDrawerDoctor('all')}>All Doctors</DropdownMenuItem>
-                          {doctors.map(doc => (
-                            <DropdownMenuItem key={doc.id} onClick={() => setSelectedDrawerDoctor(doc.name)}>{doc.name}</DropdownMenuItem>
-                          ))}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        {selectedDrawerDoctor && selectedDrawerDoctor !== 'all' ? `Doctor: ${selectedDrawerDoctor}` : 'All Doctors'}
-                      </span>
-                      <Button variant="outline" size="icon">
-                        <Printer className="h-4 w-4" />
-                      </Button>
-                      <Button variant="outline" size="icon">
-                        <FileDown className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  )}
-                </CardHeader>
-                <CardContent className="p-0">
-                  <ScrollArea className="h-[calc(100vh-19rem)]">
-                    {loading ? (
-                      <div className="p-6">
-                        {Array.from({ length: 10 }).map((_, i) => (
-                          <div key={i} className="p-3 rounded-lg border bg-muted animate-pulse h-20 mb-3"></div>
-                        ))}
-                      </div>
-                    ) : isDrawerExpanded ? (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Patient</TableHead>
-                            <TableHead>Age</TableHead>
-                            <TableHead>Gender</TableHead>
-                            <TableHead>Phone</TableHead>
-                            <TableHead>Place</TableHead>
-                            <TableHead>Doctor</TableHead>
-                            <TableHead>Department</TableHead>
-                            <TableHead>Date</TableHead>
-                            <TableHead>Time</TableHead>
-                            <TableHead>Booked Via</TableHead>
-                            <TableHead>Token</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredAppointments.map((appointment) => (
-                            <TableRow key={appointment.id} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
-                              <TableCell className="font-medium">{appointment.patientName}</TableCell>
-                              <TableCell>{appointment.age}</TableCell>
-                              <TableCell>{appointment.sex}</TableCell>
-                              <TableCell>{appointment.phone}</TableCell>
-                              <TableCell>{appointment.place}</TableCell>
-                              <TableCell>{appointment.doctor}</TableCell>
-                              <TableCell>{appointment.department}</TableCell>
-                              <TableCell>{format(parse(appointment.date, "d MMMM yyyy", new Date()), "MMM d, yy")}</TableCell>
-                              <TableCell>{appointment.time}</TableCell>
-                              <TableCell>{appointment.bookedVia}</TableCell>
-                              <TableCell>{appointment.tokenNumber}</TableCell>
-                              <TableCell className="text-right">
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" className="h-8 w-8 p-0">
-                                      <span className="sr-only">Open menu</span>
-                                      <MoreHorizontal className="h-4 w-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem>
-                                      <Eye className="mr-2 h-4 w-4" />
-                                      View
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => setEditingAppointment(appointment)}>
-                                      <Edit className="mr-2 h-4 w-4" />
-                                      Edit
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleDelete(appointment.id)} className="text-red-600">
-                                      <Trash2 className="mr-2 h-4 w-4" />
-                                      Delete
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    ) : (
+              <div className={cn("h-full w-full", isDrawerExpanded ? "p-0" : "p-4")}>
+                <Card className="h-full rounded-2xl">
+                  <CardHeader className={cn("border-b", isDrawerExpanded ? "p-4" : "p-0")}>
+                    {isDrawerExpanded ? (
                       <>
-                        <div className="flex items-center justify-between mb-2 p-2">
-                          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                            <TabsList className="grid w-full grid-cols-2">
+                        <div className="flex items-center justify-between">
+                          <CardTitle>Appointment Details</CardTitle>
+                          <Tabs value={activeTab} onValueChange={setActiveTab}>
+                            <TabsList>
+                              <TabsTrigger value="all">All</TabsTrigger>
                               <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
                               <TabsTrigger value="completed">Completed</TabsTrigger>
                             </TabsList>
                           </Tabs>
                         </div>
+                        <div className="flex items-center gap-2 mt-2 w-full">
+                          <div className="relative flex-1">
+                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              type="search"
+                              placeholder="Search by patient, doctor, department..."
+                              className="w-full rounded-lg bg-background pl-8 h-9"
+                              value={drawerSearchTerm}
+                              onChange={(e) => setDrawerSearchTerm(e.target.value)}
+                            />
+                          </div>
+                          <DateRangePicker
+                            initialDateRange={drawerDateRange}
+                            onDateChange={setDrawerDateRange}
+                            className="mx-2"
+                          />
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="outline" size="icon">
+                                <Stethoscope className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                              <DropdownMenuItem onClick={() => setSelectedDrawerDoctor('all')}>All Doctors</DropdownMenuItem>
+                              {doctors.map(doc => (
+                                <DropdownMenuItem key={doc.id} onClick={() => setSelectedDrawerDoctor(doc.name)}>{doc.name}</DropdownMenuItem>
+                              ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            {selectedDrawerDoctor && selectedDrawerDoctor !== 'all' ? `Doctor: ${selectedDrawerDoctor}` : 'All Doctors'}
+                          </span>
+                          <Button variant="outline" size="icon">
+                            <Printer className="h-4 w-4" />
+                          </Button>
+                          <Button variant="outline" size="icon">
+                            <FileDown className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="p-4 space-y-3">
+                        <CardTitle>Today's Appointments</CardTitle>
+                        <div className="relative">
+                          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            type="search"
+                            placeholder="Search by patient, doctor..."
+                            className="w-full rounded-lg bg-background pl-8 h-9"
+                            value={drawerSearchTerm}
+                            onChange={(e) => setDrawerSearchTerm(e.target.value)}
+                          />
+                        </div>
+                        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                          <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
+                            <TabsTrigger value="completed">Completed</TabsTrigger>
+                          </TabsList>
+                        </Tabs>
+                      </div>
+                    )}
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <ScrollArea className="h-[calc(100vh-15rem)]">
+                      {loading ? (
+                        <div className="p-6">
+                          {Array.from({ length: 10 }).map((_, i) => (
+                            <div key={i} className="p-3 rounded-lg border bg-muted animate-pulse h-20 mb-3"></div>
+                          ))}
+                        </div>
+                      ) : isDrawerExpanded ? (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Patient</TableHead>
+                              <TableHead>Age</TableHead>
+                              <TableHead>Gender</TableHead>
+                              <TableHead>Phone</TableHead>
+                              <TableHead>Place</TableHead>
+                              <TableHead>Doctor</TableHead>
+                              <TableHead>Department</TableHead>
+                              <TableHead>Date</TableHead>
+                              <TableHead>Time</TableHead>
+                              <TableHead>Booked Via</TableHead>
+                              <TableHead>Token</TableHead>
+                              <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredAppointments.map((appointment) => (
+                              <TableRow key={appointment.id} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
+                                <TableCell className="font-medium">{appointment.patientName}</TableCell>
+                                <TableCell>{appointment.age}</TableCell>
+                                <TableCell>{appointment.sex}</TableCell>
+                                <TableCell>{appointment.phone}</TableCell>
+                                <TableCell>{appointment.place}</TableCell>
+                                <TableCell>{appointment.doctor}</TableCell>
+                                <TableCell>{appointment.department}</TableCell>
+                                <TableCell>{format(parse(appointment.date, "d MMMM yyyy", new Date()), "MMM d, yy")}</TableCell>
+                                <TableCell>{appointment.time}</TableCell>
+                                <TableCell>{appointment.bookedVia}</TableCell>
+                                <TableCell>{appointment.tokenNumber}</TableCell>
+                                <TableCell className="text-right">
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" className="h-8 w-8 p-0">
+                                        <span className="sr-only">Open menu</span>
+                                        <MoreHorizontal className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem>
+                                        <Eye className="mr-2 h-4 w-4" />
+                                        View
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => setEditingAppointment(appointment)}>
+                                        <Edit className="mr-2 h-4 w-4" />
+                                        Edit
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => handleDelete(appointment.id)} className="text-red-600">
+                                        <Trash2 className="mr-2 h-4 w-4" />
+                                        Delete
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      ) : (
                         <Table>
                           <TableHeader>
                             <TableRow>
@@ -1182,11 +1194,11 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                               ))}
                           </TableBody>
                         </Table>
-                      </>
-                    )}
-                  </ScrollArea>
-                </CardContent>
-              </Card>
+                      )}
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              </div>
             </aside>
           </div>
         </div>
@@ -1203,6 +1215,5 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     </>
   );
 }
-
 
     
