@@ -302,37 +302,56 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     
     startTransition(async () => {
         try {
-          let patientId = selectedPatient?.id;
-          let patientDataForApt = selectedPatient;
+          let patientIdToUse: string;
+          let patientDataForApt: Patient;
           
-          if (!patientId || (selectedPatient && !selectedPatient.clinicIds?.includes(clinicId))) {
-             const newPatientId = patientId || doc(collection(db, "patients")).id;
-             const patientRef = doc(db, 'patients', newPatientId);
+          // Case 1: A patient record is already selected (from search or relative list)
+          if (selectedPatient) {
+              patientIdToUse = selectedPatient.id;
+              // Check if this patient is new to this specific clinic
+              if (!selectedPatient.clinicIds?.includes(clinicId)) {
+                  // It's a Kloqo member new to this clinic, so add clinicId to them
+                  const patientRef = doc(db, 'patients', patientIdToUse);
+                  await updateDoc(patientRef, {
+                      clinicIds: arrayUnion(clinicId),
+                      updatedAt: new Date(),
+                  });
+                  patientDataForApt = { ...selectedPatient, clinicIds: [...(selectedPatient.clinicIds || []), clinicId] };
+              } else {
+                  // Patient already belongs to this clinic
+                  patientDataForApt = selectedPatient;
+              }
+          } else {
+              // Case 2: No patient selected, so this is a completely new patient
+              const newPatientId = doc(collection(db, "patients")).id;
+              const patientRef = doc(db, 'patients', newPatientId);
+              patientIdToUse = newPatientId;
 
-             const patientToSave = {
+              patientDataForApt = {
                   id: newPatientId,
                   name: values.patientName,
                   age: values.age,
                   sex: values.sex,
                   phone: `+91${values.phone}`,
                   place: values.place,
-                  clinicIds: selectedPatient?.clinicIds ? arrayUnion(clinicId) : [clinicId],
-                  visitHistory: selectedPatient?.visitHistory || [],
-                  totalAppointments: selectedPatient?.totalAppointments || 0,
-                  relatedPatientIds: selectedPatient?.relatedPatientIds || [],
-                  createdAt: selectedPatient?.createdAt || new Date(),
+                  clinicIds: [clinicId], // First time at this clinic
+                  visitHistory: [],
+                  totalAppointments: 0,
+                  relatedPatientIds: [],
+                  createdAt: new Date(),
                   updatedAt: new Date(),
-             }
-             await setDoc(patientRef, patientToSave, { merge: true });
-             patientId = newPatientId;
-             patientDataForApt = patientToSave as Patient;
+              };
+              await setDoc(patientRef, patientDataForApt, { merge: true });
           }
-
-          if (!patientId || !patientDataForApt) {
+          
+          // Ensure we have valid patient data before proceeding
+          if (!patientIdToUse || !patientDataForApt) {
              toast({ variant: "destructive", title: "Error", description: "Could not create or find patient." });
              return;
           }
-          const patientRef = doc(db, 'patients', patientId);
+          
+          // Now proceed with appointment creation
+          const patientRef = doc(db, 'patients', patientIdToUse);
 
           const doctorName = doctors.find(d => d.id === values.doctor)?.name || "Unknown Doctor";
           const appointmentDateStr = format(values.date, "d MMMM yyyy");
@@ -347,7 +366,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
               phone: patientDataForApt.phone,
               patientName: patientDataForApt.name,
               id: appointmentId,
-              patientId: patientId,
+              patientId: patientIdToUse,
               date: appointmentDateStr,
               time: appointmentTimeStr,
               doctor: doctorName,
@@ -426,7 +445,6 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
   };
 
   const onDoctorChange = (doctorId: string) => {
-    form.setValue("doctor", doctorId, { shouldValidate: true });
     setSelectedDoctorId(doctorId);
     const doctor = doctors.find(d => d.id === doctorId);
     if (doctor) {
@@ -443,14 +461,19 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     setRelatives([]);
 
     const isKloqoMember = !patient.clinicIds?.includes(clinicId!);
-
-    form.setValue("patientId", patient.id);
-    form.setValue("patientName", patient.name);
-    form.setValue("age", patient.age);
+    
+    // Capitalize sex value before setting it in the form
     const capitalizedSex = patient.sex ? (patient.sex.charAt(0).toUpperCase() + patient.sex.slice(1).toLowerCase()) : "Male";
-    form.setValue("sex", capitalizedSex as "Male" | "Female" | "Other");
-    form.setValue("phone", patient.phone.replace('+91', ''));
-    form.setValue("place", patient.place || "");
+
+    form.reset({
+      ...form.getValues(),
+      patientId: patient.id,
+      patientName: patient.name,
+      age: patient.age,
+      sex: capitalizedSex as "Male" | "Female" | "Other",
+      phone: patient.phone.replace('+91', ''),
+      place: patient.place || "",
+    });
     
     if (isKloqoMember && patient.relatedPatientIds && patient.relatedPatientIds.length > 0) {
         const relativePromises = patient.relatedPatientIds.map(id => getFirestoreDoc(doc(db, 'patients', id)));
@@ -468,13 +491,17 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
   const handleRelativeSelect = (relative: Patient) => {
     setBookingFor('relative');
     setSelectedPatient(relative);
-    form.setValue("patientId", relative.id);
-    form.setValue("patientName", relative.name);
-    form.setValue("age", relative.age);
+    // Capitalize sex value before setting it in the form
     const capitalizedSex = relative.sex ? (relative.sex.charAt(0).toUpperCase() + relative.sex.slice(1).toLowerCase()) : "Male";
-    form.setValue("sex", capitalizedSex as "Male" | "Female" | "Other");
-    form.setValue("phone", relative.phone.replace('+91', ''));
-    form.setValue("place", relative.place || "");
+    form.reset({
+      ...form.getValues(),
+      patientId: relative.id,
+      patientName: relative.name,
+      age: relative.age,
+      sex: capitalizedSex as "Male" | "Female" | "Other",
+      phone: relative.phone.replace('+91', ''),
+      place: relative.place || "",
+    });
     toast({ title: `Selected Relative: ${relative.name}`, description: "You are now booking an appointment for the selected relative."})
   }
 
@@ -754,12 +781,15 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                               setBookingFor(value);
                               if (value === 'member' && primaryKloqoMember) {
                                   setSelectedPatient(primaryKloqoMember);
-                                  form.setValue("patientId", primaryKloqoMember.id);
-                                  form.setValue("patientName", primaryKloqoMember.name);
-                                  form.setValue("age", primaryKloqoMember.age);
                                   const capitalizedSex = primaryKloqoMember.sex ? (primaryKloqoMember.sex.charAt(0).toUpperCase() + primaryKloqoMember.sex.slice(1).toLowerCase()) : "Male";
-                                  form.setValue("sex", capitalizedSex as "Male" | "Female" | "Other");
-                                  form.setValue("place", primaryKloqoMember.place || "");
+                                  form.reset({
+                                      ...form.getValues(),
+                                      patientId: primaryKloqoMember.id,
+                                      patientName: primaryKloqoMember.name,
+                                      age: primaryKloqoMember.age,
+                                      sex: capitalizedSex as "Male" | "Female" | "Other",
+                                      place: primaryKloqoMember.place || "",
+                                  });
                               }
                             }}>
                               <TabsList className="grid w-full grid-cols-2">
@@ -895,7 +925,10 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                 <FormField control={form.control} name="doctor" render={({ field }) => (
                                     <FormItem>
                                     <FormLabel>Doctor</FormLabel>
-                                    <Select onValueChange={onDoctorChange} value={field.value}>
+                                    <Select onValueChange={(value) => {
+                                        field.onChange(value);
+                                        onDoctorChange(value);
+                                    }} value={field.value}>
                                         <FormControl>
                                         <SelectTrigger>
                                             <SelectValue placeholder="Select a doctor" />
