@@ -300,22 +300,27 @@ export default function DoctorsPage() {
 
   const handleEditAvailability = () => {
     if (!selectedDoctor) return;
-  
-    // Convert times from hh:mm a to HH:mm for the form input
-    const availabilitySlotsForForm = selectedDoctor.availabilitySlots?.map(s => ({
+
+    const availabilitySlotsForForm = selectedDoctor.availabilitySlots?.map(s => {
+      return {
         ...s,
         timeSlots: s.timeSlots.map(ts => {
-            try {
-                return {
-                    from: format(parseDateFns(ts.from, 'hh:mm a', new Date()), 'HH:mm'),
-                    to: format(parseDateFns(ts.to, 'hh:mm a', new Date()), 'HH:mm')
-                }
-            } catch {
-                return { from: ts.from, to: ts.to }; // already in HH:mm
+          try {
+            // If already in HH:mm, this will work. If in hh:mm a, it will convert.
+            const parsedFrom = parseDateFns(ts.from, 'hh:mm a', new Date());
+            const parsedTo = parseDateFns(ts.to, 'hh:mm a', new Date());
+            
+            return {
+              from: !isNaN(parsedFrom.valueOf()) ? format(parsedFrom, 'HH:mm') : ts.from,
+              to: !isNaN(parsedTo.valueOf()) ? format(parsedTo, 'HH:mm') : ts.to
             }
+          } catch {
+            return { from: ts.from, to: ts.to };
+          }
         })
-    })) || [];
-  
+      };
+    }) || [];
+
     form.reset({
         availabilitySlots: availabilitySlotsForForm,
     });
@@ -349,7 +354,7 @@ export default function DoctorsPage() {
           schedule: scheduleString || "Not set",
           preferences: 'Not set',
           historicalData: 'No data',
-          availability: 'Available',
+          availability: doctorData.id ? selectedDoctor?.availability : 'Unavailable',
           bio: doctorData.bio,
           experience: doctorData.experience,
           consultationFee: doctorData.consultationFee,
@@ -600,7 +605,6 @@ export default function DoctorsPage() {
           })
           .filter(slot => slot.timeSlots.length > 0);
     
-        // Convert times from HH:mm to hh:mm a for storage and display
         const availabilitySlotsToSave = validSlots.map(s => ({
           ...s,
           timeSlots: s.timeSlots.map(ts => ({
@@ -697,16 +701,12 @@ export default function DoctorsPage() {
         const currentFormSlots = form.getValues('availabilitySlots') || [];
         const newSlotsMap = new Map<string, { day: string; timeSlots: { from: string; to: string }[] }>();
         
-        // Initialize with existing slots
         currentFormSlots.forEach(slot => newSlotsMap.set(slot.day, slot));
     
-        // Add or overwrite selected days
         selectedDays.forEach(day => {
             newSlotsMap.set(day, { day, timeSlots: validSharedTimeSlots });
         });
         
-        // Also ensure any newly checked days that weren't in the form get added
-        // Only update slots for selectedDays, preserve others
         const updatedSlots = Array.from(newSlotsMap.values());
         form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true });
         
@@ -1019,101 +1019,106 @@ export default function DoctorsPage() {
             </div>
 
             {activeTab !== 'analytics' && (
-              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
-                  <Card>
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-2 gap-6">
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Avg. Consulting Time</CardTitle>
+                            <Clock className="h-4 w-4 text-muted-foreground" />
+                        </CardHeader>
+                        <CardContent>
+                            {isEditingTime ? (
+                                <div className="flex items-center gap-2 mt-1">
+                                    <Input 
+                                        type="number" 
+                                        value={newAvgTime} 
+                                        onChange={(e) => setNewAvgTime(e.target.value)} 
+                                        className="w-20 h-8"
+                                        placeholder="min"
+                                        disabled={isPending}
+                                    />
+                                    <Button size="icon" className="h-8 w-8" onClick={handleTimeSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
+                                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => {setIsEditingTime(false); setNewAvgTime(selectedDoctor.averageConsultingTime || "")}} disabled={isPending}><X className="h-4 w-4"/></Button>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2">
+                                    <p className="text-2xl font-bold">{selectedDoctor.averageConsultingTime || 0} min</p>
+                                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingTime(true)}><Edit className="h-3 w-3"/></Button>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Consultation Fee</CardTitle>
+                            <span className="text-muted-foreground font-bold">₹</span>
+                        </CardHeader>
+                        <CardContent>
+                            {isEditingFee ? (
+                                <div className="flex items-center gap-2 mt-1">
+                                    <Input 
+                                        type="number" 
+                                        value={newFee} 
+                                        onChange={(e) => setNewFee(e.target.value)} 
+                                        className="w-20 h-8"
+                                        placeholder="₹"
+                                        disabled={isPending}
+                                        min="0"
+                                    />
+                                    <Button size="icon" className="h-8 w-8" onClick={handleFeeSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
+                                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => {setIsEditingFee(false); setNewFee(selectedDoctor.consultationFee || "")}} disabled={isPending}><X className="h-4 w-4"/></Button>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2">
+                                    <p className="text-2xl font-bold">₹{selectedDoctor.consultationFee || 0}</p>
+                                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingFee(true)}><Edit className="h-3 w-3"/></Button>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                  </div>
+                  <div className="grid grid-cols-2 gap-6">
+                    <Card>
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                          <CardTitle className="text-sm font-medium">Avg. Consulting Time</CardTitle>
-                          <Clock className="h-4 w-4 text-muted-foreground" />
+                          <CardTitle className="text-sm font-medium">Free Follow-up</CardTitle>
+                          <Repeat className="h-4 w-4 text-muted-foreground" />
                       </CardHeader>
                       <CardContent>
-                          {isEditingTime ? (
-                              <div className="flex items-center gap-2 mt-1">
-                                  <Input 
-                                      type="number" 
-                                      value={newAvgTime} 
-                                      onChange={(e) => setNewAvgTime(e.target.value)} 
-                                      className="w-20 h-8"
-                                      placeholder="min"
-                                      disabled={isPending}
-                                  />
-                                  <Button size="icon" className="h-8 w-8" onClick={handleTimeSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
-                                  <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => {setIsEditingTime(false); setNewAvgTime(selectedDoctor.averageConsultingTime || "")}} disabled={isPending}><X className="h-4 w-4"/></Button>
-                              </div>
+                          {isEditingFollowUp ? (
+                            <div className="flex items-center gap-2 mt-1">
+                                <Input type="number" min="0" value={newFollowUp} onChange={(e) => setNewFollowUp(e.target.value)} className="w-20 h-8" placeholder="days" disabled={isPending} />
+                                <Button size="icon" className="h-8 w-8" onClick={handleFollowUpSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
+                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => {setIsEditingFollowUp(false); setNewFollowUp(selectedDoctor.freeFollowUpDays || 0)}} disabled={isPending}><X className="h-4 w-4"/></Button>
+                            </div>
                           ) : (
-                              <div className="flex items-center gap-2">
-                                  <p className="text-2xl font-bold">{selectedDoctor.averageConsultingTime || 0} min</p>
-                                  <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingTime(true)}><Edit className="h-3 w-3"/></Button>
-                              </div>
+                            <div className="flex items-center gap-2">
+                                <p className="text-2xl font-bold">{selectedDoctor.freeFollowUpDays || 0} {(selectedDoctor.freeFollowUpDays || 0) === 1 ? 'day' : 'days'}</p>
+                                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingFollowUp(true)}><Edit className="h-3 w-3"/></Button>
+                            </div>
                           )}
                       </CardContent>
-                  </Card>
-                  <Card>
+                    </Card>
+                    <Card>
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                          <CardTitle className="text-sm font-medium">Consultation Fee</CardTitle>
-                          <span className="text-muted-foreground font-bold">₹</span>
+                          <CardTitle className="text-sm font-medium">Advance Booking</CardTitle>
+                          <CalendarCheck className="h-4 w-4 text-muted-foreground" />
                       </CardHeader>
                       <CardContent>
-                          {isEditingFee ? (
-                              <div className="flex items-center gap-2 mt-1">
-                                  <Input 
-                                      type="number" 
-                                      value={newFee} 
-                                      onChange={(e) => setNewFee(e.target.value)} 
-                                      className="w-20 h-8"
-                                      placeholder="₹"
-                                      disabled={isPending}
-                                  />
-                                  <Button size="icon" className="h-8 w-8" onClick={handleFeeSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
-                                  <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => {setIsEditingFee(false); setNewFee(selectedDoctor.consultationFee || "")}} disabled={isPending}><X className="h-4 w-4"/></Button>
-                              </div>
+                          {isEditingBooking ? (
+                            <div className="flex items-center gap-2 mt-1">
+                                <Input type="number" min="0" value={newBooking} onChange={(e) => setNewBooking(e.target.value)} className="w-20 h-8" placeholder="days" disabled={isPending} />
+                                <Button size="icon" className="h-8 w-8" onClick={handleBookingSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
+                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => {setIsEditingBooking(false); setNewBooking(selectedDoctor.advanceBookingDays || 0)}} disabled={isPending}><X className="h-4 w-4"/></Button>
+                            </div>
                           ) : (
-                              <div className="flex items-center gap-2">
-                                  <p className="text-2xl font-bold">₹{selectedDoctor.consultationFee || 0}</p>
-                                  <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingFee(true)}><Edit className="h-3 w-3"/></Button>
-                              </div>
+                            <div className="flex items-center gap-2">
+                              <div className="text-2xl font-bold">{selectedDoctor.advanceBookingDays || 0} {(selectedDoctor.advanceBookingDays || 0) === 1 ? 'day' : 'days'}</div>
+                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingBooking(true)}><Edit className="h-3 w-3"/></Button>
+                            </div>
                           )}
                       </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Free Follow-up</CardTitle>
-                        <Repeat className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        {isEditingFollowUp ? (
-                          <div className="flex items-center gap-2 mt-1">
-                              <Input type="number" min="0" value={newFollowUp} onChange={(e) => setNewFollowUp(e.target.value)} className="w-20 h-8" placeholder="days" disabled={isPending} />
-                              <Button size="icon" className="h-8 w-8" onClick={handleFollowUpSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
-                              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => {setIsEditingFollowUp(false); setNewFollowUp(selectedDoctor.freeFollowUpDays || 0)}} disabled={isPending}><X className="h-4 w-4"/></Button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                              <p className="text-2xl font-bold">{selectedDoctor.freeFollowUpDays || 0} {(selectedDoctor.freeFollowUpDays || 0) === 1 ? 'day' : 'days'}</p>
-                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingFollowUp(true)}><Edit className="h-3 w-3"/></Button>
-                          </div>
-                        )}
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Advance Booking</CardTitle>
-                        <CalendarCheck className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        {isEditingBooking ? (
-                           <div className="flex items-center gap-2 mt-1">
-                              <Input type="number" min="0" value={newBooking} onChange={(e) => setNewBooking(e.target.value)} className="w-20 h-8" placeholder="days" disabled={isPending} />
-                              <Button size="icon" className="h-8 w-8" onClick={handleBookingSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
-                              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => {setIsEditingBooking(false); setNewBooking(selectedDoctor.advanceBookingDays || 0)}} disabled={isPending}><X className="h-4 w-4"/></Button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <div className="text-2xl font-bold">{selectedDoctor.advanceBookingDays || 0} {(selectedDoctor.advanceBookingDays || 0) === 1 ? 'day' : 'days'}</div>
-                            <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingBooking(true)}><Edit className="h-3 w-3"/></Button>
-                          </div>
-                        )}
-                    </CardContent>
-                  </Card>
+                    </Card>
+                  </div>
                   <div className="grid grid-cols-2 gap-6">
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1320,9 +1325,12 @@ export default function DoctorsPage() {
                                                 <div className="flex flex-wrap gap-2 items-center mt-2">
                                                     {slot.timeSlots.map((ts, i) => {
                                                         if (!ts.from || !ts.to) return null;
+                                                        const fromTime = parseDateFns(ts.from, 'hh:mm a', new Date());
+                                                        const toTime = parseDateFns(ts.to, 'hh:mm a', new Date());
+                                                        
                                                         return (
                                                             <Badge key={i} variant="outline" className="text-sm group relative pr-7">
-                                                                {ts.from} - {ts.to}
+                                                                {!isNaN(fromTime.valueOf()) ? format(fromTime, 'p') : ts.from} - {!isNaN(toTime.valueOf()) ? format(toTime, 'p') : ts.to}
                                                                 <button 
                                                                     onClick={() => handleDeleteTimeSlot(slot.day, ts)}
                                                                     className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
