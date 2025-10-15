@@ -197,9 +197,9 @@ export default function DoctorsPage() {
   const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
 
   const [isEditingFollowUp, setIsEditingFollowUp] = useState(false);
-  const [newFollowUp, setNewFollowUp] = useState<number | string>("");
+  const [newFollowUp, setNewFollowUp] = useState<number | string>(0);
   const [isEditingBooking, setIsEditingBooking] = useState(false);
-  const [newBooking, setNewBooking] = useState<number | string>("");
+  const [newBooking, setNewBooking] = useState<number | string>(0);
 
 
   useEffect(() => {
@@ -1057,24 +1057,6 @@ export default function DoctorsPage() {
                       </CardContent>
                   </Card>
                   <Card>
-                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                          <CardTitle className="text-sm font-medium">Total Patients</CardTitle>
-                          <Users className="h-4 w-4 text-muted-foreground" />
-                      </CardHeader>
-                      <CardContent>
-                          <div className="text-2xl font-bold">{selectedDoctor.totalPatients || 0}</div>
-                      </CardContent>
-                  </Card>
-                  <Card>
-                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                          <CardTitle className="text-sm font-medium">Today's Appointments</CardTitle>
-                          <CalendarDays className="h-4 w-4 text-muted-foreground" />
-                      </CardHeader>
-                      <CardContent className="flex items-center justify-center">
-                          <div className="text-2xl font-bold">{selectedDoctor.todaysAppointments || 0}</div>
-                      </CardContent>
-                  </Card>
-                  <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Free Follow-up</CardTitle>
                         <Repeat className="h-4 w-4 text-muted-foreground" />
@@ -1088,7 +1070,7 @@ export default function DoctorsPage() {
                           </div>
                         ) : (
                           <div className="flex items-center gap-2">
-                              <p className="text-2xl font-bold">{selectedDoctor.freeFollowUpDays || 0} {selectedDoctor.freeFollowUpDays === 1 ? 'day' : 'days'}</p>
+                              <p className="text-2xl font-bold">{selectedDoctor.freeFollowUpDays || 0} {(selectedDoctor.freeFollowUpDays || 0) === 1 ? 'day' : 'days'}</p>
                               <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingFollowUp(true)}><Edit className="h-3 w-3"/></Button>
                           </div>
                         )}
@@ -1108,11 +1090,29 @@ export default function DoctorsPage() {
                           </div>
                         ) : (
                           <div className="flex items-center gap-2">
-                            <div className="text-2xl font-bold">{selectedDoctor.advanceBookingDays || 0} {selectedDoctor.advanceBookingDays === 1 ? 'day' : 'days'}</div>
+                            <div className="text-2xl font-bold">{selectedDoctor.advanceBookingDays || 0} {(selectedDoctor.advanceBookingDays || 0) === 1 ? 'day' : 'days'}</div>
                             <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingBooking(true)}><Edit className="h-3 w-3"/></Button>
                           </div>
                         )}
                     </CardContent>
+                  </Card>
+                  <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                          <CardTitle className="text-sm font-medium">Total Patients</CardTitle>
+                          <Users className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                          <div className="text-2xl font-bold">{selectedDoctor.totalPatients || 0}</div>
+                      </CardContent>
+                  </Card>
+                  <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                          <CardTitle className="text-sm font-medium">Today's Appointments</CardTitle>
+                          <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent className="flex items-center justify-center">
+                          <div className="text-2xl font-bold">{selectedDoctor.todaysAppointments || 0}</div>
+                      </CardContent>
                   </Card>
               </div>
             )}
@@ -1394,4 +1394,5 @@ export default function DoctorsPage() {
     
 
     
+
 
