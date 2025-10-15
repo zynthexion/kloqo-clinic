@@ -1388,11 +1388,3 @@ export default function DoctorsPage() {
 }
 
     
-
-    
-
-    
-
-    
-
-
