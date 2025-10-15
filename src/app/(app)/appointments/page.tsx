@@ -58,6 +58,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/firebase";
 import { useSearchParams } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { AddRelativeDialog } from "@/components/patients/add-relative-dialog";
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -124,6 +125,7 @@ export default function AppointmentsPage() {
   const [patientSearchResults, setPatientSearchResults] = useState<Patient[]>([]);
   const [isPatientPopoverOpen, setIsPatientPopoverOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [primaryKloqoMember, setPrimaryKloqoMember] = useState<Patient | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const [drawerSearchTerm, setDrawerSearchTerm] = useState("");
@@ -135,6 +137,7 @@ const currentYearEnd = endOfYear(new Date());
 const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ from: currentYearStart, to: currentYearEnd });
   const [bookingFor, setBookingFor] = useState('member');
   const [relatives, setRelatives] = useState<Patient[]>([]);
+  const [isAddRelativeDialogOpen, setIsAddRelativeDialogOpen] = useState(false);
 
 
   const { toast } = useToast();
@@ -230,6 +233,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     setSelectedDoctorId(null);
     setPatientSearchTerm("");
     setSelectedPatient(null);
+    setPrimaryKloqoMember(null);
     form.reset({
       patientName: "", gender: "Male", phone: "", age: 0, doctor: "",
       department: "",
@@ -422,8 +426,9 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
 
   const handlePatientSelect = async (patient: Patient) => {
     setSelectedPatient(patient);
-    setBookingFor('member'); // Reset to default tab
-    setRelatives([]); // Clear previous relatives
+    setPrimaryKloqoMember(patient);
+    setBookingFor('member');
+    setRelatives([]);
 
     const isKloqoMember = !patient.clinicIds?.includes(clinicId!);
 
@@ -454,9 +459,8 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
   }
 
   const handleRelativeSelect = (relative: Patient) => {
-    // Treat selecting a relative like selecting a new patient for booking
-    setSelectedPatient(relative); // The relative is now the one being booked for
-    setBookingFor('member'); // Switch back to the main booking form view
+    setSelectedPatient(relative); 
+    setBookingFor('member');
     form.setValue("patientId", relative.id);
     form.setValue("patientName", relative.name);
     form.setValue("age", relative.age);
@@ -466,10 +470,17 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     toast({ title: `Selected Relative: ${relative.name}`, description: "You are now booking an appointment for the selected relative."})
   }
 
+  const handleNewRelativeAdded = (newRelative: Patient) => {
+    setRelatives(prev => [...prev, newRelative]);
+    handleRelativeSelect(newRelative);
+  };
+
+
   const handlePatientSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/\D/g, '');
     if (selectedPatient && value !== selectedPatient.phone.replace('+91', '')) {
       setSelectedPatient(null);
+      setPrimaryKloqoMember(null);
       setRelatives([]);
       form.reset({
         ...form.getValues(),
@@ -644,7 +655,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
   const todaysAppointments = filteredAppointments.filter(apt => apt.date === today);
 
   const isNewPatient = patientSearchTerm.length >= 10 && !selectedPatient;
-  const isKloqoMember = selectedPatient && !selectedPatient.clinicIds?.includes(clinicId!);
+  const isKloqoMember = primaryKloqoMember && !primaryKloqoMember.clinicIds?.includes(clinicId!);
 
   return (
     <>
@@ -756,8 +767,8 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                             </TabsList>
                             <TabsContent value="member" className="mt-4">
                                <div className="text-sm p-4 bg-muted/50 rounded-lg">
-                                  <p><strong>Name:</strong> {selectedPatient!.name.substring(0,2)}***</p>
-                                  <p><strong>Place:</strong> {selectedPatient!.place}</p>
+                                  <p><strong>Name:</strong> {primaryKloqoMember!.name.substring(0,2)}***</p>
+                                  <p><strong>Place:</strong> {primaryKloqoMember!.place}</p>
                                </div>
                             </TabsContent>
                             <TabsContent value="relative">
@@ -787,7 +798,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                       ) : (
                                         <p className="text-center text-xs text-muted-foreground py-4">No relatives found.</p>
                                       )}
-                                      <Button className="w-full" variant="outline">
+                                      <Button type="button" className="w-full" variant="outline" onClick={() => setIsAddRelativeDialogOpen(true)}>
                                         <UserPlus className="mr-2 h-4 w-4" />
                                         Add New Relative
                                       </Button>
@@ -1188,7 +1199,15 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
           </aside>
         </div>
       </div>
-        <WeeklyDoctorAvailability />
+      {primaryKloqoMember && (
+          <AddRelativeDialog 
+            isOpen={isAddRelativeDialogOpen}
+            setIsOpen={setIsAddRelativeDialogOpen}
+            primaryMemberId={primaryKloqoMember.id}
+            onRelativeAdded={handleNewRelativeAdded}
+          />
+      )}
+      <WeeklyDoctorAvailability />
     </>
   );
 }

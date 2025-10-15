@@ -95,6 +95,9 @@ export type Patient = {
   relatedPatientIds?: string[];
 };
 
+export type NewRelative = Omit<Patient, 'id' | 'clinicIds' | 'visitHistory' | 'totalAppointments' | 'createdAt' | 'updatedAt' | 'relatedPatientIds'> & { phone?: string };
+
+
 export type Activity = {
   id: string;
   timestamp: string;
