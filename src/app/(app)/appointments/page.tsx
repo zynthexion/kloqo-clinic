@@ -370,24 +370,6 @@ export default function AppointmentsPage() {
         };
     }).sort((a, b) => a.time.getTime() - b.time.getTime());
 
-    const futureAppointments = allAppointmentsToday.filter(appt => appt.time >= now);
-    const lastWalkIn = futureAppointments.filter(appt => appt.token.startsWith('W')).pop();
-    const queueStartTime = lastWalkIn ? lastWalkIn.time : now;
-
-    const appointmentsAfterQueueStart = futureAppointments.filter(appt =>
-        !appt.token.startsWith('W') && appt.time > queueStartTime
-    );
-
-    let slotAfterAllotment: Date | null = null;
-    if (appointmentsAfterQueueStart.length >= walkInTokenAllotment) {
-        slotAfterAllotment = addMinutes(appointmentsAfterQueueStart[walkInTokenAllotment - 1].time, consultationTime);
-    } else if (appointmentsAfterQueueStart.length > 0) {
-        const lastPerson = appointmentsAfterQueueStart[appointmentsAfterQueueStart.length - 1];
-        slotAfterAllotment = addMinutes(lastPerson.time, consultationTime * (walkInTokenAllotment - appointmentsAfterQueueStart.length));
-    } else {
-        slotAfterAllotment = addMinutes(queueStartTime, consultationTime * walkInTokenAllotment);
-    }
-    
     const allPossibleSlots: Date[] = [];
     availabilityForDay.timeSlots.forEach(timeSlot => {
         let currentTime = parseTime(timeSlot.from, now);
@@ -402,37 +384,43 @@ export default function AppointmentsPage() {
     const nextAvailableSlot = allPossibleSlots.find(slot => slot > now && !bookedTimes.includes(slot.getTime()));
 
     let estimatedTime: Date;
-    if (nextAvailableSlot && slotAfterAllotment) {
-        estimatedTime = nextAvailableSlot > slotAfterAllotment ? nextAvailableSlot : slotAfterAllotment;
-    } else if (slotAfterAllotment) {
-        estimatedTime = slotAfterAllotment;
-    } else if (nextAvailableSlot) {
+
+    if (nextAvailableSlot) {
         estimatedTime = nextAvailableSlot;
     } else {
-        const lastAppointmentTime = allAppointmentsToday.length > 0 ? allAppointmentsToday[allAppointmentsToday.length - 1].time : now;
-        estimatedTime = addMinutes(lastAppointmentTime, consultationTime);
+        const futureAppointments = allAppointmentsToday.filter(appt => appt.time >= now);
+        const queueStartTime = futureAppointments.length > 0 ? futureAppointments[futureAppointments.length - 1].time : now;
+
+        const appointmentsAfterQueueStart = futureAppointments.filter(appt =>
+            !appt.token.startsWith('W') && appt.time > queueStartTime
+        );
+
+        let slotAfterAllotment: Date;
+        if (appointmentsAfterQueueStart.length >= walkInTokenAllotment) {
+            slotAfterAllotment = addMinutes(appointmentsAfterQueueStart[walkInTokenAllotment - 1].time, consultationTime);
+        } else {
+            const lastPersonTime = appointmentsAfterQueueStart.length > 0 ? appointmentsAfterQueueStart[appointmentsAfterQueueStart.length - 1].time : queueStartTime;
+            slotAfterAllotment = addMinutes(lastPersonTime, consultationTime * (walkInTokenAllotment - appointmentsAfterQueueStart.length));
+        }
+        estimatedTime = slotAfterAllotment;
     }
-    
-    // Ensure the estimated time is within working hours
+
     let finalValidTime = null;
     for (const session of workingSessions) {
         if (estimatedTime >= session.start && estimatedTime < session.end) {
             finalValidTime = estimatedTime;
             break;
         }
-        // If the estimated time is before the start of this session, the valid time is the session start
         if (estimatedTime < session.start) {
             finalValidTime = session.start;
             break;
         }
     }
-
-    // If no valid slot is found (e.g., doctor's day is over), return null
+    
     if (!finalValidTime) {
-        const lastSessionEnd = workingSessions[workingSessions.length -1].end;
-        if(estimatedTime > lastSessionEnd) return null;
+        const lastSessionEnd = workingSessions[workingSessions.length - 1].end;
+        if (estimatedTime > lastSessionEnd) return null;
         
-        // Fallback to the start of the next session if available
         const nextSession = workingSessions.find(s => s.start > now);
         if (nextSession) {
             finalValidTime = nextSession.start;
@@ -441,8 +429,7 @@ export default function AppointmentsPage() {
         }
     }
 
-
-    const patientsAhead = futureAppointments.filter(time => time.time < finalValidTime!).length;
+    const patientsAhead = allAppointmentsToday.filter(appt => appt.time >= now && appt.time < finalValidTime!).length;
     return { estimatedTime: finalValidTime!, patientsAhead };
 
   }, [db, selectedDoctor, clinicDetails]);
@@ -981,6 +968,7 @@ export default function AppointmentsPage() {
                           </Button>
                         </div>
                       </div>
+                      
                       {(selectedPatient || isNewPatient || isEditing) && (
                         <>
                           <div className="pt-4 border-t">
@@ -1506,3 +1494,4 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
