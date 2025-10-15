@@ -1362,7 +1362,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                       <Edit className="mr-2 h-4 w-4" />
                                       Edit
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleDelete(appointment.id)} className="text-red-600">
+                                    <DropdownMenuItem onClick={()={() => handleDelete(appointment.id)} className="text-red-600">
                                       <Trash2 className="mr-2 h-4 w-4" />
                                       Delete
                                     </DropdownMenuItem>
@@ -1516,18 +1516,4 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     </>
   );
 }
-I see this error with the app, reported by NextJS, please fix it. The error is reported as HTML but presented visually to the user).
 
-A > before the line number in the error source usually indicates the line of interest: 
-
-> ./src/app/(app)/appointments/page.tsx:8:8
-> Module not found: Can't resolve '@/firebase/auth/use-user'
->    6 | import { useToast } from '@/hooks/use-toast';
->    7 | import { cn } from '@/lib/utils';
-> >  8 | import { useUser } from '@/firebase/auth/use-user';
->      |        ^^^^^^^
->    9 | import { useFirestore } from '@/firebase';
->   10 | import { collection, query, where, getDocs, getDoc, doc, updateDoc, addDoc, serverTimestamp, setDoc, arrayUnion, DocumentReference, writeBatch } from 'firebase/firestore';
->   11 | import type { Doctor } from '@/firebase/firestore/use-doctors';
-> 
-> https://nextjs.org/docs/messages/module-not-found
