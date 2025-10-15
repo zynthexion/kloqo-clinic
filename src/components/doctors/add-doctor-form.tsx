@@ -37,7 +37,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "../ui/scroll-area";
 import Image from "next/image";
 import { Textarea } from "../ui/textarea";
-import { format, parse, parse as parseDateFns } from "date-fns";
+import { format, parse } from "date-fns";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -111,8 +111,8 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
           timeSlots: s.timeSlots.map(ts => {
             try {
               return {
-                from: format(parseDateFns(ts.from, 'hh:mm a', new Date()), 'HH:mm'),
-                to: format(parseDateFns(ts.to, 'hh:mm a', new Date()), 'HH:mm')
+                from: format(parse(ts.from, 'hh:mm a', new Date()), 'HH:mm'),
+                to: format(parse(ts.to, 'hh:mm a', new Date()), 'HH:mm')
               }
             } catch {
                 return { from: ts.from, to: ts.to };
@@ -336,7 +336,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                       <FormItem>
                         <FormLabel>Years of Experience</FormLabel>
                         <FormControl>
-                          <Input type="number" placeholder="e.g., 10" {...field} value={field.value !== undefined ? field.value : ''} />
+                          <Input type="number" min="0" placeholder="e.g., 10" {...field} value={field.value !== undefined ? field.value : ''} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -349,7 +349,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                       <FormItem>
                         <FormLabel>Consultation Fee (₹)</FormLabel>
                         <FormControl>
-                          <Input type="number" placeholder="e.g., 150" {...field} value={field.value !== undefined ? field.value : ''} />
+                          <Input type="number" min="0" placeholder="e.g., 150" {...field} value={field.value !== undefined ? field.value : ''} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -362,7 +362,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                       <FormItem>
                         <FormLabel>Average Consulting Time (minutes)</FormLabel>
                         <FormControl>
-                          <Input type="number" placeholder="e.g., 15" {...field} value={field.value !== undefined ? field.value : ''} />
+                          <Input type="number" min="5" placeholder="e.g., 15" {...field} value={field.value !== undefined ? field.value : ''} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -375,7 +375,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                       <FormItem>
                         <FormLabel>Free Follow-up Period (Days)</FormLabel>
                         <FormControl>
-                          <Input type="number" placeholder="e.g., 7" {...field} value={field.value !== undefined ? field.value : ''} />
+                          <Input type="number" min="0" placeholder="e.g., 7" {...field} value={field.value !== undefined ? field.value : ''} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -388,7 +388,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                       <FormItem>
                         <FormLabel>Advance Booking (Days)</FormLabel>
                         <FormControl>
-                          <Input type="number" placeholder="e.g., 30" {...field} value={field.value !== undefined ? field.value : ''} />
+                          <Input type="number" min="0" placeholder="e.g., 30" {...field} value={field.value !== undefined ? field.value : ''} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -465,7 +465,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                                               if (!ts.from || !ts.to) return null;
                                               return (
                                                 <Badge key={i} variant="secondary" className="font-normal">
-                                                  {format(parseDateFns(ts.from, 'HH:mm', new Date()), 'p')} - {format(parseDateFns(ts.to, 'HH:mm', new Date()), 'p')}
+                                                  {format(parse(ts.from, 'HH:mm', new Date()), 'p')} - {format(parse(ts.to, 'HH:mm', new Date()), 'p')}
                                                 </Badge>
                                               );
                                           })}
