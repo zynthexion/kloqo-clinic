@@ -95,7 +95,7 @@ const addDoctorFormSchema = z.object({
   averageConsultingTime: z.coerce.number().min(5, "Must be at least 5 minutes."),
   availabilitySlots: z.array(availabilitySlotSchema).min(1, "At least one availability slot is required."),
   photo: z.any().optional(),
-  freeFollowUpDays: z.coerce.number().min(1, "Must be at least 1 day.").optional(),
+  freeFollowUpDays: z.coerce.number().min(0, "Cannot be negative.").optional(),
   advanceBookingDays: z.coerce.number().min(0, "Cannot be negative.").optional(),
 });
 type AddDoctorFormValues = z.infer<typeof addDoctorFormSchema>;
@@ -479,8 +479,8 @@ export default function DoctorsPage() {
     const handleFollowUpSave = async () => {
         if (!selectedDoctor || newFollowUp === "") return;
         const value = Number(newFollowUp);
-        if (isNaN(value) || value < 1) {
-            toast({ variant: "destructive", title: "Invalid Value", description: "Please enter a valid number of days (1 or more)." });
+        if (isNaN(value) || value < 0) {
+            toast({ variant: "destructive", title: "Invalid Value", description: "Please enter a valid non-negative number of days." });
             return;
         }
         startTransition(async () => {
@@ -1082,7 +1082,7 @@ export default function DoctorsPage() {
                     <CardContent>
                         {isEditingFollowUp ? (
                           <div className="flex items-center gap-2 mt-1">
-                              <Input type="number" value={newFollowUp} onChange={(e) => setNewFollowUp(e.target.value)} className="w-20 h-8" placeholder="days" disabled={isPending} />
+                              <Input type="number" min="0" value={newFollowUp} onChange={(e) => setNewFollowUp(e.target.value)} className="w-20 h-8" placeholder="days" disabled={isPending} />
                               <Button size="icon" className="h-8 w-8" onClick={handleFollowUpSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
                               <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => {setIsEditingFollowUp(false); setNewFollowUp(selectedDoctor.freeFollowUpDays || 0)}} disabled={isPending}><X className="h-4 w-4"/></Button>
                           </div>
@@ -1102,7 +1102,7 @@ export default function DoctorsPage() {
                     <CardContent>
                         {isEditingBooking ? (
                            <div className="flex items-center gap-2 mt-1">
-                              <Input type="number" value={newBooking} onChange={(e) => setNewBooking(e.target.value)} className="w-20 h-8" placeholder="days" disabled={isPending} />
+                              <Input type="number" min="0" value={newBooking} onChange={(e) => setNewBooking(e.target.value)} className="w-20 h-8" placeholder="days" disabled={isPending} />
                               <Button size="icon" className="h-8 w-8" onClick={handleBookingSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
                               <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => {setIsEditingBooking(false); setNewBooking(selectedDoctor.advanceBookingDays || 0)}} disabled={isPending}><X className="h-4 w-4"/></Button>
                           </div>
@@ -1394,3 +1394,4 @@ export default function DoctorsPage() {
     
 
     
+

@@ -63,7 +63,7 @@ const formSchema = z.object({
   averageConsultingTime: z.coerce.number().min(5, "Must be at least 5 minutes."),
   availabilitySlots: z.array(availabilitySlotSchema).min(1, "At least one availability slot is required."),
   photo: z.any().optional(),
-  freeFollowUpDays: z.coerce.number().min(1, "Must be at least 1 day.").optional(),
+  freeFollowUpDays: z.coerce.number().min(0, "Cannot be negative.").optional(),
   advanceBookingDays: z.coerce.number().min(0, "Cannot be negative.").optional(),
 });
 
@@ -490,3 +490,4 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 }
 
     
+
