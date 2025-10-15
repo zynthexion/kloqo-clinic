@@ -92,6 +92,7 @@ export type Patient = {
   visitHistory?: Visit[];
   createdAt: any; // Can be Date or Firestore Timestamp
   updatedAt: any; // Can be Date or Firestore Timestamp
+  relatedPatientIds?: string[];
 };
 
 export type Activity = {

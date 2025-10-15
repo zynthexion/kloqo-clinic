@@ -39,7 +39,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck, UserPlus } from "lucide-react";
+import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck, UserPlus, Users } from "lucide-react";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
@@ -57,6 +57,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/firebase";
 import { useSearchParams } from 'next/navigation';
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -133,6 +134,7 @@ const currentYearStart = startOfYear(new Date());
 const currentYearEnd = endOfYear(new Date());
 const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ from: currentYearStart, to: currentYearEnd });
   const [bookingFor, setBookingFor] = useState('member');
+  const [relatives, setRelatives] = useState<Patient[]>([]);
 
 
   const { toast } = useToast();
@@ -418,39 +420,68 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     }
 }
 
-  const handlePatientSelect = (patient: Patient) => {
+  const handlePatientSelect = async (patient: Patient) => {
     setSelectedPatient(patient);
-    form.setValue("patientId", patient.id);
-    form.setValue("patientName", patient.name);
-    form.setValue("age", patient.age);
-    form.setValue("gender", patient.gender);
-    form.setValue("phone", patient.phone.replace('+91', ''));
-    form.setValue("place", patient.place || "");
+    setBookingFor('member'); // Reset to default tab
+    setRelatives([]); // Clear previous relatives
+
+    const isKloqoMember = !patient.clinicIds?.includes(clinicId!);
+
+    if (isKloqoMember) {
+        form.setValue("patientId", patient.id);
+        form.setValue("phone", patient.phone.replace('+91', ''));
+        // Don't fill PII for kloqo members initially
+        if (patient.relatedPatientIds && patient.relatedPatientIds.length > 0) {
+            const relativePromises = patient.relatedPatientIds.map(id => getFirestoreDoc(doc(db, 'patients', id)));
+            const relativeDocs = await Promise.all(relativePromises);
+            const fetchedRelatives = relativeDocs
+                .filter(doc => doc.exists())
+                .map(doc => ({ id: doc.id, ...doc.data() } as Patient));
+            setRelatives(fetchedRelatives);
+        }
+
+    } else { // Existing patient in this clinic
+        form.setValue("patientId", patient.id);
+        form.setValue("patientName", patient.name);
+        form.setValue("age", patient.age);
+        form.setValue("gender", patient.gender);
+        form.setValue("phone", patient.phone.replace('+91', ''));
+        form.setValue("place", patient.place || "");
+    }
+
     setPatientSearchTerm(patient.phone.replace('+91', ''));
     setIsPatientPopoverOpen(false);
-
-    if (!patient.clinicIds?.includes(clinicId!)) {
-      // It's a Kloqo member, but not from this clinic. Enable fields for booking.
-    } else {
-      // It's a patient from this clinic.
-    }
   }
-  
-    const handlePatientSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value.replace(/\D/g, '');
-        if (selectedPatient && value !== selectedPatient.phone.replace('+91', '')) {
-            setSelectedPatient(null);
-            form.reset({
-                ...form.getValues(),
-                patientId: undefined,
-                patientName: "",
-                age: 0,
-                gender: "Male",
-                place: "",
-            });
-        }
-        setPatientSearchTerm(value);
-    };
+
+  const handleRelativeSelect = (relative: Patient) => {
+    // Treat selecting a relative like selecting a new patient for booking
+    setSelectedPatient(relative); // The relative is now the one being booked for
+    setBookingFor('member'); // Switch back to the main booking form view
+    form.setValue("patientId", relative.id);
+    form.setValue("patientName", relative.name);
+    form.setValue("age", relative.age);
+    form.setValue("gender", relative.gender);
+    form.setValue("phone", relative.phone.replace('+91', ''));
+    form.setValue("place", relative.place || "");
+    toast({ title: `Selected Relative: ${relative.name}`, description: "You are now booking an appointment for the selected relative."})
+  }
+
+  const handlePatientSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/\D/g, '');
+    if (selectedPatient && value !== selectedPatient.phone.replace('+91', '')) {
+      setSelectedPatient(null);
+      setRelatives([]);
+      form.reset({
+        ...form.getValues(),
+        patientId: undefined,
+        patientName: "",
+        age: 0,
+        gender: "Male",
+        place: "",
+      });
+    }
+    setPatientSearchTerm(value);
+  };
 
 
   const availableDaysOfWeek = useMemo(() => {
@@ -736,8 +767,26 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                     <CardDescription className="text-xs">Book for an existing relative or add a new one.</CardDescription>
                                   </CardHeader>
                                   <CardContent className="space-y-3">
-                                      {/* TODO: List relatives here */}
-                                      <p className="text-center text-xs text-muted-foreground py-4">No relatives found.</p>
+                                      {relatives.length > 0 ? (
+                                        <ScrollArea className="h-40">
+                                            {relatives.map(relative => (
+                                                <div key={relative.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted">
+                                                    <div className="flex items-center gap-3">
+                                                        <Avatar className="h-8 w-8">
+                                                            <AvatarFallback>{relative.name.charAt(0)}</AvatarFallback>
+                                                        </Avatar>
+                                                        <div>
+                                                            <p className="text-sm font-medium">{relative.name}</p>
+                                                            <p className="text-xs text-muted-foreground">{relative.gender}, {relative.age} years</p>
+                                                        </div>
+                                                    </div>
+                                                    <Button variant="outline" size="sm" onClick={() => handleRelativeSelect(relative)}>Book</Button>
+                                                </div>
+                                            ))}
+                                        </ScrollArea>
+                                      ) : (
+                                        <p className="text-center text-xs text-muted-foreground py-4">No relatives found.</p>
+                                      )}
                                       <Button className="w-full" variant="outline">
                                         <UserPlus className="mr-2 h-4 w-4" />
                                         Add New Relative
@@ -755,14 +804,14 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                             </h3>
                             <div className="grid grid-cols-2 gap-4">
                                 <FormField control={form.control} name="patientName" render={({ field }) => (
-                                    <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} disabled={!isNewPatient && !isKloqoMember && !isEditing} /></FormControl><FormMessage /></FormItem>
+                                    <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} disabled={!isNewPatient && !isEditing && isKloqoMember} value={isKloqoMember && !isEditing ? `${field.value.substring(0,2)}***` : field.value} /></FormControl><FormMessage /></FormItem>
                                 )}/>
                                 <FormField control={form.control} name="age" render={({ field }) => (
-                                    <FormItem><FormLabel>Age</FormLabel><FormControl><Input type="number" {...field} disabled={!isNewPatient && !isKloqoMember && !isEditing} /></FormControl><FormMessage /></FormItem>
+                                    <FormItem><FormLabel>Age</FormLabel><FormControl><Input type="number" {...field} disabled={!isNewPatient && !isEditing && isKloqoMember} value={isKloqoMember && !isEditing ? '**' : field.value}/></FormControl><FormMessage /></FormItem>
                                 )}/>
                                 <FormField control={form.control} name="gender" render={({ field }) => (
                                     <FormItem><FormLabel>Gender</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value} disabled={!isNewPatient && !isKloqoMember && !isEditing}>
+                                    <Select onValueChange={field.onChange} value={field.value} disabled={!isNewPatient && !isEditing && isKloqoMember}>
                                         <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
                                         <SelectContent>
                                             <SelectItem value="Male">Male</SelectItem>
@@ -773,7 +822,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                     <FormMessage /></FormItem>
                                 )}/>
                                  <FormField control={form.control} name="place" render={({ field }) => (
-                                    <FormItem><FormLabel>Place</FormLabel><FormControl><Input {...field} disabled={!isNewPatient && !isKloqoMember && !isEditing} /></FormControl><FormMessage /></FormItem>
+                                    <FormItem><FormLabel>Place</FormLabel><FormControl><Input {...field} disabled={!isNewPatient && !isEditing} /></FormControl><FormMessage /></FormItem>
                                 )}/>
                             </div>
                             <FormField control={form.control} name="bookedVia" render={({ field }) => (
@@ -1143,5 +1192,3 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     </>
   );
 }
-
-    
