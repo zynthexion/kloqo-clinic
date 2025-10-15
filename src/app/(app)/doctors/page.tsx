@@ -196,6 +196,11 @@ export default function DoctorsPage() {
   const [isAddDoctorOpen, setIsAddDoctorOpen] = useState(false);
   const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
 
+  const [isEditingFollowUp, setIsEditingFollowUp] = useState(false);
+  const [newFollowUp, setNewFollowUp] = useState<number | string>("");
+  const [isEditingBooking, setIsEditingBooking] = useState(false);
+  const [newBooking, setNewBooking] = useState<number | string>("");
+
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -272,6 +277,8 @@ export default function DoctorsPage() {
       
       setNewAvgTime(selectedDoctor.averageConsultingTime || "");
       setNewFee(selectedDoctor.consultationFee || "");
+      setNewFollowUp(selectedDoctor.freeFollowUpDays || 0);
+      setNewBooking(selectedDoctor.advanceBookingDays || 0);
       setNewName(selectedDoctor.name);
       setNewBio(selectedDoctor.bio || "");
       setNewSpecialty(selectedDoctor.specialty);
@@ -297,6 +304,8 @@ export default function DoctorsPage() {
       setIsEditingAvailability(false);
       setIsEditingTime(false);
       setIsEditingFee(false);
+      setIsEditingFollowUp(false);
+      setIsEditingBooking(false);
     }
   }, [selectedDoctor, appointments, form]);
 
@@ -463,6 +472,52 @@ export default function DoctorsPage() {
                     title: "Update Failed",
                     description: "Could not update the consultation fee.",
                 });
+            }
+        });
+    };
+
+    const handleFollowUpSave = async () => {
+        if (!selectedDoctor || newFollowUp === "") return;
+        const value = Number(newFollowUp);
+        if (isNaN(value) || value < 0) {
+            toast({ variant: "destructive", title: "Invalid Value", description: "Please enter a valid non-negative number of days." });
+            return;
+        }
+        startTransition(async () => {
+            try {
+                const doctorRef = doc(db, "doctors", selectedDoctor.id);
+                await updateDoc(doctorRef, { freeFollowUpDays: value });
+                const updatedDoctor = { ...selectedDoctor, freeFollowUpDays: value };
+                setSelectedDoctor(updatedDoctor);
+                setDoctors(prev => prev.map(d => d.id === updatedDoctor.id ? updatedDoctor : d));
+                setIsEditingFollowUp(false);
+                toast({ title: "Success", description: "Free follow-up period updated." });
+            } catch (error) {
+                console.error("Error updating follow-up days:", error);
+                toast({ variant: "destructive", title: "Error", description: "Failed to update follow-up period." });
+            }
+        });
+    };
+
+    const handleBookingSave = async () => {
+        if (!selectedDoctor || newBooking === "") return;
+        const value = Number(newBooking);
+        if (isNaN(value) || value < 0) {
+            toast({ variant: "destructive", title: "Invalid Value", description: "Please enter a valid non-negative number of days." });
+            return;
+        }
+        startTransition(async () => {
+            try {
+                const doctorRef = doc(db, "doctors", selectedDoctor.id);
+                await updateDoc(doctorRef, { advanceBookingDays: value });
+                const updatedDoctor = { ...selectedDoctor, advanceBookingDays: value };
+                setSelectedDoctor(updatedDoctor);
+                setDoctors(prev => prev.map(d => d.id === updatedDoctor.id ? updatedDoctor : d));
+                setIsEditingBooking(false);
+                toast({ title: "Success", description: "Advance booking period updated." });
+            } catch (error) {
+                console.error("Error updating booking days:", error);
+                toast({ variant: "destructive", title: "Error", description: "Failed to update booking period." });
             }
         });
     };
@@ -1025,7 +1080,18 @@ export default function DoctorsPage() {
                         <Repeat className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{selectedDoctor.freeFollowUpDays || 0} days</div>
+                        {isEditingFollowUp ? (
+                          <div className="flex items-center gap-2 mt-1">
+                              <Input type="number" value={newFollowUp} onChange={(e) => setNewFollowUp(e.target.value)} className="w-20 h-8" placeholder="days" disabled={isPending} />
+                              <Button size="icon" className="h-8 w-8" onClick={handleFollowUpSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
+                              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => {setIsEditingFollowUp(false); setNewFollowUp(selectedDoctor.freeFollowUpDays || 0)}} disabled={isPending}><X className="h-4 w-4"/></Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                              <p className="text-2xl font-bold">{selectedDoctor.freeFollowUpDays || 0} days</p>
+                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingFollowUp(true)}><Edit className="h-3 w-3"/></Button>
+                          </div>
+                        )}
                     </CardContent>
                   </Card>
                   <Card>
@@ -1034,7 +1100,18 @@ export default function DoctorsPage() {
                         <CalendarCheck className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{selectedDoctor.advanceBookingDays || 0} days</div>
+                        {isEditingBooking ? (
+                           <div className="flex items-center gap-2 mt-1">
+                              <Input type="number" value={newBooking} onChange={(e) => setNewBooking(e.target.value)} className="w-20 h-8" placeholder="days" disabled={isPending} />
+                              <Button size="icon" className="h-8 w-8" onClick={handleBookingSave} disabled={isPending}><Save className="h-4 w-4"/></Button>
+                              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => {setIsEditingBooking(false); setNewBooking(selectedDoctor.advanceBookingDays || 0)}} disabled={isPending}><X className="h-4 w-4"/></Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <div className="text-2xl font-bold">{selectedDoctor.advanceBookingDays || 0} days</div>
+                            <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingBooking(true)}><Edit className="h-3 w-3"/></Button>
+                          </div>
+                        )}
                     </CardContent>
                   </Card>
               </div>
@@ -1223,7 +1300,7 @@ export default function DoctorsPage() {
                                                 <div className="flex flex-wrap gap-2 items-center mt-2">
                                                     {slot.timeSlots.map((ts, i) => (
                                                         <Badge key={i} variant="outline" className="text-sm group relative pr-7">
-                                                            {ts.from} - {ts.to}
+                                                            {format(parseDateFns(ts.from, "hh:mm a", new Date()), 'p')} - {format(parseDateFns(ts.to, "hh:mm a", new Date()), 'p')}
                                                             <button 
                                                                 onClick={() => handleDeleteTimeSlot(slot.day, ts)}
                                                                 className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -1309,5 +1386,7 @@ export default function DoctorsPage() {
     </>
   );
 }
+
+    
 
     

@@ -488,3 +488,5 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
     </Dialog>
   );
 }
+
+    
