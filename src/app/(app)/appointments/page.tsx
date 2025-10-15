@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Appointment, Doctor, Patient, Visit } from "@/lib/types";
-import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, addDoc, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, addDoc, deleteDoc, writeBatch, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear } from "date-fns";
@@ -73,7 +73,7 @@ const formSchema = z.object({
   }),
   time: z.string().min(1, "Please select a time."),
   place: z.string().min(2, { message: "Place must be at least 2 characters." }),
-  bookedVia: z.enum(["Phone", "Walk-in", "Online"]),
+  bookedVia: z.enum(["Advanced Booking", "Walk-in", "Online"]),
   tokenNumber: z.string().optional(),
   patientId: z.string().optional(),
 });
@@ -155,7 +155,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
       date: undefined,
       time: undefined,
       place: "",
-      bookedVia: "Phone",
+      bookedVia: "Advanced Booking",
     },
   });
   
@@ -176,13 +176,14 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
   }, []);
 
   useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
+    if (patientSearchTerm.length === 10) {
       startTransition(() => {
         searchPatients(patientSearchTerm);
       });
-    }, 300);
-
-    return () => clearTimeout(delayDebounceFn);
+    } else {
+        setPatientSearchResults([]);
+        setIsPatientPopoverOpen(false);
+    }
   }, [patientSearchTerm, searchPatients]);
 
 
@@ -248,7 +249,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
       date: undefined,
       time: undefined,
       place: "",
-      bookedVia: "Phone",
+      bookedVia: "Advanced Booking",
     });
   }, [form]);
 
@@ -273,7 +274,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                 date: isNaN(appointmentDate.getTime()) ? undefined : appointmentDate,
                 doctor: doctor.id,
                 time: format(parseDateFns(editingAppointment.time, "hh:mm a", new Date()), 'HH:mm'),
-                bookedVia: (editingAppointment.bookedVia === "Phone" || editingAppointment.bookedVia === "Walk-in" || editingAppointment.bookedVia === "Online") ? editingAppointment.bookedVia : "Phone"
+                bookedVia: (editingAppointment.bookedVia === "Advanced Booking" || editingAppointment.bookedVia === "Walk-in" || editingAppointment.bookedVia === "Online") ? editingAppointment.bookedVia : "Advanced Booking"
             });
             setPatientSearchTerm(editingAppointment.phone.replace('+91', ''));
         }
@@ -291,120 +292,132 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
 
 
   async function onSubmit(values: AppointmentFormValues) {
-    if (!auth.currentUser || !clinicId) {
-        toast({ variant: "destructive", title: "Not Authenticated", description: "You must be logged in to book an appointment."});
-        return;
+    if (!auth.currentUser || !clinicId || !selectedDoctor) {
+      toast({ variant: "destructive", title: "Error", description: "You must be logged in and select a doctor to book an appointment." });
+      return;
     }
-    
+  
     startTransition(async () => {
-        try {
-          let patientIdToUse: string | undefined;
-          let patientDataForApt: Patient | undefined;
-
-          // Determine which patient record to use/create
-          if (selectedPatient) {
-            patientIdToUse = selectedPatient.id;
-            patientDataForApt = selectedPatient;
-            // Check if this patient is new to this specific clinic
-            if (!patientDataForApt.clinicIds?.includes(clinicId)) {
-                const patientRef = doc(db, 'patients', patientIdToUse);
-                await updateDoc(patientRef, {
-                    clinicIds: arrayUnion(clinicId),
-                    updatedAt: new Date(),
-                });
-                patientDataForApt = { ...patientDataForApt, clinicIds: [...(patientDataForApt.clinicIds || []), clinicId] };
-            }
-          } else {
-            // No existing patient selected, create a new one
-            const newPatientId = doc(collection(db, "patients")).id;
-            patientIdToUse = newPatientId;
-            const newPatientData: Patient = {
-                id: newPatientId,
-                name: values.patientName,
-                age: values.age,
-                sex: values.sex,
-                phone: `+91${values.phone}`,
-                place: values.place,
-                clinicIds: [clinicId], // First time at this clinic
-                visitHistory: [],
-                totalAppointments: 0,
-                relatedPatientIds: [],
-                createdAt: new Date(),
-                updatedAt: new Date(),
-            };
-            await setDoc(doc(db, 'patients', newPatientId), newPatientData);
-            patientDataForApt = newPatientData;
-          }
-          
-          if (!patientIdToUse || !patientDataForApt) {
-             toast({ variant: "destructive", title: "Error", description: "Could not create or find patient." });
-             return;
-          }
-          
-          const patientRef = doc(db, 'patients', patientIdToUse);
-          const doctorName = doctors.find(d => d.id === values.doctor)?.name || "Unknown Doctor";
-          const appointmentDateStr = format(values.date, "d MMMM yyyy");
-          const appointmentTimeStr = format(parseDateFns(values.time, "HH:mm", new Date()), "hh:mm a");
-          const appointmentId = isEditing ? values.id! : doc(collection(db, "appointments")).id;
-          const prefix = values.bookedVia === 'Phone' ? 'P' : values.bookedVia === 'Walk-in' ? 'W' : 'A';
-          const tokenNumber = isEditing ? values.tokenNumber! : `${prefix}${(appointments.length + 1).toString().padStart(3, '0')}`;
-          
-          const dataToSave: Appointment = {
-              ...values,
-              phone: patientDataForApt.phone,
-              patientName: patientDataForApt.name,
-              id: appointmentId,
-              patientId: patientIdToUse,
-              date: appointmentDateStr,
-              time: appointmentTimeStr,
-              doctor: doctorName,
-              status: isEditing ? "Confirmed" : "Pending",
-              treatment: "General Consultation",
-              clinicId,
-              tokenNumber,
-          };
-
-          const appointmentRef = doc(db, "appointments", appointmentId);
-          await setDoc(appointmentRef, dataToSave, { merge: true });
-
-          if (!isEditing) {
-            const newVisit: Visit = {
-                appointmentId: appointmentId,
-                date: appointmentDateStr,
-                time: appointmentTimeStr,
-                doctor: doctorName,
-                department: values.department,
-                status: "Pending",
-                treatment: "General Consultation",
-            };
-             await updateDoc(patientRef, {
-                visitHistory: arrayUnion(newVisit),
-                totalAppointments: increment(1),
-                updatedAt: new Date(),
-            });
-          }
-
-          const doctorRef = doc(db, "doctors", values.doctor);
-          await updateDoc(doctorRef, {
-              bookedSlots: arrayUnion({
-                  date: appointmentDateStr,
-                  time: appointmentTimeStr,
-                  tokenNumber: tokenNumber
-              })
-          });
-
-          if (isEditing) {
-              setAppointments(prev => prev.map(apt => apt.id === appointmentId ? dataToSave : apt));
-              toast({ title: "Appointment Rescheduled", description: `Appointment for ${dataToSave.patientName} has been updated.` });
-          } else {
-              setAppointments(prev => [...prev, dataToSave]);
-              toast({ title: "Appointment Booked", description: `Appointment for ${dataToSave.patientName} has been successfully booked.` });
-          }
-          resetForm();
-        } catch (error) {
-          console.error("Error saving appointment: ", error);
-          toast({ variant: "destructive", title: "Error", description: "Failed to save appointment. Please try again." });
+      try {
+        const batch = writeBatch(db);
+        let patientForAppointmentId: string;
+        let patientForAppointmentName: string;
+        let patientForAppointmentPhone: string;
+  
+        const patientDataToUpdate = {
+          name: values.patientName,
+          age: values.age,
+          sex: values.sex,
+          place: values.place,
+          phone: values.phone.startsWith('+91') ? values.phone : `+91${values.phone}`,
+        };
+  
+        // Case 1: Editing an existing appointment
+        if (isEditing && editingAppointment) {
+          patientForAppointmentId = editingAppointment.patientId;
+          const patientRef = doc(db, 'patients', patientForAppointmentId);
+          batch.update(patientRef, { ...patientDataToUpdate, updatedAt: serverTimestamp() });
+          patientForAppointmentName = values.patientName;
+          patientForAppointmentPhone = patientDataToUpdate.phone;
         }
+        // Case 2: Booking for a selected existing patient (primary or relative)
+        else if (selectedPatient) {
+          patientForAppointmentId = selectedPatient.id;
+          const patientRef = doc(db, 'patients', patientForAppointmentId);
+  
+          const clinicIds = selectedPatient.clinicIds || [];
+          const updateData: any = { ...patientDataToUpdate, updatedAt: serverTimestamp() };
+  
+          if (!clinicIds.includes(clinicId)) {
+            updateData.clinicIds = arrayUnion(clinicId);
+          }
+          batch.update(patientRef, updateData);
+          patientForAppointmentName = values.patientName;
+          patientForAppointmentPhone = patientDataToUpdate.phone;
+        }
+        // Case 3: Booking for a brand new patient (not found via search)
+        else {
+          const newPatientRef = doc(collection(db, 'patients'));
+          const newPatientData: Patient = {
+            id: newPatientRef.id,
+            ...patientDataToUpdate,
+            clinicIds: [clinicId],
+            visitHistory: [],
+            totalAppointments: 0,
+            relatedPatientIds: [],
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          };
+          batch.set(newPatientRef, newPatientData);
+          patientForAppointmentId = newPatientRef.id;
+          patientForAppointmentName = values.patientName;
+          patientForAppointmentPhone = patientDataToUpdate.phone;
+        }
+  
+        // Create or update the appointment document
+        const appointmentId = isEditing && editingAppointment ? editingAppointment.id : doc(collection(db, "appointments")).id;
+        const prefix = values.bookedVia === 'Advanced Booking' ? 'A' : values.bookedVia === 'Walk-in' ? 'W' : 'O';
+        const tokenNumber = isEditing && editingAppointment ? editingAppointment.tokenNumber : `${prefix}${(appointments.length + 1).toString().padStart(3, '0')}`;
+        
+        const appointmentDateStr = format(values.date, "d MMMM yyyy");
+        const appointmentTimeStr = format(parseDateFns(values.time, "HH:mm", new Date()), "hh:mm a");
+  
+        const appointmentData: Appointment = {
+          id: appointmentId,
+          clinicId: clinicId,
+          patientId: patientForAppointmentId,
+          patientName: patientForAppointmentName,
+          sex: values.sex,
+          phone: patientForAppointmentPhone,
+          age: values.age,
+          doctor: selectedDoctor.name,
+          date: appointmentDateStr,
+          time: appointmentTimeStr,
+          department: values.department,
+          status: isEditing ? editingAppointment!.status : "Pending",
+          treatment: "General Consultation",
+          tokenNumber: tokenNumber,
+          bookedVia: values.bookedVia,
+          place: values.place
+        };
+  
+        const appointmentRef = doc(db, 'appointments', appointmentId);
+        batch.set(appointmentRef, appointmentData, { merge: true });
+  
+        // If it's a new appointment, update patient's visit history
+        if (!isEditing) {
+          const patientRef = doc(db, 'patients', patientForAppointmentId);
+          const newVisit: Visit = {
+            appointmentId: appointmentId,
+            date: appointmentDateStr,
+            time: appointmentTimeStr,
+            doctor: selectedDoctor.name,
+            department: values.department,
+            status: 'Pending',
+            treatment: 'General Consultation',
+          };
+          batch.update(patientRef, {
+            visitHistory: arrayUnion(newVisit),
+            totalAppointments: increment(1),
+            updatedAt: serverTimestamp(),
+          });
+        }
+  
+        await batch.commit();
+  
+        // Update local state and show toast
+        if (isEditing) {
+          setAppointments(prev => prev.map(apt => apt.id === appointmentId ? appointmentData : apt));
+          toast({ title: "Appointment Rescheduled", description: `Appointment for ${appointmentData.patientName} has been updated.` });
+        } else {
+          setAppointments(prev => [...prev, appointmentData]);
+          toast({ title: "Appointment Booked", description: `Appointment for ${appointmentData.patientName} has been successfully booked.` });
+        }
+        resetForm();
+      } catch (error) {
+        console.error("Error saving appointment: ", error);
+        toast({ variant: "destructive", title: "Error", description: "Failed to save appointment. Please try again." });
+      }
     });
   }
 
@@ -838,7 +851,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                     <FormControl>
                                         <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4">
                                             <FormItem className="flex items-center space-x-2 space-y-0">
-                                                <FormControl><RadioGroupItem value="Phone" /></FormControl>
+                                                <FormControl><RadioGroupItem value="Advanced Booking" /></FormControl>
                                                 <FormLabel className="font-normal">Advanced Booking</FormLabel>
                                             </FormItem>
                                             <FormItem className="flex items-center space-x-2 space-y-0">
@@ -1210,3 +1223,5 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     </>
   );
 }
+
+    
