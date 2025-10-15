@@ -661,332 +661,328 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
       <header className="flex h-14 items-center gap-4 border-b bg-background px-4 sm:px-6">
         <h1 className="text-xl font-semibold md:text-2xl">Appointments</h1>
       </header>
-      <div className="flex flex-1">
-        <div className="flex-1 p-6">
-          <div className="flex items-start gap-4">
-            <main className={cn("flex-shrink-0 transition-all duration-300 ease-in-out", isDrawerExpanded ? "w-3/12" : "w-9/12")}>
-              <Card>
-                <CardHeader>
-                  <CardTitle>{isEditing ? "Reschedule Appointment" : "Book New Appointment"}</CardTitle>
-                  <CardDescription>
-                    {isEditing ? "Update the details for this appointment." : "Fill in the details below to book a new appointment."}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                      <div className="space-y-4">
-                          <FormItem>
-                              <FormLabel>Search Patient by Phone</FormLabel>
-                              <Popover open={isPatientPopoverOpen} onOpenChange={setIsPatientPopoverOpen}>
-                              <PopoverTrigger asChild>
-                                  <div className="relative">
-                                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                      <FormControl>
-                                      <Input
-                                          ref={patientInputRef}
-                                          placeholder="Start typing 10-digit phone number..."
-                                          value={patientSearchTerm}
-                                          onChange={handlePatientSearchChange}
-                                          className="pl-8"
-                                          maxLength={10}
-                                      />
-                                      </FormControl>
-                                  </div>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                                  <Command>
-                                  <CommandList>
-                                      <CommandEmpty>No patient found.</CommandEmpty>
-                                      <CommandGroup>
-                                      {patientSearchResults.map((patient) => {
-                                          const isClinicPatient = patient.clinicIds?.includes(clinicId!);
-                                          return (
-                                          <CommandItem
-                                              key={patient.id}
-                                              value={patient.phone}
-                                              onSelect={() => handlePatientSelect(patient)}
-                                              className="flex justify-between items-center"
-                                          >
-                                            <div>
-                                              {patient.name}
-                                              <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
-                                            </div>
-                                            <Badge variant={isClinicPatient ? "secondary" : "outline"} className={cn(
-                                              isClinicPatient ? "text-blue-600 border-blue-500" : "text-amber-600 border-amber-500"
-                                            )}>
-                                              {isClinicPatient ? (
-                                                  <UserCheck className="mr-1.5 h-3 w-3"/>
-                                              ) : (
-                                                  <Crown className="mr-1.5 h-3 w-3" />
-                                              )}
-                                              {isClinicPatient ? "Existing Patient" : "Kloqo Member"}
-                                            </Badge>
-                                          </CommandItem>
-                                      )})}
-                                      </CommandGroup>
-                                  </CommandList>
-                                  </Command>
-                              </PopoverContent>
-                              </Popover>
-                              <FormMessage />
-                          </FormItem>
-                           <div className="flex justify-end">
-                              <Button type="button" variant="secondary">
-                                  <LinkIcon className="mr-2 h-4 w-4" />
-                                  Send Booking Link
-                              </Button>
-                          </div>
-                      </div>
-                      {(selectedPatient || isNewPatient || isEditing) && (
-                        <div className="pt-4 border-t">
-                          {primaryPatient && (relatives.length > 0 || isKloqoMember) && !isEditing && (
-                            <div className="mb-4">
-                              <Tabs value={bookingFor} onValueChange={(value) => {
-                                setBookingFor(value);
-                                if (value === 'member' && primaryPatient) {
-                                    setSelectedPatient(primaryPatient);
-                                    const capitalizedSex = primaryPatient.sex ? (primaryPatient.sex.charAt(0).toUpperCase() + primaryPatient.sex.slice(1).toLowerCase()) : "Male";
-                                    form.reset({
-                                        ...form.getValues(),
-                                        patientId: primaryPatient.id,
-                                        patientName: primaryPatient.name,
-                                        age: primaryPatient.age,
-                                        sex: capitalizedSex as "Male" | "Female" | "Other",
-                                        place: primaryPatient.place || "",
-                                    });
-                                }
-                              }}>
-                                <TabsList className="grid w-full grid-cols-2">
-                                    <TabsTrigger value="member">For Member</TabsTrigger>
-                                    <TabsTrigger value="relative">For a Relative</TabsTrigger>
-                                </TabsList>
-                                <TabsContent value="member" className="mt-4">
-                                  <div className="text-sm p-4 bg-muted/50 rounded-lg">
-                                      <p><strong>Name:</strong> {primaryPatient.name}</p>
-                                      <p><strong>Place:</strong> {primaryPatient.place}</p>
-                                  </div>
-                                </TabsContent>
-                                <TabsContent value="relative">
-                                  <Card>
-                                      <CardHeader>
-                                        <CardTitle className="text-base">Relatives</CardTitle>
-                                        <CardDescription className="text-xs">Book for an existing relative or add a new one.</CardDescription>
-                                      </CardHeader>
-                                      <CardContent className="space-y-3">
-                                          {relatives.length > 0 ? (
-                                            <ScrollArea className="h-40">
-                                                {relatives.map(relative => (
-                                                    <div key={relative.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted">
-                                                        <div className="flex items-center gap-3">
-                                                            <Avatar className="h-8 w-8">
-                                                                <AvatarFallback>{relative.name.charAt(0)}</AvatarFallback>
-                                                            </Avatar>
-                                                            <div>
-                                                                <p className="text-sm font-medium">{relative.name}</p>
-                                                                <p className="text-xs text-muted-foreground">{relative.sex}, {relative.age} years</p>
-                                                            </div>
-                                                        </div>
-                                                        <Button variant="outline" size="sm" onClick={() => handleRelativeSelect(relative)}>Book</Button>
-                                                    </div>
-                                                ))}
-                                            </ScrollArea>
-                                          ) : (
-                                            <p className="text-center text-xs text-muted-foreground py-4">No relatives found.</p>
-                                          )}
-                                          <Button type="button" className="w-full" variant="outline" onClick={() => setIsAddRelativeDialogOpen(true)}>
-                                            <UserPlus className="mr-2 h-4 w-4" />
-                                            Add New Relative
-                                          </Button>
-                                      </CardContent>
-                                  </Card>
-                                </TabsContent>
-                              </Tabs>
-                            </div>
-                          )}
-
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4 mt-4">
-                            <div className="space-y-4 md:col-span-1">
-                              <h3 className="text-lg font-medium border-b pb-2 flex items-center justify-between">
-                                  Patient Details
-                              </h3>
-                              <div className="grid grid-cols-2 gap-4">
-                                  <FormField control={form.control} name="patientName" render={({ field }) => (
-                                      <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                                  )}/>
-                                  <FormField control={form.control} name="age" render={({ field }) => (
-                                      <FormItem><FormLabel>Age</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
-                                  )}/>
-                                  <FormField control={form.control} name="sex" render={({ field }) => (
-                                      <FormItem><FormLabel>Gender</FormLabel>
-                                      <Select onValueChange={field.onChange} value={field.value}>
-                                          <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
-                                          <SelectContent>
-                                              <SelectItem value="Male">Male</SelectItem>
-                                              <SelectItem value="Female">Female</SelectItem>
-                                              <SelectItem value="Other">Other</SelectItem>
-                                          </SelectContent>
-                                      </Select>
-                                      <FormMessage /></FormItem>
-                                  )}/>
-                                   <FormField control={form.control} name="place" render={({ field }) => (
-                                      <FormItem><FormLabel>Place</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                                  )}/>
-                              </div>
-                              <FormField control={form.control} name="bookedVia" render={({ field }) => (
-                                  <FormItem className="space-y-3">
-                                      <FormLabel>Booked Via</FormLabel>
-                                      <FormControl>
-                                          <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4">
-                                              <FormItem className="flex items-center space-x-2 space-y-0">
-                                                  <FormControl><RadioGroupItem value="Phone" /></FormControl>
-                                                  <FormLabel className="font-normal">Advanced Booking</FormLabel>
-                                              </FormItem>
-                                              <FormItem className="flex items-center space-x-2 space-y-0">
-                                                  <FormControl><RadioGroupItem value="Walk-in" /></FormControl>
-                                                  <FormLabel className="font-normal">Walk-in</FormLabel>
-                                              </FormItem>
-                                          </RadioGroup>
-                                      </FormControl>
-                                      <FormMessage />
-                                  </FormItem>
-                                  )} />
-                            </div>
-                            
-                            <div className="space-y-4 md:col-span-1">
-                                  <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
-                                  <FormField control={form.control} name="date" render={({ field }) => (
-                                  <FormItem className="flex flex-col">
-                                      <FormLabel>Select Date</FormLabel>
-                                      <Calendar
-                                          className="bg-primary text-primary-foreground rounded-md [&_button:hover]:bg-primary/80 [&_.rdp-day_today]:bg-primary-foreground/20 [&_button]:text-primary-foreground"
-                                          mode="single"
-                                          selected={field.value}
-                                          onSelect={(date) => {
-                                              if (date) field.onChange(date);
-                                              form.clearErrors("date");
-                                          }}
-                                          disabled={(date) => 
-                                              date < new Date(new Date().setHours(0,0,0,0)) || 
-                                              !selectedDoctor ||
-                                              !availableDaysOfWeek.includes(getDay(date)) ||
-                                              leaveDates.some(leaveDate => isSameDay(date, leaveDate))
-                                          }
-                                          initialFocus
-                                          modifiers={selectedDoctor ? { available: { dayOfWeek: availableDaysOfWeek }, leave: leaveDates } : { leave: leaveDates }}
-                                          modifiersStyles={{
-                                              available: { backgroundColor: 'hsl(var(--accent))', color: 'hsl(var(--accent-foreground))' },
-                                              leave: { backgroundColor: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' },
-                                          }}
-                                          />
-                                      <FormMessage />
-                                  </FormItem>
-                                  )}
-                              />
-                              </div>
-
-                              <div className="space-y-4 md:col-span-1">
-                                  <h3 className="text-lg font-medium border-b pb-2">Doctor & Time</h3>
-                                  <FormField control={form.control} name="doctor" render={({ field }) => (
-                                      <FormItem>
-                                      <FormLabel>Doctor</FormLabel>
-                                      <Select onValueChange={(value) => {
-                                          onDoctorChange(value);
-                                      }} value={field.value}>
-                                          <FormControl>
-                                          <SelectTrigger>
-                                              <SelectValue placeholder="Select a doctor" />
-                                          </SelectTrigger>
-                                          </FormControl>
-                                          <SelectContent>
-                                          {doctors.map(doc => (
-                                              <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
-                                          ))}
-                                          </SelectContent>
-                                      </Select>
-                                      <FormMessage />
-                                      </FormItem>
-                                  )} />
-                                  <FormField control={form.control} name="department" render={({ field }) => (
-                                      <FormItem>
-                                      <FormLabel>Department</FormLabel>
-                                      <FormControl>
-                                          <Input readOnly placeholder="Department" {...field} value={field.value ?? ''} />
-                                      </FormControl>
-                                      <FormMessage />
-                                      </FormItem>
-                                  )} />
-                              {selectedDoctor && selectedDate && (
-                                  <FormField control={form.control} name="time" render={({ field }) => (
-                                      <FormItem>
-                                      <FormLabel>Select Time Slot</FormLabel>
-                                      <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-2">
-                                          {timeSlots.length > 0 ? timeSlots.map(slot => (
-                                              <Button
-                                                  key={slot.time}
-                                                  type="button"
-                                                  variant={field.value === format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm') ? "default" : "outline"}
-                                                  onClick={() => {
-                                                  const val = format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm');
-                                                  field.onChange(val);
-                                                  if (val) form.clearErrors("time");
-                                                  }}
-                                                  disabled={slot.disabled}
-                                                  className={cn("text-xs", slot.disabled && "line-through")}
-                                              >
-                                                  {slot.time}
-                                              </Button>
-                                          )) : <p className="text-sm text-muted-foreground col-span-2">No available slots for this day.</p>}
-                                      </div>
-                                      <FormMessage />
-                                      </FormItem>
-                                  )}
-                                  />
-                              )}
-                              </div>
-                          </div>
-                        </div>
-                      )}
-                      {(selectedPatient || isNewPatient || isEditing) && (
-                      <div className="flex justify-end items-center pt-4">
-                        <div className="flex justify-end gap-2">
-                            {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
-                            <Button type="submit" disabled={isPending}>
-                              {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
-                              {isEditing ? "Save Changes" : "Book Appointment"}
+      <div className="flex-1 p-6">
+        <div className={cn("grid gap-4 transition-all duration-300 ease-in-out", isDrawerExpanded ? "grid-cols-[3fr_auto_9fr]" : "grid-cols-[9fr_auto_3fr]")}>
+          <main>
+            <Card>
+              <CardHeader>
+                <CardTitle>{isEditing ? "Reschedule Appointment" : "Book New Appointment"}</CardTitle>
+                <CardDescription>
+                  {isEditing ? "Update the details for this appointment." : "Fill in the details below to book a new appointment."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Form {...form}>
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                    <div className="space-y-4">
+                        <FormItem>
+                            <FormLabel>Search Patient by Phone</FormLabel>
+                            <Popover open={isPatientPopoverOpen} onOpenChange={setIsPatientPopoverOpen}>
+                            <PopoverTrigger asChild>
+                                <div className="relative">
+                                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                    <FormControl>
+                                    <Input
+                                        ref={patientInputRef}
+                                        placeholder="Start typing 10-digit phone number..."
+                                        value={patientSearchTerm}
+                                        onChange={handlePatientSearchChange}
+                                        className="pl-8"
+                                        maxLength={10}
+                                    />
+                                    </FormControl>
+                                </div>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                <Command>
+                                <CommandList>
+                                    <CommandEmpty>No patient found.</CommandEmpty>
+                                    <CommandGroup>
+                                    {patientSearchResults.map((patient) => {
+                                        const isClinicPatient = patient.clinicIds?.includes(clinicId!);
+                                        return (
+                                        <CommandItem
+                                            key={patient.id}
+                                            value={patient.phone}
+                                            onSelect={() => handlePatientSelect(patient)}
+                                            className="flex justify-between items-center"
+                                        >
+                                          <div>
+                                            {patient.name}
+                                            <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
+                                          </div>
+                                          <Badge variant={isClinicPatient ? "secondary" : "outline"} className={cn(
+                                            isClinicPatient ? "text-blue-600 border-blue-500" : "text-amber-600 border-amber-500"
+                                          )}>
+                                            {isClinicPatient ? (
+                                                <UserCheck className="mr-1.5 h-3 w-3"/>
+                                            ) : (
+                                                <Crown className="mr-1.5 h-3 w-3" />
+                                            )}
+                                            {isClinicPatient ? "Existing Patient" : "Kloqo Member"}
+                                          </Badge>
+                                        </CommandItem>
+                                    )})}
+                                    </CommandGroup>
+                                </CommandList>
+                                </Command>
+                            </PopoverContent>
+                            </Popover>
+                            <FormMessage />
+                        </FormItem>
+                         <div className="flex justify-end">
+                            <Button type="button" variant="secondary">
+                                <LinkIcon className="mr-2 h-4 w-4" />
+                                Send Booking Link
                             </Button>
                         </div>
+                    </div>
+                    {(selectedPatient || isNewPatient || isEditing) && (
+                      <div className="pt-4 border-t">
+                        {primaryPatient && (relatives.length > 0 || isKloqoMember) && !isEditing && (
+                          <div className="mb-4">
+                            <Tabs value={bookingFor} onValueChange={(value) => {
+                              setBookingFor(value);
+                              if (value === 'member' && primaryPatient) {
+                                  setSelectedPatient(primaryPatient);
+                                  const capitalizedSex = primaryPatient.sex ? (primaryPatient.sex.charAt(0).toUpperCase() + primaryPatient.sex.slice(1).toLowerCase()) : "Male";
+                                  form.reset({
+                                      ...form.getValues(),
+                                      patientId: primaryPatient.id,
+                                      patientName: primaryPatient.name,
+                                      age: primaryPatient.age,
+                                      sex: capitalizedSex as "Male" | "Female" | "Other",
+                                      place: primaryPatient.place || "",
+                                  });
+                              }
+                            }}>
+                              <TabsList className="grid w-full grid-cols-2">
+                                  <TabsTrigger value="member">For Member</TabsTrigger>
+                                  <TabsTrigger value="relative">For a Relative</TabsTrigger>
+                              </TabsList>
+                              <TabsContent value="member" className="mt-4">
+                                <div className="text-sm p-4 bg-muted/50 rounded-lg">
+                                    <p><strong>Name:</strong> {primaryPatient.name}</p>
+                                    <p><strong>Place:</strong> {primaryPatient.place}</p>
+                                </div>
+                              </TabsContent>
+                              <TabsContent value="relative">
+                                <Card>
+                                    <CardHeader>
+                                      <CardTitle className="text-base">Relatives</CardTitle>
+                                      <CardDescription className="text-xs">Book for an existing relative or add a new one.</CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="space-y-3">
+                                        {relatives.length > 0 ? (
+                                          <ScrollArea className="h-40">
+                                              {relatives.map(relative => (
+                                                  <div key={relative.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted">
+                                                      <div className="flex items-center gap-3">
+                                                          <Avatar className="h-8 w-8">
+                                                              <AvatarFallback>{relative.name.charAt(0)}</AvatarFallback>
+                                                          </Avatar>
+                                                          <div>
+                                                              <p className="text-sm font-medium">{relative.name}</p>
+                                                              <p className="text-xs text-muted-foreground">{relative.sex}, {relative.age} years</p>
+                                                          </div>
+                                                      </div>
+                                                      <Button variant="outline" size="sm" onClick={() => handleRelativeSelect(relative)}>Book</Button>
+                                                  </div>
+                                              ))}
+                                          </ScrollArea>
+                                        ) : (
+                                          <p className="text-center text-xs text-muted-foreground py-4">No relatives found.</p>
+                                        )}
+                                        <Button type="button" className="w-full" variant="outline" onClick={() => setIsAddRelativeDialogOpen(true)}>
+                                          <UserPlus className="mr-2 h-4 w-4" />
+                                          Add New Relative
+                                        </Button>
+                                    </CardContent>
+                                </Card>
+                              </TabsContent>
+                            </Tabs>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4 mt-4">
+                          <div className="space-y-4 md:col-span-1">
+                            <h3 className="text-lg font-medium border-b pb-2 flex items-center justify-between">
+                                Patient Details
+                            </h3>
+                            <div className="grid grid-cols-2 gap-4">
+                                <FormField control={form.control} name="patientName" render={({ field }) => (
+                                    <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                                )}/>
+                                <FormField control={form.control} name="age" render={({ field }) => (
+                                    <FormItem><FormLabel>Age</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                                )}/>
+                                <FormField control={form.control} name="sex" render={({ field }) => (
+                                    <FormItem><FormLabel>Gender</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value}>
+                                        <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
+                                        <SelectContent>
+                                            <SelectItem value="Male">Male</SelectItem>
+                                            <SelectItem value="Female">Female</SelectItem>
+                                            <SelectItem value="Other">Other</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage /></FormItem>
+                                )}/>
+                                 <FormField control={form.control} name="place" render={({ field }) => (
+                                    <FormItem><FormLabel>Place</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                                )}/>
+                            </div>
+                            <FormField control={form.control} name="bookedVia" render={({ field }) => (
+                                <FormItem className="space-y-3">
+                                    <FormLabel>Booked Via</FormLabel>
+                                    <FormControl>
+                                        <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4">
+                                            <FormItem className="flex items-center space-x-2 space-y-0">
+                                                <FormControl><RadioGroupItem value="Phone" /></FormControl>
+                                                <FormLabel className="font-normal">Advanced Booking</FormLabel>
+                                            </FormItem>
+                                            <FormItem className="flex items-center space-x-2 space-y-0">
+                                                <FormControl><RadioGroupItem value="Walk-in" /></FormControl>
+                                                <FormLabel className="font-normal">Walk-in</FormLabel>
+                                            </FormItem>
+                                        </RadioGroup>
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                                )} />
+                          </div>
+                          
+                          <div className="space-y-4 md:col-span-1">
+                                <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
+                                <FormField control={form.control} name="date" render={({ field }) => (
+                                <FormItem className="flex flex-col">
+                                    <FormLabel>Select Date</FormLabel>
+                                    <Calendar
+                                        className="bg-primary text-primary-foreground rounded-md [&_button:hover]:bg-primary/80 [&_.rdp-day_today]:bg-primary-foreground/20 [&_button]:text-primary-foreground"
+                                        mode="single"
+                                        selected={field.value}
+                                        onSelect={(date) => {
+                                            if (date) field.onChange(date);
+                                            form.clearErrors("date");
+                                        }}
+                                        disabled={(date) => 
+                                            date < new Date(new Date().setHours(0,0,0,0)) || 
+                                            !selectedDoctor ||
+                                            !availableDaysOfWeek.includes(getDay(date)) ||
+                                            leaveDates.some(leaveDate => isSameDay(date, leaveDate))
+                                        }
+                                        initialFocus
+                                        modifiers={selectedDoctor ? { available: { dayOfWeek: availableDaysOfWeek }, leave: leaveDates } : { leave: leaveDates }}
+                                        modifiersStyles={{
+                                            available: { backgroundColor: 'hsl(var(--accent))', color: 'hsl(var(--accent-foreground))' },
+                                            leave: { backgroundColor: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' },
+                                        }}
+                                        />
+                                    <FormMessage />
+                                </FormItem>
+                                )}
+                            />
+                            </div>
+
+                            <div className="space-y-4 md:col-span-1">
+                                <h3 className="text-lg font-medium border-b pb-2">Doctor & Time</h3>
+                                <FormField control={form.control} name="doctor" render={({ field }) => (
+                                    <FormItem>
+                                    <FormLabel>Doctor</FormLabel>
+                                    <Select onValueChange={(value) => {
+                                        onDoctorChange(value);
+                                    }} value={field.value}>
+                                        <FormControl>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select a doctor" />
+                                        </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                        {doctors.map(doc => (
+                                            <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
+                                        ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                    </FormItem>
+                                )} />
+                                <FormField control={form.control} name="department" render={({ field }) => (
+                                    <FormItem>
+                                    <FormLabel>Department</FormLabel>
+                                    <FormControl>
+                                        <Input readOnly placeholder="Department" {...field} value={field.value ?? ''} />
+                                    </FormControl>
+                                    <FormMessage />
+                                    </FormItem>
+                                )} />
+                            {selectedDoctor && selectedDate && (
+                                <FormField control={form.control} name="time" render={({ field }) => (
+                                    <FormItem>
+                                    <FormLabel>Select Time Slot</FormLabel>
+                                    <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-2">
+                                        {timeSlots.length > 0 ? timeSlots.map(slot => (
+                                            <Button
+                                                key={slot.time}
+                                                type="button"
+                                                variant={field.value === format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm') ? "default" : "outline"}
+                                                onClick={() => {
+                                                const val = format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm');
+                                                field.onChange(val);
+                                                if (val) form.clearErrors("time");
+                                                }}
+                                                disabled={slot.disabled}
+                                                className={cn("text-xs", slot.disabled && "line-through")}
+                                            >
+                                                {slot.time}
+                                            </Button>
+                                        )) : <p className="text-sm text-muted-foreground col-span-2">No available slots for this day.</p>}
+                                    </div>
+                                    <FormMessage />
+                                    </FormItem>
+                                )}
+                                />
+                            )}
+                            </div>
+                        </div>
                       </div>
-                      )}
-                    </form>
-                  </Form>
-                </CardContent>
-              </Card>
-            </main>
+                    )}
+                    {(selectedPatient || isNewPatient || isEditing) && (
+                    <div className="flex justify-end items-center pt-4">
+                      <div className="flex justify-end gap-2">
+                          {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
+                          <Button type="submit" disabled={isPending}>
+                            {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                            {isEditing ? "Save Changes" : "Book Appointment"}
+                          </Button>
+                      </div>
+                    </div>
+                    )}
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
+          </main>
 
-            <div className="relative flex-shrink-0 flex items-center justify-center">
-              <Button
-                variant="outline"
-                size="icon"
-                className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground z-10"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsDrawerExpanded(!isDrawerExpanded);
-                }}
-              >
-                {isDrawerExpanded ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
-              </Button>
-            </div>
+          <div className="flex items-center justify-center">
+            <Button
+              variant="outline"
+              size="icon"
+              className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground z-10"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsDrawerExpanded(!isDrawerExpanded);
+              }}
+            >
+              {isDrawerExpanded ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
+            </Button>
+          </div>
 
-            <aside className={cn(
-                "relative flex-shrink-0 transition-all duration-300 ease-in-out h-[calc(100vh-7rem)]",
-                isDrawerExpanded ? "w-9/12" : "w-3/12"
-            )}>
-              <div className={cn("h-full w-full", isDrawerExpanded ? "p-0" : "p-4")}>
+          <aside className="h-[calc(100vh-7rem)]">
+              <div className="h-full w-full p-4">
                 <Card className="h-full rounded-2xl">
-                  <CardHeader className={cn("border-b", isDrawerExpanded ? "p-4" : "p-0")}>
+                  <CardHeader className="p-0 border-b">
                     {isDrawerExpanded ? (
-                      <>
+                      <div className="p-4">
                         <div className="flex items-center justify-between">
                           <CardTitle>Appointment Details</CardTitle>
                           <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -1036,7 +1032,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                             <FileDown className="h-4 w-4" />
                           </Button>
                         </div>
-                      </>
+                      </div>
                     ) : (
                       <div className="p-4 space-y-3">
                         <CardTitle>Today's Appointments</CardTitle>
@@ -1199,8 +1195,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                   </CardContent>
                 </Card>
               </div>
-            </aside>
-          </div>
+          </aside>
         </div>
       </div>
       {primaryPatient && (
@@ -1215,5 +1210,3 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     </>
   );
 }
-
-    
