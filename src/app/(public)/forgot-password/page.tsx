@@ -46,8 +46,9 @@ export default function ForgotPasswordPage() {
   const [foundUser, setFoundUser] = useState<User | null>(null);
 
   useEffect(() => {
-    // Initialize reCAPTCHA verifier once when the component mounts
-    if (typeof window !== 'undefined' && !window.recaptchaVerifier) {
+    // This effect runs on the client after the component mounts.
+    // It sets up the reCAPTCHA verifier and cleans it up on unmount.
+    if (typeof window !== 'undefined') {
       window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
         'size': 'invisible',
         'callback': () => { /* reCAPTCHA solved */ }
@@ -62,14 +63,14 @@ export default function ForgotPasswordPage() {
       });
     }
 
-    // Cleanup function
+    // Cleanup function to run when the component unmounts
     return () => {
       if (typeof window !== 'undefined' && window.recaptchaVerifier) {
-        // It's good practice to clear the verifier on unmount
-        // to avoid memory leaks, though Firebase handles some of this.
+        // Clear the verifier to avoid memory leaks and conflicts
+        window.recaptchaVerifier.clear();
       }
     };
-  }, [toast]);
+  }, [toast, auth]);
 
 
   const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
