@@ -443,31 +443,21 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
 
     const isKloqoMember = !patient.clinicIds?.includes(clinicId!);
 
-    if (isKloqoMember) {
-        form.setValue("patientId", patient.id);
-        form.setValue("phone", patient.phone.replace('+91', ''));
-        form.setValue("patientName", patient.name);
-        form.setValue("age", patient.age);
-        const capitalizedSex = patient.sex ? (patient.sex.charAt(0).toUpperCase() + patient.sex.slice(1).toLowerCase()) : "Male";
-        form.setValue("sex", capitalizedSex as "Male" | "Female" | "Other");
-        form.setValue("place", patient.place || "");
-        if (patient.relatedPatientIds && patient.relatedPatientIds.length > 0) {
-            const relativePromises = patient.relatedPatientIds.map(id => getFirestoreDoc(doc(db, 'patients', id)));
-            const relativeDocs = await Promise.all(relativePromises);
-            const fetchedRelatives = relativeDocs
-                .filter(doc => doc.exists())
-                .map(doc => ({ id: doc.id, ...doc.data() } as Patient));
-            setRelatives(fetchedRelatives);
-        }
-
-    } else { // Existing patient in this clinic
-        form.setValue("patientId", patient.id);
-        form.setValue("patientName", patient.name);
-        form.setValue("age", patient.age);
-        const capitalizedSex = patient.sex ? (patient.sex.charAt(0).toUpperCase() + patient.sex.slice(1).toLowerCase()) : "Male";
-        form.setValue("sex", capitalizedSex as "Male" | "Female" | "Other");
-        form.setValue("phone", patient.phone.replace('+91', ''));
-        form.setValue("place", patient.place || "");
+    form.setValue("patientId", patient.id);
+    form.setValue("patientName", patient.name);
+    form.setValue("age", patient.age);
+    const capitalizedSex = patient.sex ? (patient.sex.charAt(0).toUpperCase() + patient.sex.slice(1).toLowerCase()) : "Male";
+    form.setValue("sex", capitalizedSex as "Male" | "Female" | "Other");
+    form.setValue("phone", patient.phone.replace('+91', ''));
+    form.setValue("place", patient.place || "");
+    
+    if (isKloqoMember && patient.relatedPatientIds && patient.relatedPatientIds.length > 0) {
+        const relativePromises = patient.relatedPatientIds.map(id => getFirestoreDoc(doc(db, 'patients', id)));
+        const relativeDocs = await Promise.all(relativePromises);
+        const fetchedRelatives = relativeDocs
+            .filter(doc => doc.exists())
+            .map(doc => ({ id: doc.id, ...doc.data() } as Patient));
+        setRelatives(fetchedRelatives);
     }
 
     setPatientSearchTerm(patient.phone.replace('+91', ''));
@@ -480,7 +470,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     form.setValue("patientId", relative.id);
     form.setValue("patientName", relative.name);
     form.setValue("age", relative.age);
-    const capitalizedSex = relative.sex.charAt(0).toUpperCase() + relative.sex.slice(1).toLowerCase();
+    const capitalizedSex = relative.sex ? (relative.sex.charAt(0).toUpperCase() + relative.sex.slice(1).toLowerCase()) : "Male";
     form.setValue("sex", capitalizedSex as "Male" | "Female" | "Other");
     form.setValue("phone", relative.phone.replace('+91', ''));
     form.setValue("place", relative.place || "");
@@ -726,17 +716,8 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                             className="flex justify-between items-center"
                                         >
                                           <div>
-                                            {isClinicPatient ? (
-                                                <>
-                                                    {patient.name}
-                                                    <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    {patient.name.substring(0, 2)}***
-                                                    <span className="text-xs text-muted-foreground ml-2">{patient.place}</span>
-                                                </>
-                                            )}
+                                            {patient.name}
+                                            <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
                                           </div>
                                           <Badge variant={isClinicPatient ? "secondary" : "outline"} className={cn(
                                             isClinicPatient ? "text-blue-600 border-blue-500" : "text-amber-600 border-amber-500"
@@ -770,12 +751,12 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                           <Tabs value={bookingFor} onValueChange={(value) => {
                             setBookingFor(value);
                             if (value === 'member' && primaryKloqoMember) {
-                                // Reset form to member's masked info
                                 setSelectedPatient(primaryKloqoMember);
                                 form.setValue("patientId", primaryKloqoMember.id);
                                 form.setValue("patientName", primaryKloqoMember.name);
                                 form.setValue("age", primaryKloqoMember.age);
-                                form.setValue("sex", primaryKloqoMember.sex as "Male" | "Female" | "Other");
+                                const capitalizedSex = primaryKloqoMember.sex ? (primaryKloqoMember.sex.charAt(0).toUpperCase() + primaryKloqoMember.sex.slice(1).toLowerCase()) : "Male";
+                                form.setValue("sex", capitalizedSex as "Male" | "Female" | "Other");
                                 form.setValue("place", primaryKloqoMember.place || "");
                             }
                           }}>
@@ -785,7 +766,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                             </TabsList>
                             <TabsContent value="member" className="mt-4">
                                <div className="text-sm p-4 bg-muted/50 rounded-lg">
-                                  <p><strong>Name:</strong> {primaryKloqoMember!.name.substring(0,2)}***</p>
+                                  <p><strong>Name:</strong> {primaryKloqoMember!.name}</p>
                                   <p><strong>Place:</strong> {primaryKloqoMember!.place}</p>
                                </div>
                             </TabsContent>
@@ -833,14 +814,14 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                             </h3>
                             <div className="grid grid-cols-2 gap-4">
                                 <FormField control={form.control} name="patientName" render={({ field }) => (
-                                    <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} disabled={bookingFor === 'relative' || (!isNewPatient && !isEditing && (!isKloqoMember || (isKloqoMember && bookingFor === 'member')))} value={(isKloqoMember && !isEditing && bookingFor === 'member') ? `${field.value.substring(0,2)}***` : field.value} /></FormControl><FormMessage /></FormItem>
+                                    <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                                 )}/>
                                 <FormField control={form.control} name="age" render={({ field }) => (
-                                    <FormItem><FormLabel>Age</FormLabel><FormControl><Input type="number" {...field} disabled={bookingFor === 'relative' || (!isNewPatient && !isEditing && (!isKloqoMember || (isKloqoMember && bookingFor === 'member')))} value={(isKloqoMember && !isEditing && bookingFor === 'member') ? '**' : field.value}/></FormControl><FormMessage /></FormItem>
+                                    <FormItem><FormLabel>Age</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
                                 )}/>
                                 <FormField control={form.control} name="sex" render={({ field }) => (
                                     <FormItem><FormLabel>Gender</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value} disabled={bookingFor === 'relative' || (!isNewPatient && !isEditing && (!isKloqoMember || (isKloqoMember && bookingFor === 'member')))}>
+                                    <Select onValueChange={field.onChange} value={field.value}>
                                         <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
                                         <SelectContent>
                                             <SelectItem value="Male">Male</SelectItem>
@@ -851,7 +832,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                     <FormMessage /></FormItem>
                                 )}/>
                                  <FormField control={form.control} name="place" render={({ field }) => (
-                                    <FormItem><FormLabel>Place</FormLabel><FormControl><Input {...field} disabled={bookingFor === 'relative' || (!isNewPatient && !isEditing && (!isKloqoMember || (isKloqoMember && bookingFor === 'member')))} /></FormControl><FormMessage /></FormItem>
+                                    <FormItem><FormLabel>Place</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                                 )}/>
                             </div>
                             <FormField control={form.control} name="bookedVia" render={({ field }) => (
@@ -1229,4 +1210,3 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
   );
 }
 
-    
