@@ -80,8 +80,8 @@ export type Visit = {
 }
 
 export type Patient = {
-  id: string; // This will be the patient's UID from Firebase Auth
-  clinicId: string;
+  id: string;
+  clinicIds?: string[];
   name: string;
   age: number;
   gender: 'Male' | 'Female' | 'Other';
@@ -90,6 +90,8 @@ export type Patient = {
   place?: string;
   totalAppointments: number;
   visitHistory?: Visit[];
+  createdAt: any; // Can be Date or Firestore Timestamp
+  updatedAt: any; // Can be Date or Firestore Timestamp
 };
 
 export type Activity = {

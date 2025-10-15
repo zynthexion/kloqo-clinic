@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useState, useMemo, useRef, useTransition } from "react";
+import { useEffect, useState, useMemo, useRef, useTransition, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -39,7 +39,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link } from "lucide-react";
+import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown } from "lucide-react";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
@@ -114,7 +114,7 @@ export default function AppointmentsPage() {
 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [allPatients, setAllPatients] = useState<Patient[]>([]);
+  const [clinicId, setClinicId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
@@ -154,26 +154,31 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
   
   const patientInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (patientSearchTerm.length > 1) {
-      const results = allPatients.filter(p =>
-        p.phone.includes(patientSearchTerm)
-      );
-      setPatientSearchResults(results);
-      if (results.length > 0) {
-        setIsPatientPopoverOpen(true);
-      } else {
-        setIsPatientPopoverOpen(false);
-      }
-    } else {
+  const searchPatients = useCallback(async (searchTerm: string) => {
+    if (searchTerm.length < 10) {
       setPatientSearchResults([]);
       setIsPatientPopoverOpen(false);
+      return;
     }
-  }, [patientSearchTerm, allPatients]);
+    const phoneNumber = `+91${searchTerm}`;
+    const q = query(collection(db, "patients"), where("phone", "==", phoneNumber));
+    const querySnapshot = await getDocs(q);
+    const results = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Patient));
+    setPatientSearchResults(results);
+    setIsPatientPopoverOpen(results.length > 0);
+  }, []);
+
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      searchPatients(patientSearchTerm);
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [patientSearchTerm, searchPatients]);
 
 
   useEffect(() => {
-    const fetchAppointmentsAndPatients = async () => {
+    const fetchInitialData = async () => {
       if (!auth.currentUser) {
         setLoading(false);
         return;
@@ -182,24 +187,20 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
         setLoading(true);
         
         const userDoc = await getFirestoreDoc(doc(db, "users", auth.currentUser.uid));
-        const clinicId = userDoc.data()?.clinicId;
-        if (!clinicId) {
+        const userClinicId = userDoc.data()?.clinicId;
+        if (!userClinicId) {
           toast({ variant: "destructive", title: "Error", description: "No clinic associated with this user." });
           setLoading(false);
           return;
         }
+        setClinicId(userClinicId);
 
-        const appointmentsQuery = query(collection(db, "appointments"), where("clinicId", "==", clinicId));
+        const appointmentsQuery = query(collection(db, "appointments"), where("clinicId", "==", userClinicId));
         const appointmentsSnapshot = await getDocs(appointmentsQuery);
         const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
         setAppointments(appointmentsList);
     
-        const patientsQuery = query(collection(db, "patients"), where("clinicId", "==", clinicId));
-        const patientsSnapshot = await getDocs(patientsQuery);
-        const patientsList = patientsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Patient));
-        setAllPatients(patientsList);
-    
-        const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
+        const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", userClinicId));
         const doctorsSnapshot = await getDocs(doctorsQuery);
         const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
         setDoctors(doctorsList);
@@ -217,7 +218,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     };
 
     if (auth.currentUser) {
-      fetchAppointmentsAndPatients();
+      fetchInitialData();
     }
   }, [auth.currentUser, toast]);
 
@@ -240,8 +241,17 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
         const doctor = doctors.find(d => d.name === editingAppointment.doctor);
         if (doctor) {
             const appointmentDate = parse(editingAppointment.date, "d MMMM yyyy", new Date());
-            const patient = allPatients.find(p => p.phone === editingAppointment.phone);
-            setSelectedPatient(patient || null);
+
+            const loadPatientForEditing = async () => {
+              if (editingAppointment.patientId) {
+                const patientDoc = await getFirestoreDoc(doc(db, "patients", editingAppointment.patientId));
+                if (patientDoc.exists()) {
+                    setSelectedPatient(patientDoc.data() as Patient);
+                }
+              }
+            }
+            loadPatientForEditing();
+
             form.reset({
                 ...editingAppointment,
                 date: isNaN(appointmentDate.getTime()) ? undefined : appointmentDate,
@@ -249,13 +259,13 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                 time: format(parseDateFns(editingAppointment.time, "hh:mm a", new Date()), 'HH:mm'),
                 bookedVia: (editingAppointment.bookedVia === "Phone" || editingAppointment.bookedVia === "Walk-in" || editingAppointment.bookedVia === "Online") ? editingAppointment.bookedVia : "Phone"
             });
-            setPatientSearchTerm(editingAppointment.phone);
+            setPatientSearchTerm(editingAppointment.phone.replace('+91', ''));
             setSelectedDoctorId(doctor.id);
         }
     } else {
         resetForm();
     }
-  }, [editingAppointment, form, doctors, allPatients]);
+  }, [editingAppointment, form, doctors]);
 
 
   const selectedDoctor = useMemo(() => {
@@ -266,27 +276,41 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
 
 
   async function onSubmit(values: AppointmentFormValues) {
-    if (!auth.currentUser) {
+    if (!auth.currentUser || !clinicId) {
         toast({ variant: "destructive", title: "Not Authenticated", description: "You must be logged in to book an appointment."});
-        return;
-    }
-    if (!selectedPatient && !isEditing) {
-        toast({ variant: "destructive", title: "No Patient Selected", description: "Please select a patient before booking."});
         return;
     }
     
     startTransition(async () => {
         try {
-          const userDoc = await getFirestoreDoc(doc(db, "users", auth.currentUser!.uid));
-          const clinicId = userDoc.data()?.clinicId;
-          if (!clinicId) {
-            toast({ variant: "destructive", title: "Error", description: "No clinic associated with this user." });
-            return;
+          let patientId = isEditing ? values.patientId : selectedPatient?.id;
+          let patientDataForApt = selectedPatient;
+          
+          const isKloqoMember = selectedPatient && !selectedPatient.clinicIds?.includes(clinicId);
+
+          if (!patientId || isKloqoMember) {
+             const newPatientId = patientId || doc(collection(db, "patients")).id;
+             const patientRef = doc(db, 'patients', newPatientId);
+
+             const patientToSave: Patient = {
+                  id: newPatientId,
+                  name: values.patientName,
+                  age: values.age,
+                  gender: values.gender,
+                  phone: `+91${values.phone}`,
+                  place: values.place,
+                  clinicIds: arrayUnion(clinicId),
+                  ...(selectedPatient ? { visitHistory: selectedPatient.visitHistory || [], totalAppointments: selectedPatient.totalAppointments || 0 } : {visitHistory: [], totalAppointments: 0}),
+                  createdAt: selectedPatient?.createdAt || new Date(),
+                  updatedAt: new Date(),
+             }
+             await setDoc(patientRef, patientToSave, { merge: true });
+             patientId = newPatientId;
+             patientDataForApt = patientToSave;
           }
 
-          const patientId = isEditing ? values.patientId : selectedPatient?.id;
-          if (!patientId) {
-             toast({ variant: "destructive", title: "Error", description: "Patient ID is missing." });
+          if (!patientId || !patientDataForApt) {
+             toast({ variant: "destructive", title: "Error", description: "Could not create or find patient." });
              return;
           }
           const patientRef = doc(db, 'patients', patientId);
@@ -301,8 +325,8 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
           
           const dataToSave: Appointment = {
               ...values,
-              phone: selectedPatient?.phone || values.phone,
-              patientName: selectedPatient?.name || values.patientName,
+              phone: patientDataForApt.phone,
+              patientName: patientDataForApt.name,
               id: appointmentId,
               patientId: patientId,
               date: appointmentDateStr,
@@ -395,21 +419,30 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
 
   const handlePatientSelect = (patient: Patient) => {
     setSelectedPatient(patient);
+    form.setValue("patientId", patient.id);
     form.setValue("patientName", patient.name);
     form.setValue("age", patient.age);
     form.setValue("gender", patient.gender);
     form.setValue("phone", patient.phone.replace('+91', ''));
     form.setValue("place", patient.place || "");
-    setPatientSearchTerm(patient.phone);
+    setPatientSearchTerm(patient.phone.replace('+91', ''));
     setIsPatientPopoverOpen(false);
+
+    if (!patient.clinicIds?.includes(clinicId!)) {
+      // It's a Kloqo member, but not from this clinic. Enable fields for booking.
+    } else {
+      // It's a patient from this clinic.
+    }
   }
   
     const handlePatientSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setPatientSearchTerm(e.target.value);
+        const value = e.target.value.replace(/\D/g, '');
+        setPatientSearchTerm(value);
         if (selectedPatient) {
             setSelectedPatient(null);
-            form.reset({
+             form.reset({
                 ...form.getValues(),
+                patientId: undefined,
                 patientName: "", age: 0, gender: "Male", place: ""
             })
         }
@@ -575,6 +608,9 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
   const today = format(new Date(), "d MMMM yyyy");
   const todaysAppointments = filteredAppointments.filter(apt => apt.date === today);
 
+  const isNewPatient = patientSearchTerm.length >= 10 && !selectedPatient;
+  const isKloqoMember = selectedPatient && !selectedPatient.clinicIds?.includes(clinicId!);
+
   return (
     <>
       <header className="flex h-14 items-center gap-4 border-b bg-background px-4 sm:px-6">
@@ -613,10 +649,11 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                     <FormControl>
                                     <Input
                                         ref={patientInputRef}
-                                        placeholder="Start typing phone number..."
+                                        placeholder="Start typing 10-digit phone number..."
                                         value={patientSearchTerm}
                                         onChange={handlePatientSearchChange}
                                         className="pl-8"
+                                        maxLength={10}
                                     />
                                     </FormControl>
                                 </div>
@@ -624,16 +661,25 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                             <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
                                 <Command>
                                 <CommandList>
-                                    <CommandEmpty>No patient found in this clinic.</CommandEmpty>
+                                    <CommandEmpty>No patient found.</CommandEmpty>
                                     <CommandGroup>
                                     {patientSearchResults.map((patient) => (
                                         <CommandItem
-                                        key={patient.id}
-                                        value={patient.phone}
-                                        onSelect={() => handlePatientSelect(patient)}
+                                            key={patient.id}
+                                            value={patient.phone}
+                                            onSelect={() => handlePatientSelect(patient)}
+                                            className="flex justify-between items-center"
                                         >
-                                        {patient.name}
-                                        <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
+                                          <div>
+                                            {patient.name}
+                                            <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
+                                          </div>
+                                          {!patient.clinicIds?.includes(clinicId!) && (
+                                            <Badge variant="outline" className="flex items-center gap-1 text-amber-600 border-amber-500">
+                                              <Crown className="h-3 w-3" />
+                                              Kloqo Member
+                                            </Badge>
+                                          )}
                                         </CommandItem>
                                     ))}
                                     </CommandGroup>
@@ -645,32 +691,45 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                         </FormItem>
                          <div className="flex justify-end">
                             <Button type="button" variant="secondary" disabled={!patientSearchTerm || patientSearchResults.length > 0}>
-                                <Link className="mr-2 h-4 w-4" />
+                                <LinkIcon className="mr-2 h-4 w-4" />
                                 Send Booking Link
                             </Button>
                         </div>
                     </div>
-                    {(selectedPatient || isEditing) && (
+                    {(selectedPatient || isNewPatient || isEditing) && (
                     <div className={cn("grid grid-cols-1 gap-x-8 gap-y-4 pt-4 border-t", !isDrawerExpanded && "md:grid-cols-3")}>
                       <div className="space-y-4 md:col-span-1">
-                        <h3 className="text-lg font-medium border-b pb-2">Patient Details</h3>
+                        <h3 className="text-lg font-medium border-b pb-2 flex items-center justify-between">
+                            Patient Details
+                            {isKloqoMember && (
+                                <Badge variant="outline" className="flex items-center gap-1 text-amber-600 border-amber-500">
+                                    <Crown className="h-3 w-3" />
+                                    Kloqo Member
+                                </Badge>
+                            )}
+                        </h3>
                         <div className="grid grid-cols-2 gap-4">
-                            <FormItem>
-                                <FormLabel>Name</FormLabel>
-                                <FormControl><Input readOnly value={form.watch('patientName') ?? ''} /></FormControl>
-                            </FormItem>
-                            <FormItem>
-                                <FormLabel>Age</FormLabel>
-                                <FormControl><Input readOnly value={form.watch('age') !== undefined ? form.watch('age') : ''} /></FormControl>
-                            </FormItem>
-                            <FormItem>
-                                <FormLabel>Gender</FormLabel>
-                                <FormControl><Input readOnly value={form.watch('gender') ?? ''} /></FormControl>
-                            </FormItem>
-                            <FormItem>
-                                <FormLabel>Place</FormLabel>
-                                <FormControl><Input readOnly value={form.watch('place') ?? ''} /></FormControl>
-                            </FormItem>
+                            <FormField control={form.control} name="patientName" render={({ field }) => (
+                                <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} disabled={!isNewPatient && !isKloqoMember} /></FormControl><FormMessage /></FormItem>
+                            )}/>
+                            <FormField control={form.control} name="age" render={({ field }) => (
+                                <FormItem><FormLabel>Age</FormLabel><FormControl><Input type="number" {...field} disabled={!isNewPatient && !isKloqoMember} /></FormControl><FormMessage /></FormItem>
+                            )}/>
+                            <FormField control={form.control} name="gender" render={({ field }) => (
+                                <FormItem><FormLabel>Gender</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value} disabled={!isNewPatient && !isKloqoMember}>
+                                    <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="Male">Male</SelectItem>
+                                        <SelectItem value="Female">Female</SelectItem>
+                                        <SelectItem value="Other">Other</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <FormMessage /></FormItem>
+                            )}/>
+                             <FormField control={form.control} name="place" render={({ field }) => (
+                                <FormItem><FormLabel>Place</FormLabel><FormControl><Input {...field} disabled={!isNewPatient && !isKloqoMember} /></FormControl><FormMessage /></FormItem>
+                            )}/>
                         </div>
                         <FormField control={form.control} name="bookedVia" render={({ field }) => (
                             <FormItem className="space-y-3">
@@ -789,7 +848,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                       )}
                     </div>
                     )}
-                    {(selectedPatient || isEditing) && (
+                    {(selectedPatient || isNewPatient || isEditing) && (
                     <div className="flex justify-end items-center pt-4">
                       <div className="flex justify-end gap-2">
                           {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
@@ -1038,5 +1097,3 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     </>
   );
 }
-
-    
