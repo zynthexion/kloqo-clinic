@@ -39,7 +39,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown } from "lucide-react";
+import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck } from "lucide-react";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
@@ -437,15 +437,18 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
   
     const handlePatientSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value.replace(/\D/g, '');
-        setPatientSearchTerm(value);
-        if (selectedPatient) {
+        if (selectedPatient && value !== selectedPatient.phone.replace('+91', '')) {
             setSelectedPatient(null);
-             form.reset({
+            form.reset({
                 ...form.getValues(),
                 patientId: undefined,
-                patientName: "", age: 0, gender: "Male", place: ""
-            })
+                patientName: "",
+                age: 0,
+                gender: "Male",
+                place: "",
+            });
         }
+        setPatientSearchTerm(value);
     };
 
 
@@ -663,7 +666,9 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                 <CommandList>
                                     <CommandEmpty>No patient found.</CommandEmpty>
                                     <CommandGroup>
-                                    {patientSearchResults.map((patient) => (
+                                    {patientSearchResults.map((patient) => {
+                                        const isClinicPatient = patient.clinicIds?.includes(clinicId!);
+                                        return (
                                         <CommandItem
                                             key={patient.id}
                                             value={patient.phone}
@@ -671,17 +676,30 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                             className="flex justify-between items-center"
                                         >
                                           <div>
-                                            {patient.name}
-                                            <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
+                                            {isClinicPatient ? (
+                                                <>
+                                                    {patient.name}
+                                                    <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    {patient.name.substring(0, 2)}***
+                                                    <span className="text-xs text-muted-foreground ml-2">{patient.place}</span>
+                                                </>
+                                            )}
                                           </div>
-                                          {!patient.clinicIds?.includes(clinicId!) && (
-                                            <Badge variant="outline" className="flex items-center gap-1 text-amber-600 border-amber-500">
-                                              <Crown className="h-3 w-3" />
-                                              Kloqo Member
-                                            </Badge>
-                                          )}
+                                          <Badge variant={isClinicPatient ? "secondary" : "outline"} className={cn(
+                                            isClinicPatient ? "text-blue-600 border-blue-500" : "text-amber-600 border-amber-500"
+                                          )}>
+                                            {isClinicPatient ? (
+                                                <UserCheck className="mr-1.5 h-3 w-3"/>
+                                            ) : (
+                                                <Crown className="mr-1.5 h-3 w-3" />
+                                            )}
+                                            {isClinicPatient ? "Existing Patient" : "Kloqo Member"}
+                                          </Badge>
                                         </CommandItem>
-                                    ))}
+                                    )})}
                                     </CommandGroup>
                                 </CommandList>
                                 </Command>
