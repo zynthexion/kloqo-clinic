@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useTransition, useCallback } from "react";
@@ -153,6 +152,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
       age: 0,
       sex: "Male",
       doctor: "",
+      department: "",
       date: undefined,
       time: undefined,
       place: "",
@@ -232,7 +232,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     }
   }, [auth.currentUser, toast]);
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setEditingAppointment(null);
     setSelectedDoctorId(null);
     setPatientSearchTerm("");
@@ -241,13 +241,18 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     setRelatives([]);
     setBookingFor('member');
     form.reset({
-      patientName: "", sex: "Male", phone: "", age: 0, doctor: "",
+      patientName: "",
+      phone: "",
+      age: 0,
+      sex: "Male",
+      doctor: "",
       department: "",
-      date: undefined, time: undefined,
+      date: undefined,
+      time: undefined,
       place: "",
       bookedVia: "Phone",
     });
-  }
+  }, [form]);
 
   useEffect(() => {
     if (editingAppointment) {
@@ -278,7 +283,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     } else {
         resetForm();
     }
-  }, [editingAppointment, form, doctors]);
+  }, [editingAppointment, form, doctors, resetForm]);
 
 
   const selectedDoctor = useMemo(() => {
@@ -420,6 +425,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
   };
 
   const onDoctorChange = (doctorId: string) => {
+    form.setValue("doctor", doctorId, { shouldValidate: true });
     setSelectedDoctorId(doctorId);
     const doctor = doctors.find(d => d.id === doctorId);
     if (doctor) {
@@ -440,7 +446,11 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     if (isKloqoMember) {
         form.setValue("patientId", patient.id);
         form.setValue("phone", patient.phone.replace('+91', ''));
-        // Don't fill PII for kloqo members initially
+        form.setValue("patientName", patient.name);
+        form.setValue("age", patient.age);
+        const capitalizedSex = patient.sex ? (patient.sex.charAt(0).toUpperCase() + patient.sex.slice(1).toLowerCase()) : "Male";
+        form.setValue("sex", capitalizedSex as "Male" | "Female" | "Other");
+        form.setValue("place", patient.place || "");
         if (patient.relatedPatientIds && patient.relatedPatientIds.length > 0) {
             const relativePromises = patient.relatedPatientIds.map(id => getFirestoreDoc(doc(db, 'patients', id)));
             const relativeDocs = await Promise.all(relativePromises);
@@ -454,7 +464,8 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
         form.setValue("patientId", patient.id);
         form.setValue("patientName", patient.name);
         form.setValue("age", patient.age);
-        form.setValue("sex", patient.sex);
+        const capitalizedSex = patient.sex ? (patient.sex.charAt(0).toUpperCase() + patient.sex.slice(1).toLowerCase()) : "Male";
+        form.setValue("sex", capitalizedSex as "Male" | "Female" | "Other");
         form.setValue("phone", patient.phone.replace('+91', ''));
         form.setValue("place", patient.place || "");
     }
@@ -764,7 +775,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                 form.setValue("patientId", primaryKloqoMember.id);
                                 form.setValue("patientName", primaryKloqoMember.name);
                                 form.setValue("age", primaryKloqoMember.age);
-                                form.setValue("sex", primaryKloqoMember.sex);
+                                form.setValue("sex", primaryKloqoMember.sex as "Male" | "Female" | "Other");
                                 form.setValue("place", primaryKloqoMember.place || "");
                             }
                           }}>
@@ -866,9 +877,39 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                           {!isDrawerExpanded && (
                           <>
                               <div className="space-y-4 md:col-span-1">
-                                  <h3 className="text-lg font-medium border-b pb-2">Select Date</h3>
-                                <FormField control={form.control} name="date" render={({ field }) => (
+                                  <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
+                                  <div className="space-y-4">
+                                  <FormField control={form.control} name="doctor" render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>Doctor</FormLabel>
+                                        <Select onValueChange={onDoctorChange} value={field.value}>
+                                          <FormControl>
+                                            <SelectTrigger>
+                                              <SelectValue placeholder="Select a doctor" />
+                                            </SelectTrigger>
+                                          </FormControl>
+                                          <SelectContent>
+                                            {doctors.map(doc => (
+                                              <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )} />
+                                    <FormField control={form.control} name="department" render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>Department</FormLabel>
+                                        <FormControl>
+                                          <Input readOnly placeholder="Department" {...field} value={field.value ?? ''} />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )} />
+                               </div>
+                               <FormField control={form.control} name="date" render={({ field }) => (
                                     <FormItem className="flex flex-col">
+                                       <FormLabel>Select Date</FormLabel>
                                         <Calendar
                                             className="bg-primary text-primary-foreground rounded-md [&_button:hover]:bg-primary/80 [&_.rdp-day_today]:bg-primary-foreground/20 [&_button]:text-primary-foreground"
                                             mode="single"
@@ -897,64 +938,33 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                               </div>
 
                               <div className="space-y-4 md:col-span-1">
-                                  <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
-                                  <div className="space-y-4">
-                                  <FormField control={form.control} name="doctor" render={({ field }) => (
-                                      <FormItem>
-                                        <FormLabel>Doctor</FormLabel>
-                                        <Select onValueChange={(value) => { field.onChange(value); onDoctorChange(value); }} value={field.value}>
-                                          <FormControl>
-                                            <SelectTrigger>
-                                              <SelectValue placeholder="Select a doctor" />
-                                            </SelectTrigger>
-                                          </FormControl>
-                                          <SelectContent>
-                                            {doctors.map(doc => (
-                                              <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
-                                            ))}
-                                          </SelectContent>
-                                        </Select>
+                                {selectedDoctor && selectedDate && (
+                                    <FormField control={form.control} name="time" render={({ field }) => (
+                                        <FormItem>
+                                        <FormLabel>Select Time Slot</FormLabel>
+                                        <div className="grid grid-cols-2 gap-2 max-h-96 overflow-y-auto pr-2">
+                                            {timeSlots.length > 0 ? timeSlots.map(slot => (
+                                                <Button
+                                                  key={slot.time}
+                                                  type="button"
+                                                  variant={field.value === format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm') ? "default" : "outline"}
+                                                  onClick={() => {
+                                                    const val = format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm');
+                                                    field.onChange(val);
+                                                    if (val) form.clearErrors("time");
+                                                  }}
+                                                  disabled={slot.disabled}
+                                                  className={cn("text-xs", slot.disabled && "line-through")}
+                                                >
+                                                  {slot.time}
+                                                </Button>
+                                            )) : <p className="text-sm text-muted-foreground col-span-2">No available slots for this day.</p>}
+                                        </div>
                                         <FormMessage />
-                                      </FormItem>
-                                    )} />
-                                    <FormField control={form.control} name="department" render={({ field }) => (
-                                      <FormItem>
-                                        <FormLabel>Department</FormLabel>
-                                        <FormControl>
-                                          <Input readOnly placeholder="Department" {...field} value={field.value ?? ''} />
-                                        </FormControl>
-                                        <FormMessage />
-                                      </FormItem>
-                                    )} />
-                               </div>
-
-                              {selectedDoctor && selectedDate && (
-                                  <FormField control={form.control} name="time" render={({ field }) => (
-                                      <FormItem>
-                                      <FormLabel>Select Time Slot</FormLabel>
-                                      <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-2">
-                                          {timeSlots.length > 0 ? timeSlots.map(slot => (
-                                              <Button
-                                                key={slot.time}
-                                                type="button"
-                                                variant={field.value === format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm') ? "default" : "outline"}
-                                                onClick={() => {
-                                                  const val = format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm');
-                                                  field.onChange(val);
-                                                  if (val) form.clearErrors("time");
-                                                }}
-                                                disabled={slot.disabled}
-                                                className={cn("text-xs", slot.disabled && "line-through")}
-                                              >
-                                                {slot.time}
-                                              </Button>
-                                          )) : <p className="text-sm text-muted-foreground col-span-2">No available slots for this day.</p>}
-                                      </div>
-                                      <FormMessage />
-                                      </FormItem>
-                                  )}
-                                  />
-                              )}
+                                        </FormItem>
+                                    )}
+                                    />
+                                )}
                               </div>
                           </>
                           )}
@@ -1218,3 +1228,5 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     </>
   );
 }
+
+    
