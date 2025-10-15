@@ -1300,7 +1300,7 @@ export default function DoctorsPage() {
                                                 <div className="flex flex-wrap gap-2 items-center mt-2">
                                                     {slot.timeSlots.map((ts, i) => (
                                                         <Badge key={i} variant="outline" className="text-sm group relative pr-7">
-                                                            {format(parseDateFns(ts.from, "hh:mm a", new Date()), 'p')} - {format(parseDateFns(ts.to, "hh:mm a", new Date()), 'p')}
+                                                            {ts.from} - {ts.to}
                                                             <button 
                                                                 onClick={() => handleDeleteTimeSlot(slot.day, ts)}
                                                                 className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -1386,6 +1386,8 @@ export default function DoctorsPage() {
     </>
   );
 }
+
+    
 
     
 
