@@ -33,7 +33,7 @@ import type { Patient, NewRelative } from "@/lib/types";
 const formSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters."),
   age: z.coerce.number().min(0, "Age cannot be negative."),
-  gender: z.enum(["Male", "Female", "Other"]),
+  sex: z.enum(["Male", "Female", "Other"]),
   phone: z.string().optional(),
   place: z.string().min(2, "Place is required."),
 });
@@ -61,7 +61,7 @@ export function AddRelativeDialog({
     defaultValues: {
       name: "",
       age: 0,
-      gender: "Male",
+      sex: "Male",
       phone: "",
       place: "",
     },
@@ -78,7 +78,7 @@ export function AddRelativeDialog({
           id: newRelativeId,
           name: values.name,
           age: values.age,
-          gender: values.gender,
+          sex: values.sex,
           phone: values.phone ? `+91${values.phone}` : "",
           place: values.place,
           totalAppointments: 0,
@@ -152,7 +152,7 @@ export function AddRelativeDialog({
                 />
                 <FormField
                 control={form.control}
-                name="gender"
+                name="sex"
                 render={({ field }) => (
                     <FormItem>
                     <FormLabel>Gender</FormLabel>

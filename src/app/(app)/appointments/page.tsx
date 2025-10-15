@@ -63,7 +63,7 @@ import { AddRelativeDialog } from "@/components/patients/add-relative-dialog";
 const formSchema = z.object({
   id: z.string().optional(),
   patientName: z.string().min(2, { message: "Name must be at least 2 characters." }),
-  gender: z.enum(["Male", "Female", "Other"]),
+  sex: z.enum(["Male", "Female", "Other"]),
   phone: z.string().min(10, { message: "Phone number must be at least 10 digits." }),
   age: z.coerce.number().min(0, "Age cannot be negative."),
   doctor: z.string().min(1, { message: "Please select a doctor." }),
@@ -235,7 +235,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     setSelectedPatient(null);
     setPrimaryKloqoMember(null);
     form.reset({
-      patientName: "", gender: "Male", phone: "", age: 0, doctor: "",
+      patientName: "", sex: "Male", phone: "", age: 0, doctor: "",
       department: "",
       date: undefined, time: undefined,
       place: "",
@@ -303,7 +303,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                   id: newPatientId,
                   name: values.patientName,
                   age: values.age,
-                  gender: values.gender,
+                  sex: values.sex,
                   phone: `+91${values.phone}`,
                   place: values.place,
                   clinicIds: arrayUnion(clinicId),
@@ -449,7 +449,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
         form.setValue("patientId", patient.id);
         form.setValue("patientName", patient.name);
         form.setValue("age", patient.age);
-        form.setValue("gender", patient.gender);
+        form.setValue("sex", patient.sex);
         form.setValue("phone", patient.phone.replace('+91', ''));
         form.setValue("place", patient.place || "");
     }
@@ -459,11 +459,12 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
   }
 
   const handleRelativeSelect = (relative: Patient) => {
+    setBookingFor('relative');
     setSelectedPatient(relative);
     form.setValue("patientId", relative.id);
     form.setValue("patientName", relative.name);
     form.setValue("age", relative.age);
-    form.setValue("gender", relative.gender);
+    form.setValue("sex", relative.sex);
     form.setValue("phone", relative.phone.replace('+91', ''));
     form.setValue("place", relative.place || "");
     toast({ title: `Selected Relative: ${relative.name}`, description: "You are now booking an appointment for the selected relative."})
@@ -486,7 +487,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
         patientId: undefined,
         patientName: "",
         age: 0,
-        gender: "Male",
+        sex: "Male",
         place: "",
       });
     }
@@ -787,7 +788,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                                         </Avatar>
                                                         <div>
                                                             <p className="text-sm font-medium">{relative.name}</p>
-                                                            <p className="text-xs text-muted-foreground">{relative.gender}, {relative.age} years</p>
+                                                            <p className="text-xs text-muted-foreground">{relative.sex}, {relative.age} years</p>
                                                         </div>
                                                     </div>
                                                     <Button variant="outline" size="sm" onClick={() => handleRelativeSelect(relative)}>Book</Button>
@@ -819,7 +820,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                 <FormField control={form.control} name="age" render={({ field }) => (
                                     <FormItem><FormLabel>Age</FormLabel><FormControl><Input type="number" {...field} disabled={!isNewPatient && !isEditing && isKloqoMember && bookingFor === 'member'} value={(isKloqoMember && !isEditing && bookingFor === 'member') ? '**' : field.value}/></FormControl><FormMessage /></FormItem>
                                 )}/>
-                                <FormField control={form.control} name="gender" render={({ field }) => (
+                                <FormField control={form.control} name="sex" render={({ field }) => (
                                     <FormItem><FormLabel>Gender</FormLabel>
                                     <Select onValueChange={field.onChange} value={field.value} disabled={!isNewPatient && !isEditing && isKloqoMember && bookingFor === 'member'}>
                                         <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
@@ -1077,7 +1078,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                           <TableRow key={appointment.id} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
                             <TableCell className="font-medium">{appointment.patientName}</TableCell>
                             <TableCell>{appointment.age}</TableCell>
-                            <TableCell>{appointment.gender}</TableCell>
+                            <TableCell>{appointment.sex}</TableCell>
                             <TableCell>{appointment.phone}</TableCell>
                             <TableCell>{appointment.place}</TableCell>
                             <TableCell>{appointment.doctor}</TableCell>
@@ -1210,5 +1211,3 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     </>
   );
 }
-
-    

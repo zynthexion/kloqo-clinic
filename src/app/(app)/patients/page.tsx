@@ -240,7 +240,7 @@ export default function PatientsPage() {
                       <TableRow key={patient.id}>
                         <TableCell className="font-medium">{patient.name}</TableCell>
                         <TableCell>{patient.age}</TableCell>
-                        <TableCell>{patient.gender}</TableCell>
+                        <TableCell>{patient.sex}</TableCell>
                         <TableCell>{patient.phone}</TableCell>
                         <TableCell>{lastVisit ? lastVisit.date : 'N/A'}</TableCell>
                         <TableCell>{lastVisit ? lastVisit.doctor : 'N/A'}</TableCell>
@@ -286,5 +286,3 @@ export default function PatientsPage() {
     </>
   );
 }
-
-    

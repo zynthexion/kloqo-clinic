@@ -53,7 +53,7 @@ export type Appointment = {
   patientId: string;
   doctorId?: string; // Made optional
   patientName: string;
-  gender: 'Male' | 'Female' | 'Other';
+  sex: 'Male' | 'Female' | 'Other';
   phone: string;
   age: number;
   doctor: string;
@@ -84,7 +84,7 @@ export type Patient = {
   clinicIds?: string[];
   name: string;
   age: number;
-  gender: 'Male' | 'Female' | 'Other';
+  sex: 'Male' | 'Female' | 'Other';
   phone: string;
   email?: string;
   place?: string;

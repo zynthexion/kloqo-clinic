@@ -98,7 +98,7 @@ export default function PatientHistoryPage() {
                 <CardHeader>
                   <CardTitle>{patient.name}</CardTitle>
                   <CardDescription>
-                    {patient.gender}, {patient.age} years old
+                    {patient.sex}, {patient.age} years old
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -189,5 +189,3 @@ export default function PatientHistoryPage() {
     </>
   );
 }
-
-    
