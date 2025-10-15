@@ -135,6 +135,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
 
   const [newPatientFieldsEnabled, setNewPatientFieldsEnabled] = useState(false);
   const [isCheckingPhone, setIsCheckingPhone] = useState(false);
+  const [isKloqoMember, setIsKloqoMember] = useState(false);
 
 
   const { toast } = useToast();
@@ -224,6 +225,8 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     setEditingAppointment(null);
     setSelectedDoctorId(null);
     setPatientSearchTerm("");
+    setIsKloqoMember(false);
+    setNewPatientFieldsEnabled(false);
     form.reset({
       patientName: "", gender: "Male", phone: "", age: 0, doctor: "",
       department: "",
@@ -277,37 +280,41 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
             return;
           }
 
-          const patientsQuery = query(collection(db, "patients"), where("phone", "==", values.phone), where("clinicId", "==", clinicId));
+          const fullPhoneNumber = `+91${values.phone}`;
+          const patientsQuery = query(collection(db, "patients"), where("phone", "==", fullPhoneNumber));
           const patientSnapshot = await getDocs(patientsQuery);
 
           let patientId: string;
           let patientRef: any;
 
           if (!patientSnapshot.empty) {
-            patientId = patientSnapshot.docs[0].id;
             patientRef = patientSnapshot.docs[0].ref;
+            patientId = patientRef.id;
+            // Add clinicId to existing patient if not already there
+            const patientData = patientSnapshot.docs[0].data();
+            const clinicIds = patientData.clinicIds || [];
+            if (!clinicIds.includes(clinicId)) {
+                await updateDoc(patientRef, {
+                    clinicIds: arrayUnion(clinicId)
+                });
+            }
           } else {
             patientRef = doc(collection(db, "patients"));
             patientId = patientRef.id;
-            const newPatientData: Patient = {
-              id: patientId,
-              clinicId,
+            const newPatientData: Omit<Patient, 'id'> & { createdAt: Date, updatedAt: Date, clinicIds: string[] } = {
+              clinicIds: [clinicId],
               name: values.patientName,
               age: values.age,
               gender: values.gender,
-              phone: values.phone,
+              phone: fullPhoneNumber,
               place: values.place,
               totalAppointments: 0,
               visitHistory: [],
+              createdAt: new Date(),
+              updatedAt: new Date(),
             };
             await setDoc(patientRef, newPatientData);
-            
-            const clinicRef = doc(db, "clinics", clinicId);
-            await updateDoc(clinicRef, {
-                patients: arrayUnion(patientId)
-            });
-
-            setAllPatients(prev => [...prev, newPatientData]);
+            setAllPatients(prev => [...prev, { ...newPatientData, id: patientId, clinicId }]);
           }
           
           const doctorName = doctors.find(d => d.id === values.doctor)?.name || "Unknown Doctor";
@@ -320,6 +327,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
           
           const dataToSave: Appointment = {
               ...values,
+              phone: fullPhoneNumber,
               id: appointmentId,
               patientId: patientId,
               date: appointmentDateStr,
@@ -340,12 +348,13 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
               time: appointmentTimeStr,
               doctor: doctorName,
               department: values.department,
+              status: "Pending",
               treatment: "General Consultation",
-              status: "Pending"
           };
            await updateDoc(patientRef, {
               visitHistory: arrayUnion(newVisit),
-              totalAppointments: increment(1)
+              totalAppointments: increment(1),
+              updatedAt: new Date(),
           });
 
 
@@ -412,7 +421,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     form.setValue("patientName", patient.name);
     form.setValue("age", patient.age);
     form.setValue("gender", patient.gender);
-    form.setValue("phone", patient.phone);
+    form.setValue("phone", patient.phone.replace('+91', ''));
     form.setValue("place", patient.place || "");
     setPatientSearchTerm(patient.phone);
     setIsPatientPopoverOpen(false);
@@ -425,14 +434,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
 
   const handleBookingTypeChange = (value: string) => {
     setBookingType(value);
-    setPatientSearchTerm("");
-    form.setValue("patientName", "");
-    form.setValue("age", 0);
-    form.setValue("gender", "Male");
-    form.setValue("phone", "");
-    form.setValue("place", "");
-    setNewPatientFieldsEnabled(false);
-    form.clearErrors();
+    resetForm();
   };
   
     const handleNewPatientPhoneBlur = async () => {
@@ -440,20 +442,43 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
         if (phoneValue.length < 10) return;
 
         setIsCheckingPhone(true);
+        setIsKloqoMember(false);
         try {
+            const userDoc = await getFirestoreDoc(doc(db, "users", auth.currentUser!.uid));
+            const currentClinicId = userDoc.data()?.clinicId;
+
+            const fullPhoneNumber = `+91${phoneValue}`;
             const patientsRef = collection(db, "patients");
-            const q = query(patientsRef, where("phone", "==", phoneValue));
+            const q = query(patientsRef, where("phone", "==", fullPhoneNumber));
             const querySnapshot = await getDocs(q);
 
             if (!querySnapshot.empty) {
                 const existingPatient = querySnapshot.docs[0].data() as Patient;
-                handlePatientSelect(existingPatient);
-                toast({
-                    title: "Patient Found",
-                    description: `${existingPatient.name}'s details have been filled in.`,
-                });
-                setNewPatientFieldsEnabled(true); 
+                const patientClinicIds = (existingPatient as any).clinicIds || [existingPatient.clinicId];
+
+                if (patientClinicIds.includes(currentClinicId)) {
+                    // Patient is already in this clinic, switch to existing user flow
+                    toast({
+                        title: "Patient Found",
+                        description: `This patient is already registered. Switching to existing patient booking.`,
+                    });
+                    setBookingType('existing');
+                    handlePatientSelect(existingPatient);
+                } else {
+                    // Patient exists in another clinic
+                    toast({
+                        title: "Kloqo Member Found",
+                        description: `Patient ${existingPatient.name} is already a Kloqo member. Their details have been filled in.`,
+                    });
+                    setIsKloqoMember(true);
+                    form.setValue("patientName", existingPatient.name);
+                    form.setValue("age", existingPatient.age);
+                    form.setValue("gender", existingPatient.gender);
+                    form.setValue("place", existingPatient.place || "");
+                    setNewPatientFieldsEnabled(true);
+                }
             } else {
+                // New patient
                 toast({
                     title: "New Patient",
                     description: "No existing patient found. Please fill in the details.",
@@ -750,7 +775,10 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                 )}/>
                                 <FormField control={form.control} name="patientName" render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Patient Name</FormLabel>
+                                        <div className="flex justify-between items-center">
+                                            <FormLabel>Patient Name</FormLabel>
+                                            {isKloqoMember && <Badge variant="success">Kloqo Member</Badge>}
+                                        </div>
                                         <FormControl><Input placeholder="Full Name" {...field} value={field.value ?? ''} disabled={!newPatientFieldsEnabled} /></FormControl>
                                         <FormMessage />
                                     </FormItem>
