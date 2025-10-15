@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useTransition } from "react";
@@ -1001,7 +1002,7 @@ export default function DoctorsPage() {
             </div>
 
             {activeTab !== 'analytics' && (
-              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
                   <Card>
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                           <CardTitle className="text-sm font-medium">Avg. Consulting Time</CardTitle>
@@ -1096,24 +1097,26 @@ export default function DoctorsPage() {
                         )}
                     </CardContent>
                   </Card>
-                  <Card>
-                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                          <CardTitle className="text-sm font-medium">Total Patients</CardTitle>
-                          <Users className="h-4 w-4 text-muted-foreground" />
-                      </CardHeader>
-                      <CardContent>
-                          <div className="text-2xl font-bold">{selectedDoctor.totalPatients || 0}</div>
-                      </CardContent>
-                  </Card>
-                  <Card>
-                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                          <CardTitle className="text-sm font-medium">Today's Appointments</CardTitle>
-                          <CalendarDays className="h-4 w-4 text-muted-foreground" />
-                      </CardHeader>
-                      <CardContent className="flex items-center justify-center">
-                          <div className="text-2xl font-bold">{selectedDoctor.todaysAppointments || 0}</div>
-                      </CardContent>
-                  </Card>
+                  <div className="grid grid-cols-2 gap-6">
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Total Patients</CardTitle>
+                            <Users className="h-4 w-4 text-muted-foreground" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">{selectedDoctor.totalPatients || 0}</div>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Today's Appointments</CardTitle>
+                            <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                        </CardHeader>
+                        <CardContent className="flex items-center justify-center">
+                            <div className="text-2xl font-bold">{selectedDoctor.todaysAppointments || 0}</div>
+                        </CardContent>
+                    </Card>
+                  </div>
               </div>
             )}
             
@@ -1266,11 +1269,11 @@ export default function DoctorsPage() {
                                                     <div className="flex flex-wrap gap-1 mt-1">
                                                       {field.timeSlots.map((ts, i) => {
                                                           if (!ts.from || !ts.to) return null;
-                                                            return (
-                                                              <Badge key={i} variant="secondary" className="font-normal">
-                                                                {ts.from} - {ts.to}
-                                                              </Badge>
-                                                            );
+                                                          return (
+                                                            <Badge key={i} variant="secondary" className="font-normal">
+                                                              {format(parseDateFns(ts.from, "HH:mm", new Date()), 'p')} - {format(parseDateFns(ts.to, "HH:mm", new Date()), 'p')}
+                                                            </Badge>
+                                                          );
                                                       })}
                                                     </div>
                                                 </div>
@@ -1386,5 +1389,3 @@ export default function DoctorsPage() {
     </>
   );
 }
-
-    
