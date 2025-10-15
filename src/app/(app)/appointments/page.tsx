@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useTransition, useCallback } from "react";
-import { useForm } from "react-hook-form";
+import { useForm } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import {
@@ -39,7 +39,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck, UserPlus, Users, Plus, X, Clock, Calendar as CalendarLucide, CheckCircle2 } from "lucide-react";
+import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck, UserPlus, Users, Plus, X, Clock, Calendar as CalendarLucide, CheckCircle2, Info } from "lucide-react";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
@@ -74,8 +74,8 @@ const formSchema = z.object({
   department: z.string().min(1, { message: "Department is required." }),
   date: z.date({
     required_error: "A date is required."
-  }),
-  time: z.string().min(1, "Please select a time."),
+  }).optional(),
+  time: z.string().optional(),
   place: z.string().min(2, { message: "Place must be at least 2 characters." }),
   bookedVia: z.enum(["Advanced Booking", "Walk-in"]),
   tokenNumber: z.string().optional(),
@@ -334,8 +334,54 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
         return `${type}${String(nextTokenNum).padStart(3, '0')}`;
     };
 
+    const isWithinBookingWindow = (doctor: Doctor | null): boolean => {
+        if (!doctor || !doctor.availabilitySlots) return false;
+        
+        const now = new Date();
+        const todayStr = format(now, 'EEEE');
+        const todaySlots = doctor.availabilitySlots.find(s => s.day === todayStr);
+
+        if (!todaySlots) {
+            return false;
+        }
+
+        const getTimeOnDate = (timeStr: string, date: Date) => {
+            const newDate = new Date(date);
+            const [time, modifier] = timeStr.split(' ');
+            let [hours, minutes] = time.split(':').map(Number);
+    
+            if (modifier === 'PM' && hours < 12) {
+                hours += 12;
+            }
+            if (modifier === 'AM' && hours === 12) { 
+                hours = 0;
+            }
+    
+            newDate.setHours(hours, minutes, 0, 0);
+            return newDate;
+        };
+
+        for (const session of todaySlots.timeSlots) {
+            const sessionStart = getTimeOnDate(session.from, now);
+            const sessionEnd = getTimeOnDate(session.to, now);
+            const bookingWindowStart = subMinutes(sessionStart, 30);
+            const bookingWindowEnd = subMinutes(sessionEnd, 30);
+    
+            if (now >= bookingWindowStart && now <= bookingWindowEnd) {
+                return true; 
+            }
+        }
+    
+        return false;
+    };
+    
+    const isWalkInAvailable = useMemo(() => {
+        if (appointmentType !== 'Walk-in' || !selectedDoctor) return false;
+        return isWithinBookingWindow(selectedDoctor);
+    }, [appointmentType, selectedDoctor]);
+
     const calculateWalkInDetails = async (): Promise<{ estimatedTime: Date; patientsAhead: number }> => {
-        if (!firestore || !selectedDoctor) throw new Error("Doctor not selected");
+        if (!db || !selectedDoctor) throw new Error("Doctor not selected");
         
         const now = new Date();
         const consultationTime = selectedDoctor.averageConsultingTime || 15;
@@ -352,7 +398,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
         };
 
         const dateStr = format(now, "d MMMM yyyy");
-        const appointmentsRef = collection(firestore, 'appointments');
+        const appointmentsRef = collection(db, 'appointments');
         const q = query(appointmentsRef, where('clinicId', '==', selectedDoctor.clinicId), where('doctor', '==', selectedDoctor.name), where('date', '==', dateStr));
         const querySnapshot = await getDocs(q);
 
@@ -417,55 +463,14 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
         return { estimatedTime, patientsAhead };
     };
 
-    const isWithinBookingWindow = (doctor: Doctor | null): boolean => {
-        if (!doctor || !doctor.availabilitySlots) return false;
-        
-        const now = new Date();
-        const todayStr = format(now, 'EEEE');
-        const todaySlots = doctor.availabilitySlots.find(s => s.day === todayStr);
-
-        if (!todaySlots) {
-            return false;
-        }
-
-        const getTimeOnDate = (timeStr: string, date: Date) => {
-            const newDate = new Date(date);
-            const [time, modifier] = timeStr.split(' ');
-            let [hours, minutes] = time.split(':').map(Number);
-    
-            if (modifier === 'PM' && hours < 12) {
-                hours += 12;
-            }
-            if (modifier === 'AM' && hours === 12) { 
-                hours = 0;
-            }
-    
-            newDate.setHours(hours, minutes, 0, 0);
-            return newDate;
-        };
-
-        for (const session of todaySlots.timeSlots) {
-            const sessionStart = getTimeOnDate(session.from, now);
-            const sessionEnd = getTimeOnDate(session.to, now);
-            const bookingWindowStart = subMinutes(sessionStart, 30);
-            const bookingWindowEnd = subMinutes(sessionEnd, 30);
-    
-            if (now >= bookingWindowStart && now <= bookingWindowEnd) {
-                return true; 
-            }
-        }
-    
-        return false;
-    };
-
   async function onSubmit(values: AppointmentFormValues) {
     if (!auth.currentUser || !clinicId || !selectedDoctor) {
       toast({ variant: "destructive", title: "Error", description: "You must be logged in and select a doctor to book an appointment." });
       return;
     }
 
-    if (appointmentType === 'Walk-in' && !isWithinBookingWindow(selectedDoctor)) {
-        toast({ variant: "destructive", title: "Booking Not Available", description: "Walk-in tokens can only be generated during the doctor's working hours." });
+    if (appointmentType === 'Walk-in' && !isWalkInAvailable) {
+        toast({ variant: "destructive", title: "Booking Not Available", description: "Walk-in tokens are not available for this doctor at this time." });
         return;
     }
   
@@ -564,6 +569,10 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
             setIsEstimateModalOpen(true);
             
         } else { // Advanced Booking
+             if (!values.date || !values.time) {
+                toast({ variant: "destructive", title: "Missing Information", description: "Please select a date and time for the appointment." });
+                return;
+             }
              const appointmentId = isEditing && editingAppointment ? editingAppointment.id : doc(collection(db, "appointments")).id;
              const tokenNumber = isEditing && editingAppointment ? editingAppointment.tokenNumber : await generateNextToken(values.date, 'A');
             
@@ -1013,7 +1022,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                                               <p className="text-xs text-muted-foreground">{relative.sex}, {relative.age} years</p>
                                                           </div>
                                                       </div>
-                                                      <Button variant="outline" size="sm" onClick={() => handleRelativeSelect(relative)}>Book</Button>
+                                                      <Button variant="outline" size="sm" onClick={()={() => handleRelativeSelect(relative)}}>Book</Button>
                                                   </div>
                                               ))}
                                           </ScrollArea>
@@ -1061,7 +1070,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                             </div>
                             <FormField control={form.control} name="bookedVia" render={({ field }) => (
                                 <FormItem className="space-y-3">
-                                    <FormLabel>Booked Via</FormLabel>
+                                    <FormLabel>Booking Type</FormLabel>
                                     <FormControl>
                                         <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4">
                                             <FormItem className="flex items-center space-x-2 space-y-0">
@@ -1081,7 +1090,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                           
                           <div className="space-y-4 md:col-span-1">
                                 <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
-                                {appointmentType === 'Advanced Booking' && (
+                                {appointmentType === 'Advanced Booking' ? (
                                     <FormField control={form.control} name="date" render={({ field }) => (
                                     <FormItem className="flex flex-col">
                                         <FormLabel>Select Date</FormLabel>
@@ -1110,6 +1119,18 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                     </FormItem>
                                     )}
                                 />
+                                ) : (
+                                    <Card className={cn("mt-4", isWalkInAvailable ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200")}>
+                                        <CardHeader className="flex-row items-center gap-3 space-y-0 p-4">
+                                            <Info className={cn("w-6 h-6", isWalkInAvailable ? "text-green-600" : "text-red-600")} />
+                                            <div>
+                                                <CardTitle className="text-base">{isWalkInAvailable ? "Walk-in Available" : "Walk-in Unavailable"}</CardTitle>
+                                                <CardDescription className={cn("text-xs", isWalkInAvailable ? "text-green-800" : "text-red-800")}>
+                                                    {isWalkInAvailable ? "You can book a walk-in appointment now." : "This doctor is not available for walk-ins at this time."}
+                                                </CardDescription>
+                                            </div>
+                                        </CardHeader>
+                                    </Card>
                                 )}
                             </div>
 
@@ -1179,7 +1200,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                     <div className="flex justify-end items-center pt-4">
                       <div className="flex justify-end gap-2">
                           {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
-                          <Button type="submit" disabled={isPending}>
+                          <Button type="submit" disabled={isPending || (appointmentType === 'Walk-in' && !isWalkInAvailable)}>
                             {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
                             {isEditing ? "Save Changes" : "Book Appointment"}
                           </Button>
@@ -1496,4 +1517,4 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
   );
 }
 
-    
+
