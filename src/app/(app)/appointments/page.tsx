@@ -150,6 +150,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
       patientName: "",
       phone: "",
       age: 0,
+      sex: "Male",
       doctor: "",
       date: undefined,
       time: undefined,
@@ -815,14 +816,14 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                             </h3>
                             <div className="grid grid-cols-2 gap-4">
                                 <FormField control={form.control} name="patientName" render={({ field }) => (
-                                    <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} disabled={!isNewPatient && !isEditing && isKloqoMember && bookingFor === 'member'} value={(isKloqoMember && !isEditing && bookingFor === 'member') ? `${field.value.substring(0,2)}***` : field.value} /></FormControl><FormMessage /></FormItem>
+                                    <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} disabled={!isNewPatient && !isEditing && (!isKloqoMember || (isKloqoMember && bookingFor === 'member'))} value={(isKloqoMember && !isEditing && bookingFor === 'member') ? `${field.value.substring(0,2)}***` : field.value} /></FormControl><FormMessage /></FormItem>
                                 )}/>
                                 <FormField control={form.control} name="age" render={({ field }) => (
-                                    <FormItem><FormLabel>Age</FormLabel><FormControl><Input type="number" {...field} disabled={!isNewPatient && !isEditing && isKloqoMember && bookingFor === 'member'} value={(isKloqoMember && !isEditing && bookingFor === 'member') ? '**' : field.value}/></FormControl><FormMessage /></FormItem>
+                                    <FormItem><FormLabel>Age</FormLabel><FormControl><Input type="number" {...field} disabled={!isNewPatient && !isEditing && (!isKloqoMember || (isKloqoMember && bookingFor === 'member'))} value={(isKloqoMember && !isEditing && bookingFor === 'member') ? '**' : field.value}/></FormControl><FormMessage /></FormItem>
                                 )}/>
                                 <FormField control={form.control} name="sex" render={({ field }) => (
                                     <FormItem><FormLabel>Gender</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value} disabled={!isNewPatient && !isEditing && isKloqoMember && bookingFor === 'member'}>
+                                    <Select onValueChange={field.onChange} value={field.value} disabled={!isNewPatient && !isEditing && (!isKloqoMember || (isKloqoMember && bookingFor === 'member'))}>
                                         <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
                                         <SelectContent>
                                             <SelectItem value="Male">Male</SelectItem>
@@ -833,7 +834,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                     <FormMessage /></FormItem>
                                 )}/>
                                  <FormField control={form.control} name="place" render={({ field }) => (
-                                    <FormItem><FormLabel>Place</FormLabel><FormControl><Input {...field} disabled={!isNewPatient && !isEditing && isKloqoMember && bookingFor === 'member'} /></FormControl><FormMessage /></FormItem>
+                                    <FormItem><FormLabel>Place</FormLabel><FormControl><Input {...field} disabled={!isNewPatient && !isEditing && (!isKloqoMember || (isKloqoMember && bookingFor === 'member'))} /></FormControl><FormMessage /></FormItem>
                                 )}/>
                             </div>
                             <FormField control={form.control} name="bookedVia" render={({ field }) => (
@@ -1211,3 +1212,5 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     </>
   );
 }
+
+    
