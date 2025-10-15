@@ -974,238 +974,238 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                         </div>
                     </div>
                     {(selectedPatient || isNewPatient || isEditing) && (
-                      <div className="pt-4 border-t">
-                        {primaryPatient && (relatives.length > 0 || isKloqoMember) && !isEditing && (
-                          <div className="mb-4">
-                            <Tabs value={bookingFor} onValueChange={(value) => {
-                              setBookingFor(value);
-                              if (value === 'member' && primaryPatient) {
-                                  setSelectedPatient(primaryPatient);
-                                  const capitalizedSex = primaryPatient.sex ? (primaryPatient.sex.charAt(0).toUpperCase() + primaryPatient.sex.slice(1).toLowerCase()) : "Male";
-                                  form.reset({
-                                      ...form.getValues(),
-                                      patientId: primaryPatient.id,
-                                      patientName: primaryPatient.name,
-                                      age: primaryPatient.age,
-                                      sex: capitalizedSex as "Male" | "Female" | "Other",
-                                      place: primaryPatient.place || "",
-                                  });
-                              }
-                            }}>
-                              <TabsList className="grid w-full grid-cols-2">
-                                  <TabsTrigger value="member">For Member</TabsTrigger>
-                                  <TabsTrigger value="relative">For a Relative</TabsTrigger>
-                              </TabsList>
-                              <TabsContent value="member" className="mt-4">
-                                <div className="text-sm p-4 bg-muted/50 rounded-lg">
-                                    <p><strong>Name:</strong> {primaryPatient.name}</p>
-                                    <p><strong>Place:</strong> {primaryPatient.place}</p>
-                                </div>
-                              </TabsContent>
-                              <TabsContent value="relative">
-                                <Card>
-                                    <CardHeader>
-                                      <CardTitle className="text-base">Relatives</CardTitle>
-                                      <CardDescription className="text-xs">Book for an existing relative or add a new one.</CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3">
-                                        {relatives.length > 0 ? (
-                                          <ScrollArea className="h-40">
-                                              {relatives.map(relative => (
-                                                  <div key={relative.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted">
-                                                      <div className="flex items-center gap-3">
-                                                          <Avatar className="h-8 w-8">
-                                                              <AvatarFallback>{relative.name.charAt(0)}</AvatarFallback>
-                                                          </Avatar>
-                                                          <div>
-                                                              <p className="text-sm font-medium">{relative.name}</p>
-                                                              <p className="text-xs text-muted-foreground">{relative.sex}, {relative.age} years</p>
-                                                          </div>
-                                                      </div>
-                                                      <Button variant="outline" size="sm" onClick={()={() => handleRelativeSelect(relative)}}>Book</Button>
-                                                  </div>
-                                              ))}
-                                          </ScrollArea>
-                                        ) : (
-                                          <p className="text-center text-xs text-muted-foreground py-4">No relatives found.</p>
-                                        )}
-                                        <Button type="button" className="w-full" variant="outline" onClick={() => setIsAddRelativeDialogOpen(true)}>
-                                          <UserPlus className="mr-2 h-4 w-4" />
-                                          Add New Relative
-                                        </Button>
-                                    </CardContent>
-                                </Card>
-                              </TabsContent>
-                            </Tabs>
-                          </div>
-                        )}
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4 mt-4">
-                          <div className="space-y-4 md:col-span-1">
-                            <h3 className="text-lg font-medium border-b pb-2 flex items-center justify-between">
-                                Patient Details
-                            </h3>
-                            <div className="grid grid-cols-2 gap-4">
-                                <FormField control={form.control} name="patientName" render={({ field }) => (
-                                    <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                                )}/>
-                                <FormField control={form.control} name="age" render={({ field }) => (
-                                    <FormItem><FormLabel>Age</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
-                                )}/>
-                                <FormField control={form.control} name="sex" render={({ field }) => (
-                                    <FormItem><FormLabel>Gender</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value}>
-                                        <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
-                                        <SelectContent>
-                                            <SelectItem value="Male">Male</SelectItem>
-                                            <SelectItem value="Female">Female</SelectItem>
-                                            <SelectItem value="Other">Other</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    <FormMessage /></FormItem>
-                                )}/>
-                                 <FormField control={form.control} name="place" render={({ field }) => (
-                                    <FormItem><FormLabel>Place</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                                )}/>
+                      <>
+                        <div className="pt-4 border-t">
+                          {primaryPatient && (relatives.length > 0 || isKloqoMember) && !isEditing && (
+                            <div className="mb-4">
+                              <Tabs value={bookingFor} onValueChange={(value) => {
+                                setBookingFor(value);
+                                if (value === 'member' && primaryPatient) {
+                                    setSelectedPatient(primaryPatient);
+                                    const capitalizedSex = primaryPatient.sex ? (primaryPatient.sex.charAt(0).toUpperCase() + primaryPatient.sex.slice(1).toLowerCase()) : "Male";
+                                    form.reset({
+                                        ...form.getValues(),
+                                        patientId: primaryPatient.id,
+                                        patientName: primaryPatient.name,
+                                        age: primaryPatient.age,
+                                        sex: capitalizedSex as "Male" | "Female" | "Other",
+                                        place: primaryPatient.place || "",
+                                    });
+                                }
+                              }}>
+                                <TabsList className="grid w-full grid-cols-2">
+                                    <TabsTrigger value="member">For Member</TabsTrigger>
+                                    <TabsTrigger value="relative">For a Relative</TabsTrigger>
+                                </TabsList>
+                                <TabsContent value="member" className="mt-4">
+                                  <div className="text-sm p-4 bg-muted/50 rounded-lg">
+                                      <p><strong>Name:</strong> {primaryPatient.name}</p>
+                                      <p><strong>Place:</strong> {primaryPatient.place}</p>
+                                  </div>
+                                </TabsContent>
+                                <TabsContent value="relative">
+                                  <Card>
+                                      <CardHeader>
+                                        <CardTitle className="text-base">Relatives</CardTitle>
+                                        <CardDescription className="text-xs">Book for an existing relative or add a new one.</CardDescription>
+                                      </CardHeader>
+                                      <CardContent className="space-y-3">
+                                          {relatives.length > 0 ? (
+                                            <ScrollArea className="h-40">
+                                                {relatives.map(relative => (
+                                                    <div key={relative.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted">
+                                                        <div className="flex items-center gap-3">
+                                                            <Avatar className="h-8 w-8">
+                                                                <AvatarFallback>{relative.name.charAt(0)}</AvatarFallback>
+                                                            </Avatar>
+                                                            <div>
+                                                                <p className="text-sm font-medium">{relative.name}</p>
+                                                                <p className="text-xs text-muted-foreground">{relative.sex}, {relative.age} years</p>
+                                                            </div>
+                                                        </div>
+                                                        <Button variant="outline" size="sm" onClick={()={() => handleRelativeSelect(relative)}}>Book</Button>
+                                                    </div>
+                                                ))}
+                                            </ScrollArea>
+                                          ) : (
+                                            <p className="text-center text-xs text-muted-foreground py-4">No relatives found.</p>
+                                          )}
+                                          <Button type="button" className="w-full" variant="outline" onClick={() => setIsAddRelativeDialogOpen(true)}>
+                                            <UserPlus className="mr-2 h-4 w-4" />
+                                            Add New Relative
+                                          </Button>
+                                      </CardContent>
+                                  </Card>
+                                </TabsContent>
+                              </Tabs>
                             </div>
-                            <FormField control={form.control} name="bookedVia" render={({ field }) => (
-                                <FormItem className="space-y-3">
-                                    <FormLabel>Booking Type</FormLabel>
-                                    <FormControl>
-                                        <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4">
-                                            <FormItem className="flex items-center space-x-2 space-y-0">
-                                                <FormControl><RadioGroupItem value="Advanced Booking" /></FormControl>
-                                                <FormLabel className="font-normal">Advanced Booking</FormLabel>
-                                            </FormItem>
-                                            <FormItem className="flex items-center space-x-2 space-y-0">
-                                                <FormControl><RadioGroupItem value="Walk-in" /></FormControl>
-                                                <FormLabel className="font-normal">Walk-in</FormLabel>
-                                            </FormItem>
-                                        </RadioGroup>
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                                )} />
-                          </div>
-                          
-                          <div className="space-y-4 md:col-span-1">
-                                <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
-                                {appointmentType === 'Advanced Booking' ? (
-                                    <FormField control={form.control} name="date" render={({ field }) => (
-                                    <FormItem className="flex flex-col">
-                                        <FormLabel>Select Date</FormLabel>
-                                        <Calendar
-                                            className="bg-primary text-primary-foreground rounded-md [&_button:hover]:bg-primary/80 [&_.rdp-day_today]:bg-primary-foreground/20 [&_button]:text-primary-foreground"
-                                            mode="single"
-                                            selected={field.value}
-                                            onSelect={(date) => {
-                                                if (date) field.onChange(date);
-                                                form.clearErrors("date");
-                                            }}
-                                            disabled={(date) => 
-                                                date < new Date(new Date().setHours(0,0,0,0)) || 
-                                                !selectedDoctor ||
-                                                !availableDaysOfWeek.includes(getDay(date)) ||
-                                                leaveDates.some(leaveDate => isSameDay(date, leaveDate))
-                                            }
-                                            initialFocus
-                                            modifiers={selectedDoctor ? { available: { dayOfWeek: availableDaysOfWeek }, leave: leaveDates } : { leave: leaveDates }}
-                                            modifiersStyles={{
-                                                available: { backgroundColor: 'hsl(var(--accent))', color: 'hsl(var(--accent-foreground))' },
-                                                leave: { backgroundColor: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' },
-                                            }}
-                                            />
-                                        <FormMessage />
-                                    </FormItem>
-                                    )}
-                                />
-                                ) : (
-                                    <Card className={cn("mt-4", isWalkInAvailable ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200")}>
-                                        <CardHeader className="flex-row items-center gap-3 space-y-0 p-4">
-                                            <Info className={cn("w-6 h-6", isWalkInAvailable ? "text-green-600" : "text-red-600")} />
-                                            <div>
-                                                <CardTitle className="text-base">{isWalkInAvailable ? "Walk-in Available" : "Walk-in Unavailable"}</CardTitle>
-                                                <CardDescription className={cn("text-xs", isWalkInAvailable ? "text-green-800" : "text-red-800")}>
-                                                    {isWalkInAvailable ? "You can book a walk-in appointment now." : "This doctor is not available for walk-ins at this time."}
-                                                </CardDescription>
-                                            </div>
-                                        </CardHeader>
-                                    </Card>
-                                )}
-                            </div>
+                          )}
 
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4 mt-4">
                             <div className="space-y-4 md:col-span-1">
-                                <h3 className="text-lg font-medium border-b pb-2">Doctor & Time</h3>
-                                <FormField control={form.control} name="doctor" render={({ field }) => (
-                                    <FormItem>
-                                    <FormLabel>Doctor</FormLabel>
-                                    <Select onValueChange={(value) => {
-                                        onDoctorChange(value);
-                                    }} value={field.value}>
-                                        <FormControl>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select a doctor" />
-                                        </SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent>
-                                        {doctors.map(doc => (
-                                            <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
-                                        ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                    </FormItem>
-                                )} />
-                                <FormField control={form.control} name="department" render={({ field }) => (
-                                    <FormItem>
-                                    <FormLabel>Department</FormLabel>
-                                    <FormControl>
-                                        <Input readOnly placeholder="Department" {...field} value={field.value ?? ''} />
-                                    </FormControl>
-                                    <FormMessage />
-                                    </FormItem>
-                                )} />
-                            {appointmentType === 'Advanced Booking' && selectedDoctor && selectedDate && (
-                                <FormField control={form.control} name="time" render={({ field }) => (
-                                    <FormItem>
-                                    <FormLabel>Select Time Slot</FormLabel>
-                                    <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-2">
-                                        {timeSlots.length > 0 ? timeSlots.map(slot => (
-                                            <Button
-                                                key={slot.time}
-                                                type="button"
-                                                variant={field.value === format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm') ? "default" : "outline"}
-                                                onClick={() => {
-                                                const val = format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm');
-                                                field.onChange(val);
-                                                if (val) form.clearErrors("time");
-                                                }}
-                                                disabled={slot.disabled}
-                                                className={cn("text-xs", slot.disabled && "line-through")}
-                                            >
-                                                {slot.time}
-                                            </Button>
-                                        )) : <p className="text-sm text-muted-foreground col-span-2">No available slots for this day.</p>}
-                                    </div>
-                                    <FormMessage />
-                                    </FormItem>
-                                )}
-                                />
-                            )}
+                              <h3 className="text-lg font-medium border-b pb-2 flex items-center justify-between">
+                                  Patient Details
+                              </h3>
+                              <div className="grid grid-cols-2 gap-4">
+                                  <FormField control={form.control} name="patientName" render={({ field }) => (
+                                      <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                                  )}/>
+                                  <FormField control={form.control} name="age" render={({ field }) => (
+                                      <FormItem><FormLabel>Age</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                                  )}/>
+                                  <FormField control={form.control} name="sex" render={({ field }) => (
+                                      <FormItem><FormLabel>Gender</FormLabel>
+                                      <Select onValueChange={field.onChange} value={field.value}>
+                                          <FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl>
+                                          <SelectContent>
+                                              <SelectItem value="Male">Male</SelectItem>
+                                              <SelectItem value="Female">Female</SelectItem>
+                                              <SelectItem value="Other">Other</SelectItem>
+                                          </SelectContent>
+                                      </Select>
+                                      <FormMessage /></FormItem>
+                                  )}/>
+                                   <FormField control={form.control} name="place" render={({ field }) => (
+                                      <FormItem><FormLabel>Place</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                                  )}/>
+                              </div>
+                              <FormField control={form.control} name="bookedVia" render={({ field }) => (
+                                  <FormItem className="space-y-3">
+                                      <FormLabel>Booking Type</FormLabel>
+                                      <FormControl>
+                                          <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4">
+                                              <FormItem className="flex items-center space-x-2 space-y-0">
+                                                  <FormControl><RadioGroupItem value="Advanced Booking" /></FormControl>
+                                                  <FormLabel className="font-normal">Advanced Booking</FormLabel>
+                                              </FormItem>
+                                              <FormItem className="flex items-center space-x-2 space-y-0">
+                                                  <FormControl><RadioGroupItem value="Walk-in" /></FormControl>
+                                                  <FormLabel className="font-normal">Walk-in</FormLabel>
+                                              </FormItem>
+                                          </RadioGroup>
+                                      </FormControl>
+                                      <FormMessage />
+                                  </FormItem>
+                                  )} />
                             </div>
+                            
+                            <div className="space-y-4 md:col-span-1">
+                                  <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
+                                  {appointmentType === 'Advanced Booking' ? (
+                                      <FormField control={form.control} name="date" render={({ field }) => (
+                                      <FormItem className="flex flex-col">
+                                          <FormLabel>Select Date</FormLabel>
+                                          <Calendar
+                                              className="bg-primary text-primary-foreground rounded-md [&_button:hover]:bg-primary/80 [&_.rdp-day_today]:bg-primary-foreground/20 [&_button]:text-primary-foreground"
+                                              mode="single"
+                                              selected={field.value}
+                                              onSelect={(date) => {
+                                                  if (date) field.onChange(date);
+                                                  form.clearErrors("date");
+                                              }}
+                                              disabled={(date) => 
+                                                  date < new Date(new Date().setHours(0,0,0,0)) || 
+                                                  !selectedDoctor ||
+                                                  !availableDaysOfWeek.includes(getDay(date)) ||
+                                                  leaveDates.some(leaveDate => isSameDay(date, leaveDate))
+                                              }
+                                              initialFocus
+                                              modifiers={selectedDoctor ? { available: { dayOfWeek: availableDaysOfWeek }, leave: leaveDates } : { leave: leaveDates }}
+                                              modifiersStyles={{
+                                                  available: { backgroundColor: 'hsl(var(--accent))', color: 'hsl(var(--accent-foreground))' },
+                                                  leave: { backgroundColor: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' },
+                                              }}
+                                              />
+                                          <FormMessage />
+                                      </FormItem>
+                                      )}
+                                  />
+                                  ) : (
+                                      <Card className={cn("mt-4", isWalkInAvailable ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200")}>
+                                          <CardHeader className="flex-row items-center gap-3 space-y-0 p-4">
+                                              <Info className={cn("w-6 h-6", isWalkInAvailable ? "text-green-600" : "text-red-600")} />
+                                              <div>
+                                                  <CardTitle className="text-base">{isWalkInAvailable ? "Walk-in Available" : "Walk-in Unavailable"}</CardTitle>
+                                                  <CardDescription className={cn("text-xs", isWalkInAvailable ? "text-green-800" : "text-red-800")}>
+                                                      {isWalkInAvailable ? "You can book a walk-in appointment now." : "This doctor is not available for walk-ins at this time."}
+                                                  </CardDescription>
+                                              </div>
+                                          </CardHeader>
+                                      </Card>
+                                  )}
+                              </div>
+
+                              <div className="space-y-4 md:col-span-1">
+                                  <h3 className="text-lg font-medium border-b pb-2">Doctor & Time</h3>
+                                  <FormField control={form.control} name="doctor" render={({ field }) => (
+                                      <FormItem>
+                                      <FormLabel>Doctor</FormLabel>
+                                      <Select onValueChange={(value) => {
+                                          onDoctorChange(value);
+                                      }} value={field.value}>
+                                          <FormControl>
+                                          <SelectTrigger>
+                                              <SelectValue placeholder="Select a doctor" />
+                                          </SelectTrigger>
+                                          </FormControl>
+                                          <SelectContent>
+                                          {doctors.map(doc => (
+                                              <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
+                                          ))}
+                                          </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                      </FormItem>
+                                  )} />
+                                  <FormField control={form.control} name="department" render={({ field }) => (
+                                      <FormItem>
+                                      <FormLabel>Department</FormLabel>
+                                      <FormControl>
+                                          <Input readOnly placeholder="Department" {...field} value={field.value ?? ''} />
+                                      </FormControl>
+                                      <FormMessage />
+                                      </FormItem>
+                                  )} />
+                              {appointmentType === 'Advanced Booking' && selectedDoctor && selectedDate && (
+                                  <FormField control={form.control} name="time" render={({ field }) => (
+                                      <FormItem>
+                                      <FormLabel>Select Time Slot</FormLabel>
+                                      <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-2">
+                                          {timeSlots.length > 0 ? timeSlots.map(slot => (
+                                              <Button
+                                                  key={slot.time}
+                                                  type="button"
+                                                  variant={field.value === format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm') ? "default" : "outline"}
+                                                  onClick={() => {
+                                                  const val = format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm');
+                                                  field.onChange(val);
+                                                  if (val) form.clearErrors("time");
+                                                  }}
+                                                  disabled={slot.disabled}
+                                                  className={cn("text-xs", slot.disabled && "line-through")}
+                                              >
+                                                  {slot.time}
+                                              </Button>
+                                          )) : <p className="text-sm text-muted-foreground col-span-2">No available slots for this day.</p>}
+                                      </div>
+                                      <FormMessage />
+                                      </FormItem>
+                                  )}
+                                  />
+                              )}
+                              </div>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                    {(selectedPatient || isNewPatient || isEditing) && (
-                    <div className="flex justify-end items-center pt-4">
-                      <div className="flex justify-end gap-2">
-                          {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
-                          <Button type="submit" disabled={isPending || (appointmentType === 'Walk-in' && !isWalkInAvailable)}>
-                            {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
-                            {isEditing ? "Save Changes" : "Book Appointment"}
-                          </Button>
-                      </div>
-                    </div>
+                        <div className="flex justify-end items-center pt-4">
+                          <div className="flex justify-end gap-2">
+                              {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
+                              <Button type="submit" disabled={isPending || (appointmentType === 'Walk-in' && !isWalkInAvailable)}>
+                                {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                                {isEditing ? "Save Changes" : "Book Appointment"}
+                              </Button>
+                          </div>
+                        </div>
+                      </>
                     )}
                   </form>
                 </Form>
@@ -1516,5 +1516,18 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     </>
   );
 }
+I see this error with the app, reported by NextJS, please fix it. The error is reported as HTML but presented visually to the user).
 
+A > before the line number in the error source usually indicates the line of interest: 
 
+> ./src/app/(app)/appointments/page.tsx:8:8
+> Module not found: Can't resolve '@/firebase/auth/use-user'
+>    6 | import { useToast } from '@/hooks/use-toast';
+>    7 | import { cn } from '@/lib/utils';
+> >  8 | import { useUser } from '@/firebase/auth/use-user';
+>      |        ^^^^^^^
+>    9 | import { useFirestore } from '@/firebase';
+>   10 | import { collection, query, where, getDocs, getDoc, doc, updateDoc, addDoc, serverTimestamp, setDoc, arrayUnion, DocumentReference, writeBatch } from 'firebase/firestore';
+>   11 | import type { Doctor } from '@/firebase/firestore/use-doctors';
+> 
+> https://nextjs.org/docs/messages/module-not-found
