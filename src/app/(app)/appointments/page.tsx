@@ -747,65 +747,67 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                     </div>
                     {(selectedPatient || isNewPatient || isEditing) && (
                       <div className="pt-4 border-t">
-                        {isKloqoMember && !isEditing ? (
-                          <Tabs value={bookingFor} onValueChange={(value) => {
-                            setBookingFor(value);
-                            if (value === 'member' && primaryKloqoMember) {
-                                setSelectedPatient(primaryKloqoMember);
-                                form.setValue("patientId", primaryKloqoMember.id);
-                                form.setValue("patientName", primaryKloqoMember.name);
-                                form.setValue("age", primaryKloqoMember.age);
-                                const capitalizedSex = primaryKloqoMember.sex ? (primaryKloqoMember.sex.charAt(0).toUpperCase() + primaryKloqoMember.sex.slice(1).toLowerCase()) : "Male";
-                                form.setValue("sex", capitalizedSex as "Male" | "Female" | "Other");
-                                form.setValue("place", primaryKloqoMember.place || "");
-                            }
-                          }}>
-                            <TabsList className="grid w-full grid-cols-2">
-                                <TabsTrigger value="member">For Member</TabsTrigger>
-                                <TabsTrigger value="relative">For a Relative</TabsTrigger>
-                            </TabsList>
-                            <TabsContent value="member" className="mt-4">
-                               <div className="text-sm p-4 bg-muted/50 rounded-lg">
-                                  <p><strong>Name:</strong> {primaryKloqoMember!.name}</p>
-                                  <p><strong>Place:</strong> {primaryKloqoMember!.place}</p>
-                               </div>
-                            </TabsContent>
-                            <TabsContent value="relative">
-                               <Card>
-                                  <CardHeader>
-                                    <CardTitle className="text-base">Relatives</CardTitle>
-                                    <CardDescription className="text-xs">Book for an existing relative or add a new one.</CardDescription>
-                                  </CardHeader>
-                                  <CardContent className="space-y-3">
-                                      {relatives.length > 0 ? (
-                                        <ScrollArea className="h-40">
-                                            {relatives.map(relative => (
-                                                <div key={relative.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted">
-                                                    <div className="flex items-center gap-3">
-                                                        <Avatar className="h-8 w-8">
-                                                            <AvatarFallback>{relative.name.charAt(0)}</AvatarFallback>
-                                                        </Avatar>
-                                                        <div>
-                                                            <p className="text-sm font-medium">{relative.name}</p>
-                                                            <p className="text-xs text-muted-foreground">{relative.sex}, {relative.age} years</p>
-                                                        </div>
-                                                    </div>
-                                                    <Button variant="outline" size="sm" onClick={() => handleRelativeSelect(relative)}>Book</Button>
-                                                </div>
-                                            ))}
-                                        </ScrollArea>
-                                      ) : (
-                                        <p className="text-center text-xs text-muted-foreground py-4">No relatives found.</p>
-                                      )}
-                                      <Button type="button" className="w-full" variant="outline" onClick={() => setIsAddRelativeDialogOpen(true)}>
-                                        <UserPlus className="mr-2 h-4 w-4" />
-                                        Add New Relative
-                                      </Button>
-                                  </CardContent>
-                               </Card>
-                            </TabsContent>
-                          </Tabs>
-                        ) : null}
+                        {isKloqoMember && !isEditing && (
+                          <div className="mb-4">
+                            <Tabs value={bookingFor} onValueChange={(value) => {
+                              setBookingFor(value);
+                              if (value === 'member' && primaryKloqoMember) {
+                                  setSelectedPatient(primaryKloqoMember);
+                                  form.setValue("patientId", primaryKloqoMember.id);
+                                  form.setValue("patientName", primaryKloqoMember.name);
+                                  form.setValue("age", primaryKloqoMember.age);
+                                  const capitalizedSex = primaryKloqoMember.sex ? (primaryKloqoMember.sex.charAt(0).toUpperCase() + primaryKloqoMember.sex.slice(1).toLowerCase()) : "Male";
+                                  form.setValue("sex", capitalizedSex as "Male" | "Female" | "Other");
+                                  form.setValue("place", primaryKloqoMember.place || "");
+                              }
+                            }}>
+                              <TabsList className="grid w-full grid-cols-2">
+                                  <TabsTrigger value="member">For Member</TabsTrigger>
+                                  <TabsTrigger value="relative">For a Relative</TabsTrigger>
+                              </TabsList>
+                              <TabsContent value="member" className="mt-4">
+                                <div className="text-sm p-4 bg-muted/50 rounded-lg">
+                                    <p><strong>Name:</strong> {primaryKloqoMember!.name}</p>
+                                    <p><strong>Place:</strong> {primaryKloqoMember!.place}</p>
+                                </div>
+                              </TabsContent>
+                              <TabsContent value="relative">
+                                <Card>
+                                    <CardHeader>
+                                      <CardTitle className="text-base">Relatives</CardTitle>
+                                      <CardDescription className="text-xs">Book for an existing relative or add a new one.</CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="space-y-3">
+                                        {relatives.length > 0 ? (
+                                          <ScrollArea className="h-40">
+                                              {relatives.map(relative => (
+                                                  <div key={relative.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted">
+                                                      <div className="flex items-center gap-3">
+                                                          <Avatar className="h-8 w-8">
+                                                              <AvatarFallback>{relative.name.charAt(0)}</AvatarFallback>
+                                                          </Avatar>
+                                                          <div>
+                                                              <p className="text-sm font-medium">{relative.name}</p>
+                                                              <p className="text-xs text-muted-foreground">{relative.sex}, {relative.age} years</p>
+                                                          </div>
+                                                      </div>
+                                                      <Button variant="outline" size="sm" onClick={() => handleRelativeSelect(relative)}>Book</Button>
+                                                  </div>
+                                              ))}
+                                          </ScrollArea>
+                                        ) : (
+                                          <p className="text-center text-xs text-muted-foreground py-4">No relatives found.</p>
+                                        )}
+                                        <Button type="button" className="w-full" variant="outline" onClick={() => setIsAddRelativeDialogOpen(true)}>
+                                          <UserPlus className="mr-2 h-4 w-4" />
+                                          Add New Relative
+                                        </Button>
+                                    </CardContent>
+                                </Card>
+                              </TabsContent>
+                            </Tabs>
+                          </div>
+                        )}
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4 mt-4">
                           <div className="space-y-4 md:col-span-1">
