@@ -660,7 +660,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
         <h1 className="text-xl font-semibold md:text-2xl">Appointments</h1>
       </header>
       <div className="flex-1 p-6">
-        <div className="flex items-stretch gap-4">
+        <div className="flex items-start gap-4">
           <main
             onClick={() => {
               if (isDrawerExpanded) {
@@ -668,11 +668,11 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
               }
             }}
             className={cn(
-              "relative flex-shrink-0 transition-all duration-300 ease-in-out h-[calc(100vh-7rem)]",
+              "relative flex-shrink-0 transition-all duration-300 ease-in-out",
               isDrawerExpanded ? "w-3/12" : "w-2/3"
             )}
           >
-            <Card className="h-full">
+            <Card>
               <CardHeader>
                 <CardTitle>{isEditing ? "Reschedule Appointment" : "Book New Appointment"}</CardTitle>
                 <CardDescription>
