@@ -15,6 +15,7 @@ import {
   MoreHorizontal,
   Trash,
   Search,
+  Users,
 } from "lucide-react";
 import {
   Select,
@@ -60,12 +61,20 @@ export default function DepartmentsPage() {
   const [loading, setLoading] = useState(true);
   const [viewingDoctorsDept, setViewingDoctorsDept] = useState<Department | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [departmentsPerPage, setDepartmentsPerPage] = useState(6);
 
   const filteredDepartments = useMemo(() => {
     return clinicDepartments.filter(department =>
       department.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [clinicDepartments, searchTerm]);
+
+  const totalPages = Math.ceil(filteredDepartments.length / departmentsPerPage);
+  const currentDepartments = filteredDepartments.slice(
+    (currentPage - 1) * departmentsPerPage,
+    currentPage * departmentsPerPage
+  );
 
   useEffect(() => {
     const fetchMasterDepartments = async () => {
@@ -169,7 +178,7 @@ export default function DepartmentsPage() {
                     </DropdownMenu>
                   </div>
               </CardContent>
-              <CardFooter className="bg-muted/30 px-4 py-3">
+              <CardFooter className="bg-muted/30 px-4 py-3 flex items-center justify-between">
                    <div className="flex items-center">
                       <div className="flex -space-x-2">
                           {doctorsInDept.slice(0, 3).map((doctorName, index) => (
@@ -190,6 +199,10 @@ export default function DepartmentsPage() {
                           </span>
                       )}
                   </div>
+                   <Button variant="link" size="sm" className="p-0 h-auto" onClick={() => setViewingDoctorsDept(department)}>
+                        <Users className="mr-1 h-3 w-3" />
+                        See Doctors
+                    </Button>
               </CardFooter>
           </Card>
       );
@@ -274,23 +287,15 @@ export default function DepartmentsPage() {
                     onChange={(e) => setSearchTerm(e.target.value)}
                 />
             </div>
-        </header>
-        <main className="flex-1 p-4 sm:p-6">
-          <div className="flex justify-end mb-4">
-              <Button onClick={() => setIsAddDepartmentOpen(true)}>
+             <Button onClick={() => setIsAddDepartmentOpen(true)}>
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Add Department
               </Button>
-              <SelectDepartmentDialog
-                  isOpen={isAddDepartmentOpen}
-                  setIsOpen={setIsAddDepartmentOpen}
-                  departments={availableMasterDepartments}
-                  onDepartmentsSelect={handleSaveDepartments}
-              />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        </header>
+        <main className="flex-1 p-4 sm:p-6 flex flex-col">
+          <div className="grid flex-grow grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {loading ? (
-                 Array.from({ length: 3 }).map((_, i) => (
+                 Array.from({ length: 6 }).map((_, i) => (
                     <Card key={i} className="h-full flex flex-col animate-pulse">
                         <div className="h-40 w-full bg-muted"></div>
                         <CardContent className="p-4 flex-grow">
@@ -303,8 +308,8 @@ export default function DepartmentsPage() {
                         </CardFooter>
                     </Card>
                  ))
-              ) : filteredDepartments.length > 0 ? (
-                  filteredDepartments.map((dept) => (
+              ) : currentDepartments.length > 0 ? (
+                  currentDepartments.map((dept) => (
                     <DepartmentCard key={dept.id} department={dept} onDelete={() => setDeletingDepartment(dept)} />
                 ))
               ) : (
@@ -314,6 +319,28 @@ export default function DepartmentsPage() {
               )}
           </div>
         </main>
+         <footer className="flex items-center justify-between p-4 border-t bg-background">
+            <div className="text-sm text-muted-foreground">
+                Showing {Math.min((currentPage - 1) * departmentsPerPage + 1, filteredDepartments.length)} to {Math.min(currentPage * departmentsPerPage, filteredDepartments.length)} of {filteredDepartments.length} departments
+            </div>
+            <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                </Button>
+            </div>
+        </footer>
+
+        <SelectDepartmentDialog
+            isOpen={isAddDepartmentOpen}
+            setIsOpen={setIsAddDepartmentOpen}
+            departments={availableMasterDepartments}
+            onDepartmentsSelect={handleSaveDepartments}
+        />
 
         <AlertDialog open={!!deletingDepartment} onOpenChange={(open) => !open && setDeletingDepartment(null)}>
               <AlertDialogContent>
