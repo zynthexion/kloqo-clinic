@@ -133,6 +133,9 @@ const currentYearStart = startOfYear(new Date());
 const currentYearEnd = endOfYear(new Date());
 const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ from: currentYearStart, to: currentYearEnd });
 
+  const [newPatientFieldsEnabled, setNewPatientFieldsEnabled] = useState(false);
+  const [isCheckingPhone, setIsCheckingPhone] = useState(false);
+
 
   const { toast } = useToast();
 
@@ -428,8 +431,48 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
     form.setValue("gender", "Male");
     form.setValue("phone", "");
     form.setValue("place", "");
+    setNewPatientFieldsEnabled(false);
     form.clearErrors();
   };
+  
+    const handleNewPatientPhoneBlur = async () => {
+        const phoneValue = form.getValues("phone");
+        if (phoneValue.length < 10) return;
+
+        setIsCheckingPhone(true);
+        try {
+            const patientsRef = collection(db, "patients");
+            const q = query(patientsRef, where("phone", "==", phoneValue));
+            const querySnapshot = await getDocs(q);
+
+            if (!querySnapshot.empty) {
+                const existingPatient = querySnapshot.docs[0].data() as Patient;
+                handlePatientSelect(existingPatient);
+                toast({
+                    title: "Patient Found",
+                    description: `${existingPatient.name}'s details have been filled in.`,
+                });
+                setNewPatientFieldsEnabled(true); 
+            } else {
+                toast({
+                    title: "New Patient",
+                    description: "No existing patient found. Please fill in the details.",
+                });
+                setNewPatientFieldsEnabled(true);
+            }
+        } catch (error) {
+            console.error("Error checking for patient:", error);
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Could not check for existing patient. Please enter details manually.",
+            });
+            setNewPatientFieldsEnabled(true);
+        } finally {
+            setIsCheckingPhone(false);
+        }
+    };
+
 
   const availableDaysOfWeek = useMemo(() => {
     if (!selectedDoctor?.availabilitySlots) return [];
@@ -689,17 +732,33 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                 )}
                             </TabsContent>
                             <TabsContent value="new" className="space-y-4 pt-4">
+                                <FormField control={form.control} name="phone" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Phone Number</FormLabel>
+                                        <div className="relative">
+                                            <FormControl>
+                                                <Input 
+                                                    placeholder="Enter 10-digit number" {...field} value={field.value ?? ''} 
+                                                    onBlur={handleNewPatientPhoneBlur}
+                                                    maxLength={10}
+                                                />
+                                            </FormControl>
+                                            {isCheckingPhone && <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin" />}
+                                        </div>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}/>
                                 <FormField control={form.control} name="patientName" render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Patient Name</FormLabel>
-                                        <FormControl><Input placeholder="Full Name" {...field} value={field.value ?? ''} /></FormControl>
+                                        <FormControl><Input placeholder="Full Name" {...field} value={field.value ?? ''} disabled={!newPatientFieldsEnabled} /></FormControl>
                                         <FormMessage />
                                     </FormItem>
                                 )} />
                                 <FormField control={form.control} name="age" render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Age</FormLabel>
-                                        <FormControl><Input type="number" placeholder="35" {...field} value={field.value !== undefined ? field.value : ''} /></FormControl>
+                                        <FormControl><Input type="number" placeholder="35" {...field} value={field.value !== undefined ? field.value : ''} disabled={!newPatientFieldsEnabled} /></FormControl>
                                         <FormMessage />
                                     </FormItem>
                                 )} />
@@ -707,7 +766,7 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                     <FormItem className="space-y-3">
                                         <FormLabel>Gender</FormLabel>
                                         <FormControl>
-                                        <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4">
+                                        <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4" disabled={!newPatientFieldsEnabled}>
                                             <FormItem className="flex items-center space-x-2 space-y-0">
                                             <FormControl><RadioGroupItem value="Male" /></FormControl>
                                             <FormLabel className="font-normal">Male</FormLabel>
@@ -721,17 +780,10 @@ const [drawerDateRange, setDrawerDateRange] = useState<DateRange | undefined>({ 
                                         <FormMessage />
                                     </FormItem>
                                 )} />
-                                <FormField control={form.control} name="phone" render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Phone Number</FormLabel>
-                                        <FormControl><Input placeholder="123-456-7890" {...field} value={field.value ?? ''} /></FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )} />
                                 <FormField control={form.control} name="place" render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Place</FormLabel>
-                                        <FormControl><Input placeholder="New York, USA" {...field} value={field.value ?? ''} /></FormControl>
+                                        <FormControl><Input placeholder="New York, USA" {...field} value={field.value ?? ''} disabled={!newPatientFieldsEnabled} /></FormControl>
                                         <FormMessage />
                                     </FormItem>
                                 )} />
