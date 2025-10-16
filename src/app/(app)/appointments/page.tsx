@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useTransition, useCallback } from "react";
@@ -249,7 +250,10 @@ export default function AppointmentsPage() {
           if (editingAppointment.patientId) {
             const patientDoc = await getFirestoreDoc(doc(db, "patients", editingAppointment.patientId));
             if (patientDoc.exists()) {
-              setSelectedPatient(patientDoc.data() as Patient);
+              const patientData = patientDoc.data() as Patient;
+              setSelectedPatient(patientData);
+              setPatientSearchTerm(patientData.phone.replace('+91', ''));
+              form.setValue('phone', patientData.phone.replace('+91', ''));
             }
           }
         };
@@ -257,12 +261,12 @@ export default function AppointmentsPage() {
 
         form.reset({
           ...editingAppointment,
+          phone: editingAppointment.communicationPhone.replace('+91', ''),
           date: isNaN(appointmentDate.getTime()) ? undefined : appointmentDate,
           doctor: doctor.id,
           time: format(parseDateFns(editingAppointment.time, "hh:mm a", new Date()), 'HH:mm'),
           bookedVia: (editingAppointment.bookedVia === "Advanced Booking" || editingAppointment.bookedVia === "Walk-in") ? editingAppointment.bookedVia : "Advanced Booking",
         });
-        setPatientSearchTerm(editingAppointment.phone.replace('+91', ''));
       }
     } else {
       resetForm();
@@ -466,14 +470,30 @@ export default function AppointmentsPage() {
         const batch = writeBatch(db);
         let patientForAppointmentId: string;
         let patientForAppointmentName: string;
-        let patientForAppointmentPhone: string;
+        
+        const patientPhoneNumber = values.phone.startsWith('+91') ? values.phone : `+91${values.phone}`;
+        const communicationPhone = primaryPatient?.phone || patientPhoneNumber;
+
+        // Uniqueness check for new patients
+        if (!selectedPatient && !isEditing) {
+             const q = query(collection(db, 'patients'), where('phone', '==', patientPhoneNumber));
+             const existingPatientSnap = await getDocs(q);
+             if (!existingPatientSnap.empty) {
+                 toast({
+                     variant: "destructive",
+                     title: "Duplicate Patient",
+                     description: "A patient with this phone number already exists. Please search for them instead.",
+                 });
+                 return;
+             }
+        }
 
         const patientDataToUpdate = {
           name: values.patientName,
           age: values.age,
           sex: values.sex,
           place: values.place,
-          phone: values.phone.startsWith('+91') ? values.phone : `+91${values.phone}`,
+          phone: patientPhoneNumber,
         };
 
         if (isEditing && editingAppointment) {
@@ -481,7 +501,6 @@ export default function AppointmentsPage() {
           const patientRef = doc(db, 'patients', patientForAppointmentId);
           batch.update(patientRef, { ...patientDataToUpdate, updatedAt: serverTimestamp() });
           patientForAppointmentName = values.patientName;
-          patientForAppointmentPhone = patientDataToUpdate.phone;
         } else if (selectedPatient && !isEditing) {
           patientForAppointmentId = selectedPatient.id;
           const patientRef = doc(db, 'patients', patientForAppointmentId);
@@ -492,7 +511,6 @@ export default function AppointmentsPage() {
           }
           batch.update(patientRef, updateData);
           patientForAppointmentName = values.patientName;
-          patientForAppointmentPhone = patientDataToUpdate.phone;
         } else {
           const newPatientRef = doc(collection(db, 'patients'));
           const newPatientData: Patient = {
@@ -508,7 +526,6 @@ export default function AppointmentsPage() {
           batch.set(newPatientRef, newPatientData);
           patientForAppointmentId = newPatientRef.id;
           patientForAppointmentName = values.patientName;
-          patientForAppointmentPhone = patientDataToUpdate.phone;
         }
 
         await batch.commit().catch(e => {
@@ -527,7 +544,7 @@ export default function AppointmentsPage() {
           const date = new Date();
           const tokenNumber = await generateNextToken(date, 'W');
 
-          const appointmentData = {
+          const appointmentData: Omit<Appointment, 'id'> = {
             bookedVia: appointmentType,
             clinicId: selectedDoctor.clinicId,
             date: format(date, "d MMMM yyyy"),
@@ -537,13 +554,12 @@ export default function AppointmentsPage() {
             patientId: patientForAppointmentId,
             patientName: values.patientName,
             age: values.age,
-            phone: patientForAppointmentPhone,
+            communicationPhone: communicationPhone,
             place: values.place,
             status: 'Pending',
             time: format(walkInEstimate.estimatedTime, "hh:mm a"),
             tokenNumber: tokenNumber,
             treatment: "General Consultation",
-            createdAt: serverTimestamp(),
           };
           const appointmentRef = doc(collection(db, 'appointments'));
           await setDoc(appointmentRef, { ...appointmentData, id: appointmentRef.id });
@@ -568,7 +584,7 @@ export default function AppointmentsPage() {
             patientId: patientForAppointmentId,
             patientName: patientForAppointmentName,
             sex: values.sex,
-            phone: patientForAppointmentPhone,
+            communicationPhone: communicationPhone,
             age: values.age,
             doctor: selectedDoctor.name,
             date: appointmentDateStr,
@@ -1020,6 +1036,7 @@ export default function AppointmentsPage() {
                                       patientName: primaryPatient.name,
                                       age: primaryPatient.age,
                                       sex: capitalizedSex as "Male" | "Female" | "Other",
+                                      phone: primaryPatient.phone.replace('+91', ''),
                                       place: primaryPatient.place || "",
                                     });
                                   }
@@ -1118,6 +1135,25 @@ export default function AppointmentsPage() {
                                     <FormMessage />
                                   </FormItem>
                                 )} />
+                                 <FormField
+                                    control={form.control}
+                                    name="phone"
+                                    render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Communication Phone</FormLabel>
+                                        <FormControl>
+                                        <Input
+                                            type="tel"
+                                            placeholder="Enter 10-digit number"
+                                            {...field}
+                                            disabled={bookingFor === 'member' || isEditing}
+                                        />
+                                        </FormControl>
+                                        <FormDescription className="text-xs">This number will be used for appointment communication.</FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                />
                               </div>
                               <div className="space-y-4 md:col-span-1">
                                 <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
@@ -1389,7 +1425,7 @@ export default function AppointmentsPage() {
                                 <TableCell className="font-medium">{appointment.patientName}</TableCell>
                                 <TableCell>{appointment.age}</TableCell>
                                 <TableCell>{appointment.sex}</TableCell>
-                                <TableCell>{appointment.phone}</TableCell>
+                                <TableCell>{appointment.communicationPhone}</TableCell>
                                 <TableCell>{appointment.place}</TableCell>
                                 <TableCell>{appointment.doctor}</TableCell>
                                 <TableCell>{appointment.department}</TableCell>
@@ -1537,4 +1573,3 @@ export default function AppointmentsPage() {
   );
 }
 
-    

@@ -1,4 +1,5 @@
 
+
 export type TimeSlot = {
   from: string;
   to: string;
@@ -54,7 +55,7 @@ export type Appointment = {
   doctorId?: string; // Made optional
   patientName: string;
   sex: 'Male' | 'Female' | 'Other';
-  phone: string;
+  communicationPhone: string;
   age: number;
   doctor: string;
   date: string;
@@ -150,3 +151,4 @@ export type User = {
     onboarded?: boolean;
     role?: 'clinicAdmin';
 }
+
