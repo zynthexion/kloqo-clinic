@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useTransition, useCallback } from "react";
@@ -16,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Appointment, Doctor, Patient, Visit } from "@/lib/types";
-import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes } from "date-fns";
@@ -332,7 +331,7 @@ export default function AppointmentsPage() {
     return isWithinBookingWindow(selectedDoctor);
   }, [appointmentType, selectedDoctor]);
 
-  const calculateWalkInDetails = useCallback(async (): Promise<{ estimatedTime: Date; patientsAhead: number } | null> => {
+  const calculateWalkInDetails = useCallback(async (): Promise<WalkInEstimate> => {
     if (!db || !selectedDoctor || !clinicDetails) return null;
     
     const now = new Date();
@@ -552,9 +551,6 @@ export default function AppointmentsPage() {
 
           setGeneratedToken(tokenNumber);
           setIsTokenModalOpen(true);
-          setTimeout(() => {
-            setIsTokenModalOpen(false);
-          }, 5000);
 
         } else {
           if (!values.date || !values.time) {
@@ -625,29 +621,51 @@ export default function AppointmentsPage() {
   }
 
   const handleCancel = (appointment: Appointment) => {
-    setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Cancelled' } : a));
+    startTransition(async () => {
+      try {
+        const appointmentRef = doc(db, "appointments", appointment.id);
+        await updateDoc(appointmentRef, { status: 'Cancelled' });
+        setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Cancelled' } : a));
+        toast({ title: "Appointment Cancelled" });
+      } catch (error) {
+        console.error("Error cancelling appointment:", error);
+        toast({ variant: "destructive", title: "Error", description: "Failed to cancel appointment." });
+      }
+    });
   };
 
   const handleComplete = async (appointment: Appointment) => {
-    setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Completed' } : a));
-    if (appointment.id) {
-      const appointmentRef = doc(db, "appointments", appointment.id);
-      await setDoc(appointmentRef, { status: "Completed" }, { merge: true });
-    }
+    startTransition(async () => {
+      try {
+        const appointmentRef = doc(db, "appointments", appointment.id);
+        await updateDoc(appointmentRef, { status: 'Completed' });
+        setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Completed' } : a));
+        toast({ title: "Appointment Marked as Completed" });
+      } catch (error) {
+        console.error("Error completing appointment:", error);
+        toast({ variant: "destructive", title: "Error", description: "Failed to mark as completed." });
+      }
+    });
   };
 
   const handleSkip = async (appointment: Appointment) => {
-    setAppointments(prev => {
-      const updated = prev.map(a => a.id === appointment.id ? { ...a, isSkipped: true } : a);
-      return [
-        ...updated.filter(a => !a.isSkipped),
-        ...updated.filter(a => a.isSkipped),
-      ];
+    startTransition(async () => {
+      try {
+        const appointmentRef = doc(db, "appointments", appointment.id);
+        await updateDoc(appointmentRef, { isSkipped: true });
+        setAppointments(prev => {
+          const updated = prev.map(a => a.id === appointment.id ? { ...a, isSkipped: true } : a);
+          return [
+            ...updated.filter(a => !a.isSkipped),
+            ...updated.filter(a => a.isSkipped),
+          ];
+        });
+        toast({ title: "Appointment Skipped" });
+      } catch (error) {
+        console.error("Error skipping appointment:", error);
+        toast({ variant: "destructive", title: "Error", description: "Failed to skip appointment." });
+      }
     });
-    if (appointment.id) {
-      const appointmentRef = doc(db, "appointments", appointment.id);
-      await setDoc(appointmentRef, { isSkipped: true }, { merge: true });
-    }
   };
 
   const handleDelete = async (appointmentId: string) => {
