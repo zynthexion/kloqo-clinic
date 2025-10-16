@@ -1211,7 +1211,7 @@ export default function AppointmentsPage() {
                           <div className="flex justify-end items-center pt-4">
                             <div className="flex justify-end gap-2">
                               {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
-                              <Button type="submit" disabled={isPending || (appointmentType === 'Walk-in' && !isWalkInAvailable)}>
+                              <Button type="submit" disabled={isPending || (appointmentType === 'Walk-in' && !walkInEstimate)}>
                                 {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                 {isEditing ? "Save Changes" : "Book Appointment"}
                               </Button>
@@ -1343,7 +1343,10 @@ export default function AppointmentsPage() {
                           </TableHeader>
                           <TableBody>
                             {filteredAppointments.map((appointment) => (
-                              <TableRow key={appointment.id} className={cn(isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30")}>
+                              <TableRow key={appointment.id} className={cn(
+                                isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30",
+                                appointment.isSkipped && "bg-orange-100 dark:bg-orange-900/30"
+                              )}>
                                 <TableCell className="font-medium">{appointment.patientName}</TableCell>
                                 <TableCell>{appointment.age}</TableCell>
                                 <TableCell>{appointment.sex}</TableCell>
