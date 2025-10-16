@@ -86,6 +86,7 @@ const formSchema = z.object({
 type AppointmentFormValues = z.infer<typeof formSchema>;
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MAX_VISIBLE_SLOTS = 6;
 
 type WalkInEstimate = {
   estimatedTime: Date;
@@ -761,9 +762,9 @@ export default function AppointmentsPage() {
       .map(ls => parse(ls.date, 'yyyy-MM-dd', new Date()));
   }, [selectedDoctor?.leaveSlots, selectedDoctor?.availabilitySlots]);
 
-  const timeSlots = useMemo(() => {
+  const sessionSlots = useMemo(() => {
     if (!selectedDate || !selectedDoctor || !selectedDoctor.averageConsultingTime) {
-      return [];
+        return [];
     }
 
     const dayOfWeek = daysOfWeek[getDay(selectedDate)];
@@ -775,37 +776,52 @@ export default function AppointmentsPage() {
     const bookedSlotsForDay = otherAppointments
       .filter(apt => apt.doctor === selectedDoctor.name && apt.date === formattedDate)
       .map(apt => apt.time);
-
-    const slots: { time: string; disabled: boolean }[] = [];
-    const avgTime = selectedDoctor.averageConsultingTime;
-
+    
     const leaveForDate = selectedDoctor.leaveSlots?.find(ls => ls.date && isSameDay(parse(ls.date, 'yyyy-MM-dd', new Date()), selectedDate));
     const leaveTimeSlots = leaveForDate ? leaveForDate.slots : [];
 
-    availabilityForDay.timeSlots.forEach(ts => {
-      let currentTime = parseDateFns(ts.from, 'hh:mm a', selectedDate);
-      const endTime = parseDateFns(ts.to, 'hh:mm a', selectedDate);
+    const sessions = availabilityForDay.timeSlots.map((session, sessionIndex) => {
+      const slots = [];
+      let availableCount = 0;
+      let currentTime = parseDateFns(session.from, 'hh:mm a', selectedDate);
+      const endTime = parseDateFns(session.to, 'hh:mm a', selectedDate);
 
       while (currentTime < endTime) {
+        if (isPast(currentTime) && !isToday(currentTime)) {
+          currentTime = new Date(currentTime.getTime() + selectedDoctor.averageConsultingTime! * 60000);
+          continue;
+        }
+
         const slotTime = format(currentTime, "hh:mm a");
-        const isLeave = leaveTimeSlots.some(leaveSlot => {
+        let status: 'available' | 'booked' | 'leave' = 'available';
+
+        if (bookedSlotsForDay.includes(slotTime)) {
+          status = 'booked';
+        } else if (leaveTimeSlots.some(leaveSlot => {
           const leaveStart = parseDateFns(leaveSlot.from, 'hh:mm a', selectedDate);
           const leaveEnd = parseDateFns(leaveSlot.to, 'hh:mm a', selectedDate);
           return currentTime >= leaveStart && currentTime < leaveEnd;
-        });
-
-        if (!isLeave) {
-          slots.push({
-            time: slotTime,
-            disabled: bookedSlotsForDay.includes(slotTime),
-          });
+        })) {
+          status = 'leave';
         }
 
-        currentTime = new Date(currentTime.getTime() + avgTime * 60000);
+        if (status === 'available') {
+            if (availableCount < MAX_VISIBLE_SLOTS) {
+                slots.push({ time: slotTime, status });
+                availableCount++;
+            }
+        } else {
+            slots.push({ time: slotTime, status });
+        }
+        
+        currentTime = new Date(currentTime.getTime() + selectedDoctor.averageConsultingTime! * 60000);
       }
+      
+      const sessionTitle = `Session ${sessionIndex + 1} (${session.from} - ${session.to})`;
+      return { title: sessionTitle, slots };
     });
 
-    return slots;
+    return sessions.filter(s => s.slots.length > 0);
   }, [selectedDate, selectedDoctor, appointments, isEditing, editingAppointment]);
 
   const isAppointmentOnLeave = (appointment: Appointment): boolean => {
@@ -1179,30 +1195,36 @@ export default function AppointmentsPage() {
                                   </FormItem>
                                 )} />
                                 {appointmentType === 'Advanced Booking' && selectedDoctor && selectedDate && (
-                                  <FormField control={form.control} name="time" render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Select Time Slot</FormLabel>
-                                      <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-2">
-                                        {timeSlots.length > 0 ? timeSlots.map(slot => (
-                                          <Button
-                                            key={slot.time}
-                                            type="button"
-                                            variant={field.value === format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm') ? "default" : "outline"}
-                                            onClick={() => {
-                                              const val = format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm');
-                                              field.onChange(val);
-                                              if (val) form.clearErrors("time");
-                                            }}
-                                            disabled={slot.disabled}
-                                            className={cn("text-xs", slot.disabled && "line-through")}
-                                          >
-                                            {slot.time}
-                                          </Button>
-                                        )) : <p className="text-sm text-muted-foreground col-span-2">No available slots for this day.</p>}
-                                      </div>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )} />
+                                    <div className="space-y-4 max-h-60 overflow-y-auto pr-2">
+                                        {sessionSlots.length > 0 ? (
+                                            sessionSlots.map((session, index) => (
+                                                <div key={index}>
+                                                    <h4 className="text-sm font-semibold mb-2">{session.title}</h4>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        {session.slots.map(slot => (
+                                                            <Button
+                                                                key={slot.time}
+                                                                type="button"
+                                                                variant={form.getValues("time") === format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm') ? "default" : "outline"}
+                                                                onClick={() => {
+                                                                    const val = format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm');
+                                                                    form.setValue("time", val);
+                                                                    if (val) form.clearErrors("time");
+                                                                }}
+                                                                disabled={slot.status !== 'available'}
+                                                                className={cn("text-xs", {
+                                                                    "line-through bg-muted text-muted-foreground": slot.status === 'booked',
+                                                                    "line-through bg-destructive/20 text-destructive-foreground": slot.status === 'leave',
+                                                                })}
+                                                            >
+                                                                {slot.time}
+                                                            </Button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : <p className="text-sm text-muted-foreground col-span-2">No available slots for this day.</p>}
+                                    </div>
                                 )}
                               </div>
                             </div>
@@ -1496,3 +1518,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
