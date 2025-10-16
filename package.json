@@ -10,7 +10,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "seed-firestore": "node scripts/seed-firestore.js"
+    "seed-firestore": "node scripts/seed-firestore.js",
+    "seed-master-departments": "node scripts/seed-master-departments.js"
   },
   "dependencies": {
     "@genkit-ai/googleai": "^1.14.1",
