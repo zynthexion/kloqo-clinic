@@ -1,5 +1,5 @@
 
-const { initializeApp } = require('firebase-admin/app');
+const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 
 if (typeof window !== 'undefined') {
@@ -151,10 +151,77 @@ const masterDepartments = [
     imageHint: 'xray scan',
     doctors: [],
   },
+  {
+    id: 'dept-19',
+    name: 'Anesthesiology',
+    description: 'Management of pain and total care of the patient before, during and after surgery.',
+    image: 'https://images.unsplash.com/photo-1581594549592-3823d3e39396?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8YW5lc3RoZXNpYXxlbnwwfHwwfHx8MA%3D%3D',
+    imageHint: 'surgical equipment',
+    doctors: [],
+  },
+  {
+    id: 'dept-20',
+    name: 'Dentistry',
+    description: 'Diagnosis, treatment, and prevention of diseases and conditions of the oral cavity.',
+    image: 'https://images.unsplash.com/photo-1629905684821-2a8e85906161?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8M3x8ZGVudGlzdHJ5fGVufDB8fDB8fHww',
+    imageHint: 'dental tools',
+    doctors: [],
+  },
+  {
+    id: 'dept-21',
+    name: 'Emergency Medicine',
+    description: 'Care for patients with acute illnesses or injuries which require immediate medical attention.',
+    image: 'https://images.unsplash.com/photo-1532938911079-1b06ac7ceec7?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8N3x8ZW1lcmdlbmN5JTIwcm9vbXxlbnwwfHwwfHx8MA%3D%3D',
+    imageHint: 'emergency room',
+    doctors: [],
+  },
+  {
+    id: 'dept-22',
+    name: 'Geriatrics',
+    description: 'Health care of elderly people.',
+    image: 'https://images.unsplash.com/photo-1594949563212-320e69882208?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8ZWxkZXJseSUyMGNhcmV8ZW58MHx8MHx8fDA%3D',
+    imageHint: 'doctor elderly patient',
+    doctors: [],
+  },
+  {
+    id: 'dept-23',
+    name: 'Hematology',
+    description: 'Treatment of blood, blood-forming organs, and blood diseases.',
+    image: 'https://images.unsplash.com/photo-1579154341148-3c3b05f88414?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8Ymxvb2QlMjB0ZXN0fGVufDB8fDB8fHww',
+    imageHint: 'blood test',
+    doctors: [],
+  },
+  {
+    id: 'dept-24',
+    name: 'Infectious Disease',
+    description: 'Diagnosis and treatment of complex infections.',
+    image: 'https://images.unsplash.com/photo-1579532582937-16c1179a3348?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8M3x8bWljcm9zY29wZXxlbnwwfHwwfHx8MA%3D%3D',
+    imageHint: 'microscope virus',
+    doctors: [],
+  },
+  {
+    id: 'dept-25',
+    name: 'Plastic Surgery',
+    description: 'Surgical specialty dedicated to reconstruction of facial and body defects.',
+    image: 'https://images.unsplash.com/photo-1631215243349-5cd3b9148464?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8cGxhc3RpYyUyMHN1cmdlcnl8ZW58MHx8MHx8fDA%3D',
+    imageHint: 'surgical tools',
+    doctors: [],
+  },
+  {
+    id: 'dept-26',
+    name: 'Physiotherapy',
+    description: 'Helps restore movement and function when someone is affected by injury or disability.',
+    image: 'https://images.unsplash.com/photo-1591953931693-7a27453b3b4f?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8cGh5c2lvdGhlcmFweXxlbnwwfHwwfHx8MA%3D%3D',
+    imageHint: 'physical therapy',
+    doctors: [],
+  },
 ];
 
 try {
-    initializeApp();
+    initializeApp({
+        // If you're running this locally with a service account file:
+        // credential: cert(require('./path/to/your/serviceAccountKey.json'))
+    });
 } catch(e) {
     if (e.code !== 'app/duplicate-app') {
         console.error("Firebase Admin initialization error:", e);
