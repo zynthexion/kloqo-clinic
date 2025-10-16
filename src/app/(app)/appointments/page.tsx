@@ -456,7 +456,7 @@ export default function AppointmentsPage() {
       return;
     }
 
-    if (appointmentType === 'Walk-in' && !isWalkInAvailable) {
+    if (appointmentType === 'Walk-in' && !walkInEstimate) {
       toast({ variant: "destructive", title: "Booking Not Available", description: "Walk-in tokens are not available for this doctor at this time." });
       return;
     }
@@ -809,19 +809,20 @@ export default function AppointmentsPage() {
   }, [selectedDate, selectedDoctor, appointments, isEditing, editingAppointment]);
 
   const isAppointmentOnLeave = (appointment: Appointment): boolean => {
-    if (!doctors.length || !appointment) return false;
-    const doctorForApt = doctors.find(d => d.name === appointment.doctor);
-    if (!doctorForApt || !doctorForApt.leaveSlots) return false;
-    const aptDate = parse(appointment.date, "d MMMM yyyy", new Date());
-    const leaveForDay = doctorForApt.leaveSlots.find(ls => ls.date && isSameDay(parse(ls.date, "yyyy-MM-dd", new Date()), aptDate));
-    if (!leaveForDay) return false;
+      if (!doctors.length || !appointment) return false;
+      const doctorForApt = doctors.find(d => d.name === appointment.doctor);
+      if (!doctorForApt || !doctorForApt.leaveSlots) return false;
+      const aptDate = parse(appointment.date, "d MMMM yyyy", new Date());
+      const leaveForDay = doctorForApt.leaveSlots.find(ls => ls.date && isSameDay(parse(ls.date, "yyyy-MM-dd", new Date()), aptDate));
+      if (!leaveForDay) return false;
 
-    const aptTime = parseDateFns(appointment.time, "hh:mm a", new Date(0));
-    return leaveForDay.slots.some(leaveSlot => {
-      const leaveStart = parseDateFns(leaveSlot.from, "hh:mm a", new Date(0));
-      const leaveEnd = parseDateFns(leaveSlot.to, "hh:mm a", new Date(0));
-      return aptTime >= leaveStart && aptTime < leaveEnd;
-    });
+      const aptTime = parseDateFns(appointment.time, "hh:mm a", new Date(0));
+      
+      return leaveForDay.slots.some(leaveSlot => {
+          const leaveStart = parseDateFns(leaveSlot.from, "hh:mm a", new Date(0));
+          const leaveEnd = parseDateFns(leaveSlot.to, "hh:mm a", new Date(0));
+          return aptTime >= leaveStart && aptTime < leaveEnd;
+      });
   };
 
   const filteredAppointments = useMemo(() => {
@@ -1115,21 +1116,21 @@ export default function AppointmentsPage() {
                                     </FormItem>
                                   )} />
                                 ) : (
-                                  <Card className={cn("mt-4", isWalkInAvailable ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200")}>
+                                  <Card className={cn("mt-4", walkInEstimate ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200")}>
                                       <CardHeader className="flex-row items-start gap-3 space-y-0 p-4">
-                                        <Info className={cn("w-6 h-6 mt-1", isWalkInAvailable ? "text-green-600" : "text-red-600")} />
+                                        <Info className={cn("w-6 h-6 mt-1", walkInEstimate ? "text-green-600" : "text-red-600")} />
                                         <div>
-                                            <CardTitle className="text-base">{isWalkInAvailable ? "Walk-in Available" : "Walk-in Unavailable"}</CardTitle>
-                                            <CardDescription className={cn("text-xs", isWalkInAvailable ? "text-green-800" : "text-red-800")}>
-                                                {isWalkInAvailable ? "Estimated waiting time is shown below." : "This doctor is not available for walk-ins at this time."}
+                                            <CardTitle className="text-base">{walkInEstimate ? "Walk-in Available" : "Walk-in Unavailable"}</CardTitle>
+                                            <CardDescription className={cn("text-xs", walkInEstimate ? "text-green-800" : "text-red-800")}>
+                                                {walkInEstimate ? "Estimated waiting time is shown below." : "This doctor is not available for walk-ins at this time."}
                                             </CardDescription>
                                         </div>
                                       </CardHeader>
-                                      {isWalkInAvailable && (
+                                      {walkInEstimate && (
                                         <CardContent className="p-4 pt-0">
                                             {isCalculatingEstimate ? (
                                                 <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Calculating wait time...</div>
-                                            ) : walkInEstimate ? (
+                                            ) : (
                                                 <div className="flex items-center justify-around text-center">
                                                     <div>
                                                         <p className="text-xs text-muted-foreground">Est. Time</p>
@@ -1140,8 +1141,6 @@ export default function AppointmentsPage() {
                                                         <p className="font-bold text-lg">{walkInEstimate.patientsAhead} ahead</p>
                                                     </div>
                                                 </div>
-                                            ) : (
-                                              <p className="text-center text-xs text-muted-foreground">Could not calculate estimate.</p>
                                             )}
                                         </CardContent>
                                       )}
@@ -1497,4 +1496,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
