@@ -4,37 +4,37 @@ import { getStorage } from 'firebase-admin/storage';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { config } from 'dotenv';
 
-// Load environment variables from .env file
 config();
 
-// Initialize Firebase Admin
-// Make sure to set the environment variables in your .env.local file
-if (!getApps().length) {
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
-  if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !privateKey || !process.env.FIREBASE_STORAGE_BUCKET) {
-    console.error('Firebase Admin SDK initialization failed: One or more required environment variables are missing.');
-    console.error('Check FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY, FIREBASE_STORAGE_BUCKET');
-  } else {
-      try {
-        initializeApp({
-            credential: cert({
-            projectId: process.env.FIREBASE_PROJECT_ID,
-            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-            privateKey: privateKey,
-            }),
-            storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
-        });
-      } catch (error) {
-          console.error('Firebase Admin SDK initializeApp error:', error);
-      }
-  }
-}
-
 export async function POST(request: NextRequest) {
-  // Check if Firebase Admin is initialized before proceeding
+  // Initialize Firebase Admin SDK within the request handler
+  if (!getApps().length) {
+    try {
+      const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+      if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !privateKey || !process.env.FIREBASE_STORAGE_BUCKET) {
+        throw new Error('Firebase Admin SDK initialization failed: One or more required environment variables are missing.');
+      }
+      initializeApp({
+        credential: cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey: privateKey,
+        }),
+        storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+      });
+    } catch (error: any) {
+        console.error('Firebase Admin SDK initializeApp error:', error.message);
+        return NextResponse.json(
+            { error: 'Firebase Admin SDK not initialized. Check server logs for details. Make sure environment variables are set.' },
+            { status: 500 }
+        );
+    }
+  }
+
+  // Check again to ensure initialization was successful
   if (!getApps().length) {
     return NextResponse.json(
-        { error: 'Firebase Admin SDK not initialized. Check server logs for details. Make sure environment variables are set.' },
+        { error: 'Firebase Admin SDK could not be initialized.' },
         { status: 500 }
     );
   }
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     const clinicId = formData.get('clinicId') as string;
     const userId = formData.get('userId') as string;
 
-    if (!file || !clinicId) {
+    if (!file || !clinicId || !userId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
@@ -66,8 +66,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // The public URL can be constructed this way, assuming default public access settings or signed URLs
-    // For simplicity, we'll make the file public. For production, signed URLs are safer.
     await fileRef.makePublic();
     const publicUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
 
