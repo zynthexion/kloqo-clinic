@@ -64,7 +64,7 @@ const formSchema = z.object({
   registrationNumber: z.string().optional(),
   bio: z.string().min(10, { message: "Bio must be at least 10 characters." }),
   experience: z.coerce.number().min(0, "Years of experience cannot be negative."),
-  consultationFee: z.coerce.number().min(0, "Consultation fee cannot be negative."),
+  consultationFee: z.coerce.number({invalid_type_error: "Consultation fee is required."}).min(1, "Consultation fee must be greater than 0."),
   averageConsultingTime: z.coerce.number().min(5, "Must be at least 5 minutes."),
   availabilitySlots: z.array(availabilitySlotSchema).min(1, "At least one availability slot is required."),
   photo: z.any().optional(),
@@ -104,7 +104,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
       registrationNumber: "",
       bio: "",
       experience: 0,
-      consultationFee: 0,
+      consultationFee: undefined,
       averageConsultingTime: 15,
       availabilitySlots: [],
       freeFollowUpDays: 7,
@@ -135,7 +135,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         registrationNumber: doctor.registrationNumber || "",
         bio: doctor.bio || "",
         experience: doctor.experience || 0,
-        consultationFee: doctor.consultationFee || 0,
+        consultationFee: doctor.consultationFee || undefined,
         averageConsultingTime: doctor.averageConsultingTime || 15,
         availabilitySlots: availabilitySlots,
         freeFollowUpDays: doctor.freeFollowUpDays || 7,
@@ -153,7 +153,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         registrationNumber: "",
         bio: "",
         experience: 0,
-        consultationFee: 0,
+        consultationFee: undefined,
         averageConsultingTime: 15,
         availabilitySlots: [],
         freeFollowUpDays: 7,
@@ -226,11 +226,17 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 
             let photoUrl = doctor?.avatar || `https://picsum.photos/seed/new-doc-${Date.now()}/100/100`;
 
-            if (values.photo instanceof File) {
-                const storageRef = ref(storage, `doctor_avatars/${clinicId}/${Date.now()}_${values.photo.name}`);
-                await uploadBytes(storageRef, values.photo);
+            const photoFile = form.getValues('photo');
+            if (photoFile instanceof File) {
+                console.log("File is being uploaded:", photoFile);
+                const storageRef = ref(storage, `doctor_avatars/${clinicId}/${Date.now()}_${photoFile.name}`);
+                await uploadBytes(storageRef, photoFile);
                 photoUrl = await getDownloadURL(storageRef);
+                console.log("File uploaded successfully. URL:", photoUrl);
+            } else {
+                console.log("No new file selected or file is not a File instance.");
             }
+            
 
             const docId = values.id || `doc-${Date.now()}`;
 
@@ -265,8 +271,10 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                 freeFollowUpDays: values.freeFollowUpDays,
                 advanceBookingDays: values.advanceBookingDays,
             };
-
+            
+            console.log("Attempting to save doctor data:", doctorToSave);
             await setDoc(doc(db, "doctors", docId), doctorToSave, { merge: true });
+            console.log("Doctor data saved successfully to Firestore.");
 
             onSave(doctorToSave);
             setIsOpen(false);
@@ -320,34 +328,28 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
                 {/* Left Column */}
                 <div className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="photo"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Doctor's Photo</FormLabel>
-                          <div className="flex items-center gap-4">
-                            <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center overflow-hidden">
-                              {photoPreview ? (
-                                <Image src={photoPreview} alt="Doctor's Photo" width={96} height={96} className="object-cover" />
-                              ) : (
-                                <Upload className="w-8 h-8 text-muted-foreground" />
-                              )}
-                            </div>
-                            <FormControl>
-                                <Input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" id="photo-upload" />
-                            </FormControl>
-                            <label htmlFor="photo-upload" className="cursor-pointer">
-                              <Button type="button" variant="outline">
-                                <Upload className="mr-2 h-4 w-4" />
-                                Upload
-                              </Button>
-                            </label>
-                          </div>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <FormItem>
+                    <FormLabel>Doctor's Photo</FormLabel>
+                      <div className="flex items-center gap-4">
+                        <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center overflow-hidden">
+                          {photoPreview ? (
+                            <Image src={photoPreview} alt="Doctor's Photo" width={96} height={96} className="object-cover" />
+                          ) : (
+                            <Upload className="w-8 h-8 text-muted-foreground" />
+                          )}
+                        </div>
+                        <FormControl>
+                            <Input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" id="photo-upload" />
+                        </FormControl>
+                        <label htmlFor="photo-upload" className="cursor-pointer">
+                          <Button type="button" variant="outline">
+                            <Upload className="mr-2 h-4 w-4" />
+                            Upload
+                          </Button>
+                        </label>
+                      </div>
+                    <FormMessage />
+                  </FormItem>
                   <FormField
                     control={form.control}
                     name="name"
