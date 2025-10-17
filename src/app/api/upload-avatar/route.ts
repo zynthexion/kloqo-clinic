@@ -4,7 +4,7 @@ import { getStorage } from 'firebase-admin/storage';
 import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
 
 // Import the service account key from the JSON file
-import serviceAccount from '../../../../service-account.json';
+import serviceAccount from '../../../../service-account-key.json';
 
 // Ensure the service account has the correct properties
 const serviceAccountParams = {
