@@ -31,9 +31,10 @@ interface LogoProps {
   className?: string;
   width?: number;
   height?: number;
+  variant?: 'compact' | 'full';
 }
 
-export function Logo({ className = "", width, height = 64 }: LogoProps) {
+export function Logo({ className = "", width, height = 64, variant = 'full' }: LogoProps) {
   // Original image dimensions: 4000×2200 (20:11 aspect ratio)
   const aspectRatio = 4000 / 2200; // ≈ 1.818
 
@@ -41,9 +42,14 @@ export function Logo({ className = "", width, height = 64 }: LogoProps) {
   const imageWidth = width || Math.round(height * aspectRatio);
   const imageHeight = height;
 
+  // Choose image source based on variant
+  const imageSrc = variant === 'compact'
+    ? 'https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.firebasestorage.app/o/kloqo_Logo_twest.png?alt=media&token=478a0eb1-1a51-4513-adce-d0fcb0c392a7'
+    : 'https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.firebasestorage.app/o/Kloqo_Logo_full.png?alt=media&token=2f9b97ad-29ae-4812-b189-ba7291a1f005';
+
   return (
     <Image
-      src="https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.firebasestorage.app/o/Kloqo_Logo_full.png?alt=media&token=2f9b97ad-29ae-4812-b189-ba7291a1f005"
+      src={imageSrc}
       alt="Kloqo Logo"
       width={imageWidth}
       height={imageHeight}
