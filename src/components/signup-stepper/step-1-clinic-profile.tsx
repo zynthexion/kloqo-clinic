@@ -38,28 +38,60 @@ export function Step1ClinicProfile() {
             setValue('latitude', latitude, { shouldValidate: true });
             setValue('longitude', longitude, { shouldValidate: true });
 
-            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`);
-            const data = await response.json();
-            
-            if (data && data.address) {
-                const { city, town, village, country } = data.address;
-                setLocationName(`${city || town || village || 'Unknown Location'}, ${country || ''}`);
-            } else {
-                setLocationName(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
-            }
+            try {
+              const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&addressdetails=1&zoom=16`);
+              const data = await response.json();
 
-            toast({
-              title: "Location Detected",
-              description: "Your clinic's location has been set.",
-            });
+              if (data && data.display_name) {
+                // Use the full display name from Nominatim
+                setLocationName(data.display_name);
+              } else if (data && data.address) {
+                // Try multiple address field combinations
+                const address = data.address;
+                const locationParts = [];
+
+                // Try different location fields in order of preference
+                if (address.city) locationParts.push(address.city);
+                else if (address.town) locationParts.push(address.town);
+                else if (address.village) locationParts.push(address.village);
+                else if (address.municipality) locationParts.push(address.municipality);
+                else if (address.suburb) locationParts.push(address.suburb);
+                else if (address.locality) locationParts.push(address.locality);
+                else if (address.county) locationParts.push(address.county);
+
+                if (address.state) locationParts.push(address.state);
+                else if (address.region) locationParts.push(address.region);
+
+                if (address.country) locationParts.push(address.country);
+
+                const locationName = locationParts.length > 0 ? locationParts.join(', ') : 'Unknown Location';
+                setLocationName(locationName);
+              } else {
+                // Fallback to coordinates if no address data
+                setLocationName(`Location at ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+              }
+
+              toast({
+                title: "Location Detected",
+                description: "Your clinic's location has been set.",
+              });
+            } catch (geocodeError) {
+              console.error("Reverse geocoding error:", geocodeError);
+              // Still save coordinates even if geocoding fails
+              setLocationName(`Location at ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+
+              toast({
+                title: "Location Detected",
+                description: "Coordinates saved successfully. Could not fetch place name.",
+              });
+            }
           } catch (error) {
-             console.error("Reverse geocoding error:", error);
-             toast({
-                variant: "destructive",
-                title: "Location Error",
-                description: "Could not fetch place name. Coordinates saved.",
-             });
-             setLocationName(`${watch('latitude').toFixed(4)}, ${watch('longitude').toFixed(4)}`);
+            console.error("Geolocation error:", error);
+            toast({
+              variant: "destructive",
+              title: "Location Error",
+              description: "Could not detect location. Please grant permission or enter manually.",
+            });
           } finally {
             setIsDetecting(false);
           }
@@ -75,11 +107,11 @@ export function Step1ClinicProfile() {
         }
       );
     } else {
-        toast({
-            variant: "destructive",
-            title: "Not Supported",
-            description: "Geolocation is not supported by your browser.",
-        });
+      toast({
+        variant: "destructive",
+        title: "Not Supported",
+        description: "Geolocation is not supported by your browser.",
+      });
     }
   };
   
@@ -187,9 +219,12 @@ export function Step1ClinicProfile() {
                 {isDetecting ? 'Detecting...' : (latitude !== 0 ? 'Location Detected' : 'Detect My Location')}
             </Button>
             {latitude !== 0 && locationName && (
-                <p className="text-sm text-muted-foreground text-center mt-2">
-                    {locationName}
-                </p>
+                <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-md">
+                    <p className="text-sm text-green-800 text-center">
+                        <MapPin className="inline h-3 w-3 mr-1" />
+                        {locationName}
+                    </p>
+                </div>
             )}
             <FormField control={control} name="latitude" render={() => <FormMessage />} />
         </div>

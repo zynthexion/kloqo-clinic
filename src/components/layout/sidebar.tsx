@@ -121,13 +121,15 @@ export function Sidebar() {
   return (
     <TooltipProvider delayDuration={0}>
       <aside className="group sticky top-0 left-0 h-screen w-16 hover:w-64 transition-all duration-300 ease-in-out flex flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-lg z-50 rounded-tr-2xl rounded-br-2xl">
-        <div className="flex h-20 items-center justify-start p-4 shrink-0">
-          <Link href="/" className="flex items-center gap-3">
-            <Image src="https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.appspot.com/o/Kloqo_Logo_full.png?alt=media&token=2f9b97ad-29ae-4812-b189-ba7291a1f005" alt="Kloqo Logo" width={120} height={30} className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100" />
-             <div className="w-10 h-10 shrink-0 group-hover:opacity-0 transition-opacity duration-200">
-                <Image src="https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.appspot.com/o/Kloqo_Logo_full.png?alt=media&token=2f9b97ad-29ae-4812-b189-ba7291a1f005" alt="Kloqo Icon" width={40} height={40} />
-             </div>
-          </Link>
+        <div className="flex h-20 items-center justify-center p-4 shrink-0">
+            <Link href="/" className="flex items-center gap-3">
+                <div className="w-10 h-10 shrink-0 group-hover:hidden transition-opacity duration-200">
+                    <Image src="https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.appspot.com/o/Kloqo_Logo_full.png?alt=media&token=2f9b97ad-29ae-4812-b189-ba7291a1f005" alt="Kloqo Icon" width={40} height={40} />
+                </div>
+                <div className="w-32 h-auto shrink-0 hidden group-hover:block transition-opacity duration-200 delay-100">
+                     <Image src="https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.appspot.com/o/Kloqo_Logo_full.png?alt=media&token=2f9b97ad-29ae-4812-b189-ba7291a1f005" alt="Kloqo Logo" width={128} height={35} />
+                </div>
+            </Link>
         </div>
 
         <nav className="flex-grow flex flex-col justify-start gap-2 p-2">

@@ -70,7 +70,7 @@ export default function ForgotPasswordPage() {
         window.recaptchaVerifier.clear();
       }
     };
-  }, [toast, auth]);
+  }, [toast]);
 
 
   const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
