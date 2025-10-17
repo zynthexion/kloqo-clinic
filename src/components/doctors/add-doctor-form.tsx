@@ -91,6 +91,8 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
   const isEditMode = !!doctor;
   const auth = useAuth();
   const [isPending, startTransition] = useTransition();
+  const [clinicId, setClinicId] = useState<string | null>(null);
+
 
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [sharedTimeSlots, setSharedTimeSlots] = useState<Array<{ from: string; to: string }>>([{ from: "09:00", to: "17:00" }]);
@@ -111,6 +113,27 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
       advanceBookingDays: 30,
     },
   });
+
+  useEffect(() => {
+    if (auth.currentUser) {
+      console.log('Auth user found on form mount:', auth.currentUser.uid);
+      const fetchClinicId = async () => {
+        const userDocRef = doc(db, 'users', auth.currentUser!.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        const userClinicId = userDocSnap.data()?.clinicId;
+        if (userClinicId) {
+          setClinicId(userClinicId);
+          console.log('Clinic ID fetched and set on mount:', userClinicId);
+        } else {
+          console.error('Could not find clinicId for the current user.');
+        }
+      };
+      fetchClinicId();
+    } else {
+       console.log('No auth user found on form mount.');
+    }
+  }, [auth.currentUser]);
+
 
   useEffect(() => {
     if (doctor) {
@@ -210,100 +233,107 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 
   const onSubmit = (values: AddDoctorFormValues) => {
     startTransition(async () => {
-        if (!auth.currentUser) {
-            toast({ variant: "destructive", title: "Error", description: "You must be logged in." });
-            return;
+      console.log('Form submitted. User:', auth.currentUser?.uid);
+      console.log('Clinic ID available in onSubmit:', clinicId);
+      
+      if (!auth.currentUser) {
+        toast({ variant: "destructive", title: "Authentication Error", description: "You must be logged in to save a doctor." });
+        console.error('Save failed: No authenticated user.');
+        return;
+      }
+      
+      if (!clinicId) {
+        toast({ variant: "destructive", title: "Configuration Error", description: "Cannot save doctor without a valid clinic ID." });
+        console.error('Save failed: No clinic ID available.');
+        return;
+      }
+
+      try {
+        await auth.currentUser.reload();
+        console.log('User token reloaded successfully.');
+
+        let photoUrl = doctor?.avatar || `https://picsum.photos/seed/new-doc-${Date.now()}/100/100`;
+        const photoFile = form.getValues('photo');
+
+        if (photoFile instanceof File) {
+          console.log("New photo file detected:", photoFile.name, `(${(photoFile.size / 1024).toFixed(2)} KB)`);
+          
+          const options = {
+            maxSizeMB: 0.5,
+            maxWidthOrHeight: 800,
+            useWebWorker: true,
+          };
+          
+          const compressedFile = await imageCompression(photoFile, options);
+          console.log("Image compressed:", compressedFile.name, `(${(compressedFile.size / 1024).toFixed(2)} KB)`);
+
+          const storagePath = `doctor_avatars/${clinicId}/${Date.now()}_${compressedFile.name}`;
+          console.log("Uploading to storage path:", storagePath);
+          const storageRef = ref(storage, storagePath);
+          
+          await uploadBytes(storageRef, compressedFile);
+          photoUrl = await getDownloadURL(storageRef);
+          console.log("Upload successful. Photo URL:", photoUrl);
+        } else {
+            console.log("No new photo file detected. Using existing avatar URL:", photoUrl);
         }
 
-        try {
-            const userDocRef = doc(db, 'users', auth.currentUser.uid);
-            const userDocSnap = await getDoc(userDocRef);
-            const clinicId = userDocSnap.data()?.clinicId;
-            if (!clinicId) {
-                toast({ variant: "destructive", title: "Error", description: "Clinic ID not found." });
-                return;
-            }
+        const docId = values.id || `doc-${Date.now()}`;
+        const scheduleString = values.availabilitySlots
+          ?.sort((a, b) => daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day))
+          .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${format(parse(ts.from, "HH:mm", new Date()), "hh:mm a")}-${format(parse(ts.to, "HH:mm", new Date()), "hh:mm a")}`).join(', ')}`)
+          .join('; ');
 
-            let photoUrl = doctor?.avatar || `https://picsum.photos/seed/new-doc-${Date.now()}/100/100`;
+        const doctorToSave: Doctor = {
+          id: docId,
+          clinicId: clinicId,
+          name: values.name,
+          specialty: values.specialty,
+          department: values.department,
+          registrationNumber: values.registrationNumber,
+          avatar: photoUrl,
+          schedule: scheduleString || "Not set",
+          preferences: doctor?.preferences || 'Not set',
+          historicalData: doctor?.historicalData || 'No data',
+          availability: doctor?.availability || 'Unavailable',
+          consultationStatus: isEditMode ? doctor.consultationStatus : 'Out',
+          bio: values.bio,
+          experience: values.experience,
+          consultationFee: values.consultationFee,
+          averageConsultingTime: values.averageConsultingTime,
+          availabilitySlots: values.availabilitySlots.map(s => ({
+            ...s, timeSlots: s.timeSlots.map(ts => ({
+              from: format(parse(ts.from, "HH:mm", new Date()), "hh:mm a"),
+              to: format(parse(ts.to, "HH:mm", new Date()), "hh:mm a")
+            }))
+          })),
+          freeFollowUpDays: values.freeFollowUpDays,
+          advanceBookingDays: values.advanceBookingDays,
+        };
 
-            const photoFile = form.getValues('photo');
-            if (photoFile instanceof File) {
-                console.log("Original file:", photoFile.name, (photoFile.size / 1024).toFixed(2), "KB");
+        console.log("Attempting to save doctor data to Firestore:", doctorToSave);
+        await setDoc(doc(db, "doctors", docId), doctorToSave, { merge: true });
+        console.log("Doctor data saved successfully.");
 
-                const options = {
-                  maxSizeMB: 0.5,
-                  maxWidthOrHeight: 800,
-                  useWebWorker: true,
-                };
-                
-                const compressedFile = await imageCompression(photoFile, options);
-                console.log("Compressed file:", compressedFile.name, (compressedFile.size / 1024).toFixed(2), "KB");
+        onSave(doctorToSave);
+        setIsOpen(false);
+        form.reset();
+        setPhotoPreview(null);
+        toast({
+          title: `Doctor ${isEditMode ? "Updated" : "Added"}`,
+          description: `${values.name} has been successfully ${isEditMode ? "updated" : "added"}.`,
+        });
 
-                const storageRef = ref(storage, `doctor_avatars/${clinicId}/${Date.now()}_${compressedFile.name}`);
-                await uploadBytes(storageRef, compressedFile);
-                photoUrl = await getDownloadURL(storageRef);
-                console.log("File uploaded successfully. URL:", photoUrl);
-            } else {
-                console.log("No new file selected or file is not a File instance.");
-            }
-            
-
-            const docId = values.id || `doc-${Date.now()}`;
-
-            const scheduleString = values.availabilitySlots
-                ?.sort((a, b) => daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day))
-                .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${format(parse(ts.from, "HH:mm", new Date()), "hh:mm a")}-${format(parse(ts.to, "HH:mm", new Date()), "hh:mm a")}`).join(', ')}`)
-                .join('; ');
-
-            const doctorToSave: Doctor = {
-                id: docId,
-                clinicId: clinicId,
-                name: values.name,
-                specialty: values.specialty,
-                department: values.department,
-                registrationNumber: values.registrationNumber,
-                avatar: photoUrl,
-                schedule: scheduleString || "Not set",
-                preferences: doctor?.preferences || 'Not set',
-                historicalData: doctor?.historicalData || 'No data',
-                availability: doctor?.availability || 'Unavailable',
-                consultationStatus: isEditMode ? doctor.consultationStatus : 'Out',
-                bio: values.bio,
-                experience: values.experience,
-                consultationFee: values.consultationFee,
-                averageConsultingTime: values.averageConsultingTime,
-                availabilitySlots: values.availabilitySlots.map(s => ({
-                    ...s, timeSlots: s.timeSlots.map(ts => ({
-                        from: format(parse(ts.from, "HH:mm", new Date()), "hh:mm a"),
-                        to: format(parse(ts.to, "HH:mm", new Date()), "hh:mm a")
-                    }))
-                })),
-                freeFollowUpDays: values.freeFollowUpDays,
-                advanceBookingDays: values.advanceBookingDays,
-            };
-            
-            console.log("Attempting to save doctor data:", doctorToSave);
-            await setDoc(doc(db, "doctors", docId), doctorToSave, { merge: true });
-            console.log("Doctor data saved successfully to Firestore.");
-
-            onSave(doctorToSave);
-            setIsOpen(false);
-            form.reset();
-            setPhotoPreview(null);
-            toast({
-                title: `Doctor ${isEditMode ? "Updated" : "Added"}`,
-                description: `${values.name} has been successfully ${isEditMode ? "updated" : "added"}.`,
-            });
-        } catch (error) {
-            console.error("Error saving doctor:", error);
-            toast({
-                variant: "destructive",
-                title: "Save Failed",
-                description: "Could not save doctor details.",
-            });
-        }
+      } catch (error: any) {
+        console.error("An error occurred during form submission:", error);
+        toast({
+          variant: "destructive",
+          title: "Save Failed",
+          description: error.message || "An unexpected error occurred. Please check the console.",
+        });
+      }
     });
-  }
+  };
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -340,24 +370,24 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                 <div className="space-y-4">
                   <FormItem>
                     <FormLabel>Doctor's Photo</FormLabel>
-                    <div className="flex items-center gap-4">
-                      <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center overflow-hidden">
-                        {photoPreview ? (
-                          <Image src={photoPreview} alt="Doctor's Photo" width={96} height={96} className="object-cover" />
-                        ) : (
-                          <Upload className="w-8 h-8 text-muted-foreground" />
-                        )}
-                      </div>
-                      <Input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" id="photo-upload" />
-                      <label htmlFor="photo-upload" className="cursor-pointer">
+                     <div className="flex items-center gap-4">
+                        <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center overflow-hidden">
+                          {photoPreview ? (
+                            <Image src={photoPreview} alt="Doctor's Photo" width={96} height={96} className="object-cover" />
+                          ) : (
+                            <Upload className="w-8 h-8 text-muted-foreground" />
+                          )}
+                        </div>
+                         <FormControl>
+                            <Input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" id="photo-upload" />
+                         </FormControl>
                         <Button type="button" variant="outline" asChild>
-                           <span>
+                           <label htmlFor="photo-upload" className="cursor-pointer">
                             <Upload className="mr-2 h-4 w-4" />
                             Upload
-                           </span>
+                           </label>
                         </Button>
-                      </label>
-                    </div>
+                      </div>
                     <FormMessage />
                   </FormItem>
                   <FormField
