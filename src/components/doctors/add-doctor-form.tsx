@@ -1,7 +1,8 @@
 
+
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -17,7 +18,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -31,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PlusCircle, Trash, Upload } from "lucide-react";
+import { Loader2, Trash, Upload } from "lucide-react";
 import type { Doctor, Department, AvailabilitySlot } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "../ui/scroll-area";
@@ -41,6 +41,10 @@ import { format, parse } from "date-fns";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/firebase";
+import { setDoc, doc, getDoc, collection } from "firebase/firestore";
+import { db, storage } from "@/lib/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 const timeSlotSchema = z.object({
   from: z.string().min(1, "Required"),
@@ -71,7 +75,7 @@ const formSchema = z.object({
 type AddDoctorFormValues = z.infer<typeof formSchema>;
 
 type AddDoctorFormProps = {
-  onSave: (doctor: AddDoctorFormValues & { consultationStatus?: 'In' | 'Out' }) => void;
+  onSave: (doctor: Doctor) => void;
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
   doctor: Doctor | null;
@@ -85,6 +89,8 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const { toast } = useToast();
   const isEditMode = !!doctor;
+  const auth = useAuth();
+  const [isPending, startTransition] = useTransition();
 
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [sharedTimeSlots, setSharedTimeSlots] = useState<Array<{ from: string; to: string }>>([{ from: "09:00", to: "17:00" }]);
@@ -200,13 +206,85 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
     });
     
     setSelectedDays([]);
-};
+  };
 
-  function onSubmit(values: AddDoctorFormValues) {
-    onSave({ ...values, consultationStatus: isEditMode ? doctor.consultationStatus : "Out" });
-    setIsOpen(false);
-    form.reset();
-    setPhotoPreview(null);
+  const onSubmit = (values: AddDoctorFormValues) => {
+    startTransition(async () => {
+        if (!auth.currentUser) {
+            toast({ variant: "destructive", title: "Error", description: "You must be logged in." });
+            return;
+        }
+
+        try {
+            const userDocRef = doc(db, 'users', auth.currentUser.uid);
+            const userDocSnap = await getDoc(userDocRef);
+            const clinicId = userDocSnap.data()?.clinicId;
+            if (!clinicId) {
+                toast({ variant: "destructive", title: "Error", description: "Clinic ID not found." });
+                return;
+            }
+
+            let photoUrl = doctor?.avatar || `https://picsum.photos/seed/new-doc-${Date.now()}/100/100`;
+
+            if (values.photo instanceof File) {
+                const storageRef = ref(storage, `doctor_avatars/${clinicId}/${Date.now()}_${values.photo.name}`);
+                await uploadBytes(storageRef, values.photo);
+                photoUrl = await getDownloadURL(storageRef);
+            }
+
+            const docId = values.id || `doc-${Date.now()}`;
+
+            const scheduleString = values.availabilitySlots
+                ?.sort((a, b) => daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day))
+                .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${format(parse(ts.from, "HH:mm", new Date()), "hh:mm a")}-${format(parse(ts.to, "HH:mm", new Date()), "hh:mm a")}`).join(', ')}`)
+                .join('; ');
+
+            const doctorToSave: Doctor = {
+                id: docId,
+                clinicId: clinicId,
+                name: values.name,
+                specialty: values.specialty,
+                department: values.department,
+                registrationNumber: values.registrationNumber,
+                avatar: photoUrl,
+                schedule: scheduleString || "Not set",
+                preferences: doctor?.preferences || 'Not set',
+                historicalData: doctor?.historicalData || 'No data',
+                availability: doctor?.availability || 'Unavailable',
+                consultationStatus: isEditMode ? doctor.consultationStatus : 'Out',
+                bio: values.bio,
+                experience: values.experience,
+                consultationFee: values.consultationFee,
+                averageConsultingTime: values.averageConsultingTime,
+                availabilitySlots: values.availabilitySlots.map(s => ({
+                    ...s, timeSlots: s.timeSlots.map(ts => ({
+                        from: format(parse(ts.from, "HH:mm", new Date()), "hh:mm a"),
+                        to: format(parse(ts.to, "HH:mm", new Date()), "hh:mm a")
+                    }))
+                })),
+                freeFollowUpDays: values.freeFollowUpDays,
+                advanceBookingDays: values.advanceBookingDays,
+            };
+
+            await setDoc(doc(db, "doctors", docId), doctorToSave, { merge: true });
+
+            onSave(doctorToSave);
+            setIsOpen(false);
+            form.reset();
+            setPhotoPreview(null);
+            toast({
+                title: `Doctor ${isEditMode ? "Updated" : "Added"}`,
+                description: `${values.name} has been successfully ${isEditMode ? "updated" : "added"}.`,
+            });
+        } catch (error) {
+            console.error("Error saving doctor:", error);
+            toast({
+                variant: "destructive",
+                title: "Save Failed",
+                description: "Could not save doctor details.",
+            });
+        }
+    });
   }
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -500,7 +578,10 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
             </ScrollArea>
             <DialogFooter className="pt-4">
               <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancel</Button>
-              <Button type="submit">{isEditMode ? "Save Changes" : "Save Doctor"}</Button>
+              <Button type="submit" disabled={isPending}>
+                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isEditMode ? "Save Changes" : "Save Doctor"}
+              </Button>
             </DialogFooter>
           </form>
         </Form>

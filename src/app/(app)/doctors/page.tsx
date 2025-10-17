@@ -85,23 +85,6 @@ const weeklyAvailabilityFormSchema = z.object({
 });
 type WeeklyAvailabilityFormValues = z.infer<typeof weeklyAvailabilityFormSchema>;
 
-const addDoctorFormSchema = z.object({
-  id: z.string().optional(),
-  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
-  specialty: z.string().min(2, { message: "Specialty must be at least 2 characters." }),
-  department: z.string().min(1, { message: "Please select a department." }),
-  registrationNumber: z.string().optional(),
-  bio: z.string().min(10, { message: "Bio must be at least 10 characters." }),
-  experience: z.coerce.number().min(0, "Years of experience cannot be negative."),
-  consultationFee: z.coerce.number().min(0, "Consultation fee cannot be negative."),
-  averageConsultingTime: z.coerce.number().min(5, "Must be at least 5 minutes."),
-  availabilitySlots: z.array(availabilitySlotSchema).min(1, "At least one availability slot is required."),
-  photo: z.any().optional(),
-  freeFollowUpDays: z.coerce.number().min(0, "Cannot be negative.").optional(),
-  advanceBookingDays: z.coerce.number().min(0, "Cannot be negative.").optional(),
-});
-type AddDoctorFormValues = z.infer<typeof addDoctorFormSchema>;
-
 const StarRating = ({ rating }: { rating: number }) => (
   <div className="flex items-center">
     {[...Array(5)].map((_, i) => (
@@ -331,86 +314,20 @@ export default function DoctorsPage() {
     setIsEditingAvailability(true);
   };
 
-    const handleSaveDoctor = async (doctorData: AddDoctorFormValues & { consultationStatus?: 'In' | 'Out' }) => {
-    startTransition(async () => {
-      try {
-        let photoUrl = doctorData.id ? doctors.find(d => d.id === doctorData.id)?.avatar : `https://picsum.photos/seed/new-doc-${Date.now()}/100/100`;
-
-        if (doctorData.photo instanceof File) {
-          const storageRef = ref(storage, `doctor_avatars/${Date.now()}_${doctorData.photo.name}`);
-          await uploadBytes(storageRef, doctorData.photo);
-          photoUrl = await getDownloadURL(storageRef);
+  const handleDoctorSaved = (savedDoctor: Doctor) => {
+    setDoctors(prev => {
+        const index = prev.findIndex(d => d.id === savedDoctor.id);
+        if (index > -1) {
+            // Update existing doctor
+            const newDoctors = [...prev];
+            newDoctors[index] = savedDoctor;
+            return newDoctors;
+        } else {
+            // Add new doctor
+            return [...prev, savedDoctor];
         }
-
-        const scheduleString = doctorData.availabilitySlots
-          ?.sort((a, b) => daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day))
-          .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a")}-${format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")}`).join(', ')}`)
-          .join('; ');
-
-        const docId = doctorData.id || `doc-${Date.now()}`;
-
-        const doctorToSave: Partial<Doctor> & {name: string; specialty: string; department: string; avatar: string; bio: string; experience: number; consultationFee: number; averageConsultingTime: number; availabilitySlots: any[]; schedule: string; consultationStatus: 'In' | 'Out'; registrationNumber?: string; } = {
-          name: doctorData.name,
-          specialty: doctorData.specialty,
-          department: doctorData.department,
-          registrationNumber: doctorData.registrationNumber,
-          avatar: photoUrl!,
-          schedule: scheduleString || "Not set",
-          preferences: 'Not set',
-          historicalData: 'No data',
-          availability: doctorData.id ? selectedDoctor?.availability : 'Unavailable',
-          consultationStatus: doctorData.consultationStatus || 'Out',
-          bio: doctorData.bio,
-          experience: doctorData.experience,
-          consultationFee: doctorData.consultationFee,
-          averageConsultingTime: doctorData.averageConsultingTime,
-          availabilitySlots: doctorData.availabilitySlots.map(s => ({...s, timeSlots: s.timeSlots.map(ts => ({
-            from: format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a"),
-            to: format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")
-          }))})),
-          freeFollowUpDays: doctorData.freeFollowUpDays,
-          advanceBookingDays: doctorData.advanceBookingDays,
-        };
-        
-        if (doctorData.id) {
-          doctorToSave.id = doctorData.id;
-        }
-
-        if (auth.currentUser) {
-            const userDocSnap = await getDoc(doc(db, "users", auth.currentUser.uid));
-            const clinicId = userDocSnap.data()?.clinicId;
-            if (clinicId) {
-                await setDoc(doc(db, "doctors", docId), {...doctorToSave, clinicId: clinicId}, { merge: true });
-                
-                const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
-                const updatedDoctors = await getDocs(doctorsQuery);
-                const doctorsList = updatedDoctors.docs.map(doc => ({ id: doc.id, ...doc.data(), clinicId } as Doctor));
-                setDoctors(doctorsList);
-
-                if (!doctorData.id) {
-                    setSelectedDoctor(doctorsList.find(d => d.id === docId) || null);
-                } else {
-                    setSelectedDoctor(prev => prev && prev.id === docId ? { ...prev, ...(doctorToSave as Doctor), id: docId, clinicId } : prev);
-                }
-            }
-        }
-
-        toast({
-          title: `Doctor ${doctorData.id ? "Updated" : "Added"}`,
-          description: `${doctorData.name} has been successfully ${doctorData.id ? "updated" : "added"}.`,
-        });
-      } catch (error) {
-        console.error("Error saving doctor:", error);
-        toast({
-          variant: "destructive",
-          title: "Save Failed",
-          description: "Could not save doctor details.",
-        });
-      } finally {
-        setIsAddDoctorOpen(false);
-        setEditingDoctor(null);
-      }
     });
+    setSelectedDoctor(savedDoctor);
   };
 
     const handleStatusChange = async (newStatus: 'In' | 'Out') => {
@@ -1422,7 +1339,7 @@ export default function DoctorsPage() {
       </main>
 
       <AddDoctorForm
-        onSave={handleSaveDoctor}
+        onSave={handleDoctorSaved}
         isOpen={isAddDoctorOpen}
         setIsOpen={setIsAddDoctorOpen}
         doctor={editingDoctor}
