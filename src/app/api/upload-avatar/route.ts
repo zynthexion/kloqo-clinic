@@ -12,20 +12,34 @@ config();
 if (!getApps().length) {
   const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
   if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !privateKey || !process.env.FIREBASE_STORAGE_BUCKET) {
-    throw new Error('Missing Firebase environment variables for Admin SDK initialization.');
+    // This part is changed. Instead of throwing an error which crashes the server,
+    // we return a proper JSON response. This is a common source of 500 errors in Next.js API routes.
+    console.error('Firebase Admin SDK initialization failed: Missing environment variables.');
+  } else {
+      try {
+        initializeApp({
+            credential: cert({
+            projectId: process.env.FIREBASE_PROJECT_ID,
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+            privateKey: privateKey,
+            }),
+            storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+        });
+      } catch (error) {
+          console.error('Firebase Admin SDK initialization error:', error);
+      }
   }
-
-  initializeApp({
-    credential: cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: privateKey,
-    }),
-    storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
-  });
 }
 
 export async function POST(request: NextRequest) {
+  // Check if Firebase Admin is initialized before proceeding
+  if (!getApps().length) {
+    return NextResponse.json(
+        { error: 'Firebase Admin SDK not initialized. Check server logs for details. Make sure environment variables are set.' },
+        { status: 500 }
+    );
+  }
+
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
