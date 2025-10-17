@@ -42,9 +42,10 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/firebase";
-import { setDoc, doc, getDoc, collection } from "firebase/firestore";
+import { setDoc, doc, getDoc } from "firebase/firestore";
 import { db, storage } from "@/lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import imageCompression from "browser-image-compression";
 
 const timeSlotSchema = z.object({
   from: z.string().min(1, "Required"),
@@ -135,7 +136,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         registrationNumber: doctor.registrationNumber || "",
         bio: doctor.bio || "",
         experience: doctor.experience || 0,
-        consultationFee: doctor.consultationFee || undefined,
+        consultationFee: doctor.consultationFee,
         averageConsultingTime: doctor.averageConsultingTime || 15,
         availabilitySlots: availabilitySlots,
         freeFollowUpDays: doctor.freeFollowUpDays || 7,
@@ -228,9 +229,19 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 
             const photoFile = form.getValues('photo');
             if (photoFile instanceof File) {
-                console.log("File is being uploaded:", photoFile);
-                const storageRef = ref(storage, `doctor_avatars/${clinicId}/${Date.now()}_${photoFile.name}`);
-                await uploadBytes(storageRef, photoFile);
+                console.log("Original file:", photoFile.name, (photoFile.size / 1024).toFixed(2), "KB");
+
+                const options = {
+                  maxSizeMB: 0.5,
+                  maxWidthOrHeight: 800,
+                  useWebWorker: true,
+                };
+                
+                const compressedFile = await imageCompression(photoFile, options);
+                console.log("Compressed file:", compressedFile.name, (compressedFile.size / 1024).toFixed(2), "KB");
+
+                const storageRef = ref(storage, `doctor_avatars/${clinicId}/${Date.now()}_${compressedFile.name}`);
+                await uploadBytes(storageRef, compressedFile);
                 photoUrl = await getDownloadURL(storageRef);
                 console.log("File uploaded successfully. URL:", photoUrl);
             } else {
