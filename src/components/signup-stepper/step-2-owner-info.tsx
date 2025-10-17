@@ -16,6 +16,7 @@ import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 
 declare global {
     interface Window {
+        recaptchaVerifier?: RecaptchaVerifier;
         confirmationResult?: ConfirmationResult;
     }
 }
@@ -24,7 +25,7 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
   const { control, watch, formState: { errors }, setValue } = useFormContext<SignUpFormData>();
   const { toast } = useToast();
 
-  const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
+  const recaptchaContainerRef = useRef<HTMLDivElement>(null);
 
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState('');
@@ -37,32 +38,26 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
   const isMobileNumberValid = !errors.mobileNumber && mobileNumber?.length === 10;
 
   useEffect(() => {
-    if (!recaptchaVerifierRef.current) {
-        recaptchaVerifierRef.current = new RecaptchaVerifier(auth, 'recaptcha-container', {
+    if (recaptchaContainerRef.current && !window.recaptchaVerifier) {
+        window.recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
             'size': 'invisible',
             'callback': () => {
                 // reCAPTCHA solved
             }
         });
-        recaptchaVerifierRef.current.render().catch((err) => {
+        window.recaptchaVerifier.render().catch((err) => {
             console.error("reCAPTCHA render error:", err);
         });
     }
-
-    return () => {
-        if (recaptchaVerifierRef.current) {
-            recaptchaVerifierRef.current = null;
-        }
-    }
-  }, []);
+  }, [recaptchaContainerRef]);
 
   const handleSendOtp = async () => {
-    if (!isMobileNumberValid || !recaptchaVerifierRef.current) return;
+    if (!isMobileNumberValid || !window.recaptchaVerifier) return;
     setIsSending(true);
     setCaptchaFailed(false);
     const fullNumber = `+91${mobileNumber}`;
     try {
-      const confirmationResult = await signInWithPhoneNumber(auth, fullNumber, recaptchaVerifierRef.current);
+      const confirmationResult = await signInWithPhoneNumber(auth, fullNumber, window.recaptchaVerifier);
       window.confirmationResult = confirmationResult;
       setOtpSent(true);
       toast({ title: "OTP Sent", description: "An OTP has been sent to your mobile number." });
@@ -76,7 +71,15 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
               description: "Please authorize your app's domain in the Firebase console.",
               duration: 10000,
           });
-      } else {
+      } else if (error.code === 'auth/too-many-requests') {
+          toast({
+              variant: "destructive",
+              title: "Too Many Requests",
+              description: "We have blocked all requests from this device due to unusual activity. Try again later.",
+              duration: 10000,
+          });
+      }
+      else {
           toast({
             variant: "destructive",
             title: "Failed to Send OTP",
@@ -120,7 +123,7 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
       <h2 className="text-2xl font-bold mb-1">Primary Contact Information</h2>
       <p className="text-muted-foreground mb-6">Details of the main contact person or owner.</p>
       
-      <div id="recaptcha-container"></div>
+      <div id="recaptcha-container" ref={recaptchaContainerRef}></div>
 
       {captchaFailed && (
           <Alert variant="destructive" className="mb-4">
