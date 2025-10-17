@@ -279,6 +279,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 
             } catch (uploadError: any) {
                 console.error("Upload error:", uploadError);
+                console.log(uploadError.message);
                 toast({
                     variant: "destructive",
                     title: "Upload Failed",
@@ -387,9 +388,6 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                             <Upload className="w-8 h-8 text-muted-foreground" />
                           )}
                         </div>
-                         <FormControl>
-                            <Input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" id="photo-upload" />
-                         </FormControl>
                         <label htmlFor="photo-upload" className="cursor-pointer">
                           <Button type="button" variant="outline" asChild>
                             <span>
@@ -398,6 +396,9 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                             </span>
                           </Button>
                         </label>
+                        <FormControl>
+                            <Input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" id="photo-upload" />
+                        </FormControl>
                       </div>
                     <FormMessage />
                   </FormItem>
