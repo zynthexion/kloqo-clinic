@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
       console.log("Initializing Firebase Admin SDK for this request...");
       initializeApp({
         credential: cert(serviceAccountParams),
-        storageBucket: 'kloqo-clinic-multi-33968-4c50b.appspot.com',
+        storageBucket: 'studio-3880243108-2ecd3.appspot.com',
       });
       console.log("Firebase Admin SDK initialized successfully.");
     } catch (error: any) {
