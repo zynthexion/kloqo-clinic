@@ -64,7 +64,7 @@ export type Appointment = {
   status: 'Confirmed' | 'Pending' | 'Cancelled' | 'Completed';
   treatment: string;
   tokenNumber: string;
-  bookedVia: 'Online' | 'Phone' | 'Walk-in';
+  bookedVia: 'Advanced Booking' | 'Walk-in';
   place?: string;
   isSkipped?: boolean;
 };
@@ -117,8 +117,7 @@ export type Department = {
     id: string;
     name: string;
     description: string;
-    image: string;
-    imageHint?: string;
+    icon: string;
     doctors: string[];
 }
 
@@ -151,4 +150,3 @@ export type User = {
     onboarded?: boolean;
     role?: 'clinicAdmin';
 }
-
