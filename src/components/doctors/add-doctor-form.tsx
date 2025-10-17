@@ -42,8 +42,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/firebase";
 import { setDoc, doc, getDoc } from "firebase/firestore";
-import { db, storage } from "@/lib/firebase";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db } from "@/lib/firebase";
 import imageCompression from "browser-image-compression";
 
 const timeSlotSchema = z.object({
@@ -116,21 +115,17 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 
   useEffect(() => {
     if (auth.currentUser) {
-      console.log('Auth user found on form mount:', auth.currentUser.uid);
       const fetchClinicId = async () => {
         const userDocRef = doc(db, 'users', auth.currentUser!.uid);
         const userDocSnap = await getDoc(userDocRef);
         const userClinicId = userDocSnap.data()?.clinicId;
         if (userClinicId) {
           setClinicId(userClinicId);
-          console.log('Clinic ID fetched and set on mount:', userClinicId);
         } else {
           console.error('Could not find clinicId for the current user.');
         }
       };
       fetchClinicId();
-    } else {
-       console.log('No auth user found on form mount.');
     }
   }, [auth.currentUser]);
 
@@ -233,50 +228,66 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 
   const onSubmit = (values: AddDoctorFormValues) => {
     startTransition(async () => {
-      console.log('Form submitted. User:', auth.currentUser?.uid);
-      console.log('Clinic ID available in onSubmit:', clinicId);
-      
       if (!auth.currentUser) {
         toast({ variant: "destructive", title: "Authentication Error", description: "You must be logged in to save a doctor." });
-        console.error('Save failed: No authenticated user.');
         return;
       }
       
       if (!clinicId) {
         toast({ variant: "destructive", title: "Configuration Error", description: "Cannot save doctor without a valid clinic ID." });
-        console.error('Save failed: No clinic ID available.');
         return;
       }
 
       try {
         await auth.currentUser.reload();
-        console.log('User token reloaded successfully.');
 
         let photoUrl = doctor?.avatar || `https://picsum.photos/seed/new-doc-${Date.now()}/100/100`;
         const photoFile = form.getValues('photo');
 
         if (photoFile instanceof File) {
-          console.log("New photo file detected:", photoFile.name, `(${(photoFile.size / 1024).toFixed(2)} KB)`);
-          
-          const options = {
-            maxSizeMB: 0.5,
-            maxWidthOrHeight: 800,
-            useWebWorker: true,
-          };
-          
-          const compressedFile = await imageCompression(photoFile, options);
-          console.log("Image compressed:", compressedFile.name, `(${(compressedFile.size / 1024).toFixed(2)} KB)`);
+            console.log("New photo file detected:", photoFile.name, `(${(photoFile.size / 1024).toFixed(2)} KB)`);
 
-          const storagePath = `doctor_avatars/${clinicId}/${Date.now()}_${compressedFile.name}`;
-          console.log("Uploading to storage path:", storagePath);
-          const storageRef = ref(storage, storagePath);
-          
-          await uploadBytes(storageRef, compressedFile);
-          photoUrl = await getDownloadURL(storageRef);
-          console.log("Upload successful. Photo URL:", photoUrl);
-        } else {
-            console.log("No new photo file detected. Using existing avatar URL:", photoUrl);
+            try {
+                const options = {
+                    maxSizeMB: 0.5,
+                    maxWidthOrHeight: 800,
+                    useWebWorker: true,
+                };
+                
+                const compressedFile = await imageCompression(photoFile, options);
+                console.log("Image compressed:", compressedFile.name, `(${(compressedFile.size / 1024).toFixed(2)} KB)`);
+
+                // Upload via API route instead of direct Firebase
+                const formData = new FormData();
+                formData.append('file', compressedFile);
+                formData.append('clinicId', clinicId);
+                formData.append('userId', auth.currentUser.uid);
+
+                const response = await fetch('/api/upload-avatar', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Upload failed');
+                }
+
+                const data = await response.json();
+                photoUrl = data.url;
+                console.log("File uploaded successfully via API. URL:", photoUrl);
+
+            } catch (uploadError: any) {
+                console.error("Upload error:", uploadError);
+                toast({
+                    variant: "destructive",
+                    title: "Upload Failed",
+                    description: uploadError.message,
+                });
+                return;
+            }
         }
+
 
         const docId = values.id || `doc-${Date.now()}`;
         const scheduleString = values.availabilitySlots
@@ -311,9 +322,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
           advanceBookingDays: values.advanceBookingDays,
         };
 
-        console.log("Attempting to save doctor data to Firestore:", doctorToSave);
         await setDoc(doc(db, "doctors", docId), doctorToSave, { merge: true });
-        console.log("Doctor data saved successfully.");
 
         onSave(doctorToSave);
         setIsOpen(false);
@@ -381,12 +390,14 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                          <FormControl>
                             <Input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" id="photo-upload" />
                          </FormControl>
-                        <Button type="button" variant="outline" asChild>
-                           <label htmlFor="photo-upload" className="cursor-pointer">
-                            <Upload className="mr-2 h-4 w-4" />
-                            Upload
-                           </label>
-                        </Button>
+                        <label htmlFor="photo-upload" className="cursor-pointer">
+                          <Button type="button" variant="outline" asChild>
+                            <span>
+                              <Upload className="mr-2 h-4 w-4" />
+                              Upload
+                            </span>
+                          </Button>
+                        </label>
                       </div>
                     <FormMessage />
                   </FormItem>
