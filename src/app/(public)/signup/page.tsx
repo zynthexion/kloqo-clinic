@@ -13,7 +13,7 @@ import { Step6Uploads } from '@/components/signup-stepper/step-6-uploads';
 import { Step7Confirm } from '@/components/signup-stepper/step-7-confirm';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { PeterdrawLogo } from '@/components/icons';
+import { PeterdrawLogo, Logo } from '@/components/icons';
 import Link from 'next/link';
 
 import { useToast } from '@/hooks/use-toast';
@@ -441,8 +441,7 @@ export default function SignupPage() {
         <aside className="w-1/4 bg-slate-100 p-8 flex flex-col justify-between">
           <div className="flex-grow flex flex-col overflow-hidden">
             <Link href="/" className="flex items-center gap-2 mb-12 flex-shrink-0">
-              <PeterdrawLogo className="h-8 w-8 text-primary" />
-              <span className="text-xl font-bold">Kloqo</span>
+              <Logo className="h-16 text-primary" />
             </Link>
             <div className="flex-grow overflow-y-auto pr-4">
                 <StepperNav steps={steps} currentStep={currentStep} />

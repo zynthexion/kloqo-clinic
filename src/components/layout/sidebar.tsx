@@ -15,7 +15,7 @@ import {
   MoreVertical,
   User as UserIcon,
 } from "lucide-react";
-import { PeterdrawLogo } from "@/components/icons";
+import { PeterdrawLogo, Logo } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -123,10 +123,7 @@ export function Sidebar() {
       <aside className="group sticky top-0 left-0 h-screen w-16 hover:w-64 transition-all duration-300 ease-in-out flex flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-lg z-50 rounded-tr-2xl rounded-br-2xl">
         <div className="flex h-20 items-center justify-start p-4 shrink-0">
           <Link href="/" className="flex items-center gap-3">
-            <PeterdrawLogo className="h-10 w-10 text-sidebar-primary" />
-            <span className="text-xl font-bold font-logo opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100 whitespace-nowrap">
-              Kloqo
-            </span>
+            <Logo className="h-20 text-sidebar-primary" />
           </Link>
         </div>
 

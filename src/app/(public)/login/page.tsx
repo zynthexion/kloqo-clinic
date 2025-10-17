@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PeterdrawLogo } from '@/components/icons';
+import { PeterdrawLogo, Logo } from '@/components/icons';
 import { Eye, EyeOff } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { signInWithEmailAndPassword } from 'firebase/auth';
@@ -66,8 +66,7 @@ export default function LoginPage() {
         <Card className="mx-auto w-[400px] z-10">
           <CardHeader className="text-center">
             <div className="flex items-center justify-center gap-2 mb-4">
-              <PeterdrawLogo className="h-8 w-8 text-primary" />
-              <h1 className="text-3xl font-bold font-headline">Kloqo</h1>
+              <Logo className="h-16 text-primary" />
             </div>
             <CardTitle className="text-3xl font-bold">Welcome Back!</CardTitle>
             <CardDescription className="text-balance text-muted-foreground">
