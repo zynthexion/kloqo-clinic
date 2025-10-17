@@ -1,6 +1,6 @@
 
-const { initializeApp, cert } = require('firebase-admin/app');
-const { getFirestore, getApps } = require('firebase-admin/firestore');
+const { initializeApp, cert, getApps } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
 
 if (typeof window !== 'undefined') {
   throw new Error("This script should only be run in a Node.js environment.");
