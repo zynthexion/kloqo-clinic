@@ -90,6 +90,7 @@ const addDoctorFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   specialty: z.string().min(2, { message: "Specialty must be at least 2 characters." }),
   department: z.string().min(1, { message: "Please select a department." }),
+  registrationNumber: z.string().optional(),
   bio: z.string().min(10, { message: "Bio must be at least 10 characters." }),
   experience: z.coerce.number().min(0, "Years of experience cannot be negative."),
   consultationFee: z.coerce.number().min(0, "Consultation fee cannot be negative."),
@@ -184,6 +185,7 @@ export default function DoctorsPage() {
   const [newSpecialty, setNewSpecialty] = useState("");
   const [newDepartment, setNewDepartment] = useState("");
   const [newExperience, setNewExperience] = useState<number | string>("");
+  const [newRegistrationNumber, setNewRegistrationNumber] = useState("");
 
   const [isEditingAvailability, setIsEditingAvailability] = useState(false);
   
@@ -285,6 +287,7 @@ export default function DoctorsPage() {
       setNewSpecialty(selectedDoctor.specialty);
       setNewDepartment(selectedDoctor.department || "");
       setNewExperience(selectedDoctor.experience || 0);
+      setNewRegistrationNumber(selectedDoctor.registrationNumber || "");
       form.reset({
         availabilitySlots: selectedDoctor.availabilitySlots || [],
       });
@@ -346,10 +349,11 @@ export default function DoctorsPage() {
 
         const docId = doctorData.id || `doc-${Date.now()}`;
 
-        const doctorToSave: Partial<Doctor> & {name: string, specialty: string, department: string, avatar: string, bio: string, experience: number, consultationFee: number, averageConsultingTime: number, availabilitySlots: any[], schedule: string, consultationStatus: 'In' | 'Out'} = {
+        const doctorToSave: Partial<Doctor> & {name: string; specialty: string; department: string; avatar: string; bio: string; experience: number; consultationFee: number; averageConsultingTime: number; availabilitySlots: any[]; schedule: string; consultationStatus: 'In' | 'Out'; registrationNumber?: string; } = {
           name: doctorData.name,
           specialty: doctorData.specialty,
           department: doctorData.department,
+          registrationNumber: doctorData.registrationNumber,
           avatar: photoUrl!,
           schedule: scheduleString || "Not set",
           preferences: 'Not set',
@@ -557,6 +561,7 @@ export default function DoctorsPage() {
                     specialty: newSpecialty,
                     department: newDepartment,
                     experience: Number(newExperience),
+                    registrationNumber: newRegistrationNumber,
                 };
                 await updateDoc(doctorRef, updatedData);
                 const updatedDoctor = { ...selectedDoctor, ...updatedData };
@@ -915,6 +920,13 @@ export default function DoctorsPage() {
                                disabled={isPending}
                                placeholder="Doctor Name"
                            />
+                           <Input
+                                value={newRegistrationNumber}
+                                onChange={(e) => setNewRegistrationNumber(e.target.value)}
+                                className="text-sm h-8 bg-transparent border-white/50 placeholder:text-primary-foreground/70"
+                                placeholder="Registration No."
+                                disabled={isPending}
+                            />
                            <Input 
                                value={newSpecialty} 
                                onChange={(e) => setNewSpecialty(e.target.value)} 
@@ -936,6 +948,7 @@ export default function DoctorsPage() {
                         ) : (
                             <>
                                 <p className="font-bold text-2xl">{selectedDoctor.name}</p>
+                                {selectedDoctor.registrationNumber && <p className="text-xs opacity-80">{selectedDoctor.registrationNumber}</p>}
                                 <p className="text-md opacity-90">{selectedDoctor.specialty}</p>
                                 <p className="text-sm opacity-90">{(selectedDoctor.degrees || []).join(', ')}{selectedDoctor.degrees && selectedDoctor.department ? ' - ' : ''}{selectedDoctor.department}</p>
                             </>

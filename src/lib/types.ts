@@ -47,6 +47,7 @@ export type Doctor = {
   bookedSlots?: BookedSlot[];
   freeFollowUpDays?: number;
   advanceBookingDays?: number;
+  registrationNumber?: string;
 };
 
 export type Appointment = {

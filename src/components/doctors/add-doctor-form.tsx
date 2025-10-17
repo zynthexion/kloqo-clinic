@@ -57,6 +57,7 @@ const formSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   specialty: z.string().min(2, { message: "Specialty must be at least 2 characters." }),
   department: z.string().min(1, { message: "Please select a department." }),
+  registrationNumber: z.string().optional(),
   bio: z.string().min(10, { message: "Bio must be at least 10 characters." }),
   experience: z.coerce.number().min(0, "Years of experience cannot be negative."),
   consultationFee: z.coerce.number().min(0, "Consultation fee cannot be negative."),
@@ -94,6 +95,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
       name: "",
       specialty: "",
       department: "",
+      registrationNumber: "",
       bio: "",
       experience: 0,
       consultationFee: 0,
@@ -124,6 +126,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         name: doctor.name,
         specialty: doctor.specialty,
         department: doctor.department,
+        registrationNumber: doctor.registrationNumber || "",
         bio: doctor.bio || "",
         experience: doctor.experience || 0,
         consultationFee: doctor.consultationFee || 0,
@@ -141,6 +144,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         name: "",
         specialty: "",
         department: "",
+        registrationNumber: "",
         bio: "",
         experience: 0,
         consultationFee: 0,
@@ -274,6 +278,19 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                         <FormLabel>Name</FormLabel>
                         <FormControl>
                           <Input placeholder="Dr. John Doe" {...field} value={field.value ?? ''} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                   <FormField
+                    control={form.control}
+                    name="registrationNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Registration Number</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., IMA/12345" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
