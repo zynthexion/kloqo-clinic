@@ -1,0 +1,19 @@
+
+[
+  {
+    "origin": [
+      "https://6000-firebase-kloqo-admin-multi-1759825919434.cluster-edb2jv34dnhjisxuq5m7l37ccy.cloudworkstations.dev"
+    ],
+    "method": [
+      "GET",
+      "POST",
+      "PUT",
+      "HEAD"
+    ],
+    "responseHeader": [
+      "Content-Type",
+      "Access-Control-Allow-Origin"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]
