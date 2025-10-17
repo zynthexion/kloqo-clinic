@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
@@ -324,10 +323,9 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                   <FormField
                     control={form.control}
                     name="photo"
-                    render={() => (
+                    render={({ field }) => (
                       <FormItem>
                         <FormLabel>Doctor's Photo</FormLabel>
-                        <FormControl>
                           <div className="flex items-center gap-4">
                             <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center overflow-hidden">
                               {photoPreview ? (
@@ -336,7 +334,9 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                                 <Upload className="w-8 h-8 text-muted-foreground" />
                               )}
                             </div>
-                            <Input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" id="photo-upload" />
+                            <FormControl>
+                                <Input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" id="photo-upload" />
+                            </FormControl>
                             <label htmlFor="photo-upload" className="cursor-pointer">
                               <Button type="button" variant="outline">
                                 <Upload className="mr-2 h-4 w-4" />
@@ -344,7 +344,6 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                               </Button>
                             </label>
                           </div>
-                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
