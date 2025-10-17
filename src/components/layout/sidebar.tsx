@@ -124,10 +124,10 @@ export function Sidebar() {
         <div className="flex h-20 items-center justify-center p-4 shrink-0">
             <Link href="/" className="flex items-center gap-3">
                 <div className="w-10 h-10 shrink-0 group-hover:hidden transition-opacity duration-200">
-                    <Image src="https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.firebasestorage.app/o/kloqo_Logo_twest.png?alt=media&token=478a0eb1-1a51-4513-adce-d0fcb0c392a7" alt="Kloqo Icon" width={40} height={22} />
+                    <Image src="https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.appspot.com/o/Kloqo_Logo_full.png?alt=media&token=2f9b97ad-29ae-4812-b189-ba7291a1f005" alt="Kloqo Icon" width={40} height={40} />
                 </div>
                 <div className="w-32 h-auto shrink-0 hidden group-hover:block transition-opacity duration-200 delay-100">
-                     <Image src="https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.firebasestorage.app/o/Kloqo_Logo_full.png?alt=media&token=2f9b97ad-29ae-4812-b189-ba7291a1f005" alt="Kloqo Logo" width={116} height={64} className="h-16" />
+                     <Image src="https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.appspot.com/o/Kloqo_Logo_full.png?alt=media&token=2f9b97ad-29ae-4812-b189-ba7291a1f005" alt="Kloqo Logo" width={128} height={35} />
                 </div>
             </Link>
         </div>

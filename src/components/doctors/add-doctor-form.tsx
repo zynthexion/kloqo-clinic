@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useTransition, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -64,7 +64,7 @@ const formSchema = z.object({
   registrationNumber: z.string().optional(),
   bio: z.string().min(10, { message: "Bio must be at least 10 characters." }),
   experience: z.coerce.number().min(0, "Years of experience cannot be negative."),
-  consultationFee: z.coerce.number().min(0, "Consultation fee cannot be negative."),
+  consultationFee: z.coerce.number().min(1, "Consultation fee is required and must be greater than 0."),
   averageConsultingTime: z.coerce.number().min(5, "Must be at least 5 minutes."),
   availabilitySlots: z.array(availabilitySlotSchema).min(1, "At least one availability slot is required."),
   photo: z.any().optional(),
@@ -104,12 +104,12 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
       registrationNumber: "",
       bio: "",
       experience: 0,
-      consultationFee: 0,
       averageConsultingTime: 15,
       availabilitySlots: [],
       freeFollowUpDays: 7,
       advanceBookingDays: 30,
     },
+    mode: 'onBlur', // Validate on blur (when field loses focus)
   });
 
   useEffect(() => {
@@ -135,7 +135,6 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         registrationNumber: doctor.registrationNumber || "",
         bio: doctor.bio || "",
         experience: doctor.experience || 0,
-        consultationFee: doctor.consultationFee || 0,
         averageConsultingTime: doctor.averageConsultingTime || 15,
         availabilitySlots: availabilitySlots,
         freeFollowUpDays: doctor.freeFollowUpDays || 7,
@@ -153,7 +152,6 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         registrationNumber: "",
         bio: "",
         experience: 0,
-        consultationFee: 0,
         averageConsultingTime: 15,
         availabilitySlots: [],
         freeFollowUpDays: 7,
@@ -166,7 +164,24 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 
   const watchedAvailabilitySlots = form.watch('availabilitySlots');
 
+  // Debug form validation state (only when fields lose focus now)
+  useEffect(() => {
+    console.log('🔘 Button State Check:', {
+      isPending,
+      formIsValid: form.formState.isValid,
+      buttonEnabled: !isPending && form.formState.isValid,
+      formErrors: form.formState.errors,
+      formValues: form.getValues()
+    });
+  }, [isPending, form.formState.isValid, form.formState.errors]);
+
   const applySharedSlotsToSelectedDays = () => {
+    console.log('🎯 Apply Slots Called:', {
+      selectedDays,
+      sharedTimeSlots,
+      validSharedTimeSlots: sharedTimeSlots.filter(ts => ts.from && ts.to)
+    });
+
     if (selectedDays.length === 0) {
         toast({
             variant: "destructive",
@@ -227,9 +242,20 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
             let photoUrl = doctor?.avatar || `https://picsum.photos/seed/new-doc-${Date.now()}/100/100`;
 
             if (values.photo instanceof File) {
-                const storageRef = ref(storage, `doctor_avatars/${clinicId}/${Date.now()}_${values.photo.name}`);
-                await uploadBytes(storageRef, values.photo);
-                photoUrl = await getDownloadURL(storageRef);
+                try {
+                    const storageRef = ref(storage, `doctor_avatars/${clinicId}/${Date.now()}_${values.photo.name}`);
+                    await uploadBytes(storageRef, values.photo);
+                    photoUrl = await getDownloadURL(storageRef);
+                } catch (error) {
+                    console.error('Firebase Storage upload failed:', error);
+                    // Fallback: use a placeholder image URL
+                    photoUrl = `https://picsum.photos/seed/${values.name.replace(/\s+/g, '-').toLowerCase()}/200/200`;
+                    toast({
+                        variant: "destructive",
+                        title: "Upload Warning",
+                        description: "Image upload failed. Using placeholder image instead.",
+                    });
+                }
             }
 
             const docId = values.id || `doc-${Date.now()}`;
@@ -254,7 +280,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                 consultationStatus: isEditMode ? doctor.consultationStatus : 'Out',
                 bio: values.bio,
                 experience: values.experience,
-                consultationFee: values.consultationFee,
+                consultationFee: values.consultationFee || 0,
                 averageConsultingTime: values.averageConsultingTime,
                 availabilitySlots: values.availabilitySlots.map(s => ({
                     ...s, timeSlots: s.timeSlots.map(ts => ({
@@ -290,7 +316,30 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        toast({
+          variant: "destructive",
+          title: "Invalid file type",
+          description: "Please select an image file.",
+        });
+        return;
+      }
+
+      // Validate file size (5MB limit)
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          variant: "destructive",
+          title: "File too large",
+          description: "Please select an image smaller than 5MB.",
+        });
+        return;
+      }
+
+      // Update form value
       form.setValue('photo', file);
+
+      // Create preview
       const reader = new FileReader();
       reader.onloadend = () => {
         setPhotoPreview(reader.result as string);
@@ -305,6 +354,9 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         if (!open) {
             form.reset();
             setPhotoPreview(null);
+            // Reset file input
+            const fileInput = document.getElementById('photo-upload') as HTMLInputElement;
+            if (fileInput) fileInput.value = '';
         }
     }}>
       <DialogContent className="max-w-4xl">
@@ -323,7 +375,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                   <FormField
                     control={form.control}
                     name="photo"
-                    render={({ field }) => (
+                    render={({ field: { value, onChange, ...field } }) => (
                       <FormItem>
                         <FormLabel>Doctor's Photo</FormLabel>
                           <div className="flex items-center gap-4">
@@ -334,15 +386,53 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                                 <Upload className="w-8 h-8 text-muted-foreground" />
                               )}
                             </div>
-                            <FormControl>
-                                <Input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" id="photo-upload" />
-                            </FormControl>
-                            <label htmlFor="photo-upload" className="cursor-pointer">
-                              <Button type="button" variant="outline">
-                                <Upload className="mr-2 h-4 w-4" />
-                                Upload
-                              </Button>
-                            </label>
+                            <div className="flex flex-col gap-2">
+                              <FormControl>
+                                  <Input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        onChange(file);
+                                        handlePhotoChange(e);
+                                      }
+                                    }}
+                                    className="hidden"
+                                    id="photo-upload"
+                                  />
+                              </FormControl>
+                              <div className="flex gap-2">
+                                <div
+                                  className="cursor-pointer"
+                                  onClick={() => {
+                                    const fileInput = document.getElementById('photo-upload') as HTMLInputElement;
+                                    if (fileInput) fileInput.click();
+                                  }}
+                                >
+                                  <Button type="button" variant="outline" size="sm">
+                                    <Upload className="mr-2 h-4 w-4" />
+                                    {photoPreview ? 'Change' : 'Upload'}
+                                  </Button>
+                                </div>
+                                {photoPreview && (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      setPhotoPreview(null);
+                                      onChange(undefined);
+                                      // Reset file input
+                                      const fileInput = document.getElementById('photo-upload') as HTMLInputElement;
+                                      if (fileInput) fileInput.value = '';
+                                    }}
+                                  >
+                                    Remove
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         <FormMessage />
                       </FormItem>
@@ -353,7 +443,10 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     name="name"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Name</FormLabel>
+                        <FormLabel className="flex items-center gap-1">
+                          Name
+                          <span className="text-red-500">*</span>
+                        </FormLabel>
                         <FormControl>
                           <Input placeholder="Dr. John Doe" {...field} value={field.value ?? ''} />
                         </FormControl>
@@ -379,7 +472,10 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     name="specialty"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Specialty</FormLabel>
+                        <FormLabel className="flex items-center gap-1">
+                          Specialty
+                          <span className="text-red-500">*</span>
+                        </FormLabel>
                         <FormControl>
                           <Input placeholder="Cardiology" {...field} />
                         </FormControl>
@@ -392,7 +488,10 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     name="department"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Department</FormLabel>
+                        <FormLabel className="flex items-center gap-1">
+                          Department
+                          <span className="text-red-500">*</span>
+                        </FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
                           <FormControl>
                             <SelectTrigger>
@@ -416,7 +515,10 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     name="bio"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Bio</FormLabel>
+                        <FormLabel className="flex items-center gap-1">
+                          Bio
+                          <span className="text-red-500">*</span>
+                        </FormLabel>
                         <FormControl>
                           <Textarea placeholder="A brief biography of the doctor..." {...field} />
                         </FormControl>
@@ -429,7 +531,10 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     name="experience"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Years of Experience</FormLabel>
+                        <FormLabel className="flex items-center gap-1">
+                          Years of Experience
+                          <span className="text-red-500">*</span>
+                        </FormLabel>
                         <FormControl>
                           <Input type="number" min="0" placeholder="e.g., 10" {...field} value={field.value !== undefined ? field.value : ''} />
                         </FormControl>
@@ -442,7 +547,10 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     name="consultationFee"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Consultation Fee (₹)</FormLabel>
+                        <FormLabel className="flex items-center gap-1">
+                          Consultation Fee (₹)
+                          <span className="text-red-500">*</span>
+                        </FormLabel>
                         <FormControl>
                           <Input type="number" min="0" placeholder="e.g., 150" {...field} value={field.value !== undefined ? field.value : ''} />
                         </FormControl>
@@ -455,7 +563,10 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     name="averageConsultingTime"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Average Consulting Time (minutes)</FormLabel>
+                        <FormLabel className="flex items-center gap-1">
+                          Average Consulting Time (minutes)
+                          <span className="text-red-500">*</span>
+                        </FormLabel>
                         <FormControl>
                           <Input type="number" min="5" placeholder="e.g., 15" {...field} value={field.value !== undefined ? field.value : ''} />
                         </FormControl>
@@ -499,7 +610,10 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     render={() => (
                       <FormItem>
                         <div className="mb-4">
-                          <FormLabel className="text-base">Weekly Availability</FormLabel>
+                          <FormLabel className="text-base flex items-center gap-1">
+                            Weekly Availability
+                            <span className="text-red-500">*</span>
+                          </FormLabel>
                           <FormDescription>
                             Define the doctor's recurring weekly schedule.
                           </FormDescription>
@@ -578,7 +692,27 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
             </ScrollArea>
             <DialogFooter className="pt-4">
               <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={isPending}>
+              <Button
+                type="submit"
+                disabled={isPending || !form.formState.isValid}
+                onClick={() => {
+                  console.log('🚀 Submit Button Clicked:', {
+                    isPending,
+                    formIsValid: form.formState.isValid,
+                    buttonEnabled: !isPending && form.formState.isValid,
+                    formErrors: form.formState.errors,
+                    formValues: form.getValues()
+                  });
+
+                  // If button is disabled, show why
+                  if (isPending) {
+                    console.log('❌ Button disabled: Form is submitting');
+                  }
+                  if (!form.formState.isValid) {
+                    console.log('❌ Button disabled: Form validation failed', form.formState.errors);
+                  }
+                }}
+              >
                 {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {isEditMode ? "Save Changes" : "Save Doctor"}
               </Button>
