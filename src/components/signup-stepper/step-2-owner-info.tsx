@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -16,7 +16,6 @@ import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 
 declare global {
     interface Window {
-        recaptchaVerifier: RecaptchaVerifier;
         confirmationResult?: ConfirmationResult;
     }
 }
@@ -24,6 +23,8 @@ declare global {
 export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
   const { control, watch, formState: { errors }, setValue } = useFormContext<SignUpFormData>();
   const { toast } = useToast();
+
+  const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
 
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState('');
@@ -36,24 +37,32 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
   const isMobileNumberValid = !errors.mobileNumber && mobileNumber?.length === 10;
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && !window.recaptchaVerifier) {
-      window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-        'size': 'invisible',
-        'callback': (response: any) => {
-          // reCAPTCHA solved, allow signInWithPhoneNumber.
+    if (!recaptchaVerifierRef.current) {
+        recaptchaVerifierRef.current = new RecaptchaVerifier(auth, 'recaptcha-container', {
+            'size': 'invisible',
+            'callback': () => {
+                // reCAPTCHA solved
+            }
+        });
+        recaptchaVerifierRef.current.render().catch((err) => {
+            console.error("reCAPTCHA render error:", err);
+        });
+    }
+
+    return () => {
+        if (recaptchaVerifierRef.current) {
+            recaptchaVerifierRef.current = null;
         }
-      });
     }
   }, []);
 
   const handleSendOtp = async () => {
-    if (!isMobileNumberValid) return;
+    if (!isMobileNumberValid || !recaptchaVerifierRef.current) return;
     setIsSending(true);
     setCaptchaFailed(false);
     const fullNumber = `+91${mobileNumber}`;
     try {
-      const appVerifier = window.recaptchaVerifier;
-      const confirmationResult = await signInWithPhoneNumber(auth, fullNumber, appVerifier);
+      const confirmationResult = await signInWithPhoneNumber(auth, fullNumber, recaptchaVerifierRef.current);
       window.confirmationResult = confirmationResult;
       setOtpSent(true);
       toast({ title: "OTP Sent", description: "An OTP has been sent to your mobile number." });
@@ -74,12 +83,6 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
             description: "Please check the mobile number or try again.",
           });
       }
-       // Re-render the reCAPTCHA widget to allow for another attempt
-      window.recaptchaVerifier.render().then((widgetId) => {
-        if(typeof window !== 'undefined' && window.recaptchaVerifier){
-            window.recaptchaVerifier.reset(widgetId);
-        }
-      });
     } finally {
         setIsSending(false);
     }
