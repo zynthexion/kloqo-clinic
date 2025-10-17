@@ -13,38 +13,23 @@ const serviceAccountParams = {
   privateKey: serviceAccount.private_key,
 };
 
-let adminApp: App;
-
-// Function to initialize Firebase Admin SDK
-function initializeAdminApp() {
+export async function POST(request: NextRequest) {
+  // Initialize Firebase Admin SDK within the request handler
   if (getApps().length === 0) {
     try {
-      console.log("Initializing Firebase Admin SDK...");
-      adminApp = initializeApp({
+      console.log("Initializing Firebase Admin SDK for this request...");
+      initializeApp({
         credential: cert(serviceAccountParams),
         storageBucket: 'kloqo-clinic-multi-33968-4c50b.appspot.com',
       });
       console.log("Firebase Admin SDK initialized successfully.");
     } catch (error: any) {
-      console.error('Firebase Admin SDK initialization error:', error.message);
-      // Do not throw here, let the handler manage the response
+      console.error('CRITICAL: Firebase Admin SDK initialization failed:', error.message);
+      return NextResponse.json(
+          { error: 'Server configuration error: Failed to initialize Firebase Admin.' },
+          { status: 500 }
+      );
     }
-  } else {
-    adminApp = getApps()[0];
-  }
-}
-
-// Initialize on module load
-initializeAdminApp();
-
-export async function POST(request: NextRequest) {
-  // Double-check initialization on each request
-  if (!getApps().length) {
-    console.error("Critical Error: Firebase Admin SDK is not initialized.");
-    return NextResponse.json(
-        { error: 'Server configuration error. Firebase Admin SDK could not be initialized.' },
-        { status: 500 }
-    );
   }
   
   try {
@@ -74,8 +59,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Note: Making files public is often not recommended for user-uploaded content.
-    // A better approach is to generate signed URLs, but for simplicity, we'll make it public.
+    // Make the file public to get a publicly accessible URL
     await fileRef.makePublic();
     const publicUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
 
