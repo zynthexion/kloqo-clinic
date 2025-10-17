@@ -17,7 +17,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -341,24 +340,24 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                 <div className="space-y-4">
                   <FormItem>
                     <FormLabel>Doctor's Photo</FormLabel>
-                      <div className="flex items-center gap-4">
-                        <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center overflow-hidden">
-                          {photoPreview ? (
-                            <Image src={photoPreview} alt="Doctor's Photo" width={96} height={96} className="object-cover" />
-                          ) : (
-                            <Upload className="w-8 h-8 text-muted-foreground" />
-                          )}
-                        </div>
-                        <FormControl>
-                            <Input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" id="photo-upload" />
-                        </FormControl>
-                        <label htmlFor="photo-upload" className="cursor-pointer">
-                          <Button type="button" variant="outline">
+                    <div className="flex items-center gap-4">
+                      <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center overflow-hidden">
+                        {photoPreview ? (
+                          <Image src={photoPreview} alt="Doctor's Photo" width={96} height={96} className="object-cover" />
+                        ) : (
+                          <Upload className="w-8 h-8 text-muted-foreground" />
+                        )}
+                      </div>
+                      <Input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" id="photo-upload" />
+                      <label htmlFor="photo-upload" className="cursor-pointer">
+                        <Button type="button" variant="outline" asChild>
+                           <span>
                             <Upload className="mr-2 h-4 w-4" />
                             Upload
-                          </Button>
-                        </label>
-                      </div>
+                           </span>
+                        </Button>
+                      </label>
+                    </div>
                     <FormMessage />
                   </FormItem>
                   <FormField
@@ -513,9 +512,9 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                       <FormItem>
                         <div className="mb-4">
                           <FormLabel className="text-base">Weekly Availability</FormLabel>
-                          <FormDescription>
+                          <p className="text-sm text-muted-foreground">
                             Define the doctor's recurring weekly schedule.
-                          </FormDescription>
+                          </p>
                         </div>
                           <div className="space-y-2">
                             <Label>1. Select days to apply time slots to</Label>
