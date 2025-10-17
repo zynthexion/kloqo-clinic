@@ -53,7 +53,7 @@ const masterDepartments = [
     id: 'dept-07',
     name: 'Oncology',
     description: 'Diagnosis and treatment of cancer.',
-    icon: 'Ribbon',
+    icon: 'Award',
     doctors: [],
   },
   {
@@ -74,7 +74,7 @@ const masterDepartments = [
     id: 'dept-10',
     name: 'Pulmonology',
     description: 'Specializing in diseases of the lungs and respiratory tract.',
-    icon: 'Lung',
+    icon: 'Wind',
     doctors: [],
   },
   {
@@ -172,7 +172,7 @@ const masterDepartments = [
     id: 'dept-24',
     name: 'Infectious Disease',
     description: 'Diagnosis and treatment of complex infections.',
-    icon: 'Virus',
+    icon: 'Bug',
     doctors: [],
   },
   {

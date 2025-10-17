@@ -22,7 +22,7 @@ import {
   Sparkles,
   BrainCircuit,
   Bone,
-  Ribbon,
+  Award,
   Droplets,
   Filter,
   Droplet,
@@ -34,10 +34,10 @@ import {
   Siren,
   Microwave,
   TestTube,
-  Virus,
+  Bug,
   Scissors,
   Ambulance,
-  Lung,
+  Wind,
   type LucideIcon,
 } from "lucide-react";
 import * as Lucide from "lucide-react";
@@ -95,7 +95,7 @@ const Tooth = () => (
 
 
 const iconMap: Record<string, LucideIcon | React.FC> = {
-    Stethoscope, HeartPulse, Baby, Sparkles, BrainCircuit, Bone, Ribbon, Droplets, Filter, Droplet, Eye, Ear, Brain, PersonStanding, Radiation, Siren, Microwave, TestTube, Virus, Scissors, Ambulance, Lung, Pregnant, Tooth
+    Stethoscope, HeartPulse, Baby, Sparkles, BrainCircuit, Bone, Award, Droplets, Filter, Droplet, Eye, Ear, Brain, PersonStanding, Radiation, Siren, Microwave, TestTube, Bug, Scissors, Ambulance, Wind, Pregnant, Tooth
 };
 
 const DynamicIcon = ({ name, className }: { name: string, className: string }) => {
