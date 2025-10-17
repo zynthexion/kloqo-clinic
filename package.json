@@ -5,13 +5,12 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
-    "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
+    "genkit:watch": "genkit start -- tsx --watch srcai/dev.ts",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "seed-firestore": "node scripts/seed-firestore.js",
-    "seed-master-departments": "node scripts/seed-master-departments.js"
+    "seed-firestore": "node scripts/seed-firestore.js"
   },
   "dependencies": {
     "@genkit-ai/googleai": "^1.14.1",
@@ -71,3 +70,4 @@
     "typescript": "^5"
   }
 }
+    

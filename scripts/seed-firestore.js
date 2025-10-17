@@ -233,63 +233,63 @@ const departments = [
     id: 'dept-01',
     name: 'General Medicine',
     description: 'Provides comprehensive healthcare services including routine check-ups, preventive care, and treatment for a wide range of illnesses.',
-    image: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8bWVkaWNpbmV8ZW58MHx8MHx8fDA%3D',
+    image: 'https://images.pexels.com/photos/3825529/pexels-photo-3825529.jpeg',
     doctors: ['Dr. Petra Winsburry', 'Dr. Emily Smith', 'Dr. Samuel Thompson', 'Dr. Sarah Johnson', 'Dr. Luke Harrison', 'Dr. Andrew Peterson', 'Dr. William Carter', 'Dr. Mark Wilson', 'Dr. Thomas Brown', 'Dr. Olivia Martinez', 'Dr. Damian Sanchez', 'Dr. Chloe Harrington'],
   },
   {
     id: 'dept-02',
     name: 'Cardiology',
     description: 'Specializes in the diagnosis and treatment of heart-related conditions, offering advanced cardiac care and preventive services.',
-    image: 'https://images.unsplash.com/photo-1530026405182-271453396975?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MjZ8fG1lZGljaW5lfGVufDB8fDB8fHww',
+    image: 'https://images.pexels.com/photos/8460159/pexels-photo-8460159.jpeg',
     doctors: ['Dr. Olivia Martinez', 'Dr. Samuel Thompson', 'Dr. Emily Smith', 'Dr. Sarah Johnson', 'Dr. Luke Harrison', 'Dr. Andrew Peterson', 'Dr. William Carter', 'Dr. Mark Wilson'],
   },
   {
     id: 'dept-03',
     name: 'Pediatrics',
     description: 'Dedicated to the health and well-being of children, providing specialized care for infants, children, and adolescents.',
-    image: 'https://images.unsplash.com/photo-1599586120429-48281b6f0ece?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTR8fGNoaWxkcmVuJTIwZG9jdG9yfGVufDB8fDB8fHww',
+    image: 'https://images.pexels.com/photos/5452201/pexels-photo-5452201.jpeg',
     doctors: ['Dr. Damian Sanchez', 'Dr. Sarah Johnson', 'Dr. William Carter', 'Dr. Petra Winsburry', 'Dr. Emily Smith', 'Dr. Samuel Thompson', 'Dr. Luke Harrison'],
   },
   {
     id: 'dept-04',
     name: 'Dermatology',
     description: 'Focuses on the treatment of skin conditions, offering medical and cosmetic dermatology services to improve skin health and appearance.',
-    image: 'https://images.unsplash.com/photo-1631894959934-396b3a8d11b3?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTB8fGRlcm1hdG9sb2d5fGVufDB8fDB8fHww',
+    image: 'https://images.pexels.com/photos/6628101/pexels-photo-6628101.jpeg',
     doctors: ['Dr. Chloe Harrington', 'Dr. Luke Harrison', 'Dr. Petra Winsburry', 'Dr. Emily Smith', 'Dr. Samuel Thompson'],
   },
   {
     id: 'dept-05',
     name: 'Internal Medicine',
     description: 'Provides primary care for adults, focusing on the prevention, diagnosis, and treatment of adult diseases.',
-    image: 'https://images.unsplash.com/photo-1551191980-492a71b1626a?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Nnx8aW50ZXJuYWwlMjBtZWRpY2luZXxlbnwwfHwwfHx8MA%3D%3D',
+    image: 'https://images.pexels.com/photos/8460126/pexels-photo-8460126.jpeg',
     doctors: ['Dr. Andrew Peterson', 'Dr. Petra Winsburry', 'Dr. Olivia Martinez', 'Dr. Samuel Thompson', 'Dr. Mark Wilson', 'Dr. Thomas Brown', 'Dr. Chloe Harrington', 'Dr. Damian Sanchez', 'Dr. Sarah Johnson', 'Dr. William Carter', 'Dr. Emily Smith', 'Dr. Luke Harrison'],
   },
   {
     id: 'dept-06',
     name: 'Orthopedics',
     description: 'Specializes in the treatment of musculoskeletal system disorders, including bones, joints, ligaments, tendons, and muscles.',
-    image: 'https://images.unsplash.com/photo-1681878096238-31e1388b0a99?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NHx8b3J0aG9wZWRpY3N8ZW58MHx8MHx8fDA%3D',
+    image: 'https://images.pexels.com/photos/5452198/pexels-photo-5452198.jpeg',
     doctors: ['Dr. Mark Wilson', 'Dr. Petra Winsburry', 'Dr. Olivia Martinez', 'Dr. Samuel Thompson', 'Dr. Andrew Peterson', 'Dr. Thomas Brown', 'Dr. Chloe Harrington', 'Dr. Damian Sanchez'],
   },
     {
     id: 'dept-07',
     name: 'Neurology',
     description: 'Deals with disorders of the nervous system, offering expert care for conditions affecting the brain, spinal cord, and nerves.',
-    image: 'https://images.unsplash.com/photo-1695423589949-c9a56f626245?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Nnx8bmV1cm9sb2d5fGVufDB8fDB8fHww',
+    image: 'https://images.pexels.com/photos/8460162/pexels-photo-8460162.jpeg',
     doctors: ['Dr. Thomas Brown', 'Dr. Olivia Martinez', 'Dr. Samuel Thompson', 'Dr. Andrew Peterson', 'Dr. Mark Wilson', 'Dr. Chloe Harrington'],
   },
   {
     id: 'dept-08',
     name: 'Oncology',
     description: 'Focuses on the diagnosis and treatment of cancer, providing comprehensive cancer care and support services.',
-    image: 'https://plus.unsplash.com/premium_photo-1676999081594-81498a442a22?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8b25jb2xvZ3l8ZW58MHx8MHx8fDA%3D',
+    image: 'https://images.pexels.com/photos/8460144/pexels-photo-8460144.jpeg',
     doctors: ['Dr. Emily Smith', 'Dr. Petra Winsburry', 'Dr. Olivia Martinez', 'Dr. Samuel Thompson', 'Dr. Andrew Peterson', 'Dr. Mark Wilson', 'Dr. Thomas Brown'],
   },
   {
     id: 'dept-09',
     name: 'Obstetrics and Gynecology (OB/GYN)',
     description: "Provides care for women's health, including pregnancy, childbirth, and reproductive health.",
-    image: 'https://images.unsplash.com/photo-1576089182512-a8ce7c001a88?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTF8fHByZWduYW5jeXxlbnwwfHwwfHx8MA%3D%3D',
+    image: 'https://images.pexels.com/photos/7088520/pexels-photo-7088520.jpeg',
     doctors: ['Dr. Sarah Johnson', 'Dr. Petra Winsburry', 'Dr. Olivia Martinez', 'Dr. Samuel Thompson', 'Dr. Andrew Peterson', 'Dr. Mark Wilson', 'Dr. Thomas Brown', 'Dr. Chloe Harrington', 'Dr. Damian Sanchez', 'Dr. William Carter', 'Dr. Emily Smith'],
   }
 ];
@@ -535,16 +535,17 @@ const db = getFirestore();
 
 async function seedCollection(collectionName, data, idField) {
   console.log(`Starting to seed ${collectionName}...`);
+  const clinicId = 'default-clinic-id'; // Define clinicId here
+  const collectionPath = `clinics/${clinicId}/${collectionName}`;
+  const batch = db.batch();
 
   for (const item of data) {
-    const clinicId = 'default-clinic-id'; // Define clinicId here
-    const collectionPath = `clinics/${clinicId}/${collectionName}`;
     const docRef = db.collection(collectionPath).doc(item[idField]);
-    await docRef.set({ ...item, clinicId: clinicId });
-    console.log(`Added ${collectionName} ${item.name || item.patientName || item[idField]} with ID: ${item[idField]} to clinic ${clinicId}`);
+    batch.set(docRef, { ...item, clinicId: clinicId });
   }
 
-  console.log(`Finished seeding ${collectionName}.`);
+  await batch.commit();
+  console.log(`Finished seeding ${collectionName} for clinic ${clinicId}.`);
 }
 
 

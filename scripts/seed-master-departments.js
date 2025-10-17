@@ -207,18 +207,21 @@ const db = getFirestore();
 async function seedMasterDepartments() {
   const collectionRef = db.collection('master-departments');
   console.log('Starting to seed master-departments...');
+  const batch = db.batch();
 
   for (const dept of masterDepartments) {
-    try {
-      const docRef = collectionRef.doc(dept.id);
-      await docRef.set(dept);
-      console.log(`Added master department: ${dept.name}`);
-    } catch (error) {
-      console.error(`Error adding master department ${dept.name}:`, error);
-    }
+    const docRef = collectionRef.doc(dept.id);
+    batch.set(docRef, dept);
   }
 
-  console.log('Finished seeding master-departments.');
+  try {
+    await batch.commit();
+    console.log('Finished seeding master-departments.');
+  } catch (error) {
+    console.error('Error committing batch for master-departments:', error);
+  }
 }
 
 seedMasterDepartments().catch(console.error);
+
+    
