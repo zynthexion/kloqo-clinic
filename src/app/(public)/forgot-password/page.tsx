@@ -13,7 +13,6 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PeterdrawLogo } from '@/components/icons';
 import { useRouter } from 'next/navigation';
 import { signInWithPhoneNumber, RecaptchaVerifier, type ConfirmationResult, updatePassword } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
@@ -21,6 +20,7 @@ import { auth, db } from '@/lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { ArrowLeft, Loader2, KeyRound, Phone, Mail } from 'lucide-react';
 import type { User } from '@/lib/types';
+import Image from 'next/image';
 
 type Step = 'enterEmail' | 'enterPhone' | 'verifyOtp' | 'resetPassword' | 'success';
 
@@ -196,8 +196,7 @@ export default function ForgotPasswordPage() {
       <Card className="mx-auto w-[400px] z-10">
         <CardHeader className="text-center">
           <div className="flex items-center justify-center gap-2 mb-4">
-            <PeterdrawLogo className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold font-headline">Kloqo</h1>
+            <Image src="https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.appspot.com/o/Kloqo_Logo_full.png?alt=media&token=2f9b97ad-29ae-4812-b189-ba7291a1f005" alt="Kloqo Logo" width={120} height={30} />
           </div>
           <CardTitle className="text-3xl font-bold">{titles[step]}</CardTitle>
           <CardDescription className="text-balance text-muted-foreground">

@@ -13,8 +13,8 @@ import { Step6Uploads } from '@/components/signup-stepper/step-6-uploads';
 import { Step7Confirm } from '@/components/signup-stepper/step-7-confirm';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { PeterdrawLogo } from '@/components/icons';
 import Link from 'next/link';
+import Image from 'next/image';
 
 import { useToast } from '@/hooks/use-toast';
 import { useForm, FormProvider } from 'react-hook-form';
@@ -441,8 +441,7 @@ export default function SignupPage() {
         <aside className="w-1/4 bg-slate-100 p-8 flex flex-col justify-between">
           <div className="flex-grow flex flex-col overflow-hidden">
             <Link href="/" className="flex items-center gap-2 mb-12 flex-shrink-0">
-              <PeterdrawLogo className="h-8 w-8 text-primary" />
-              <span className="text-xl font-bold">Kloqo</span>
+               <Image src="https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.appspot.com/o/Kloqo_Logo_full.png?alt=media&token=2f9b97ad-29ae-4812-b189-ba7291a1f005" alt="Kloqo Logo" width={120} height={30} />
             </Link>
             <div className="flex-grow overflow-y-auto pr-4">
                 <StepperNav steps={steps} currentStep={currentStep} />
@@ -488,4 +487,3 @@ export default function SignupPage() {
     </div>
   );
 }
-

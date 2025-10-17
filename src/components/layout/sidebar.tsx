@@ -15,7 +15,6 @@ import {
   MoreVertical,
   User as UserIcon,
 } from "lucide-react";
-import { PeterdrawLogo } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -39,6 +38,7 @@ import { useAuth } from "@/firebase";
 import { useEffect, useState } from "react";
 import { doc, getDoc, collection, getDocs, query, where } from "firebase/firestore";
 import type { User } from "@/lib/types";
+import Image from "next/image";
 
 const menuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard" },
@@ -123,10 +123,10 @@ export function Sidebar() {
       <aside className="group sticky top-0 left-0 h-screen w-16 hover:w-64 transition-all duration-300 ease-in-out flex flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-lg z-50 rounded-tr-2xl rounded-br-2xl">
         <div className="flex h-20 items-center justify-start p-4 shrink-0">
           <Link href="/" className="flex items-center gap-3">
-            <PeterdrawLogo className="h-10 w-10 text-sidebar-primary" />
-            <span className="text-xl font-bold font-logo opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100 whitespace-nowrap">
-              Kloqo
-            </span>
+            <Image src="https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.appspot.com/o/Kloqo_Logo_full.png?alt=media&token=2f9b97ad-29ae-4812-b189-ba7291a1f005" alt="Kloqo Logo" width={120} height={30} className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100" />
+             <div className="w-10 h-10 shrink-0 group-hover:opacity-0 transition-opacity duration-200">
+                <Image src="https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.appspot.com/o/Kloqo_Logo_full.png?alt=media&token=2f9b97ad-29ae-4812-b189-ba7291a1f005" alt="Kloqo Icon" width={40} height={40} />
+             </div>
           </Link>
         </div>
 
