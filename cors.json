@@ -8,11 +8,20 @@
       "GET",
       "POST",
       "PUT",
-      "HEAD"
+      "DELETE",
+      "HEAD",
+      "OPTIONS"
     ],
     "responseHeader": [
       "Content-Type",
-      "Access-Control-Allow-Origin"
+      "Access-Control-Allow-Origin",
+      "Authorization",
+      "Content-Length",
+      "x-goog-resumable",
+      "x-goog-upload-protocol",
+      "x-goog-upload-command",
+      "x-goog-upload-offset",
+      "x-goog-upload-status"
     ],
     "maxAgeSeconds": 3600
   }
