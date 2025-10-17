@@ -34,6 +34,7 @@ export type Doctor = {
   totalPatients?: number;
   todaysAppointments?: number;
   availability: 'Available' | 'Unavailable';
+  consultationStatus?: 'In' | 'Out';
   bio?: string;
   averageConsultingTime?: number;
   availabilitySlots?: AvailabilitySlot[];

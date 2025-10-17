@@ -70,7 +70,7 @@ const formSchema = z.object({
 type AddDoctorFormValues = z.infer<typeof formSchema>;
 
 type AddDoctorFormProps = {
-  onSave: (doctor: AddDoctorFormValues) => void;
+  onSave: (doctor: AddDoctorFormValues & { consultationStatus?: 'In' | 'Out' }) => void;
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
   doctor: Doctor | null;
@@ -199,7 +199,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 };
 
   function onSubmit(values: AddDoctorFormValues) {
-    onSave(values);
+    onSave({ ...values, consultationStatus: isEditMode ? doctor.consultationStatus : "Out" });
     setIsOpen(false);
     form.reset();
     setPhotoPreview(null);
@@ -491,5 +491,3 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
     </Dialog>
   );
 }
-
-    

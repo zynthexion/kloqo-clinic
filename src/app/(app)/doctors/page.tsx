@@ -131,7 +131,7 @@ const DoctorListItem = ({ doctor, onSelect, isSelected }: { doctor: Doctor, onSe
             />
             <span className={cn(
                 "absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full border-2 border-white",
-                doctor.availability === "Available" ? "bg-green-500" : "bg-red-500"
+                doctor.consultationStatus === "In" ? "bg-green-500" : "bg-red-500"
             )} />
         </div>
         <div>
@@ -328,7 +328,7 @@ export default function DoctorsPage() {
     setIsEditingAvailability(true);
   };
 
-    const handleSaveDoctor = async (doctorData: AddDoctorFormValues) => {
+    const handleSaveDoctor = async (doctorData: AddDoctorFormValues & { consultationStatus?: 'In' | 'Out' }) => {
     startTransition(async () => {
       try {
         let photoUrl = doctorData.id ? doctors.find(d => d.id === doctorData.id)?.avatar : `https://picsum.photos/seed/new-doc-${Date.now()}/100/100`;
@@ -346,7 +346,7 @@ export default function DoctorsPage() {
 
         const docId = doctorData.id || `doc-${Date.now()}`;
 
-        const doctorToSave: Partial<Doctor> & {name: string, specialty: string, department: string, avatar: string, bio: string, experience: number, consultationFee: number, averageConsultingTime: number, availabilitySlots: any[], schedule: string} = {
+        const doctorToSave: Partial<Doctor> & {name: string, specialty: string, department: string, avatar: string, bio: string, experience: number, consultationFee: number, averageConsultingTime: number, availabilitySlots: any[], schedule: string, consultationStatus: 'In' | 'Out'} = {
           name: doctorData.name,
           specialty: doctorData.specialty,
           department: doctorData.department,
@@ -355,6 +355,7 @@ export default function DoctorsPage() {
           preferences: 'Not set',
           historicalData: 'No data',
           availability: doctorData.id ? selectedDoctor?.availability : 'Unavailable',
+          consultationStatus: doctorData.consultationStatus || 'Out',
           bio: doctorData.bio,
           experience: doctorData.experience,
           consultationFee: doctorData.consultationFee,
@@ -408,19 +409,19 @@ export default function DoctorsPage() {
     });
   };
 
-    const handleStatusChange = async (newStatus: 'Available' | 'Unavailable') => {
+    const handleStatusChange = async (newStatus: 'In' | 'Out') => {
         if (!selectedDoctor) return;
 
         startTransition(async () => {
             const doctorRef = doc(db, "doctors", selectedDoctor.id);
             try {
-                await updateDoc(doctorRef, { availability: newStatus });
-                const updatedDoctor = { ...selectedDoctor, availability: newStatus };
+                await updateDoc(doctorRef, { consultationStatus: newStatus });
+                const updatedDoctor = { ...selectedDoctor, consultationStatus: newStatus };
                 setSelectedDoctor(updatedDoctor);
                 setDoctors(prev => prev.map(d => d.id === selectedDoctor.id ? updatedDoctor : d));
                 toast({
                     title: "Status Updated",
-                    description: `Dr. ${selectedDoctor.name} is now marked as ${newStatus === 'Available' ? 'In' : 'Out'}.`,
+                    description: `Dr. ${selectedDoctor.name} is now marked as ${newStatus}.`,
                 });
             } catch (error) {
                 console.error("Error updating status:", error);
@@ -1006,13 +1007,13 @@ export default function DoctorsPage() {
                     <div className="flex items-center space-x-2 bg-primary p-2 rounded-md">
                       <Switch
                         id="status-switch"
-                        checked={selectedDoctor.availability === 'Available'}
-                        onCheckedChange={(checked) => handleStatusChange(checked ? 'Available' : 'Unavailable')}
+                        checked={selectedDoctor.consultationStatus === 'In'}
+                        onCheckedChange={(checked) => handleStatusChange(checked ? 'In' : 'Out')}
                         disabled={isPending}
                         className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500"
                       />
                       <Label htmlFor="status-switch" className="font-semibold text-white">
-                        {selectedDoctor.availability === 'Available' ? 'In' : 'Out'}
+                        {selectedDoctor.consultationStatus === 'In' ? 'In' : 'Out'}
                       </Label>
                    </div>
                 </div>
