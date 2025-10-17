@@ -2,43 +2,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getStorage } from 'firebase-admin/storage';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { config } from 'dotenv';
+import serviceAccount from '../../../../service-account.json';
 
-config();
+// Initialize Firebase Admin SDK
+if (!getApps().length) {
+  try {
+    initializeApp({
+      credential: cert(serviceAccount as any),
+      storageBucket: 'kloqo-clinic-multi-33968-4c50b.appspot.com',
+    });
+    console.log("Firebase Admin SDK initialized successfully.");
+  } catch (error: any) {
+    console.error('Firebase Admin SDK initialization error:', error.message);
+  }
+}
 
 export async function POST(request: NextRequest) {
-  // Initialize Firebase Admin SDK within the request handler
+  // Check if SDK is initialized
   if (!getApps().length) {
-    try {
-      const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
-      if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !privateKey || !process.env.FIREBASE_STORAGE_BUCKET) {
-        throw new Error('Firebase Admin SDK initialization failed: One or more required environment variables are missing.');
-      }
-      initializeApp({
-        credential: cert({
-          projectId: process.env.FIREBASE_PROJECT_ID,
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          privateKey: privateKey,
-        }),
-        storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
-      });
-    } catch (error: any) {
-        console.error('Firebase Admin SDK initializeApp error:', error.message);
-        return NextResponse.json(
-            { error: 'Firebase Admin SDK not initialized. Check server logs for details. Make sure environment variables are set.' },
-            { status: 500 }
-        );
-    }
-  }
-
-  // Check again to ensure initialization was successful
-  if (!getApps().length) {
+    console.error("Critical Error: Firebase Admin SDK is not initialized.");
     return NextResponse.json(
-        { error: 'Firebase Admin SDK could not be initialized.' },
+        { error: 'Server configuration error. Firebase Admin SDK could not be initialized.' },
         { status: 500 }
     );
   }
-
+  
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -71,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ url: publicUrl });
   } catch (error: any) {
-    console.error('Upload error:', error);
+    console.error('Upload API route error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
