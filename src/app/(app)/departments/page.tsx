@@ -116,7 +116,7 @@ export default function DepartmentsPage() {
   const [viewingDoctorsDept, setViewingDoctorsDept] = useState<Department | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [departmentsPerPage, setDepartmentsPerPage] = useState(6);
+  const [departmentsPerPage, setDepartmentsPerPage] = useState(8);
 
   const filteredDepartments = useMemo(() => {
     return clinicDepartments.filter(department =>
@@ -198,21 +198,18 @@ export default function DepartmentsPage() {
   const DepartmentCard = ({ department, onDelete }: { department: Department, onDelete: (department: Department) => void }) => {
       const doctorsInDept = getDoctorsInDepartment(department.name);
       return (
-          <Card className="overflow-hidden flex flex-col">
-              <div className="h-40 w-full flex items-center justify-center bg-muted/30">
-                  <DynamicIcon name={department.icon} className="w-20 h-20 text-muted-foreground opacity-50" />
+          <Card className="overflow-hidden flex flex-col aspect-square">
+              <div className="h-2/3 w-full flex items-center justify-center bg-muted/30">
+                  <DynamicIcon name={department.icon} className="w-16 h-16 text-muted-foreground opacity-50" />
               </div>
-              <CardContent className="p-4 flex-grow">
-                  <div className="flex justify-between items-start">
+              <CardContent className="p-3 flex-grow flex flex-col justify-center">
+                  <div className="flex justify-between items-center">
                     <div>
-                        <h3 className="text-lg font-semibold">{department.name}</h3>
-                        <p className="text-sm text-muted-foreground mt-1 h-10 overflow-hidden">
-                            {department.description}
-                        </p>
+                        <h3 className="text-base font-semibold truncate">{department.name}</h3>
                     </div>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
+                            <Button variant="ghost" className="h-6 w-6 p-0">
                                 <span className="sr-only">Open menu</span>
                                 <MoreHorizontal className="h-4 w-4" />
                             </Button>
@@ -225,33 +222,29 @@ export default function DepartmentsPage() {
                         </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
-              </CardContent>
-              <CardFooter className="bg-muted/30 px-4 py-3 flex items-center justify-between">
-                   <div className="flex items-center">
+                   <div className="flex items-center mt-1">
                       <div className="flex -space-x-2">
                           {doctorsInDept.slice(0, 3).map((doctorName, index) => (
                               <Image
                                   key={index}
                                   src={getDoctorAvatar(doctorName)}
                                   alt={doctorName}
-                                  width={32}
-                                  height={32}
+                                  width={24}
+                                  height={24}
                                   className="rounded-full border-2 border-white object-cover"
                                   data-ai-hint="doctor portrait"
                               />
                           ))}
                       </div>
-                      {doctorsInDept.length > 3 && (
-                          <span className="text-xs text-muted-foreground ml-2">
-                              + {doctorsInDept.length - 3} others
-                          </span>
-                      )}
+                      {doctorsInDept.length > 0 ? (
+                        <span className="text-xs text-muted-foreground ml-2 truncate">
+                           {doctorsInDept.length} {doctorsInDept.length > 1 ? 'doctors' : 'doctor'}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">No doctors</span>
+                      ) }
                   </div>
-                   <Button variant="link" size="sm" className="p-0 h-auto" onClick={() => setViewingDoctorsDept(department)}>
-                        <Users className="mr-1 h-3 w-3" />
-                        See Doctors
-                    </Button>
-              </CardFooter>
+              </CardContent>
           </Card>
       );
   }
@@ -341,19 +334,15 @@ export default function DepartmentsPage() {
               </Button>
         </header>
         <main className="flex-1 p-4 sm:p-6 flex flex-col">
-          <div className="grid flex-grow grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid flex-grow grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {loading ? (
-                 Array.from({ length: 6 }).map((_, i) => (
-                    <Card key={i} className="h-full flex flex-col animate-pulse">
-                        <div className="h-40 w-full bg-muted"></div>
-                        <CardContent className="p-4 flex-grow">
-                            <div className="h-6 w-3/4 bg-muted rounded"></div>
-                            <div className="h-10 w-full bg-muted rounded mt-2"></div>
+                 Array.from({ length: 8 }).map((_, i) => (
+                    <Card key={i} className="h-full flex flex-col animate-pulse aspect-square">
+                        <div className="h-2/3 w-full bg-muted"></div>
+                        <CardContent className="p-3 flex-grow">
+                            <div className="h-5 w-3/4 bg-muted rounded"></div>
+                            <div className="h-4 w-full bg-muted rounded mt-2"></div>
                         </CardContent>
-                        <CardFooter className="bg-muted/30 px-4 py-3 flex items-center justify-between">
-                            <div className="h-8 w-1/2 bg-muted rounded"></div>
-                            <div className="h-6 w-1/4 bg-muted rounded"></div>
-                        </CardFooter>
                     </Card>
                  ))
               ) : currentDepartments.length > 0 ? (
