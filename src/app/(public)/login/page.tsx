@@ -66,7 +66,7 @@ export default function LoginPage() {
         <Card className="mx-auto w-[400px] z-10">
           <CardHeader className="text-center">
             <div className="flex items-center justify-center gap-2 mb-4">
-              <Image src="https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.firebasestorage.app/o/Kloqo_Logo_full.png?alt=media&token=2f9b97ad-29ae-4812-b189-ba7291a1f005" alt="Kloqo Logo" width={116} height={64} className="h-16" />
+              <Image src="https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.appspot.com/o/Kloqo_Logo_full.png?alt=media&token=2f9b97ad-29ae-4812-b189-ba7291a1f005" alt="Kloqo Logo" width={120} height={30} />
             </div>
             <CardTitle className="text-3xl font-bold">Welcome Back!</CardTitle>
             <CardDescription className="text-balance text-muted-foreground">

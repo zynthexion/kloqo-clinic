@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useTransition, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -111,6 +111,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
       freeFollowUpDays: 7,
       advanceBookingDays: 30,
     },
+    mode: 'onBlur', // Validate on blur (when field loses focus)
   });
 
   useEffect(() => {
@@ -184,7 +185,24 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 
   const watchedAvailabilitySlots = form.watch('availabilitySlots');
 
+  // Debug form validation state (only when fields lose focus now)
+  useEffect(() => {
+    console.log('🔘 Button State Check:', {
+      isPending,
+      formIsValid: form.formState.isValid,
+      buttonEnabled: !isPending && form.formState.isValid,
+      formErrors: form.formState.errors,
+      formValues: form.getValues()
+    });
+  }, [isPending, form.formState.isValid, form.formState.errors, form]);
+
   const applySharedSlotsToSelectedDays = () => {
+    console.log('🎯 Apply Slots Called:', {
+      selectedDays,
+      sharedTimeSlots,
+      validSharedTimeSlots: sharedTimeSlots.filter(ts => ts.from && ts.to)
+    });
+
     if (selectedDays.length === 0) {
         toast({
             variant: "destructive",
@@ -348,7 +366,30 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        toast({
+          variant: "destructive",
+          title: "Invalid file type",
+          description: "Please select an image file.",
+        });
+        return;
+      }
+
+      // Validate file size (5MB limit)
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          variant: "destructive",
+          title: "File too large",
+          description: "Please select an image smaller than 5MB.",
+        });
+        return;
+      }
+
+      // Update form value
       form.setValue('photo', file);
+
+      // Create preview
       const reader = new FileReader();
       reader.onloadend = () => {
         setPhotoPreview(reader.result as string);
@@ -363,6 +404,9 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         if (!open) {
             form.reset();
             setPhotoPreview(null);
+            // Reset file input
+            const fileInput = document.getElementById('photo-upload') as HTMLInputElement;
+            if (fileInput) fileInput.value = '';
         }
     }}>
       <DialogContent className="max-w-4xl">
@@ -407,7 +451,10 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     name="name"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Name</FormLabel>
+                        <FormLabel className="flex items-center gap-1">
+                          Name
+                          <span className="text-red-500">*</span>
+                        </FormLabel>
                         <FormControl>
                           <Input placeholder="Dr. John Doe" {...field} value={field.value ?? ''} />
                         </FormControl>
@@ -433,7 +480,10 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     name="specialty"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Specialty</FormLabel>
+                        <FormLabel className="flex items-center gap-1">
+                          Specialty
+                          <span className="text-red-500">*</span>
+                        </FormLabel>
                         <FormControl>
                           <Input placeholder="Cardiology" {...field} />
                         </FormControl>
@@ -446,7 +496,10 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     name="department"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Department</FormLabel>
+                        <FormLabel className="flex items-center gap-1">
+                          Department
+                          <span className="text-red-500">*</span>
+                        </FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
                           <FormControl>
                             <SelectTrigger>
@@ -470,7 +523,10 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     name="bio"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Bio</FormLabel>
+                        <FormLabel className="flex items-center gap-1">
+                          Bio
+                          <span className="text-red-500">*</span>
+                        </FormLabel>
                         <FormControl>
                           <Textarea placeholder="A brief biography of the doctor..." {...field} />
                         </FormControl>
@@ -483,7 +539,10 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     name="experience"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Years of Experience</FormLabel>
+                        <FormLabel className="flex items-center gap-1">
+                          Years of Experience
+                          <span className="text-red-500">*</span>
+                        </FormLabel>
                         <FormControl>
                           <Input type="number" min="0" placeholder="e.g., 10" {...field} value={field.value !== undefined ? field.value : ''} />
                         </FormControl>
@@ -496,7 +555,10 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     name="consultationFee"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Consultation Fee (₹)</FormLabel>
+                        <FormLabel className="flex items-center gap-1">
+                          Consultation Fee (₹)
+                          <span className="text-red-500">*</span>
+                        </FormLabel>
                         <FormControl>
                           <Input type="number" min="0" placeholder="e.g., 150" {...field} value={field.value !== undefined ? field.value : ''} />
                         </FormControl>
@@ -509,7 +571,10 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     name="averageConsultingTime"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Average Consulting Time (minutes)</FormLabel>
+                        <FormLabel className="flex items-center gap-1">
+                          Average Consulting Time (minutes)
+                          <span className="text-red-500">*</span>
+                        </FormLabel>
                         <FormControl>
                           <Input type="number" min="5" placeholder="e.g., 15" {...field} value={field.value !== undefined ? field.value : ''} />
                         </FormControl>
@@ -553,10 +618,13 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     render={() => (
                       <FormItem>
                         <div className="mb-4">
-                          <FormLabel className="text-base">Weekly Availability</FormLabel>
-                          <p className="text-sm text-muted-foreground">
+                          <FormLabel className="text-base flex items-center gap-1">
+                            Weekly Availability
+                            <span className="text-red-500">*</span>
+                          </FormLabel>
+                          <FormDescription>
                             Define the doctor's recurring weekly schedule.
-                          </p>
+                          </FormDescription>
                         </div>
                           <div className="space-y-2">
                             <Label>1. Select days to apply time slots to</Label>
@@ -632,7 +700,27 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
             </ScrollArea>
             <DialogFooter className="pt-4">
               <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={isPending}>
+              <Button
+                type="submit"
+                disabled={isPending || !form.formState.isValid}
+                onClick={() => {
+                  console.log('🚀 Submit Button Clicked:', {
+                    isPending,
+                    formIsValid: form.formState.isValid,
+                    buttonEnabled: !isPending && form.formState.isValid,
+                    formErrors: form.formState.errors,
+                    formValues: form.getValues()
+                  });
+
+                  // If button is disabled, show why
+                  if (isPending) {
+                    console.log('❌ Button disabled: Form is submitting');
+                  }
+                  if (!form.formState.isValid) {
+                    console.log('❌ Button disabled: Form validation failed', form.formState.errors);
+                  }
+                }}
+              >
                 {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {isEditMode ? "Save Changes" : "Save Doctor"}
               </Button>

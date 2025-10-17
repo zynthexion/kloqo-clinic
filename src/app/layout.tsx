@@ -7,22 +7,6 @@ import { AuthProvider } from './(app)/auth-provider';
 export const metadata: Metadata = {
   title: 'Kloqo',
   description: 'AI-powered medical dashboard.',
-  icons: {
-    icon: [
-      {
-        url: 'https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.firebasestorage.app/o/kloqo_Logo_twest.png?alt=media&token=478a0eb1-1a51-4513-adce-d0fcb0c392a7',
-        sizes: '32x32',
-        type: 'image/png',
-      }
-    ],
-    apple: [
-      {
-        url: 'https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.firebasestorage.app/o/kloqo_Logo_twest.png?alt=media&token=478a0eb1-1a51-4513-adce-d0fcb0c392a7',
-        sizes: '180x180',
-        type: 'image/png',
-      }
-    ],
-  },
 };
 
 export default function RootLayout({
