@@ -2,15 +2,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getStorage } from 'firebase-admin/storage';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { config } from 'dotenv';
+
+// Load environment variables from .env file
+config();
 
 // Initialize Firebase Admin
 // Make sure to set the environment variables in your .env.local file
 if (!getApps().length) {
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !privateKey || !process.env.FIREBASE_STORAGE_BUCKET) {
+    throw new Error('Missing Firebase environment variables for Admin SDK initialization.');
+  }
+
   initializeApp({
     credential: cert({
       projectId: process.env.FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      privateKey: privateKey,
     }),
     storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
   });
