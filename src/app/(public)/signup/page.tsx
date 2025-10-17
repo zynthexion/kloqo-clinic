@@ -22,7 +22,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { auth, db } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { writeBatch, doc, collection } from 'firebase/firestore';
+import { writeBatch, doc, collection, getDocs, query, where } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
@@ -334,16 +334,42 @@ export default function SignupPage() {
         onboarded: false,
         role: 'clinicAdmin' as const,
     };
+    
+    // --- Mobile App Credential Generation ---
+    const generateUniqueUsername = async (clinicName: string): Promise<string> => {
+      const prefix = clinicName.replace(/[^a-zA-Z]/g, '').slice(0, 3).toLowerCase();
+      let username = '';
+      let isUnique = false;
+      while (!isUnique) {
+        const randomNumbers = Math.floor(100 + Math.random() * 900); // 3-digit number
+        username = `${prefix}${randomNumbers}`;
+        const q = query(collection(db, 'mobile-app'), where('username', '==', username));
+        const querySnapshot = await getDocs(q);
+        isUnique = querySnapshot.empty;
+      }
+      return username;
+    };
+
+    const generateRandomPassword = (length = 8): string => {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      let password = '';
+      for (let i = 0; i < length; i++) {
+        password += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return password;
+    };
 
     const mobileAppCredsRef = doc(collection(db, "mobile-app"));
-    const mobileUsername = formData.clinicName.toLowerCase().replace(/\s+/g, '-') + '-mobile';
-    const mobilePassword = 'password123';
+    const mobileUsername = await generateUniqueUsername(formData.clinicName);
+    const mobilePassword = generateRandomPassword(8);
     const mobileCredsData = {
         id: mobileAppCredsRef.id,
         clinicId: clinicId,
         username: mobileUsername,
         password: mobilePassword,
     };
+    // --- End Credential Generation ---
+
 
     const batch = writeBatch(db);
     batch.set(clinicRef, clinicData);
@@ -463,4 +489,3 @@ export default function SignupPage() {
   );
 }
 
-    
