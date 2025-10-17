@@ -12,9 +12,8 @@ config();
 if (!getApps().length) {
   const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
   if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !privateKey || !process.env.FIREBASE_STORAGE_BUCKET) {
-    // This part is changed. Instead of throwing an error which crashes the server,
-    // we return a proper JSON response. This is a common source of 500 errors in Next.js API routes.
-    console.error('Firebase Admin SDK initialization failed: Missing environment variables.');
+    console.error('Firebase Admin SDK initialization failed: One or more required environment variables are missing.');
+    console.error('Check FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY, FIREBASE_STORAGE_BUCKET');
   } else {
       try {
         initializeApp({
@@ -26,7 +25,7 @@ if (!getApps().length) {
             storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
         });
       } catch (error) {
-          console.error('Firebase Admin SDK initialization error:', error);
+          console.error('Firebase Admin SDK initializeApp error:', error);
       }
   }
 }
