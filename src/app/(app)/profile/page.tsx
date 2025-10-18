@@ -64,7 +64,7 @@ type ProfileFormValues = z.infer<typeof profileFormSchema>;
 const clinicFormSchema = z.object({
     name: z.string().min(2, "Clinic name must be at least 2 characters."),
     type: z.enum(['Single Doctor', 'Multi-Doctor']),
-    maxDoctors: z.coerce.number().min(1),
+    numDoctors: z.coerce.number().min(1),
     clinicRegNumber: z.string().optional(),
     address: z.string().min(10, "Address is required."),
     mapsLink: z.string().url().optional().or(z.literal('')),
@@ -112,7 +112,7 @@ export default function ProfilePage() {
   const profileForm = useForm<ProfileFormValues>({ resolver: zodResolver(profileFormSchema), defaultValues: { name: "", phone: "" } });
   const clinicForm = useForm<ClinicFormValues>({ 
       resolver: zodResolver(clinicFormSchema), 
-      defaultValues: { name: "", type: "Single Doctor", maxDoctors: 1, clinicRegNumber: "", address: "", mapsLink: "" } 
+      defaultValues: { name: "", type: "Single Doctor", numDoctors: 1, clinicRegNumber: "", address: "", mapsLink: "" } 
   });
   const hoursForm = useForm<OperatingHoursFormValues>({
     resolver: zodResolver(operatingHoursFormSchema),
@@ -154,7 +154,7 @@ export default function ProfilePage() {
               clinicForm.reset({
                 name: clinicData.name || '',
                 type: clinicData.type,
-                maxDoctors: clinicData.maxDoctors,
+                numDoctors: clinicData.numDoctors,
                 clinicRegNumber: clinicData.clinicRegNumber || '',
                 address: clinicData.address,
                 mapsLink: clinicData.mapsLink || '',
@@ -190,7 +190,7 @@ export default function ProfilePage() {
       }
     };
     fetchAllData();
-  }, [auth.currentUser, toast]);
+  }, [auth.currentUser, toast, profileForm, clinicForm, hoursForm, mobileAppForm]);
 
   const onMobileAppSubmit = async (values: MobileAppFormValues) => {
     if (!userProfile?.clinicId) {
@@ -268,7 +268,7 @@ export default function ProfilePage() {
             await updateDoc(clinicRef, { 
                 name: values.name,
                 type: values.type,
-                maxDoctors: values.maxDoctors,
+                numDoctors: values.numDoctors,
                 clinicRegNumber: values.clinicRegNumber,
                 address: values.address,
                 mapsLink: values.mapsLink,
@@ -307,7 +307,7 @@ export default function ProfilePage() {
         clinicForm.reset({ 
             name: clinicDetails.name,
             type: clinicDetails.type,
-            maxDoctors: clinicDetails.maxDoctors,
+            numDoctors: clinicDetails.numDoctors,
             clinicRegNumber: clinicDetails.clinicRegNumber || '',
             address: clinicDetails.address,
             mapsLink: clinicDetails.mapsLink || '',
@@ -448,12 +448,12 @@ export default function ProfilePage() {
                                                   {currentDoctorCount}
                                               </div>
                                               <div className="text-sm text-muted-foreground">
-                                                  of {clinicDetails?.maxDoctors || 0} doctors
+                                                  of {clinicDetails?.numDoctors || 0} doctors
                                               </div>
                                           </div>
                                           <div className="text-xs text-muted-foreground">
-                                              {clinicDetails?.maxDoctors && clinicDetails.maxDoctors > 0 ?
-                                                  `${Math.round((currentDoctorCount / clinicDetails.maxDoctors) * 100)}% utilized` :
+                                              {clinicDetails?.numDoctors && clinicDetails.numDoctors > 0 ?
+                                                  `${Math.round((currentDoctorCount / clinicDetails.numDoctors) * 100)}% utilized` :
                                                   'No limit set'
                                               }
                                           </div>
