@@ -17,7 +17,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -31,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Trash, Upload } from "lucide-react";
+import { Loader2, Trash, Upload, Trash2, Edit } from "lucide-react";
 import type { Doctor, Department, AvailabilitySlot } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "../ui/scroll-area";
@@ -106,6 +105,8 @@ const generateTimeOptions = (startTime: string, endTime: string, interval: numbe
     return options;
 };
 
+const defaultDoctorImage = "https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.firebasestorage.app/o/doctor.jpg?alt=media&token=1cee71fb-ab82-4392-ab24-0e0aecd8de84";
+
 
 export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }: AddDoctorFormProps) {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -115,6 +116,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
   const [isPending, startTransition] = useTransition();
   const [clinicId, setClinicId] = useState<string | null>(null);
   const [clinicDetails, setClinicDetails] = useState<any | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
 
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
@@ -189,7 +191,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         freeFollowUpDays: doctor.freeFollowUpDays || 7,
         advanceBookingDays: doctor.advanceBookingDays || 30,
       });
-      setPhotoPreview(doctor.avatar);
+      setPhotoPreview(doctor.avatar || defaultDoctorImage);
       if(availabilitySlots.length > 0) {
         setSharedTimeSlots(availabilitySlots[0].timeSlots);
       }
@@ -207,7 +209,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         freeFollowUpDays: 7,
         advanceBookingDays: 30,
       });
-      setPhotoPreview(null);
+      setPhotoPreview(defaultDoctorImage);
       setSharedTimeSlots([{ from: "09:00", to: "17:00" }]);
     }
   }, [doctor, form, isOpen]);
@@ -315,7 +317,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
             }
         }
         
-        let photoUrl = doctor?.avatar || `https://picsum.photos/seed/new-doc-${Date.now()}/100/100`;
+        let photoUrl = doctor?.avatar || defaultDoctorImage;
         const photoFile = form.getValues('photo');
 
         if (photoFile instanceof File) {
@@ -413,7 +415,9 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
   };
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log("DEBUG: handlePhotoChange triggered");
     const file = e.target.files?.[0];
+    console.log("DEBUG: Selected file:", file);
     if (file) {
       if (!file.type.startsWith('image/')) {
         toast({
@@ -435,9 +439,18 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 
       form.setValue('photo', file);
       const previewUrl = URL.createObjectURL(file);
+      console.log("DEBUG: Generated preview URL:", previewUrl);
       setPhotoPreview(previewUrl);
     }
   };
+
+  const handlePhotoDelete = () => {
+    form.setValue('photo', null);
+    setPhotoPreview(defaultDoctorImage);
+    if(fileInputRef.current) {
+        fileInputRef.current.value = "";
+    }
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
@@ -445,8 +458,9 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         if (!open) {
             form.reset();
             setPhotoPreview(null);
-            const fileInput = document.getElementById('photo-upload') as HTMLInputElement;
-            if (fileInput) fileInput.value = '';
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+            }
         }
     }}>
       <DialogContent className="max-w-4xl">
@@ -467,21 +481,23 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                      <div className="flex items-center gap-4">
                         <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center overflow-hidden">
                           {photoPreview ? (
-                            <Image src={photoPreview} alt="Doctor's Photo" width={96} height={96} className="object-cover" />
+                            <Image src={photoPreview} alt="Doctor's Photo" width={96} height={96} className="object-cover w-full h-full" />
                           ) : (
                             <Upload className="w-8 h-8 text-muted-foreground" />
                           )}
                         </div>
-                        <label htmlFor="photo-upload" className="cursor-pointer">
-                          <Button type="button" variant="outline" asChild>
-                            <span>
-                              <Upload className="mr-2 h-4 w-4" />
-                              Upload
-                            </span>
-                          </Button>
-                        </label>
+                        <div className="flex flex-col gap-2">
+                           <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Change
+                            </Button>
+                            <Button type="button" variant="destructive" size="sm" onClick={handlePhotoDelete}>
+                               <Trash2 className="mr-2 h-4 w-4" />
+                               Delete
+                            </Button>
+                        </div>
                         <FormControl>
-                            <Input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" id="photo-upload" />
+                            <Input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" id="photo-upload" ref={fileInputRef} />
                         </FormControl>
                       </div>
                     <FormMessage />
@@ -662,10 +678,6 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                             Weekly Availability
                             <span className="text-red-500">*</span>
                           </FormLabel>
-                           <FormDescription>
-                             Define the doctor's recurring weekly schedule.
-                           </FormDescription>
-                          <FormMessage />
                         </div>
                           <div className="space-y-2">
                             <Label>1. Select days to apply time slots to</Label>
@@ -794,3 +806,5 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
     </Dialog>
   );
 }
+
+    
