@@ -1433,6 +1433,7 @@ export default function DoctorsPage() {
         setIsOpen={setIsAddDoctorOpen}
         doctor={editingDoctor}
         departments={clinicDepartments}
+        updateDepartments={(newDepartment) => setClinicDepartments(prev => [...prev, newDepartment])}
       />
     </>
   );

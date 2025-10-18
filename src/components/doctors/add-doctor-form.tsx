@@ -31,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Trash, Upload, Trash2, Edit } from "lucide-react";
+import { Loader2, Trash, Upload, Trash2, Edit, PlusCircle as PlusCircleIcon } from "lucide-react";
 import type { Doctor, Department, AvailabilitySlot } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "../ui/scroll-area";
@@ -45,6 +45,8 @@ import { setDoc, doc, getDoc, collection, query, where, getDocs, updateDoc } fro
 import { db } from "@/lib/firebase";
 import imageCompression from "browser-image-compression";
 import { Textarea } from "../ui/textarea";
+import { AddDepartmentDialog } from "../departments/add-department-dialog";
+import { Separator } from "../ui/separator";
 
 const timeSlotSchema = z.object({
   from: z.string().min(1, "Required"),
@@ -94,6 +96,7 @@ type AddDoctorFormProps = {
   setIsOpen: (isOpen: boolean) => void;
   doctor: Doctor | null;
   departments: Department[];
+  updateDepartments: (newDepartment: Department) => void;
 };
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -115,7 +118,7 @@ const generateTimeOptions = (startTime: string, endTime: string, interval: numbe
 const defaultDoctorImage = "https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.firebasestorage.app/o/doctor.jpg?alt=media&token=1cee71fb-ab82-4392-ab24-0e0aecd8de84";
 
 
-export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }: AddDoctorFormProps) {
+export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, updateDepartments }: AddDoctorFormProps) {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const { toast } = useToast();
   const isEditMode = !!doctor;
@@ -124,6 +127,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
   const [clinicId, setClinicId] = useState<string | null>(null);
   const [clinicDetails, setClinicDetails] = useState<any | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isAddDepartmentOpen, setIsAddDepartmentOpen] = useState(false);
 
 
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
@@ -457,6 +461,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
   }
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={(open) => {
         setIsOpen(open);
         if (!open) {
@@ -560,7 +565,13 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                           Department
                           <span className="text-red-500">*</span>
                         </FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
+                        <Select onValueChange={(value) => {
+                            if (value === 'add_new') {
+                                setIsAddDepartmentOpen(true);
+                            } else {
+                                field.onChange(value);
+                            }
+                        }} value={field.value}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select a department" />
@@ -572,6 +583,13 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                                 {dept.name}
                               </SelectItem>
                             ))}
+                            <Separator />
+                            <SelectItem value="add_new" className="text-primary focus:bg-primary/10 focus:text-primary">
+                                <div className="flex items-center gap-2">
+                                    <PlusCircleIcon className="h-4 w-4" />
+                                    Add New Department
+                                </div>
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -821,5 +839,15 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         </Form>
       </DialogContent>
     </Dialog>
+    <AddDepartmentDialog
+        isOpen={isAddDepartmentOpen}
+        setIsOpen={setIsAddDepartmentOpen}
+        onDepartmentAdded={(newDept) => {
+            updateDepartments(newDept);
+            form.setValue('department', newDept.name);
+        }}
+    />
+    </>
   );
 }
+
