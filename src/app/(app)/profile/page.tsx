@@ -453,6 +453,7 @@ export default function ProfilePage() {
                                             <Input
                                                 type="number"
                                                 {...field}
+                                                onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)}
                                                 value={field.value || ''}
                                                 disabled={!isEditingClinic || !isMultiDoctorClinic || isPending}
                                                 min={currentDoctorCount}
