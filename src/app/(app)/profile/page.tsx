@@ -193,7 +193,8 @@ export default function ProfilePage() {
       }
     };
     fetchAllData();
-  }, [auth.currentUser, toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth.currentUser]);
 
   const onMobileAppSubmit = async (values: MobileAppFormValues) => {
     if (!userProfile?.clinicId) {
@@ -457,7 +458,7 @@ export default function ProfilePage() {
                                             />
                                         </FormControl>
                                         <FormDescription className="text-xs">
-                                            Currently using {currentDoctorCount} of {field.value} available slots.
+                                            Currently using {currentDoctorCount} of {clinicDetails?.numDoctors || 0} available slots.
                                         </FormDescription>
                                         <FormMessage />
                                     </FormItem>
