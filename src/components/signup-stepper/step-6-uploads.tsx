@@ -4,20 +4,24 @@
 import { useFormContext } from 'react-hook-form';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Upload } from 'lucide-react';
+import { Upload, Edit, Trash2 } from 'lucide-react';
 import type { SignUpFormData } from '@/app/(public)/signup/page';
 import Image from 'next/image';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { FormControl, FormField, FormItem, FormMessage } from '../ui/form';
 import { Input } from '@/components/ui/input';
 
-type StepProps = {
-  data: SignUpFormData;
-  updateData: (update: Partial<SignUpFormData>) => void;
-};
-
-const FileUpload = ({ field, label }: { field: any, label: string }) => {
+const FileUpload = ({
+  field,
+  label,
+  isRequired,
+}: {
+  field: any;
+  label: string;
+  isRequired: boolean;
+}) => {
   const [preview, setPreview] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
@@ -27,31 +31,79 @@ const FileUpload = ({ field, label }: { field: any, label: string }) => {
     } else {
       setPreview(null);
     }
-  }
+  };
+
+  const handleEdit = () => {
+    inputRef.current?.click();
+  };
+
+  const handleDelete = () => {
+    field.onChange(null);
+    setPreview(null);
+    if (inputRef.current) {
+      inputRef.current.value = '';
+    }
+  };
 
   return (
     <FormItem>
-      <Label>{label}</Label>
+      <Label>
+        {label}
+        {isRequired && <span className="text-destructive">*</span>}
+      </Label>
       <div className="flex items-center gap-4">
         <div className="w-20 h-20 rounded-md bg-muted flex items-center justify-center overflow-hidden">
-          {preview ? <Image src={preview} alt="preview" width={80} height={80} className="object-cover" /> : <Upload className="h-6 w-6 text-muted-foreground"/>}
+          {preview ? (
+            <Image
+              src={preview}
+              alt="preview"
+              width={80}
+              height={80}
+              className="object-cover"
+            />
+          ) : (
+            <Upload className="h-6 w-6 text-muted-foreground" />
+          )}
         </div>
-        <FormControl>
-          <Input type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} id={`file-input-${field.name}`} />
-        </FormControl>
-        <label htmlFor={`file-input-${field.name}`} className="cursor-pointer">
-          <Button type="button" variant="outline" tabIndex={-1}>
-            <Upload className="mr-2 h-4 w-4" />
-            Choose File
-          </Button>
-        </label>
-        {field.value && <span className="text-sm text-muted-foreground truncate">{field.value.name}</span>}
+        <div className="flex-grow">
+          <FormControl>
+            <Input
+              type="file"
+              accept="image/*,.pdf"
+              onChange={handleFileChange}
+              ref={inputRef}
+              style={{ display: 'none' }}
+              id={`file-input-${field.name}`}
+            />
+          </FormControl>
+          {field.value ? (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground truncate max-w-xs">
+                {field.value.name}
+              </span>
+              <Button type="button" size="icon" variant="ghost" onClick={handleEdit}>
+                <Edit className="h-4 w-4" />
+              </Button>
+              <Button type="button" size="icon" variant="ghost" onClick={handleDelete}>
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            </div>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => inputRef.current?.click()}
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Choose File
+            </Button>
+          )}
+        </div>
       </div>
-       <FormMessage />
+      <FormMessage />
     </FormItem>
   );
 };
-
 
 export function Step6Uploads() {
   const { control } = useFormContext<SignUpFormData>();
@@ -59,24 +111,40 @@ export function Step6Uploads() {
   return (
     <div>
       <p className="text-sm text-muted-foreground">Step 6/7</p>
-      <h2 className="text-2xl font-bold mb-1">Uploads (Optional)</h2>
-      <p className="text-muted-foreground mb-6">Adding these will build trust and complete your profile.</p>
+      <h2 className="text-2xl font-bold mb-1">Uploads</h2>
+      <p className="text-muted-foreground mb-6">
+        Adding these will build trust and complete your profile.
+      </p>
 
       <div className="space-y-6">
         <FormField
           control={control}
           name="logo"
-          render={({ field }) => <FileUpload field={field} label="Clinic Logo" />}
+          render={({ field }) => (
+            <FileUpload field={field} label="Clinic Logo" isRequired={false} />
+          )}
         />
         <FormField
           control={control}
           name="license"
-          render={({ field }) => <FileUpload field={field} label="Doctor/Clinic License Copy" />}
+          render={({ field }) => (
+            <FileUpload
+              field={field}
+              label="Doctor/Clinic License Copy"
+              isRequired={true}
+            />
+          )}
         />
         <FormField
           control={control}
           name="receptionPhoto"
-          render={({ field }) => <FileUpload field={field} label="Reception / Waiting Area Photo" />}
+          render={({ field }) => (
+            <FileUpload
+              field={field}
+              label="Reception / Waiting Area Photo"
+              isRequired={false}
+            />
+          )}
         />
       </div>
     </div>

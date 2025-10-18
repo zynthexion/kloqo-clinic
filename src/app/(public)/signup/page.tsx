@@ -37,6 +37,17 @@ const hoursSchema = z.object({
   isClosed: z.boolean(),
 });
 
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+
+const fileSchema = z.any()
+    .refine((file) => file instanceof File, "File is required.")
+    .refine((file) => file?.size <= MAX_FILE_SIZE, `Max file size is 5MB.`)
+    .refine(
+      (file) => ACCEPTED_IMAGE_TYPES.includes(file?.type),
+      ".jpg, .jpeg, .png and .webp files are accepted."
+    );
+
 const signupSchema = z.object({
   // Step 1
   clinicName: z.string()
@@ -89,14 +100,14 @@ const signupSchema = z.object({
   avgPatientsPerDay: z.coerce.number().min(1, "Value must be at least 1."),
   
   // Step 5
-  plan: z.enum(['Free Plan (Beta)', 'Kloqo Lite', 'Kloqo Grow', 'Kloqo Prime'], { required_error: "Please select a plan." }),
-  promoCode: z.string(),
-  paymentMethod: z.enum(['Card', 'UPI', 'NetBanking'], { required_error: "Please select a payment method." }),
+  plan: z.enum(['Free Plan (Beta)'], { required_error: "Please select a plan." }),
+  promoCode: z.string().optional(),
+  paymentMethod: z.enum(['Card', 'UPI', 'NetBanking']).optional(),
 
   // Step 6
-  logo: z.any(),
-  license: z.any(),
-  receptionPhoto: z.any(),
+  logo: z.any().optional(),
+  license: fileSchema,
+  receptionPhoto: z.any().optional(),
 
   // Step 7
   agreeTerms: z.boolean().refine(val => val === true, { message: "You must agree to the terms." }),
@@ -150,7 +161,7 @@ const defaultFormData: SignUpFormData = {
   
   plan: 'Free Plan (Beta)',
   promoCode: '',
-  paymentMethod: 'Card',
+  paymentMethod: undefined,
   
   logo: null,
   license: null,
@@ -166,7 +177,7 @@ const stepFields: (keyof SignUpFormData)[][] = [
     ['addressLine1', 'city', 'state', 'pincode'], // Step 3
     ['hours', 'avgPatientsPerDay'], // Step 4
     ['plan'], // Step 5
-    [], // Step 6
+    ['license'], // Step 6
     ['agreeTerms', 'isAuthorized'], // Step 7
 ]
 
@@ -193,6 +204,9 @@ export default function SignupPage() {
             return false;
         }
         const value = values[field as keyof SignUpFormData];
+        if (field === 'license' && !value) {
+            return false;
+        }
         if (typeof value === 'string' && !value.trim()) {
             if(field !== 'clinicRegNumber' && field !== 'mapsLink') {
                 return false;
@@ -282,8 +296,7 @@ export default function SignupPage() {
 
     const user = userCredential.user;
 
-    // --- File upload logic ---
-    const uploadFileToStorage = async (file: File | null, path: string) => {
+    const uploadFileToStorage = async (file: File | null, path: string): Promise<string | null> => {
       if (!file) return null;
       const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
       const { storage } = await import('@/lib/firebase');
@@ -292,10 +305,9 @@ export default function SignupPage() {
       return await getDownloadURL(fileRef);
     };
 
-    const logoUrl = await uploadFileToStorage(formData.logo, `clinics/${user.uid}/logo`);
-    const licenseUrl = await uploadFileToStorage(formData.license, `clinics/${user.uid}/license`);
-    const receptionPhotoUrl = await uploadFileToStorage(formData.receptionPhoto, `clinics/${user.uid}/receptionPhoto`);
-    // --- End file upload logic ---
+    const logoUrl = await uploadFileToStorage(formData.logo, `clinics/${user.uid}/documents/logo`);
+    const licenseUrl = await uploadFileToStorage(formData.license, `clinics/${user.uid}/documents/license`);
+    const receptionPhotoUrl = await uploadFileToStorage(formData.receptionPhoto, `clinics/${user.uid}/documents/reception_photo`);
 
     const clinicRef = doc(collection(db, "clinics"));
     const clinicId = clinicRef.id;
@@ -314,7 +326,7 @@ export default function SignupPage() {
         ownerId: user.uid,
         name: formData.clinicName,
         type: formData.clinicType,
-        address: fullAddress, // A combined address for display purposes
+        address: fullAddress,
         addressDetails: {
           line1: formData.addressLine1,
           line2: formData.addressLine2,
@@ -330,8 +342,8 @@ export default function SignupPage() {
         longitude: formData.longitude,
         skippedTokenRecurrence: formData.skippedTokenRecurrence,
         walkInTokenAllotment: formData.walkInTokenAllotment,
-        maxDoctors: formData.numDoctors, // This is the limit
-        currentDoctorCount: 0, // This tracks actual count
+        numDoctors: formData.numDoctors,
+        currentDoctorCount: 0,
         clinicRegNumber: formData.clinicRegNumber,
         mapsLink: formData.mapsLink,
         logoUrl,
@@ -355,7 +367,6 @@ export default function SignupPage() {
         role: 'clinicAdmin' as const,
     };
     
-    // --- Mobile App Credential Generation ---
     const generateUniqueUsername = async (clinicName: string): Promise<string> => {
       const prefix = clinicName.replace(/[^a-zA-Z]/g, '').slice(0, 3).toLowerCase();
       let username = '';
@@ -388,8 +399,6 @@ export default function SignupPage() {
         username: mobileUsername,
         password: mobilePassword,
     };
-    // --- End Credential Generation ---
-
 
     const batch = writeBatch(db);
     batch.set(clinicRef, clinicData);
