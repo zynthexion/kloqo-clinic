@@ -417,11 +417,12 @@ export default function ProfilePage() {
                   </Card>
               );
           case 'clinic':
+              if (!clinicDetails) {
+                  return <Card><CardHeader><CardTitle>Loading Clinic Details...</CardTitle></CardHeader></Card>;
+              }
               const isMultiDoctorClinic = clinicForm.watch('type') === 'Multi-Doctor';
               return (
                    <Card>
-                    {!clinicDetails ? <CardHeader><CardTitle>Loading...</CardTitle></CardHeader> : (
-                      <>
                         <CardHeader>
                             <div className="flex items-center justify-between">
                                 <CardTitle>General Information</CardTitle>
@@ -455,19 +456,16 @@ export default function ProfilePage() {
                                       <FormItem>
                                           <FormLabel>Number of Doctors Limit</FormLabel>
                                           <FormControl>
-                                              <Input
-                                                  type="number"
-                                                  {...field}
-                                                  disabled={!isEditingClinic || !isMultiDoctorClinic || isPending}
-                                                  min={currentDoctorCount}
-                                                  onChange={(e) => {
-                                                    const value = parseInt(e.target.value, 10);
-                                                    field.onChange(isNaN(value) ? 0 : value);
-                                                  }}
-                                              />
+                                            <Input
+                                                type="number"
+                                                {...field}
+                                                disabled={!isEditingClinic || !isMultiDoctorClinic || isPending}
+                                                min={currentDoctorCount}
+                                                onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 0)}
+                                            />
                                           </FormControl>
                                           <FormDescription className="text-xs">
-                                              Currently using {currentDoctorCount} of {clinicDetails?.numDoctors || 0} available slots.
+                                             Currently using {currentDoctorCount} of {clinicDetails?.numDoctors || 0} available slots.
                                           </FormDescription>
                                           <FormMessage />
                                       </FormItem>
@@ -498,8 +496,6 @@ export default function ProfilePage() {
                                 </CardContent>
                             </form>
                         </Form>
-                      </>
-                    )}
                   </Card>
               );
           case 'hours':
