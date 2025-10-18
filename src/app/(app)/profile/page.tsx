@@ -142,7 +142,7 @@ export default function ProfilePage() {
 
           const profileResetData = {
             name: userData.name,
-            phone: userData.phone,
+            phone: userData.phone.replace('+91',''),
           };
           profileForm.reset(profileResetData);
 
@@ -255,8 +255,9 @@ export default function ProfilePage() {
       startTransition(async () => {
           const userRef = doc(db, 'users', auth.currentUser!.uid);
           try {
-              await updateDoc(userRef, { name: values.name, phone: values.phone });
-              setUserProfile(prev => prev ? {...prev, ...values} : null);
+              const phoneWithCountryCode = values.phone.startsWith('+91') ? values.phone : `+91${values.phone}`;
+              await updateDoc(userRef, { name: values.name, phone: phoneWithCountryCode });
+              setUserProfile(prev => prev ? {...prev, name: values.name, phone: phoneWithCountryCode} : null);
               toast({ title: "Profile Updated", description: "Your personal information has been changed successfully." });
               setIsEditingProfile(false);
           } catch (error) {
@@ -308,7 +309,7 @@ export default function ProfilePage() {
   };
 
   const handleCancelMobile = () => { if (credentials) { mobileAppForm.reset({ username: credentials.username, password: "" }); setIsEditingMobile(false); } }
-  const handleCancelProfile = () => { if (userProfile) { profileForm.reset({ name: userProfile.name, phone: userProfile.phone }); } setIsEditingProfile(false); }
+  const handleCancelProfile = () => { if (userProfile) { profileForm.reset({ name: userProfile.name, phone: userProfile.phone.replace('+91','') }); } setIsEditingProfile(false); }
   const handleCancelClinic = () => { 
     if (clinicDetails) { 
         clinicForm.reset({ 
