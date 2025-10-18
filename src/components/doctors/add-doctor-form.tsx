@@ -17,6 +17,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -523,10 +524,8 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
   return (
     <>
     <Dialog open={isOpen} onOpenChange={(open) => {
-        if (open) {
-            setIsOpen(true);
-        } else {
-           // This block is now intentionally left empty to prevent closing
+        if (!open) {
+           setIsOpen(false);
         }
     }}>
       <DialogContent 
