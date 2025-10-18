@@ -441,12 +441,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
       }
 
       form.setValue('photo', file);
-
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPhotoPreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      setPhotoPreview(URL.createObjectURL(file));
     }
   };
 
@@ -520,7 +515,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                       <FormItem>
                         <FormLabel>Registration Number</FormLabel>
                         <FormControl>
-                          <Input placeholder="e.g., IMA/12345" {...field} />
+                          <Input placeholder="e.g., IMA/12345" {...field} value={field.value ?? ''} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -803,3 +798,4 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
   );
 }
 
+    
