@@ -193,8 +193,7 @@ export default function ProfilePage() {
       }
     };
     fetchAllData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auth.currentUser]);
+  }, [auth.currentUser, toast, profileForm, clinicForm, hoursForm, mobileAppForm]);
 
   const onMobileAppSubmit = async (values: MobileAppFormValues) => {
     if (!userProfile?.clinicId) {
@@ -357,233 +356,243 @@ export default function ProfilePage() {
           case 'profile':
               return (
                   <Card>
-                      <CardHeader>
-                          <div className="flex items-center justify-between">
-                              <CardTitle>Login & Personal Information</CardTitle>
-                              {!isEditingProfile && (
-                                  <Button variant="outline" size="icon" onClick={() => setIsEditingProfile(true)} disabled={isPending}>
-                                      <Edit className="w-4 h-4"/>
-                                  </Button>
-                              )}
-                          </div>
-                          <CardDescription>Your personal and login information.</CardDescription>
-                      </CardHeader>
-                       <Form {...profileForm}>
-                          <form onSubmit={profileForm.handleSubmit(onProfileSubmit)}>
-                              <CardContent className="space-y-4">
-                                  <FormField control={profileForm.control} name="name" render={({ field }) => (
-                                      <FormItem><FormLabel>Admin Name</FormLabel><FormControl><Input {...field} disabled={!isEditingProfile || isPending} /></FormControl><FormMessage /></FormItem>
-                                  )}/>
-                                  <FormItem><FormLabel>Email Address</FormLabel><Input type="email" value={userProfile?.email || ""} disabled /></FormItem>
-                                  <FormField control={profileForm.control} name="phone" render={({ field }) => (
-                                      <FormItem><FormLabel>Phone</FormLabel><FormControl><Input {...field} disabled={!isEditingProfile || isPending} /></FormControl><FormMessage /></FormItem>
-                                  )}/>
-                                  {isEditingProfile && (
-                                      <div className="flex justify-end gap-2 pt-4">
-                                          <Button type="button" variant="ghost" onClick={handleCancelProfile} disabled={isPending}>Cancel</Button>
-                                          <Button type="submit" disabled={isPending}>
-                                              {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />}
-                                              Save Changes
-                                          </Button>
-                                      </div>
-                                  )}
-                              </CardContent>
-                          </form>
-                      </Form>
-                      <Separator />
-                      <CardFooter className="pt-6">
-                          <Form {...passwordForm}>
-                              <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="w-full space-y-4">
-                                  <p className="font-medium text-sm">Change Password</p>
-                                  <FormField control={passwordForm.control} name="currentPassword" render={({ field }) => (
-                                      <FormItem><FormLabel>Current Password</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>
-                                  )}/>
-                                  <FormField control={passwordForm.control} name="newPassword" render={({ field }) => (
-                                      <FormItem><FormLabel>New Password</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>
-                                  )}/>
-                                  <FormField control={passwordForm.control} name="confirmPassword" render={({ field }) => (
-                                      <FormItem><FormLabel>Confirm New Password</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>
-                                  )}/>
-                                  <Button type="submit" variant="secondary" className="w-full" disabled={isPending}>
-                                    {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
-                                    Set New Password
-                                  </Button>
-                              </form>
-                          </Form>
-                      </CardFooter>
+                    {!userProfile ? <CardHeader><CardTitle>Loading...</CardTitle></CardHeader> : (
+                      <>
+                        <CardHeader>
+                            <div className="flex items-center justify-between">
+                                <CardTitle>Login & Personal Information</CardTitle>
+                                {!isEditingProfile && (
+                                    <Button variant="outline" size="icon" onClick={() => setIsEditingProfile(true)} disabled={isPending}>
+                                        <Edit className="w-4 h-4"/>
+                                    </Button>
+                                )}
+                            </div>
+                            <CardDescription>Your personal and login information.</CardDescription>
+                        </CardHeader>
+                        <Form {...profileForm}>
+                            <form onSubmit={profileForm.handleSubmit(onProfileSubmit)}>
+                                <CardContent className="space-y-4">
+                                    <FormField control={profileForm.control} name="name" render={({ field }) => (
+                                        <FormItem><FormLabel>Admin Name</FormLabel><FormControl><Input {...field} disabled={!isEditingProfile || isPending} /></FormControl><FormMessage /></FormItem>
+                                    )}/>
+                                    <FormItem><FormLabel>Email Address</FormLabel><Input type="email" value={userProfile?.email || ""} disabled /></FormItem>
+                                    <FormField control={profileForm.control} name="phone" render={({ field }) => (
+                                        <FormItem><FormLabel>Phone</FormLabel><FormControl><Input {...field} disabled={!isEditingProfile || isPending} /></FormControl><FormMessage /></FormItem>
+                                    )}/>
+                                    {isEditingProfile && (
+                                        <div className="flex justify-end gap-2 pt-4">
+                                            <Button type="button" variant="ghost" onClick={handleCancelProfile} disabled={isPending}>Cancel</Button>
+                                            <Button type="submit" disabled={isPending}>
+                                                {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />}
+                                                Save Changes
+                                            </Button>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </form>
+                        </Form>
+                        <Separator />
+                        <CardFooter className="pt-6">
+                            <Form {...passwordForm}>
+                                <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="w-full space-y-4">
+                                    <p className="font-medium text-sm">Change Password</p>
+                                    <FormField control={passwordForm.control} name="currentPassword" render={({ field }) => (
+                                        <FormItem><FormLabel>Current Password</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>
+                                    )}/>
+                                    <FormField control={passwordForm.control} name="newPassword" render={({ field }) => (
+                                        <FormItem><FormLabel>New Password</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>
+                                    )}/>
+                                    <FormField control={passwordForm.control} name="confirmPassword" render={({ field }) => (
+                                        <FormItem><FormLabel>Confirm New Password</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>
+                                    )}/>
+                                    <Button type="submit" variant="secondary" className="w-full" disabled={isPending}>
+                                      {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                                      Set New Password
+                                    </Button>
+                                </form>
+                            </Form>
+                        </CardFooter>
+                      </>
+                    )}
                   </Card>
               );
           case 'clinic':
               const isMultiDoctorClinic = clinicForm.watch('type') === 'Multi-Doctor';
               return (
                    <Card>
-                      <CardHeader>
-                          <div className="flex items-center justify-between">
-                              <CardTitle>General Information</CardTitle>
-                              {!isEditingClinic && (
-                                  <Button variant="outline" size="icon" onClick={() => setIsEditingClinic(true)} disabled={isPending}>
-                                      <Edit className="w-4 h-4"/>
-                                  </Button>
-                              )}
-                          </div>
-                          <CardDescription>General information about your clinic.</CardDescription>
-                      </CardHeader>
-                      <Form {...clinicForm}>
-                          <form onSubmit={clinicForm.handleSubmit(onClinicSubmit)}>
-                              <CardContent className="space-y-4">
-                                  <FormField control={clinicForm.control} name="name" render={({ field }) => (
-                                      <FormItem><FormLabel>Clinic Name</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
-                                  )}/>
-                                  <FormField control={clinicForm.control} name="type" render={({ field }) => (
-                                      <FormItem><FormLabel>Clinic Type</FormLabel>
-                                      <Select onValueChange={field.onChange} value={field.value} disabled={!isEditingClinic || isPending || currentDoctorCount > 1}>
-                                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                                          <SelectContent>
-                                              <SelectItem value="Single Doctor">Single Doctor</SelectItem>
-                                              <SelectItem value="Multi-Doctor">Multi-Doctor</SelectItem>
-                                          </SelectContent>
-                                      </Select>
-                                      {currentDoctorCount > 1 && <FormDescription className="text-xs">Cannot change to Single Doctor with multiple doctors registered.</FormDescription>}
-                                      <FormMessage /></FormItem>
-                                  )}/>
-                                  <FormField control={clinicForm.control} name="numDoctors" render={({ field }) => (
+                    {!clinicDetails ? <CardHeader><CardTitle>Loading...</CardTitle></CardHeader> : (
+                      <>
+                        <CardHeader>
+                            <div className="flex items-center justify-between">
+                                <CardTitle>General Information</CardTitle>
+                                {!isEditingClinic && (
+                                    <Button variant="outline" size="icon" onClick={() => setIsEditingClinic(true)} disabled={isPending}>
+                                        <Edit className="w-4 h-4"/>
+                                    </Button>
+                                )}
+                            </div>
+                            <CardDescription>General information about your clinic.</CardDescription>
+                        </CardHeader>
+                        <Form {...clinicForm}>
+                            <form onSubmit={clinicForm.handleSubmit(onClinicSubmit)}>
+                                <CardContent className="space-y-4">
+                                    <FormField control={clinicForm.control} name="name" render={({ field }) => (
+                                        <FormItem><FormLabel>Clinic Name</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
+                                    )}/>
+                                    <FormField control={clinicForm.control} name="type" render={({ field }) => (
+                                        <FormItem><FormLabel>Clinic Type</FormLabel>
+                                        <Select onValueChange={field.onChange} value={field.value} disabled={!isEditingClinic || isPending || currentDoctorCount > 1}>
+                                            <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                            <SelectContent>
+                                                <SelectItem value="Single Doctor">Single Doctor</SelectItem>
+                                                <SelectItem value="Multi-Doctor">Multi-Doctor</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        {currentDoctorCount > 1 && <FormDescription className="text-xs">Cannot change to Single Doctor with multiple doctors registered.</FormDescription>}
+                                        <FormMessage /></FormItem>
+                                    )}/>
+                                    <FormField control={clinicForm.control} name="numDoctors" render={({ field }) => (
+                                      <FormItem>
+                                          <FormLabel>Number of Doctors Limit</FormLabel>
+                                          <FormControl>
+                                              <Input
+                                                  type="number"
+                                                  {...field}
+                                                  disabled={!isEditingClinic || !isMultiDoctorClinic || isPending}
+                                                  min={currentDoctorCount}
+                                              />
+                                          </FormControl>
+                                          <FormDescription className="text-xs">
+                                              Currently using {currentDoctorCount} of {clinicDetails?.numDoctors || 0} available slots.
+                                          </FormDescription>
+                                          <FormMessage />
+                                      </FormItem>
+                                    )}/>
+                                    <FormField control={clinicForm.control} name="clinicRegNumber" render={({ field }) => (
+                                        <FormItem><FormLabel>Clinic Registration Number</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
+                                    )}/>
+                                    <FormField control={clinicForm.control} name="address" render={({ field }) => (
+                                        <FormItem><FormLabel>Address</FormLabel><FormControl><Textarea {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
+                                    )}/>
+                                    <FormField control={clinicForm.control} name="mapsLink" render={({ field }) => (
+                                        <FormItem><FormLabel>Google Maps Link</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
+                                    )}/>
                                     <FormItem>
-                                        <FormLabel>Number of Doctors Limit</FormLabel>
-                                        <FormControl>
-                                            <Input
-                                                type="number"
-                                                {...field}
-                                                onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)}
-                                                value={field.value || ''}
-                                                disabled={!isEditingClinic || !isMultiDoctorClinic || isPending}
-                                                min={currentDoctorCount}
-                                            />
-                                        </FormControl>
-                                        <FormDescription className="text-xs">
-                                            Currently using {currentDoctorCount} of {clinicDetails?.numDoctors || 0} available slots.
-                                        </FormDescription>
-                                        <FormMessage />
+                                        <FormLabel>Plan</FormLabel>
+                                        <div><Badge>{clinicDetails?.plan || "Not set"}</Badge></div>
                                     </FormItem>
-                                  )}/>
-                                  <FormField control={clinicForm.control} name="clinicRegNumber" render={({ field }) => (
-                                      <FormItem><FormLabel>Clinic Registration Number</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
-                                  )}/>
-                                  <FormField control={clinicForm.control} name="address" render={({ field }) => (
-                                      <FormItem><FormLabel>Address</FormLabel><FormControl><Textarea {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
-                                  )}/>
-                                  <FormField control={clinicForm.control} name="mapsLink" render={({ field }) => (
-                                      <FormItem><FormLabel>Google Maps Link</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
-                                  )}/>
-                                  <FormItem>
-                                      <FormLabel>Plan</FormLabel>
-                                      <div><Badge>{clinicDetails?.plan || "Not set"}</Badge></div>
-                                  </FormItem>
 
-                                  {isEditingClinic && (
-                                      <div className="flex justify-end gap-2 pt-4">
-                                          <Button type="button" variant="ghost" onClick={handleCancelClinic} disabled={isPending}>Cancel</Button>
-                                          <Button type="submit" disabled={isPending}>
-                                              {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />}
-                                              Save Changes
-                                          </Button>
-                                      </div>
-                                  )}
-                              </CardContent>
-                          </form>
-                      </Form>
+                                    {isEditingClinic && (
+                                        <div className="flex justify-end gap-2 pt-4">
+                                            <Button type="button" variant="ghost" onClick={handleCancelClinic} disabled={isPending}>Cancel</Button>
+                                            <Button type="submit" disabled={isPending}>
+                                                {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />}
+                                                Save Changes
+                                            </Button>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </form>
+                        </Form>
+                      </>
+                    )}
                   </Card>
               );
           case 'hours':
             return (
               <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle>Operating Hours</CardTitle>
-                    {!isEditingHours && (
-                        <Button variant="outline" size="icon" onClick={() => setIsEditingHours(true)} disabled={isPending}>
-                            <Edit className="w-4 h-4"/>
-                        </Button>
-                    )}
-                  </div>
-                  <CardDescription>Manage your clinic's weekly schedule.</CardDescription>
-                </CardHeader>
-                <Form {...hoursForm}>
-                  <form onSubmit={hoursForm.handleSubmit(onHoursSubmit)}>
-                    <CardContent className="space-y-4">
-                      {fields.map((hour, dayIndex) => (
-                        <div key={hour.id} className={cn("p-4 border rounded-lg", hour.isClosed && isEditingHours && "bg-muted/50")}>
-                          <div className="flex items-center justify-between mb-4">
-                            <p className={cn("w-24 font-semibold", hour.isClosed && isEditingHours && "text-muted-foreground")}>{hour.day}</p>
-                            {isEditingHours && (
-                              <div className="flex items-center space-x-2">
-                                <Label htmlFor={`closed-switch-${dayIndex}`}>{hour.isClosed ? 'Closed' : 'Open'}</Label>
-                                <Switch
-                                  id={`closed-switch-${dayIndex}`}
-                                  checked={!hour.isClosed}
-                                  onCheckedChange={(checked) => handleClosedToggle(dayIndex, !checked)}
-                                />
+                {!clinicDetails ? <CardHeader><CardTitle>Loading...</CardTitle></CardHeader> : (
+                  <>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle>Operating Hours</CardTitle>
+                      {!isEditingHours && (
+                          <Button variant="outline" size="icon" onClick={() => setIsEditingHours(true)} disabled={isPending}>
+                              <Edit className="w-4 h-4"/>
+                          </Button>
+                      )}
+                    </div>
+                    <CardDescription>Manage your clinic's weekly schedule.</CardDescription>
+                  </CardHeader>
+                  <Form {...hoursForm}>
+                    <form onSubmit={hoursForm.handleSubmit(onHoursSubmit)}>
+                      <CardContent className="space-y-4">
+                        {fields.map((hour, dayIndex) => (
+                          <div key={hour.id} className={cn("p-4 border rounded-lg", hour.isClosed && isEditingHours && "bg-muted/50")}>
+                            <div className="flex items-center justify-between mb-4">
+                              <p className={cn("w-24 font-semibold", hour.isClosed && isEditingHours && "text-muted-foreground")}>{hour.day}</p>
+                              {isEditingHours && (
+                                <div className="flex items-center space-x-2">
+                                  <Label htmlFor={`closed-switch-${dayIndex}`}>{hour.isClosed ? 'Closed' : 'Open'}</Label>
+                                  <Switch
+                                    id={`closed-switch-${dayIndex}`}
+                                    checked={!hour.isClosed}
+                                    onCheckedChange={(checked) => handleClosedToggle(dayIndex, !checked)}
+                                  />
+                                </div>
+                              )}
+                            </div>
+
+                            {!hour.isClosed && (
+                              <div className="space-y-3">
+                                {hour.timeSlots.map((slot, slotIndex) => (
+                                  <div key={slotIndex} className="flex items-end gap-2">
+                                    <div className="space-y-1 flex-grow">
+                                      <Label htmlFor={`open-time-${dayIndex}-${slotIndex}`} className="text-xs">Open</Label>
+                                      <Input
+                                        id={`open-time-${dayIndex}-${slotIndex}`}
+                                        type="time"
+                                        defaultValue={slot.open}
+                                        onChange={e => handleTimeChange(dayIndex, slotIndex, 'open', e.target.value)}
+                                        disabled={!isEditingHours || isPending}
+                                      />
+                                    </div>
+                                    <div className="space-y-1 flex-grow">
+                                      <Label htmlFor={`close-time-${dayIndex}-${slotIndex}`} className="text-xs">Close</Label>
+                                      <Input
+                                        id={`close-time-${dayIndex}-${slotIndex}`}
+                                        type="time"
+                                        defaultValue={slot.close}
+                                        onChange={e => handleTimeChange(dayIndex, slotIndex, 'close', e.target.value)}
+                                        disabled={!isEditingHours || isPending}
+                                      />
+                                    </div>
+                                    {isEditingHours && (
+                                      <Button 
+                                        type="button" 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        onClick={() => removeTimeSlot(dayIndex, slotIndex)}
+                                        disabled={hour.timeSlots.length <= 1 || isPending}
+                                      >
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                ))}
+                                {isEditingHours && (
+                                  <Button type="button" variant="link" size="sm" onClick={() => addTimeSlot(dayIndex)} className="text-primary" disabled={isPending}>
+                                    <PlusCircle className="mr-2 h-4 w-4" /> Add Slot
+                                  </Button>
+                                )}
                               </div>
                             )}
                           </div>
-
-                          {!hour.isClosed && (
-                            <div className="space-y-3">
-                              {hour.timeSlots.map((slot, slotIndex) => (
-                                <div key={slotIndex} className="flex items-end gap-2">
-                                  <div className="space-y-1 flex-grow">
-                                    <Label htmlFor={`open-time-${dayIndex}-${slotIndex}`} className="text-xs">Open</Label>
-                                    <Input
-                                      id={`open-time-${dayIndex}-${slotIndex}`}
-                                      type="time"
-                                      defaultValue={slot.open}
-                                      onChange={e => handleTimeChange(dayIndex, slotIndex, 'open', e.target.value)}
-                                      disabled={!isEditingHours || isPending}
-                                    />
-                                  </div>
-                                  <div className="space-y-1 flex-grow">
-                                    <Label htmlFor={`close-time-${dayIndex}-${slotIndex}`} className="text-xs">Close</Label>
-                                    <Input
-                                      id={`close-time-${dayIndex}-${slotIndex}`}
-                                      type="time"
-                                      defaultValue={slot.close}
-                                      onChange={e => handleTimeChange(dayIndex, slotIndex, 'close', e.target.value)}
-                                      disabled={!isEditingHours || isPending}
-                                    />
-                                  </div>
-                                  {isEditingHours && (
-                                    <Button 
-                                      type="button" 
-                                      variant="ghost" 
-                                      size="icon" 
-                                      onClick={() => removeTimeSlot(dayIndex, slotIndex)}
-                                      disabled={hour.timeSlots.length <= 1 || isPending}
-                                    >
-                                      <Trash2 className="h-4 w-4 text-destructive" />
-                                    </Button>
-                                  )}
-                                </div>
-                              ))}
-                              {isEditingHours && (
-                                <Button type="button" variant="link" size="sm" onClick={() => addTimeSlot(dayIndex)} className="text-primary" disabled={isPending}>
-                                  <PlusCircle className="mr-2 h-4 w-4" /> Add Slot
-                                </Button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </CardContent>
-                    {isEditingHours && (
-                        <CardFooter className="flex justify-end gap-2">
-                            <Button type="button" variant="ghost" onClick={handleCancelHours} disabled={isPending}>Cancel</Button>
-                            <Button type="submit" disabled={isPending}>
-                                {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />}
-                                Save Hours
-                            </Button>
-                        </CardFooter>
-                    )}
-                  </form>
-                </Form>
+                        ))}
+                      </CardContent>
+                      {isEditingHours && (
+                          <CardFooter className="flex justify-end gap-2">
+                              <Button type="button" variant="ghost" onClick={handleCancelHours} disabled={isPending}>Cancel</Button>
+                              <Button type="submit" disabled={isPending}>
+                                  {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />}
+                                  Save Hours
+                              </Button>
+                          </CardFooter>
+                      )}
+                    </form>
+                  </Form>
+                  </>
+                )}
               </Card>
             );
           case 'mobile':
