@@ -131,13 +131,11 @@ export default function ProfilePage() {
       setLoading(false);
       return;
     }
-  
-    const fetchAllData = async () => {
+    const fetchUserData = async () => {
       setLoading(true);
       try {
         const userDocRef = doc(db, "users", auth.currentUser!.uid);
         const userDocSnap = await getDoc(userDocRef);
-  
         if (userDocSnap.exists()) {
           const userData = userDocSnap.data() as User;
           setUserProfile(userData);
@@ -145,32 +143,19 @@ export default function ProfilePage() {
             name: userData.name,
             phone: userData.phone,
           });
-  
+
           if (userData.clinicId) {
             const clinicId = userData.clinicId;
+            // Fetch clinic details in a separate effect
             const clinicDocRef = doc(db, "clinics", clinicId);
             const clinicDocSnap = await getDoc(clinicDocRef);
-            
             if (clinicDocSnap.exists()) {
-              const clinicData = clinicDocSnap.data();
-              setClinicDetails(clinicData);
-              clinicForm.reset({
-                name: clinicData.name,
-                type: clinicData.type,
-                numDoctors: clinicData.numDoctors,
-                clinicRegNumber: clinicData.clinicRegNumber || '',
-                address: clinicData.address,
-                mapsLink: clinicData.mapsLink || '',
-              });
-              hoursForm.reset({
-                hours: clinicData.operatingHours,
-              });
-  
+              setClinicDetails(clinicDocSnap.data());
               const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
               const doctorsSnapshot = await getDocs(doctorsQuery);
               setCurrentDoctorCount(doctorsSnapshot.size);
             }
-  
+
             const credsQuery = query(collection(db, "mobile-app"), where("clinicId", "==", clinicId));
             const credsSnapshot = await getDocs(credsQuery);
             if (!credsSnapshot.empty) {
@@ -182,18 +167,31 @@ export default function ProfilePage() {
               setIsEditingMobile(true);
             }
           }
-        } else {
-          setIsEditingMobile(true);
         }
       } catch (error) {
-        console.error("Error fetching profile data:", error);
-        toast({ variant: "destructive", title: "Error", description: "Could not load profile data." });
+        console.error("Error fetching initial data:", error);
       } finally {
         setLoading(false);
       }
     };
-    fetchAllData();
-  }, [auth.currentUser, toast, profileForm, clinicForm, hoursForm, mobileAppForm]);
+    fetchUserData();
+  }, [auth.currentUser, profileForm, mobileAppForm]);
+
+  useEffect(() => {
+    if (clinicDetails) {
+      clinicForm.reset({
+        name: clinicDetails.name,
+        type: clinicDetails.type,
+        numDoctors: clinicDetails.numDoctors,
+        clinicRegNumber: clinicDetails.clinicRegNumber || '',
+        address: clinicDetails.address,
+        mapsLink: clinicDetails.mapsLink || '',
+      });
+      hoursForm.reset({
+        hours: clinicDetails.operatingHours,
+      });
+    }
+  }, [clinicDetails, clinicForm, hoursForm]);
 
   const onMobileAppSubmit = async (values: MobileAppFormValues) => {
     if (!userProfile?.clinicId) {
@@ -356,7 +354,7 @@ export default function ProfilePage() {
           case 'profile':
               return (
                   <Card>
-                    {loading || !userProfile ? <CardHeader><CardTitle>Loading...</CardTitle></CardHeader> : (
+                    {!userProfile ? <CardHeader><CardTitle>Loading...</CardTitle></CardHeader> : (
                       <>
                         <CardHeader>
                             <div className="flex items-center justify-between">
@@ -417,7 +415,7 @@ export default function ProfilePage() {
                   </Card>
               );
           case 'clinic':
-              if (loading || !clinicDetails) {
+              if (!clinicDetails) {
                   return <Card><CardHeader><CardTitle>Loading Clinic Details...</CardTitle></CardHeader></Card>;
               }
               const isMultiDoctorClinic = clinicForm.watch('type') === 'Multi-Doctor';
@@ -455,15 +453,14 @@ export default function ProfilePage() {
                                     <FormField
                                       control={clinicForm.control}
                                       name="numDoctors"
-                                      render={({ field }) => {
-                                        console.log("DEBUG: numDoctors field state:", field);
-                                        return (
+                                      render={({ field }) => (
                                           <FormItem>
                                             <FormLabel>Number of Doctors Limit</FormLabel>
                                             <FormControl>
                                               <Input
                                                 type="number"
                                                 {...field}
+                                                onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)}
                                                 disabled={!isEditingClinic || !isMultiDoctorClinic || isPending}
                                                 min={currentDoctorCount}
                                               />
@@ -473,8 +470,7 @@ export default function ProfilePage() {
                                             </FormDescription>
                                             <FormMessage />
                                           </FormItem>
-                                        );
-                                      }}
+                                        )}
                                     />
                                     <FormField control={clinicForm.control} name="clinicRegNumber" render={({ field }) => (
                                         <FormItem><FormLabel>Clinic Registration Number</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
@@ -720,3 +716,5 @@ export default function ProfilePage() {
     </>
   );
 }
+
+    
