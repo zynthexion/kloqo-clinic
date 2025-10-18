@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { AddDepartmentStep } from "@/components/onboarding/add-department-step";
 import type { Department, Doctor } from "@/lib/types";
@@ -23,9 +23,9 @@ export default function OnboardingPage() {
   const auth = useAuth();
   const { toast } = useToast();
 
-  const handleDepartmentsAdded = (departments: Department[]) => {
+  const handleDepartmentsAdded = useCallback((departments: Department[]) => {
     setSelectedDepartments(departments);
-  };
+  }, []);
   
   const handleAddDoctorClick = () => {
       setIsAddDoctorOpen(true);
@@ -140,6 +140,7 @@ export default function OnboardingPage() {
         setIsOpen={setIsAddDoctorOpen}
         doctor={null}
         departments={selectedDepartments}
+        updateDepartments={() => {}}
       />
     </>
   );
