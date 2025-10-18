@@ -356,7 +356,7 @@ export default function ProfilePage() {
           case 'profile':
               return (
                   <Card>
-                    {!userProfile ? <CardHeader><CardTitle>Loading...</CardTitle></CardHeader> : (
+                    {loading || !userProfile ? <CardHeader><CardTitle>Loading...</CardTitle></CardHeader> : (
                       <>
                         <CardHeader>
                             <div className="flex items-center justify-between">
@@ -417,7 +417,7 @@ export default function ProfilePage() {
                   </Card>
               );
           case 'clinic':
-              if (!clinicDetails) {
+              if (loading || !clinicDetails) {
                   return <Card><CardHeader><CardTitle>Loading Clinic Details...</CardTitle></CardHeader></Card>;
               }
               const isMultiDoctorClinic = clinicForm.watch('type') === 'Multi-Doctor';
@@ -452,24 +452,30 @@ export default function ProfilePage() {
                                         {currentDoctorCount > 1 && <FormDescription className="text-xs">Cannot change to Single Doctor with multiple doctors registered.</FormDescription>}
                                         <FormMessage /></FormItem>
                                     )}/>
-                                    <FormField control={clinicForm.control} name="numDoctors" render={({ field }) => (
-                                      <FormItem>
-                                          <FormLabel>Number of Doctors Limit</FormLabel>
-                                          <FormControl>
-                                            <Input
+                                    <FormField
+                                      control={clinicForm.control}
+                                      name="numDoctors"
+                                      render={({ field }) => {
+                                        console.log("DEBUG: numDoctors field state:", field);
+                                        return (
+                                          <FormItem>
+                                            <FormLabel>Number of Doctors Limit</FormLabel>
+                                            <FormControl>
+                                              <Input
                                                 type="number"
                                                 {...field}
                                                 disabled={!isEditingClinic || !isMultiDoctorClinic || isPending}
                                                 min={currentDoctorCount}
-                                                onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 0)}
-                                            />
-                                          </FormControl>
-                                          <FormDescription className="text-xs">
-                                             Currently using {currentDoctorCount} of {clinicDetails?.numDoctors || 0} available slots.
-                                          </FormDescription>
-                                          <FormMessage />
-                                      </FormItem>
-                                    )}/>
+                                              />
+                                            </FormControl>
+                                            <FormDescription className="text-xs">
+                                              Currently using {currentDoctorCount} of {clinicDetails?.numDoctors || 0} available slots.
+                                            </FormDescription>
+                                            <FormMessage />
+                                          </FormItem>
+                                        );
+                                      }}
+                                    />
                                     <FormField control={clinicForm.control} name="clinicRegNumber" render={({ field }) => (
                                         <FormItem><FormLabel>Clinic Registration Number</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
                                     )}/>
