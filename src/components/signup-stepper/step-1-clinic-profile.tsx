@@ -97,11 +97,22 @@ export function Step1ClinicProfile() {
           }
         },
         (error) => {
-          console.error("Geolocation error:", error);
+          let description = "Could not detect location. Please enter manually.";
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              description = "Location access was denied. Please enable it in your browser settings.";
+              break;
+            case error.POSITION_UNAVAILABLE:
+              description = "Location information is unavailable. Please try again.";
+              break;
+            case error.TIMEOUT:
+              description = "The request to get user location timed out.";
+              break;
+          }
           toast({
             variant: "destructive",
             title: "Location Error",
-            description: "Could not detect location. Please grant permission or enter manually.",
+            description,
           });
           setIsDetecting(false);
         }
