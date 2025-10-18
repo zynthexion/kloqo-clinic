@@ -7,7 +7,7 @@ import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '../ui/
 import { useEffect, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, MapPin } from 'lucide-react';
-import { Textarea } from '../ui/textarea';
+import { Input } from '../ui/input';
 
 export function Step3ClinicLocation() {
   const { control, watch, setValue } = useFormContext<SignUpFormData>();
@@ -26,9 +26,17 @@ export function Step3ClinicLocation() {
             `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`
           );
           const data = await response.json();
-
-          if (data && data.display_name) {
-            setValue('address', data.display_name, { shouldValidate: true });
+          
+          if (data && data.address) {
+            const { road, neighbourhood, city, town, village, county, state_district, state, postcode, country } = data.address;
+            
+            setValue('addressLine1', `${road || ''}`, { shouldValidate: true });
+            setValue('addressLine2', `${neighbourhood || ''}`, { shouldValidate: true });
+            setValue('city', city || town || village || '', { shouldValidate: true });
+            setValue('district', state_district || county || '', { shouldValidate: true });
+            setValue('state', state || '', { shouldValidate: true });
+            setValue('pincode', postcode || '', { shouldValidate: true });
+            
             setLocationAutoFilled(true);
             toast({
               title: 'Location Auto-filled',
@@ -72,19 +80,80 @@ export function Step3ClinicLocation() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <FormField
           control={control}
-          name="address"
+          name="addressLine1"
+          render={({ field }) => (
+            <FormItem className="md:col-span-2">
+              <FormLabel>Address Line 1 <span className="text-destructive">*</span></FormLabel>
+              <FormControl>
+                <Input placeholder="Building Name, Street Name" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={control}
+          name="addressLine2"
+          render={({ field }) => (
+            <FormItem className="md:col-span-2">
+              <FormLabel>Address Line 2 (Optional)</FormLabel>
+              <FormControl>
+                <Input placeholder="Landmark, Area" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={control}
+          name="city"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Full Clinic Address <span className="text-destructive">*</span></FormLabel>
+              <FormLabel>City / Town <span className="text-destructive">*</span></FormLabel>
               <FormControl>
-                <Textarea 
-                  placeholder="e.g., 14/46, City Centre Building, MG Road, Kochi, Kerala - 682016" 
-                  {...field}
-                  rows={4}
-                />
+                <Input placeholder="e.g., Kochi" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={control}
+          name="district"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>District (Optional)</FormLabel>
+              <FormControl>
+                <Input placeholder="e.g., Ernakulam" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={control}
+          name="state"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>State <span className="text-destructive">*</span></FormLabel>
+              <FormControl>
+                <Input placeholder="e.g., Kerala" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={control}
+          name="pincode"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Pincode <span className="text-destructive">*</span></FormLabel>
+              <FormControl>
+                <Input placeholder="e.g., 682016" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -94,14 +163,10 @@ export function Step3ClinicLocation() {
           control={control}
           name="mapsLink"
           render={({ field }) => (
-            <FormItem>
-              <FormLabel>Google Maps Link (optional)</FormLabel>
+            <FormItem className="md:col-span-2">
+              <FormLabel>Google Maps Link (Optional)</FormLabel>
               <FormControl>
-                <Textarea 
-                  placeholder="https://maps.app.goo.gl/..." 
-                  {...field} 
-                  rows={2}
-                />
+                <Input placeholder="https://maps.app.goo.gl/..." {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>

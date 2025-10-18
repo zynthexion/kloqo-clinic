@@ -31,6 +31,15 @@ export function Step7Confirm() {
   const selectedPlan = plans.find(p => p.name === data.plan);
   const isFreePlan = data.plan === 'Free Plan (Beta)';
 
+  const fullAddress = [
+    data.addressLine1,
+    data.addressLine2,
+    data.city,
+    data.district,
+    data.state,
+    data.pincode,
+  ].filter(Boolean).join(', ');
+
   return (
     <div>
       <p className="text-sm text-muted-foreground">Step 7/7</p>
@@ -56,7 +65,7 @@ export function Step7Confirm() {
               <CardTitle className="text-lg">Location</CardTitle>
             </CardHeader>
             <CardContent className="text-sm">
-              <p>{data.address}</p>
+              <p>{fullAddress}</p>
             </CardContent>
           </Card>
 

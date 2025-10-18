@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import type { SignUpFormData } from '@/app/(public)/signup/page';
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '../ui/form';
+import { Rocket } from 'lucide-react';
 
 const plans = [
     {
@@ -16,25 +17,7 @@ const plans = [
         price: 'Free',
         roi: 'Provide valuable feedback to help us improve Kloqo for everyone.'
     },
-    {
-        name: 'Kloqo Lite',
-        doctors: '1 doctor',
-        price: '₹999',
-        roi: 'If just 3 patients (₹300 × 3) show up instead of missing, Kloqo pays for itself.'
-    },
-    {
-        name: 'Kloqo Grow',
-        doctors: '2–4 doctors',
-        price: '₹1,999',
-        roi: 'Each doctor needs only 2–3 extra patients a month to cover the cost.'
-    },
-    {
-        name: 'Kloqo Prime',
-        doctors: '5–9 doctors',
-        price: '₹3,999',
-        roi: 'Recover one day of missed appointments and cover the entire month’s fee.'
-    }
-]
+];
 
 export function Step5Pricing() {
   const { control, watch } = useFormContext<SignUpFormData>();
@@ -60,24 +43,17 @@ export function Step5Pricing() {
                         value={field.value}
                         className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
                     >
-                        {plans.map(p => {
-                            const isFreePlan = p.name === 'Free Plan (Beta)';
-                            const isDisabled = !isFreePlan;
-                            return (
+                        {plans.map(p => (
                             <FormItem key={p.name}>
                                 <FormControl>
-                                    <RadioGroupItem value={p.name} id={p.name} className="sr-only" disabled={isDisabled} />
+                                    <RadioGroupItem value={p.name} id={p.name} className="sr-only" />
                                 </FormControl>
                                 <Label 
                                   htmlFor={p.name} 
-                                  className={`flex flex-col p-4 border rounded-lg h-full transition-all ${
+                                  className={`flex flex-col p-4 border rounded-lg h-full transition-all cursor-pointer hover:border-primary ${
                                     field.value === p.name
                                       ? 'bg-primary text-primary-foreground border-primary shadow-lg'
                                       : 'bg-white border-gray-200'
-                                  } ${
-                                      isDisabled
-                                      ? 'cursor-not-allowed bg-muted/50 text-muted-foreground'
-                                      : 'cursor-pointer hover:border-primary'
                                   }`}
                                 >
                                     <div className="text-center">
@@ -87,18 +63,19 @@ export function Step5Pricing() {
                                         </p>
                                     </div>
                                     <div className="text-center my-4">
-                                        {isFreePlan ? (
-                                            <span className="text-3xl font-bold">{p.price}</span>
-                                        ) : (
-                                            <span className="text-xl font-bold text-muted-foreground">Coming Soon</span>
-                                        )}
+                                      <span className="text-3xl font-bold">{p.price}</span>
                                     </div>
                                     <p className={`text-xs text-center flex-grow ${field.value === p.name ? 'text-primary-foreground/90' : 'text-muted-foreground'}`}>
                                       {p.roi}
                                     </p>
                                 </Label>
                             </FormItem>
-                        )})}
+                        ))}
+                         <div className="flex flex-col items-center justify-center p-4 border-2 border-dashed rounded-lg h-full text-center text-muted-foreground">
+                            <Rocket className="h-8 w-8 mb-2" />
+                            <p className="font-semibold">More Plans</p>
+                            <p className="text-sm">Coming Soon!</p>
+                        </div>
                     </RadioGroup>
                 </FormControl>
               <FormMessage />

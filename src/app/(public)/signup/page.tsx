@@ -76,7 +76,12 @@ const signupSchema = z.object({
     }),
 
   // Step 3
-  address: z.string().min(10, { message: "Address must be at least 10 characters." }),
+  addressLine1: z.string().min(5, { message: "Address Line 1 is required." }),
+  addressLine2: z.string().optional(),
+  city: z.string().min(2, { message: "City is required." }),
+  district: z.string().optional(),
+  state: z.string().min(2, { message: "State is required." }),
+  pincode: z.string().regex(/^\d{6}$/, "A valid 6-digit pincode is required."),
   mapsLink: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
 
   // Step 4
@@ -124,7 +129,12 @@ const defaultFormData: SignUpFormData = {
   emailAddress: "",
   password: "",
   
-  address: '',
+  addressLine1: '',
+  addressLine2: '',
+  city: '',
+  district: '',
+  state: '',
+  pincode: '',
   mapsLink: '',
   
   hours: [
@@ -153,7 +163,7 @@ const defaultFormData: SignUpFormData = {
 const stepFields: (keyof SignUpFormData)[][] = [
     ['clinicName', 'clinicType', 'numDoctors', 'skippedTokenRecurrence', 'walkInTokenAllotment'], // Step 1, latitude/longitude are special
     ['ownerName', 'designation', 'mobileNumber', 'emailAddress', 'password'], // Step 2
-    ['address'], // Step 3
+    ['addressLine1', 'city', 'state', 'pincode'], // Step 3
     ['hours', 'avgPatientsPerDay'], // Step 4
     ['plan'], // Step 5
     [], // Step 6
@@ -289,12 +299,30 @@ export default function SignupPage() {
 
     const clinicRef = doc(collection(db, "clinics"));
     const clinicId = clinicRef.id;
+
+    const fullAddress = [
+      formData.addressLine1,
+      formData.addressLine2,
+      formData.city,
+      formData.district,
+      formData.state,
+      formData.pincode,
+    ].filter(Boolean).join(', ');
+
     const clinicData = {
         id: clinicId,
         ownerId: user.uid,
         name: formData.clinicName,
         type: formData.clinicType,
-        address: formData.address,
+        address: fullAddress, // A combined address for display purposes
+        addressDetails: {
+          line1: formData.addressLine1,
+          line2: formData.addressLine2,
+          city: formData.city,
+          district: formData.district,
+          state: formData.state,
+          pincode: formData.pincode,
+        },
         operatingHours: formData.hours,
         plan: formData.plan,
         ownerEmail: formData.emailAddress,
