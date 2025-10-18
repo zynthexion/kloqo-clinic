@@ -17,7 +17,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -41,11 +40,11 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/firebase";
-import { setDoc, doc, getDoc, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
+import { setDoc, doc, getDoc, collection, query, where, getDocs, updateDoc, arrayUnion } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import imageCompression from "browser-image-compression";
 import { Textarea } from "../ui/textarea";
-import { AddDepartmentDialog } from "../departments/add-department-dialog";
+import { SelectDepartmentDialog } from "../onboarding/select-department-dialog";
 import { Separator } from "../ui/separator";
 
 const timeSlotSchema = z.object({
@@ -127,7 +126,8 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
   const [clinicId, setClinicId] = useState<string | null>(null);
   const [clinicDetails, setClinicDetails] = useState<any | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isAddDepartmentOpen, setIsAddDepartmentOpen] = useState(false);
+  const [isSelectDepartmentOpen, setIsSelectDepartmentOpen] = useState(false);
+  const [masterDepartments, setMasterDepartments] = useState<Department[]>([]);
 
 
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
@@ -150,6 +150,18 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
     },
     mode: 'onBlur',
   });
+
+  useEffect(() => {
+    const fetchMasterDepartments = async () => {
+      if (isSelectDepartmentOpen) {
+        const masterDeptsSnapshot = await getDocs(collection(db, "master-departments"));
+        const masterDeptsList = masterDeptsSnapshot.docs.map(d => d.data() as Department);
+        setMasterDepartments(masterDeptsList);
+      }
+    };
+    fetchMasterDepartments();
+  }, [isSelectDepartmentOpen]);
+
 
   useEffect(() => {
     if (auth.currentUser) {
@@ -291,6 +303,38 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
     
     setSelectedDays([]);
   };
+
+  const handleDepartmentsSelected = async (selectedDepts: Department[]) => {
+    if (!auth.currentUser || !clinicId) return;
+
+    try {
+        const clinicRef = doc(db, "clinics", clinicId);
+        const departmentIdsToAdd = selectedDepts.map(d => d.id);
+        
+        await updateDoc(clinicRef, {
+            departments: arrayUnion(...departmentIdsToAdd)
+        });
+        
+        const newDept = selectedDepts[0];
+        if (newDept) {
+            updateDepartments(newDept);
+            form.setValue('department', newDept.name, { shouldValidate: true });
+        }
+
+        toast({
+            title: "Department Added",
+            description: `${selectedDepts.length} department(s) have been successfully added.`,
+        });
+    } catch (error) {
+        console.error("Error saving departments:", error);
+        toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Failed to save departments. Please try again.",
+        });
+    }
+  }
+
 
   const onSubmit = (values: AddDoctorFormValues) => {
     startTransition(async () => {
@@ -460,6 +504,10 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
     }
   }
 
+  const availableMasterDepartments = masterDepartments.filter(
+    (masterDept) => !departments.some((clinicDept) => clinicDept.id === masterDept.id)
+  );
+
   return (
     <>
     <Dialog open={isOpen} onOpenChange={(open) => {
@@ -567,7 +615,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
                         </FormLabel>
                         <Select onValueChange={(value) => {
                             if (value === 'add_new') {
-                                setIsAddDepartmentOpen(true);
+                                setIsSelectDepartmentOpen(true);
                             } else {
                                 field.onChange(value);
                             }
@@ -700,10 +748,6 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
                              Weekly Availability
                              <span className="text-red-500">*</span>
                            </FormLabel>
-                           <FormDescription>
-                             Define the doctor's recurring weekly schedule.
-                           </FormDescription>
-                           <FormMessage />
                          </div>
                           <div className="space-y-2">
                             <Label>1. Select days to apply time slots to</Label>
@@ -839,13 +883,11 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
         </Form>
       </DialogContent>
     </Dialog>
-    <AddDepartmentDialog
-        isOpen={isAddDepartmentOpen}
-        setIsOpen={setIsAddDepartmentOpen}
-        onDepartmentAdded={(newDept) => {
-            updateDepartments(newDept);
-            form.setValue('department', newDept.name);
-        }}
+    <SelectDepartmentDialog
+        isOpen={isSelectDepartmentOpen}
+        setIsOpen={setIsSelectDepartmentOpen}
+        departments={availableMasterDepartments}
+        onDepartmentsSelect={handleDepartmentsSelected}
     />
     </>
   );
