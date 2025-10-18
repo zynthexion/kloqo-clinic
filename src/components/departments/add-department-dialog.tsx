@@ -37,7 +37,10 @@ import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { AlertCircle } from "lucide-react";
 import Link from "next/link";
 
-const iconNames = Object.keys(Lucide).filter(key => /^[A-Z]/.test(key) && key !== 'createLucideIcon' && key !== 'icons');
+const iconNames = Object.keys(Lucide).filter(
+  (key) => typeof Lucide[key as keyof typeof Lucide] === 'object' && key !== 'createLucideIcon'
+);
+
 
 const formSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters."),
