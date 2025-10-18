@@ -410,6 +410,7 @@ export default function ProfilePage() {
                   </Card>
               );
           case 'clinic':
+              const isMultiDoctorClinic = clinicForm.watch('type') === 'Multi-Doctor';
               return (
                    <Card>
                       <CardHeader>
@@ -431,37 +432,33 @@ export default function ProfilePage() {
                                   )}/>
                                   <FormField control={clinicForm.control} name="type" render={({ field }) => (
                                       <FormItem><FormLabel>Clinic Type</FormLabel>
-                                      <Select onValueChange={field.onChange} value={field.value} disabled={!isEditingClinic || isPending}>
+                                      <Select onValueChange={field.onChange} value={field.value} disabled={!isEditingClinic || isPending || currentDoctorCount > 1}>
                                           <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                                           <SelectContent>
                                               <SelectItem value="Single Doctor">Single Doctor</SelectItem>
                                               <SelectItem value="Multi-Doctor">Multi-Doctor</SelectItem>
                                           </SelectContent>
                                       </Select>
+                                      {currentDoctorCount > 1 && <FormDescription className="text-xs">Cannot change to Single Doctor with multiple doctors registered.</FormDescription>}
                                       <FormMessage /></FormItem>
                                   )}/>
-                                  <FormItem>
-                                      <FormLabel>Doctor Count</FormLabel>
-                                      <div className="flex items-center gap-4">
-                                          <div className="flex items-center gap-2">
-                                              <div className="text-2xl font-bold text-primary">
-                                                  {currentDoctorCount}
-                                              </div>
-                                              <div className="text-sm text-muted-foreground">
-                                                  of {clinicDetails?.numDoctors || 0} doctors
-                                              </div>
-                                          </div>
-                                          <div className="text-xs text-muted-foreground">
-                                              {clinicDetails?.numDoctors && clinicDetails.numDoctors > 0 ?
-                                                  `${Math.round((currentDoctorCount / clinicDetails.numDoctors) * 100)}% utilized` :
-                                                  'No limit set'
-                                              }
-                                          </div>
-                                      </div>
-                                      <p className="text-xs text-muted-foreground mt-1">
-                                          Current doctors registered vs. maximum allowed by your plan.
-                                      </p>
-                                  </FormItem>
+                                  <FormField control={clinicForm.control} name="numDoctors" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Number of Doctors Limit</FormLabel>
+                                        <FormControl>
+                                            <Input
+                                                type="number"
+                                                {...field}
+                                                disabled={!isEditingClinic || !isMultiDoctorClinic || isPending}
+                                                min={currentDoctorCount}
+                                            />
+                                        </FormControl>
+                                        <FormDescription className="text-xs">
+                                            Currently using {currentDoctorCount} of {field.value} available slots.
+                                        </FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                  )}/>
                                   <FormField control={clinicForm.control} name="clinicRegNumber" render={({ field }) => (
                                       <FormItem><FormLabel>Clinic Registration Number</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
                                   )}/>
@@ -702,3 +699,5 @@ export default function ProfilePage() {
     </>
   );
 }
+
+    
