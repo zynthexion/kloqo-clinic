@@ -17,6 +17,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -48,19 +49,22 @@ import { Textarea } from "../ui/textarea";
 const timeSlotSchema = z.object({
   from: z.string().min(1, "Required"),
   to: z.string().min(1, "Required"),
-}).refine(data => {
-    if(!data.from || !data.to) return false;
-    const from = parse(data.from, "HH:mm", new Date());
-    const to = parse(data.to, "HH:mm", new Date());
-    return isBefore(from, to);
-}, {
-  message: "End time must be after start time.",
-  path: ["to"],
 });
 
 const availabilitySlotSchema = z.object({
   day: z.string(),
   timeSlots: z.array(timeSlotSchema).min(1, "At least one time slot is required."),
+}).refine(data => {
+    const sortedSlots = [...data.timeSlots].sort((a, b) => a.from.localeCompare(b.from));
+    for (let i = 0; i < sortedSlots.length - 1; i++) {
+        if (sortedSlots[i].to > sortedSlots[i+1].from) {
+            return false;
+        }
+    }
+    return true;
+}, {
+    message: "Time slots cannot overlap.",
+    path: ["timeSlots"],
 });
 
 const formSchema = z.object({
@@ -673,12 +677,15 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     name="availabilitySlots"
                     render={() => (
                       <FormItem>
-                        <div className="mb-4">
-                          <FormLabel className="text-base flex items-center gap-1">
-                            Weekly Availability
-                            <span className="text-red-500">*</span>
-                          </FormLabel>
-                        </div>
+                         <div className="mb-4">
+                           <FormLabel className="text-base flex items-center gap-1">
+                             Weekly Availability
+                             <span className="text-red-500">*</span>
+                           </FormLabel>
+                            <FormDescription>
+                              Define the doctor's recurring weekly schedule.
+                            </FormDescription>
+                         </div>
                           <div className="space-y-2">
                             <Label>1. Select days to apply time slots to</Label>
                             <ToggleGroup type="multiple" value={selectedDays} onValueChange={setSelectedDays} variant="outline" className="flex-wrap justify-start">
@@ -697,14 +704,21 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                           <div className="space-y-2">
                             <Label>2. Define time slots</Label>
                             {sharedTimeSlots.map((ts, index) => {
-                               const dayForSlot = selectedDays[0] || daysOfWeek.find(day => !clinicDetails?.operatingHours?.find((h:any) => h.day === day)?.isClosed);
-                               const clinicDay = clinicDetails?.operatingHours?.find((h: any) => h.day === dayForSlot);
-                               const clinicOpeningTime = clinicDay?.timeSlots[0]?.open || "00:00";
-                               const clinicClosingTime = clinicDay?.timeSlots[clinicDay.timeSlots.length - 1]?.close || "23:45";
-                               const allTimeOptions = generateTimeOptions(clinicOpeningTime, clinicClosingTime, 15);
-                               
-                               const fromTimeOptions = allTimeOptions.slice(0, -1); // Can't be the last slot
-                               const toTimeOptions = ts.from ? allTimeOptions.filter(t => t > ts.from) : allTimeOptions.slice(1);
+                                const allDaySlots = form.getValues('availabilitySlots').find(s => s.day === selectedDays[0])?.timeSlots || [];
+                                const otherSlots = allDaySlots.filter((_, i) => i !== index);
+
+                                const dayForSlot = selectedDays[0] || daysOfWeek.find(day => !clinicDetails?.operatingHours?.find((h:any) => h.day === day)?.isClosed);
+                                const clinicDay = clinicDetails?.operatingHours?.find((h: any) => h.day === dayForSlot);
+                                const clinicOpeningTime = clinicDay?.timeSlots[0]?.open || "00:00";
+                                const clinicClosingTime = clinicDay?.timeSlots[clinicDay.timeSlots.length - 1]?.close || "23:45";
+                                const allTimeOptions = generateTimeOptions(clinicOpeningTime, clinicClosingTime, 15);
+                                
+                                const fromTimeOptions = allTimeOptions.filter(time => 
+                                  !otherSlots.some(slot => time >= slot.from && time < slot.to)
+                                ).slice(0, -1);
+
+                                const nextSlotStart = otherSlots.filter(slot => slot.from > ts.from).sort((a,b) => a.from.localeCompare(b.from))[0]?.from || clinicClosingTime;
+                                const toTimeOptions = ts.from ? allTimeOptions.filter(t => t > ts.from && t <= nextSlotStart) : [];
 
                                return (
                                 <div key={index} className="flex items-end gap-2">
@@ -715,7 +729,6 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                                         onValueChange={(value) => {
                                           const newShared = [...sharedTimeSlots];
                                           newShared[index].from = value;
-                                          // If 'to' is now invalid, reset it
                                           if (newShared[index].to <= value) {
                                             newShared[index].to = '';
                                           }
@@ -806,5 +819,3 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
     </Dialog>
   );
 }
-
-    
