@@ -60,6 +60,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/firebase";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const dayAbbreviations = ["S", "M", "T", "W", "T", "F", "S"];
@@ -780,10 +782,23 @@ export default function DoctorsPage() {
                 <CardHeader>
                   <div className="flex justify-between items-center">
                     <CardTitle>Doctors</CardTitle>
-                    <Button onClick={openAddDoctorDialog} disabled={isDoctorLimitReached} title={isDoctorLimitReached ? "Doctor limit reached for your plan" : "Add new doctor"}>
-                      <PlusCircle className="mr-2 h-4 w-4" />
-                      Add Doctor
-                    </Button>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className={cn(isDoctorLimitReached && "cursor-not-allowed")}>
+                              <Button onClick={openAddDoctorDialog} disabled={isDoctorLimitReached}>
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                Add Doctor
+                              </Button>
+                            </div>
+                          </TooltipTrigger>
+                          {isDoctorLimitReached && (
+                            <TooltipContent>
+                              <p>Doctor limit reached. Go to Profile &gt; Clinic Details to increase the limit.</p>
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      </TooltipProvider>
                   </div>
                    <div className="relative mt-2">
                       <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
