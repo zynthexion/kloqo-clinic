@@ -176,12 +176,11 @@ export function Sidebar() {
               <Button variant="ghost" className="w-full justify-start h-auto p-2 hover:bg-sidebar-accent/50">
                   <div className="flex items-center gap-3">
                     <Avatar className="h-9 w-9">
-                      <AvatarImage src={currentUser?.photoURL || undefined} alt={userProfile?.name || ""} />
-                      <AvatarFallback>{userProfile?.name.charAt(0) || 'U'}</AvatarFallback>
+                      <AvatarImage src={currentUser?.photoURL || undefined} alt={clinicName || ""} />
+                      <AvatarFallback>{clinicName?.charAt(0) || 'C'}</AvatarFallback>
                     </Avatar>
-                    <div className="text-left opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100 whitespace-nowrap overflow-hidden">
-                      <p className="text-sm font-semibold text-sidebar-foreground truncate">{userProfile?.name || 'User'}</p>
-                      <p className="text-xs text-sidebar-foreground/70 truncate">{clinicName || 'No Clinic'}</p>
+                    <div className="text-left opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100 whitespace-nowrap overflow-hidden flex items-center">
+                        <p className="text-sm font-semibold text-sidebar-foreground truncate">{clinicName || 'No Clinic'}</p>
                     </div>
                     <MoreVertical className="ml-auto h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100" />
                   </div>
