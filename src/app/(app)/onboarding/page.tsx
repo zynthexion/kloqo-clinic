@@ -31,10 +31,6 @@ export default function OnboardingPage() {
       setIsAddDoctorOpen(true);
   }
 
-  const handleDoctorAdded = (doctor: Doctor) => {
-      setStep(3); // Move to completion step
-  }
-
   const handleSaveDoctor = async (doctorData: Omit<Doctor, 'id' | 'avatar' | 'schedule' | 'preferences' | 'historicalData' | 'clinicId'> & { photo?: File; id?: string }) => {
     if (!auth.currentUser) {
         toast({ variant: "destructive", title: "Authentication Error", description: "You must be logged in." });
@@ -75,24 +71,28 @@ export default function OnboardingPage() {
     };
     
     const docRef = doc(db, "doctors", docId);
-    setDoc(docRef, newDoctor)
-      .then(() => {
-        handleDoctorAdded(newDoctor);
+    const clinicRef = doc(db, 'clinics', clinicId);
+
+    try {
+        await setDoc(docRef, newDoctor);
+        await updateDoc(clinicRef, { onboardingStatus: "Completed" });
 
         toast({
           title: "First Doctor Added!",
-          description: `${doctorData.name} has been added. You can now proceed.`,
+          description: "Onboarding complete. Welcome to your dashboard!",
         });
+        
         setIsAddDoctorOpen(false);
-      })
-      .catch((serverError) => {
+        router.push('/dashboard');
+
+    } catch(serverError) {
         const permissionError = new FirestorePermissionError({
             path: docRef.path,
             operation: 'create',
             requestResourceData: newDoctor,
         });
         errorEmitter.emit('permission-error', permissionError);
-      });
+    }
   };
 
   const handleCompletion = async () => {
@@ -131,18 +131,7 @@ export default function OnboardingPage() {
   return (
     <>
       <main className="flex-1 p-4 sm:p-6">
-        {step < 3 && (
-            <AddDepartmentStep onDepartmentsAdded={handleDepartmentsAdded} onAddDoctorClick={handleAddDoctorClick} />
-        )}
-        {step === 3 && (
-            <div className="flex flex-col items-center justify-center h-full text-center bg-background p-8 rounded-lg">
-              <h1 className="text-3xl font-bold text-primary mb-4">Onboarding Complete!</h1>
-              <p className="text-lg text-muted-foreground mb-8">
-                  You have successfully set up your clinic. You are now ready to manage your dashboard.
-              </p>
-              <Button onClick={handleCompletion}>Go to Dashboard</Button>
-          </div>
-        )}
+          <AddDepartmentStep onDepartmentsAdded={handleDepartmentsAdded} onAddDoctorClick={handleAddDoctorClick} />
       </main>
 
       <AddDoctorForm
