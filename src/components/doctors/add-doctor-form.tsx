@@ -17,7 +17,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -58,7 +57,7 @@ const availabilitySlotSchema = z.object({
     const sortedSlots = [...data.timeSlots].sort((a, b) => a.from.localeCompare(b.from));
     for (let i = 0; i < sortedSlots.length - 1; i++) {
         if (sortedSlots[i].to > sortedSlots[i+1].from) {
-            return false;
+            return false; // Overlap detected
         }
     }
     return true;
@@ -419,9 +418,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
   };
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log("DEBUG: handlePhotoChange triggered");
     const file = e.target.files?.[0];
-    console.log("DEBUG: Selected file:", file);
     if (file) {
       if (!file.type.startsWith('image/')) {
         toast({
@@ -443,7 +440,6 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 
       form.setValue('photo', file);
       const previewUrl = URL.createObjectURL(file);
-      console.log("DEBUG: Generated preview URL:", previewUrl);
       setPhotoPreview(previewUrl);
     }
   };
@@ -675,16 +671,14 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                   <FormField
                     control={form.control}
                     name="availabilitySlots"
-                    render={() => (
+                    render={({ field }) => (
                       <FormItem>
                          <div className="mb-4">
                            <FormLabel className="text-base flex items-center gap-1">
                              Weekly Availability
                              <span className="text-red-500">*</span>
                            </FormLabel>
-                            <FormDescription>
-                              Define the doctor's recurring weekly schedule.
-                            </FormDescription>
+                           <FormMessage />
                          </div>
                           <div className="space-y-2">
                             <Label>1. Select days to apply time slots to</Label>
@@ -704,21 +698,25 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                           <div className="space-y-2">
                             <Label>2. Define time slots</Label>
                             {sharedTimeSlots.map((ts, index) => {
-                                const allDaySlots = form.getValues('availabilitySlots').find(s => s.day === selectedDays[0])?.timeSlots || [];
-                                const otherSlots = allDaySlots.filter((_, i) => i !== index);
-
                                 const dayForSlot = selectedDays[0] || daysOfWeek.find(day => !clinicDetails?.operatingHours?.find((h:any) => h.day === day)?.isClosed);
                                 const clinicDay = clinicDetails?.operatingHours?.find((h: any) => h.day === dayForSlot);
-                                const clinicOpeningTime = clinicDay?.timeSlots[0]?.open || "00:00";
-                                const clinicClosingTime = clinicDay?.timeSlots[clinicDay.timeSlots.length - 1]?.close || "23:45";
+                                if (!clinicDay) return null;
+
+                                const clinicOpeningTime = clinicDay.timeSlots[0]?.open || "00:00";
+                                const clinicClosingTime = clinicDay.timeSlots[clinicDay.timeSlots.length - 1]?.close || "23:45";
                                 const allTimeOptions = generateTimeOptions(clinicOpeningTime, clinicClosingTime, 15);
                                 
                                 const fromTimeOptions = allTimeOptions.filter(time => 
-                                  !otherSlots.some(slot => time >= slot.from && time < slot.to)
+                                  !sharedTimeSlots.filter((_, i) => i !== index).some(slot => time >= slot.from && time < slot.to)
                                 ).slice(0, -1);
 
-                                const nextSlotStart = otherSlots.filter(slot => slot.from > ts.from).sort((a,b) => a.from.localeCompare(b.from))[0]?.from || clinicClosingTime;
-                                const toTimeOptions = ts.from ? allTimeOptions.filter(t => t > ts.from && t <= nextSlotStart) : [];
+                                const nextSlotStart = [...sharedTimeSlots]
+                                    .filter(slot => slot.from > ts.from)
+                                    .sort((a,b) => a.from.localeCompare(b.from))[0]?.from || clinicClosingTime;
+                                
+                                const toTimeOptions = ts.from 
+                                    ? allTimeOptions.filter(t => t > ts.from && t <= nextSlotStart) 
+                                    : [];
 
                                return (
                                 <div key={index} className="flex items-end gap-2">
@@ -779,11 +777,11 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                           <div className="space-y-2 pt-4">
                             <Label>Review and save</Label>
                             <div className="space-y-3 rounded-md border p-3 min-h-[100px]">
-                                {watchedAvailabilitySlots.length > 0 ? watchedAvailabilitySlots.map((field, index) => (
+                                {field.value.length > 0 ? field.value.map((fieldItem, index) => (
                                    <div key={index} className="text-sm">
-                                        <p className="font-semibold">{field.day}</p>
+                                        <p className="font-semibold">{fieldItem.day}</p>
                                         <div className="flex flex-wrap gap-1 mt-1">
-                                          {field.timeSlots.map((ts, i) => {
+                                          {fieldItem.timeSlots.map((ts, i) => {
                                               if (!ts.from || !ts.to) return null;
                                               return (
                                                 <Badge key={i} variant="secondary" className="font-normal">
@@ -796,7 +794,6 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                                 )) : <p className="text-xs text-muted-foreground text-center pt-6">No availability applied yet.</p>}
                             </div>
                           </div>
-                        <FormMessage />
                       </FormItem>
                     )}
                   />
@@ -819,3 +816,5 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
     </Dialog>
   );
 }
+
+    
