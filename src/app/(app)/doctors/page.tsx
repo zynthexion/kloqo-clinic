@@ -158,6 +158,7 @@ export default function DoctorsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [leaveCalDate, setLeaveCalDate] = useState<Date | undefined>(new Date());
+  const [clinicDetails, setClinicDetails] = useState<any>(null);
   
   const [isEditingTime, setIsEditingTime] = useState(false);
   const [newAvgTime, setNewAvgTime] = useState<number | string>("");
@@ -214,6 +215,10 @@ export default function DoctorsPage() {
           getDocs(collection(db, "master-departments")),
           getDoc(doc(db, "clinics", clinicId))
         ]);
+
+        if (clinicDocSnap.exists()) {
+          setClinicDetails(clinicDocSnap.data());
+        }
         
         const masterDepartmentsList = masterDepartmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Department));
 
@@ -757,6 +762,8 @@ export default function DoctorsPage() {
       currentPage * doctorsPerPage
   );
 
+  const isDoctorLimitReached = clinicDetails ? doctors.length >= clinicDetails.numDoctors : false;
+
   const openAddDoctorDialog = () => {
     setEditingDoctor(null);
     setIsAddDoctorOpen(true);
@@ -773,7 +780,7 @@ export default function DoctorsPage() {
                 <CardHeader>
                   <div className="flex justify-between items-center">
                     <CardTitle>Doctors</CardTitle>
-                    <Button onClick={openAddDoctorDialog}>
+                    <Button onClick={openAddDoctorDialog} disabled={isDoctorLimitReached} title={isDoctorLimitReached ? "Doctor limit reached for your plan" : "Add new doctor"}>
                       <PlusCircle className="mr-2 h-4 w-4" />
                       Add Doctor
                     </Button>
