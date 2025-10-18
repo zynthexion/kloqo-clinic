@@ -815,6 +815,22 @@ export default function DoctorsPage() {
     setEditingDoctor(null);
     setIsAddDoctorOpen(true);
   };
+  
+  const isDoctorCurrentlyAvailable = useMemo(() => {
+    if (!selectedDoctor?.availabilitySlots) return false;
+    
+    const now = new Date();
+    const currentDayName = format(now, 'EEEE');
+    
+    const todayAvailability = selectedDoctor.availabilitySlots.find(slot => slot.day === currentDayName);
+    if (!todayAvailability) return false;
+
+    return todayAvailability.timeSlots.some(slot => {
+        const startTime = parseDateFns(slot.from, 'hh:mm a', now);
+        const endTime = parseDateFns(slot.to, 'hh:mm a', now);
+        return now >= startTime && now <= endTime;
+    });
+  }, [selectedDoctor]);
 
 
   return (
@@ -1028,7 +1044,7 @@ export default function DoctorsPage() {
                         id="status-switch"
                         checked={selectedDoctor.consultationStatus === 'In'}
                         onCheckedChange={(checked) => handleStatusChange(checked ? 'In' : 'Out')}
-                        disabled={isPending}
+                        disabled={isPending || !isDoctorCurrentlyAvailable}
                         className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500"
                       />
                       <Label htmlFor="status-switch" className="font-semibold text-white">
