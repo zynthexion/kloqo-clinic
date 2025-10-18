@@ -157,17 +157,6 @@ export function Sidebar() {
               </TooltipContent>
             </Tooltip>
           ))}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <NavLink href="/image-upload-test" icon={FileImage} label="Image Upload Test" />
-              </TooltipTrigger>
-              <TooltipContent
-                side="right"
-                className="group-hover:hidden ml-2"
-              >
-                Image Upload Test
-              </TooltipContent>
-            </Tooltip>
         </nav>
         
         <div className="mt-auto p-2 shrink-0">
