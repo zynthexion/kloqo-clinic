@@ -17,6 +17,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -318,8 +319,6 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         const photoFile = form.getValues('photo');
 
         if (photoFile instanceof File) {
-            console.log("New photo file detected:", photoFile.name, `(${(photoFile.size / 1024).toFixed(2)} KB)`);
-
             try {
                 const options = {
                     maxSizeMB: 0.5,
@@ -328,8 +327,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                 };
 
                 const compressedFile = await imageCompression(photoFile, options);
-                console.log("Image compressed:", compressedFile.name, `(${(compressedFile.size / 1024).toFixed(2)} KB)`);
-
+                
                 const formData = new FormData();
                 formData.append('file', compressedFile);
                 formData.append('clinicId', clinicId);
@@ -347,11 +345,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 
                 const data = await response.json();
                 photoUrl = data.url;
-                console.log("File uploaded successfully via API. URL:", photoUrl);
                 
-                if (data.firebaseError) {
-                  console.warn("Firebase upload failed, using fallback URL");
-                }
             } catch (uploadError: any) {
                 console.error("Upload error:", uploadError);
                 toast({
@@ -359,7 +353,6 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     title: "Upload Failed",
                     description: uploadError.message,
                 });
-                console.log(uploadError.message);
                 return;
             }
         }
@@ -420,9 +413,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
   };
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log("handlePhotoChange triggered");
     const file = e.target.files?.[0];
-    console.log("Selected file:", file);
     if (file) {
       if (!file.type.startsWith('image/')) {
         toast({
@@ -444,7 +435,6 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 
       form.setValue('photo', file);
       const previewUrl = URL.createObjectURL(file);
-      console.log("Generated preview URL:", previewUrl);
       setPhotoPreview(previewUrl);
     }
   };
