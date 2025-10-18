@@ -178,9 +178,9 @@ export function Sidebar() {
                       <AvatarImage src={currentUser?.photoURL || undefined} alt={userProfile?.name || ""} />
                       <AvatarFallback>{userProfile?.name.charAt(0) || 'U'}</AvatarFallback>
                     </Avatar>
-                    <div className="text-left opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100 whitespace-nowrap">
-                      <p className="text-sm font-semibold text-sidebar-foreground">{userProfile?.name || 'User'}</p>
-                      <p className="text-xs text-sidebar-foreground/70">{clinicName || 'No Clinic'}</p>
+                    <div className="text-left opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100 whitespace-nowrap overflow-hidden">
+                      <p className="text-sm font-semibold text-sidebar-foreground truncate">{userProfile?.name || 'User'}</p>
+                      <p className="text-xs text-sidebar-foreground/70 truncate">{clinicName || 'No Clinic'}</p>
                     </div>
                     <MoreVertical className="ml-auto h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100" />
                   </div>
