@@ -144,7 +144,6 @@ export default function ProfilePage() {
             name: userData.name,
             phone: userData.phone,
           };
-          console.log("DEBUG: Resetting profileForm with:", profileResetData);
           profileForm.reset(profileResetData);
 
           if (userData.clinicId) {
@@ -154,6 +153,22 @@ export default function ProfilePage() {
             if (clinicDocSnap.exists()) {
               const clinicData = clinicDocSnap.data();
               setClinicDetails(clinicData);
+
+              const clinicResetData = {
+                name: clinicData.name,
+                type: clinicData.type,
+                numDoctors: clinicData.numDoctors,
+                clinicRegNumber: clinicData.clinicRegNumber || '',
+                address: clinicData.address,
+                mapsLink: clinicData.mapsLink || '',
+              };
+              clinicForm.reset(clinicResetData);
+
+              const hoursResetData = {
+                hours: clinicData.operatingHours,
+              };
+              hoursForm.reset(hoursResetData);
+              
               const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
               const doctorsSnapshot = await getDocs(doctorsQuery);
               setCurrentDoctorCount(doctorsSnapshot.size);
@@ -166,7 +181,6 @@ export default function ProfilePage() {
               setCredentials({ ...credsData, id: credsSnapshot.docs[0].id });
               
               const mobileResetData = { username: credsData.username, password: "" };
-              console.log("DEBUG: Resetting mobileAppForm with:", mobileResetData);
               mobileAppForm.reset(mobileResetData);
 
               setIsEditingMobile(false);
@@ -182,28 +196,8 @@ export default function ProfilePage() {
       }
     };
     fetchUserData();
-  }, [auth.currentUser]);
+  }, [auth.currentUser, profileForm, clinicForm, hoursForm, mobileAppForm]);
 
-  useEffect(() => {
-    if (clinicDetails) {
-      const clinicResetData = {
-        name: clinicDetails.name,
-        type: clinicDetails.type,
-        numDoctors: clinicDetails.numDoctors,
-        clinicRegNumber: clinicDetails.clinicRegNumber || '',
-        address: clinicDetails.address,
-        mapsLink: clinicDetails.mapsLink || '',
-      };
-      console.log("DEBUG: Resetting clinicForm with:", clinicResetData);
-      clinicForm.reset(clinicResetData);
-
-      const hoursResetData = {
-        hours: clinicDetails.operatingHours,
-      };
-      console.log("DEBUG: Resetting hoursForm with:", hoursResetData);
-      hoursForm.reset(hoursResetData);
-    }
-  }, [clinicDetails]);
 
   const onMobileAppSubmit = async (values: MobileAppFormValues) => {
     if (!userProfile?.clinicId) {
@@ -465,15 +459,14 @@ export default function ProfilePage() {
                                     <FormField
                                       control={clinicForm.control}
                                       name="numDoctors"
-                                      render={({ field }) => {
-                                        console.log("DEBUG: numDoctors field state:", field);
-                                        return (
+                                      render={({ field }) => (
                                           <FormItem>
                                             <FormLabel>Number of Doctors Limit</FormLabel>
                                             <FormControl>
                                               <Input
                                                 type="number"
                                                 {...field}
+                                                onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)}
                                                 disabled={!isEditingClinic || !isMultiDoctorClinic || isPending}
                                                 min={currentDoctorCount}
                                               />
@@ -483,8 +476,7 @@ export default function ProfilePage() {
                                             </FormDescription>
                                             <FormMessage />
                                           </FormItem>
-                                        )
-                                      }}
+                                      )}
                                     />
                                     <FormField control={clinicForm.control} name="clinicRegNumber" render={({ field }) => (
                                         <FormItem><FormLabel>Clinic Registration Number</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
