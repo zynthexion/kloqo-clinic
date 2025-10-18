@@ -92,6 +92,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
   const auth = useAuth();
   const [isPending, startTransition] = useTransition();
   const [clinicId, setClinicId] = useState<string | null>(null);
+  const [clinicDetails, setClinicDetails] = useState<any | null>(null);
 
 
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
@@ -112,22 +113,27 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
       freeFollowUpDays: 7,
       advanceBookingDays: 30,
     },
-    mode: 'onBlur', // Validate on blur (when field loses focus)
+    mode: 'onBlur',
   });
 
   useEffect(() => {
     if (auth.currentUser) {
-      const fetchClinicId = async () => {
+      const fetchClinicData = async () => {
         const userDocRef = doc(db, 'users', auth.currentUser!.uid);
         const userDocSnap = await getDoc(userDocRef);
         const userClinicId = userDocSnap.data()?.clinicId;
         if (userClinicId) {
           setClinicId(userClinicId);
+          const clinicDocRef = doc(db, 'clinics', userClinicId);
+          const clinicDocSnap = await getDoc(clinicDocRef);
+          if (clinicDocSnap.exists()) {
+            setClinicDetails(clinicDocSnap.data());
+          }
         } else {
           console.error('Could not find clinicId for the current user.');
         }
       };
-      fetchClinicId();
+      fetchClinicData();
     }
   }, [auth.currentUser]);
 
@@ -195,9 +201,9 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         });
         return;
     }
-
+  
     const validSharedTimeSlots = sharedTimeSlots.filter(ts => ts.from && ts.to);
-
+  
     if (validSharedTimeSlots.length === 0) {
          toast({
             variant: "destructive",
@@ -206,19 +212,42 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         });
         return;
     }
-
+  
+    // Check if slots are within clinic hours
+    for (const day of selectedDays) {
+      const clinicDay = clinicDetails?.operatingHours?.find((h: any) => h.day === day);
+      if (!clinicDay || clinicDay.isClosed) {
+          toast({ variant: "destructive", title: "Invalid Day", description: `Clinic is closed on ${day}.` });
+          return;
+      }
+  
+      for (const slot of validSharedTimeSlots) {
+          let withinHours = false;
+          for (const clinicSlot of clinicDay.timeSlots) {
+              if (slot.from >= clinicSlot.open && slot.to <= clinicSlot.close) {
+                  withinHours = true;
+                  break;
+              }
+          }
+          if (!withinHours) {
+              toast({ variant: "destructive", title: "Invalid Time Slot", description: `Slot for ${day} is outside clinic operating hours.` });
+              return;
+          }
+      }
+    }
+  
     const currentFormSlots = form.getValues('availabilitySlots') || [];
     const newSlotsMap = new Map<string, AvailabilitySlot>();
     
     currentFormSlots.forEach(slot => newSlotsMap.set(slot.day, slot));
-
+  
     selectedDays.forEach(day => {
         newSlotsMap.set(day, { day, timeSlots: validSharedTimeSlots });
     });
-
+  
     const updatedSlots = Array.from(newSlotsMap.values());
     
-    form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true });
+    form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true, shouldValidate: true });
     
     toast({
         title: "Time Slots Applied",
@@ -630,17 +659,27 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                           <div className="space-y-2">
                             <Label>1. Select days to apply time slots to</Label>
                             <ToggleGroup type="multiple" value={selectedDays} onValueChange={setSelectedDays} variant="outline" className="flex-wrap justify-start">
-                                {daysOfWeek.map((day, index) => (
-                                    <ToggleGroupItem key={daysOfWeek[index]} value={daysOfWeek[index]} aria-label={`Toggle ${daysOfWeek[index]}`} className="h-9 w-9">
-                                        {dayAbbreviations[index]}
-                                    </ToggleGroupItem>
-                                ))}
+                                {daysOfWeek.map((day, index) => {
+                                    const clinicDay = clinicDetails?.operatingHours?.find((h: any) => h.day === day);
+                                    const isDisabled = !clinicDay || clinicDay.isClosed;
+                                    return (
+                                        <ToggleGroupItem key={daysOfWeek[index]} value={daysOfWeek[index]} aria-label={`Toggle ${daysOfWeek[index]}`} className="h-9 w-9" disabled={isDisabled}>
+                                            {dayAbbreviations[index]}
+                                        </ToggleGroupItem>
+                                    )
+                                })}
                             </ToggleGroup>
                           </div>
 
                           <div className="space-y-2">
                             <Label>2. Define time slots</Label>
-                            {sharedTimeSlots.map((ts, index) => (
+                            {sharedTimeSlots.map((ts, index) => {
+                               const dayForSlot = selectedDays[0] || daysOfWeek.find(day => !clinicDetails?.operatingHours?.find((h:any) => h.day === day)?.isClosed);
+                               const clinicDay = clinicDetails?.operatingHours?.find((h: any) => h.day === dayForSlot);
+                               const minTime = clinicDay?.timeSlots[0]?.open;
+                               const maxTime = clinicDay?.timeSlots[clinicDay.timeSlots.length - 1]?.close;
+
+                               return (
                                 <div key={index} className="flex items-end gap-2">
                                    <div className="flex-grow">
                                       <Label className="text-xs font-normal">From</Label>
@@ -648,7 +687,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                                           const newShared = [...sharedTimeSlots];
                                           newShared[index].from = e.target.value;
                                           setSharedTimeSlots(newShared);
-                                      }} />
+                                      }} min={minTime} max={maxTime} />
                                    </div>
                                    <div className="flex-grow">
                                       <Label className="text-xs font-normal">To</Label>
@@ -656,13 +695,13 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                                           const newShared = [...sharedTimeSlots];
                                           newShared[index].to = e.target.value;
                                           setSharedTimeSlots(newShared);
-                                      }} />
+                                      }} min={ts.from || minTime} max={maxTime} />
                                    </div>
                                    <Button type="button" variant="ghost" size="icon" onClick={() => setSharedTimeSlots(prev => prev.filter((_, i) => i !== index))} disabled={sharedTimeSlots.length <=1}>
                                         <Trash className="h-4 w-4 text-red-500" />
                                    </Button>
                                 </div>
-                            ))}
+                            )})}
                             <Button type="button" size="sm" variant="outline" onClick={() => setSharedTimeSlots(prev => [...prev, { from: "", to: "" }])}>
                                 Add Another Slot
                             </Button>
@@ -715,5 +754,3 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
     </Dialog>
   );
 }
-
-    
