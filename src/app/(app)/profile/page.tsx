@@ -453,6 +453,7 @@ export default function ProfilePage() {
                                             <Input
                                                 type="number"
                                                 {...field}
+                                                value={field.value || ''}
                                                 disabled={!isEditingClinic || !isMultiDoctorClinic || isPending}
                                                 min={currentDoctorCount}
                                             />
