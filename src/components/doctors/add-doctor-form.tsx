@@ -46,6 +46,7 @@ import imageCompression from "browser-image-compression";
 import { Textarea } from "../ui/textarea";
 import { SelectDepartmentDialog } from "../onboarding/select-department-dialog";
 import { Separator } from "../ui/separator";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 
 const timeSlotSchema = z.object({
   from: z.string().min(1, "Required"),
@@ -315,6 +316,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
             departments: arrayUnion(...departmentIdsToAdd)
         });
         
+        // This assumes we only add one at a time from this flow.
         const newDept = selectedDepts[0];
         if (newDept) {
             updateDepartments(newDept);
@@ -508,6 +510,9 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
     (masterDept) => !departments.some((clinicDept) => clinicDept.id === masterDept.id)
   );
 
+  const isDepartmentLimitReached = clinicDetails ? departments.length >= clinicDetails.numDoctors : false;
+
+
   return (
     <>
     <Dialog open={isOpen} onOpenChange={(open) => {
@@ -615,16 +620,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
                         </FormLabel>
                         <Select onValueChange={(value) => {
                             if (value === 'add_new') {
-                                if (clinicDetails && departments.length >= clinicDetails.numDoctors) {
-                                    toast({
-                                        variant: "destructive",
-                                        title: "Department Limit Reached",
-                                        description: `Your plan allows for ${clinicDetails.numDoctors} department(s). Please upgrade your plan in Profile > Clinic Details to add more.`,
-                                        duration: 6000,
-                                    });
-                                } else {
-                                    setIsSelectDepartmentOpen(true);
-                                }
+                                setIsSelectDepartmentOpen(true);
                             } else {
                                 field.onChange(value);
                             }
@@ -641,12 +637,25 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
                               </SelectItem>
                             ))}
                             <Separator />
-                            <SelectItem value="add_new" className="text-primary focus:bg-primary/10 focus:text-primary">
-                                <div className="flex items-center gap-2">
-                                    <PlusCircleIcon className="h-4 w-4" />
-                                    Add New Department
-                                </div>
-                            </SelectItem>
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <div className={isDepartmentLimitReached ? "opacity-50 cursor-not-allowed" : ""}>
+                                            <SelectItem value="add_new" className="text-primary focus:bg-primary/10 focus:text-primary" disabled={isDepartmentLimitReached}>
+                                                <div className="flex items-center gap-2">
+                                                    <PlusCircleIcon className="h-4 w-4" />
+                                                    Add New Department
+                                                </div>
+                                            </SelectItem>
+                                        </div>
+                                    </TooltipTrigger>
+                                    {isDepartmentLimitReached && (
+                                        <TooltipContent>
+                                            <p>Department limit reached. Upgrade your plan to add more.</p>
+                                        </TooltipContent>
+                                    )}
+                                </Tooltip>
+                            </TooltipProvider>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -757,6 +766,10 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
                              Weekly Availability
                              <span className="text-red-500">*</span>
                            </FormLabel>
+                           <FormDescription>
+                             Define the doctor's recurring weekly schedule.
+                           </FormDescription>
+                           <FormMessage />
                          </div>
                           <div className="space-y-2">
                             <Label>1. Select days to apply time slots to</Label>
@@ -871,7 +884,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
                                     </div>
                                 )) : <p className="text-xs text-muted-foreground text-center pt-6">No availability applied yet.</p>}
                             </div>
-                            <FormMessage />
+                            
                           </div>
                       </FormItem>
                     )}
@@ -898,6 +911,8 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
         setIsOpen={setIsSelectDepartmentOpen}
         departments={availableMasterDepartments}
         onDepartmentsSelect={handleDepartmentsSelected}
+        limit={clinicDetails?.numDoctors}
+        currentCount={departments.length}
     />
     </>
   );

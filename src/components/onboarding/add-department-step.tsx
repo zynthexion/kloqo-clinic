@@ -53,6 +53,7 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [clinicDepartments, setClinicDepartments] = useState<Department[]>([]);
   const [masterDepartments, setMasterDepartments] = useState<Department[]>([]);
+  const [clinicDetails, setClinicDetails] = useState<any>(null);
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
 
@@ -80,6 +81,7 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
           const clinicDoc = await getDoc(doc(db, "clinics", clinicId));
           if(clinicDoc.exists()){
             const clinicData = clinicDoc.data();
+            setClinicDetails(clinicData);
             const departmentIds: string[] = clinicData.departments || [];
             
             if (departmentIds.length > 0) {
@@ -162,6 +164,10 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
     );
   }
 
+  const availableMasterDepartments = masterDepartments.filter(
+    (masterDept) => !clinicDepartments.some((clinicDept) => clinicDept.id === masterDept.id)
+  );
+
   return (
     <div className="flex flex-col items-center justify-center h-full text-center w-full">
       {clinicDepartments.length === 0 ? (
@@ -220,8 +226,10 @@ export function AddDepartmentStep({ onDepartmentsAdded, onAddDoctorClick }: { on
       <SelectDepartmentDialog
         isOpen={isDialogOpen}
         setIsOpen={setIsDialogOpen}
-        departments={masterDepartments}
+        departments={availableMasterDepartments}
         onDepartmentsSelect={handleSelectDepartments}
+        limit={clinicDetails?.numDoctors}
+        currentCount={clinicDepartments.length}
       />
     </div>
   );

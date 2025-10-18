@@ -16,6 +16,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Search, CheckCircle } from "lucide-react";
 import type { Department } from "@/lib/types";
 import * as Lucide from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 const Pregnant = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -52,11 +53,14 @@ type SelectDepartmentDialogProps = {
   setIsOpen: (isOpen: boolean) => void;
   departments: Omit<Department, "clinicId">[];
   onDepartmentsSelect: (departments: Omit<Department, "clinicId">[]) => void;
+  limit?: number;
+  currentCount?: number;
 };
 
-export function SelectDepartmentDialog({ isOpen, setIsOpen, departments, onDepartmentsSelect }: SelectDepartmentDialogProps) {
+export function SelectDepartmentDialog({ isOpen, setIsOpen, departments, onDepartmentsSelect, limit = Infinity, currentCount = 0 }: SelectDepartmentDialogProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selected, setSelected] = useState<Omit<Department, "clinicId">[]>([]);
+  const { toast } = useToast();
 
   const filteredDepartments = useMemo(() => {
     if (!departments) return [];
@@ -66,14 +70,21 @@ export function SelectDepartmentDialog({ isOpen, setIsOpen, departments, onDepar
   }, [departments, searchTerm]);
 
   const toggleSelection = (department: Omit<Department, "clinicId">) => {
-    setSelected(prev => {
-        const isSelected = prev.find(d => d.id === department.id);
-        if (isSelected) {
-            return prev.filter(d => d.id !== department.id);
-        } else {
-            return [...prev, department];
-        }
-    })
+    const isAlreadySelected = selected.some(d => d.id === department.id);
+
+    if (isAlreadySelected) {
+      setSelected(prev => prev.filter(d => d.id !== department.id));
+    } else {
+      if (currentCount + selected.length >= limit) {
+        toast({
+          variant: "destructive",
+          title: "Department Limit Reached",
+          description: `You can only add up to ${limit} departments with your current plan.`,
+        });
+        return;
+      }
+      setSelected(prev => [...prev, department]);
+    }
   }
 
   const handleAdd = () => {
@@ -91,7 +102,7 @@ export function SelectDepartmentDialog({ isOpen, setIsOpen, departments, onDepar
         <DialogHeader>
           <DialogTitle>Add Departments to Your Clinic</DialogTitle>
           <DialogDescription>
-            Select one or more departments from the list to add to your clinic setup.
+            Select one or more departments from the list to add to your clinic setup. You can add {limit - (currentCount + selected.length)} more.
           </DialogDescription>
         </DialogHeader>
         <div className="relative">
