@@ -37,9 +37,12 @@ import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { AlertCircle } from "lucide-react";
 import Link from "next/link";
 
-const iconNames = Object.keys(Lucide).filter(
-  (key) => typeof Lucide[key as keyof typeof Lucide] === 'object' && key !== 'createLucideIcon'
-);
+const iconNames = [
+  "Stethoscope", "HeartPulse", "Baby", "Sparkles", "BrainCircuit", "Bone",
+  "Award", "Droplets", "Filter", "Droplet", "Eye", "Ear", "Brain",
+  "PersonStanding", "Radiation", "Siren", "Microwave", "TestTube", "Bug",
+  "Scissors", "Ambulance", "Wind", "Virus", "Activity", "Pill"
+];
 
 
 const formSchema = z.object({
@@ -201,31 +204,35 @@ export function AddDepartmentDialog({
                 )}
                 />
                 <FormField
-                control={form.control}
-                name="icon"
-                render={({ field }) => (
+                  control={form.control}
+                  name="icon"
+                  render={({ field }) => (
                     <FormItem>
-                    <FormLabel>Icon</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormLabel>Icon</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select an icon" />
-                            </SelectTrigger>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select an icon" />
+                          </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                            {iconNames.map(iconName => (
-                                <SelectItem key={iconName} value={iconName}>
-                                    <div className="flex items-center gap-2">
-                                        {React.createElement(Lucide[iconName as keyof typeof Lucide], { className: "h-4 w-4"})}
-                                        <span>{iconName}</span>
-                                    </div>
-                                </SelectItem>
-                            ))}
+                          {iconNames.map(iconName => {
+                            const IconComponent = Lucide[iconName as keyof typeof Lucide] as React.ElementType;
+                            if (!IconComponent) return null;
+                            return (
+                              <SelectItem key={iconName} value={iconName}>
+                                <div className="flex items-center gap-2">
+                                  <IconComponent className="h-4 w-4" />
+                                  <span>{iconName}</span>
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
-                    </Select>
-                    <FormMessage />
+                      </Select>
+                      <FormMessage />
                     </FormItem>
-                )}
+                  )}
                 />
                 <DialogFooter>
                 <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>
