@@ -132,62 +132,61 @@ export default function ProfilePage() {
     }
 
     const fetchAllData = async () => {
-      setLoading(true);
-      const userDocRef = doc(db, "users", auth.currentUser!.uid);
-      const userDocSnap = await getDoc(userDocRef);
+        setLoading(true);
+        const userDocRef = doc(db, "users", auth.currentUser!.uid);
+        const userDocSnap = await getDoc(userDocRef);
 
-      if (userDocSnap.exists()) {
-          const userData = userDocSnap.data() as User;
-          setUserProfile(userData);
-          profileForm.reset({
-              name: userData.name,
-              phone: userData.phone,
-          });
+        if (userDocSnap.exists()) {
+            const userData = userDocSnap.data() as User;
+            setUserProfile(userData);
+            profileForm.reset({
+                name: userData.name,
+                phone: userData.phone,
+            });
 
-          if(userData.clinicId) {
-            const clinicDocRef = doc(db, "clinics", userData.clinicId);
-            const clinicDocSnap = await getDoc(clinicDocRef);
-            if (clinicDocSnap.exists()) {
-                const clinicData = clinicDocSnap.data();
-                setClinicDetails(clinicData);
-                clinicForm.reset({
-                    name: clinicData.name,
-                    type: clinicData.type,
-                    maxDoctors: clinicData.maxDoctors,
-                    clinicRegNumber: clinicData.clinicRegNumber || '',
-                    address: clinicData.address,
-                    mapsLink: clinicData.mapsLink || '',
-                });
-                hoursForm.reset({
-                    hours: clinicData.operatingHours,
-                });
+            if (userData.clinicId) {
+                const clinicDocRef = doc(db, "clinics", userData.clinicId);
+                const clinicDocSnap = await getDoc(clinicDocRef);
+                if (clinicDocSnap.exists()) {
+                    const clinicData = clinicDocSnap.data();
+                    setClinicDetails(clinicData);
+                    clinicForm.reset({
+                        name: clinicData.name || '',
+                        type: clinicData.type,
+                        maxDoctors: clinicData.maxDoctors,
+                        clinicRegNumber: clinicData.clinicRegNumber || '',
+                        address: clinicData.address,
+                        mapsLink: clinicData.mapsLink || '',
+                    });
+                    hoursForm.reset({
+                        hours: clinicData.operatingHours,
+                    });
 
-                // Fetch current doctor count
-                const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", userData.clinicId));
-                const doctorsSnapshot = await getDocs(doctorsQuery);
-                setCurrentDoctorCount(doctorsSnapshot.size);
+                    // Fetch current doctor count
+                    const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", userData.clinicId));
+                    const doctorsSnapshot = await getDocs(doctorsQuery);
+                    setCurrentDoctorCount(doctorsSnapshot.size);
+                }
+
+                const credsQuery = query(collection(db, "mobile-app"), where("clinicId", "==", userData.clinicId));
+                const credsSnapshot = await getDocs(credsQuery);
+                if (!credsSnapshot.empty) {
+                    const credsData = credsSnapshot.docs[0].data() as MobileApp;
+                    setCredentials({ ...credsData, id: credsSnapshot.docs[0].id });
+                    mobileAppForm.reset({ username: credsData.username, password: "" });
+                    setIsEditingMobile(false);
+                } else {
+                    setIsEditingMobile(true);
+                }
             }
+        } else {
+            setIsEditingMobile(true);
+        }
 
-            const credsQuery = query(collection(db, "mobile-app"), where("clinicId", "==", userData.clinicId));
-            const credsSnapshot = await getDocs(credsQuery);
-            if (!credsSnapshot.empty) {
-                const credsData = credsSnapshot.docs[0].data() as MobileApp;
-                setCredentials({ ...credsData, id: credsSnapshot.docs[0].id });
-                mobileAppForm.reset({ username: credsData.username, password: "" });
-                setIsEditingMobile(false);
-            } else {
-                setIsEditingMobile(true);
-            }
-          }
-      } else {
-          setIsEditingMobile(true);
-      }
-
-      setLoading(false);
+        setLoading(false);
     };
     fetchAllData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auth.currentUser]);
+  }, [auth.currentUser, clinicForm, hoursForm, mobileAppForm, profileForm]);
 
   const onMobileAppSubmit = async (values: MobileAppFormValues) => {
     if (!userProfile?.clinicId) {
@@ -460,13 +459,13 @@ export default function ProfilePage() {
                                       </p>
                                   </FormItem>
                                   <FormField control={clinicForm.control} name="clinicRegNumber" render={({ field }) => (
-                                      <FormItem><FormLabel>Clinic Registration Number</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
+                                      <FormItem><FormLabel>Clinic Registration Number</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
                                   )}/>
                                   <FormField control={clinicForm.control} name="address" render={({ field }) => (
                                       <FormItem><FormLabel>Address</FormLabel><FormControl><Textarea {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
                                   )}/>
                                   <FormField control={clinicForm.control} name="mapsLink" render={({ field }) => (
-                                      <FormItem><FormLabel>Google Maps Link</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
+                                      <FormItem><FormLabel>Google Maps Link</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
                                   )}/>
                                   <FormItem>
                                       <FormLabel>Plan</FormLabel>
