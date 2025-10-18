@@ -133,60 +133,64 @@ export default function ProfilePage() {
 
     const fetchAllData = async () => {
         setLoading(true);
-        const userDocRef = doc(db, "users", auth.currentUser!.uid);
-        const userDocSnap = await getDoc(userDocRef);
+        try {
+            const userDocRef = doc(db, "users", auth.currentUser!.uid);
+            const userDocSnap = await getDoc(userDocRef);
 
-        if (userDocSnap.exists()) {
-            const userData = userDocSnap.data() as User;
-            setUserProfile(userData);
-            profileForm.reset({
-                name: userData.name,
-                phone: userData.phone,
-            });
+            if (userDocSnap.exists()) {
+                const userData = userDocSnap.data() as User;
+                setUserProfile(userData);
+                profileForm.reset({
+                    name: userData.name,
+                    phone: userData.phone,
+                });
 
-            if (userData.clinicId) {
-                const clinicDocRef = doc(db, "clinics", userData.clinicId);
-                const clinicDocSnap = await getDoc(clinicDocRef);
-                if (clinicDocSnap.exists()) {
-                    const clinicData = clinicDocSnap.data();
-                    setClinicDetails(clinicData);
-                    clinicForm.reset({
-                        name: clinicData.name || '',
-                        type: clinicData.type,
-                        maxDoctors: clinicData.maxDoctors,
-                        clinicRegNumber: clinicData.clinicRegNumber || '',
-                        address: clinicData.address,
-                        mapsLink: clinicData.mapsLink || '',
-                    });
-                    hoursForm.reset({
-                        hours: clinicData.operatingHours,
-                    });
+                if (userData.clinicId) {
+                    const clinicDocRef = doc(db, "clinics", userData.clinicId);
+                    const clinicDocSnap = await getDoc(clinicDocRef);
+                    if (clinicDocSnap.exists()) {
+                        const clinicData = clinicDocSnap.data();
+                        setClinicDetails(clinicData);
+                        clinicForm.reset({
+                            name: clinicData.name || '',
+                            type: clinicData.type,
+                            maxDoctors: clinicData.maxDoctors,
+                            clinicRegNumber: clinicData.clinicRegNumber || '',
+                            address: clinicData.address,
+                            mapsLink: clinicData.mapsLink || '',
+                        });
+                        hoursForm.reset({
+                            hours: clinicData.operatingHours,
+                        });
 
-                    // Fetch current doctor count
-                    const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", userData.clinicId));
-                    const doctorsSnapshot = await getDocs(doctorsQuery);
-                    setCurrentDoctorCount(doctorsSnapshot.size);
+                        const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", userData.clinicId));
+                        const doctorsSnapshot = await getDocs(doctorsQuery);
+                        setCurrentDoctorCount(doctorsSnapshot.size);
+                    }
+
+                    const credsQuery = query(collection(db, "mobile-app"), where("clinicId", "==", userData.clinicId));
+                    const credsSnapshot = await getDocs(credsQuery);
+                    if (!credsSnapshot.empty) {
+                        const credsData = credsSnapshot.docs[0].data() as MobileApp;
+                        setCredentials({ ...credsData, id: credsSnapshot.docs[0].id });
+                        mobileAppForm.reset({ username: credsData.username, password: "" });
+                        setIsEditingMobile(false);
+                    } else {
+                        setIsEditingMobile(true);
+                    }
                 }
-
-                const credsQuery = query(collection(db, "mobile-app"), where("clinicId", "==", userData.clinicId));
-                const credsSnapshot = await getDocs(credsQuery);
-                if (!credsSnapshot.empty) {
-                    const credsData = credsSnapshot.docs[0].data() as MobileApp;
-                    setCredentials({ ...credsData, id: credsSnapshot.docs[0].id });
-                    mobileAppForm.reset({ username: credsData.username, password: "" });
-                    setIsEditingMobile(false);
-                } else {
-                    setIsEditingMobile(true);
-                }
+            } else {
+                setIsEditingMobile(true);
             }
-        } else {
-            setIsEditingMobile(true);
+        } catch (error) {
+            console.error("Error fetching profile data:", error);
+            toast({ variant: "destructive", title: "Error", description: "Could not load profile data."});
+        } finally {
+            setLoading(false);
         }
-
-        setLoading(false);
     };
     fetchAllData();
-  }, [auth.currentUser, clinicForm, hoursForm, mobileAppForm, profileForm]);
+  }, [auth.currentUser, clinicForm, hoursForm, mobileAppForm, profileForm, toast]);
 
   const onMobileAppSubmit = async (values: MobileAppFormValues) => {
     if (!userProfile?.clinicId) {
@@ -684,7 +688,13 @@ export default function ProfilePage() {
                 </Card>
             </div>
             <div className="md:col-span-3">
-              {renderContent()}
+              {loading ? (
+                <Card>
+                  <CardContent className="p-10 flex items-center justify-center">
+                    <Loader2 className="mr-2 h-6 w-6 animate-spin"/> Loading profile...
+                  </CardContent>
+                </Card>
+              ) : renderContent()}
             </div>
           </div>
         </main>
