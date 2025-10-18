@@ -318,8 +318,10 @@ export default function DoctorsPage() {
       const reader = new FileReader();
       reader.onloadend = () => {
         setPhotoPreview(reader.result as string);
+        console.log("DEBUG: Photo preview updated.", { file: file.name, previewUrl: reader.result as string });
       };
       reader.readAsDataURL(file);
+      console.log("DEBUG: handlePhotoChange called with file:", file);
     }
   };
 
@@ -509,12 +511,13 @@ export default function DoctorsPage() {
             toast({ variant: "destructive", title: "Invalid Details", description: "Name, specialty, and department cannot be empty." });
             return;
         }
+        console.log("DEBUG: handleDetailsSave called.");
 
         startTransition(async () => {
             try {
                 let photoUrl = selectedDoctor.avatar;
                 if (newPhoto) {
-                    console.log("New photo file detected for upload:", newPhoto.name);
+                    console.log("DEBUG: New photo file detected for upload:", newPhoto.name);
                     const options = { maxSizeMB: 0.5, maxWidthOrHeight: 800, useWebWorker: true };
                     const compressedFile = await imageCompression(newPhoto, options);
                     const formData = new FormData();
@@ -522,6 +525,7 @@ export default function DoctorsPage() {
                     formData.append('clinicId', selectedDoctor.clinicId);
                     formData.append('userId', auth.currentUser!.uid);
 
+                    console.log("DEBUG: Sending photo to /api/upload-avatar");
                     const response = await fetch('/api/upload-avatar', {
                         method: 'POST',
                         body: formData,
@@ -533,6 +537,7 @@ export default function DoctorsPage() {
                     }
                     const data = await response.json();
                     photoUrl = data.url;
+                    console.log("DEBUG: Photo uploaded. New URL:", photoUrl);
                 }
 
                 const updatedData = {
@@ -544,6 +549,7 @@ export default function DoctorsPage() {
                     avatar: photoUrl,
                 };
                 
+                console.log("DEBUG: Updating Firestore with data:", updatedData);
                 const doctorRef = doc(db, "doctors", selectedDoctor.id);
                 await updateDoc(doctorRef, updatedData);
                 const updatedDoctor = { ...selectedDoctor, ...updatedData };
@@ -1439,3 +1445,4 @@ export default function DoctorsPage() {
     </>
   );
 }
+

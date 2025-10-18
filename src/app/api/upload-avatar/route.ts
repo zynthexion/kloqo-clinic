@@ -74,16 +74,16 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('🚀 Upload API route called');
+    console.log('🚀 API Route: /api/upload-avatar POST request received.');
 
     // Initialize Firebase Admin SDK
     if (getApps().length === 0) {
-      console.log('Initializing Firebase Admin SDK...');
+      console.log('🚀 API Route: Initializing Firebase Admin SDK...');
       initializeApp({
         credential: cert(serviceAccountParams),
         storageBucket: 'kloqo-clinic-multi-33968-4c50b.firebasestorage.app',
       });
-      console.log('✅ Firebase Admin SDK initialized successfully');
+      console.log('✅ API Route: Firebase Admin SDK initialized successfully');
     }
 
     const formData = await request.formData();
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
     const clinicId = formData.get('clinicId') as string;
     const userId = formData.get('userId') as string;
 
-    console.log('📋 Form data received:', {
+    console.log('📋 API Route: Form data received:', {
       hasFile: !!file,
       clinicId,
       userId,
@@ -101,16 +101,17 @@ export async function POST(request: NextRequest) {
     });
 
     if (!file || !clinicId || !userId) {
-      console.error('❌ Missing required fields');
+      console.error('❌ API Route: Missing required fields');
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
     const filePath = `doctor_avatars/${clinicId}/${fileName}`;
+    
+    console.log(`🚀 API Route: Preparing to upload to Firebase Storage at path: ${filePath}`);
 
     try {
-      // Upload to Firebase Storage using the correct bucket format
       const bucket = getStorage().bucket('kloqo-clinic-multi-33968-4c50b.firebasestorage.app');
       const fileRef = bucket.file(filePath);
 
@@ -123,57 +124,39 @@ export async function POST(request: NextRequest) {
           },
         },
       });
+      console.log('✅ API Route: File saved to bucket.');
 
       await fileRef.makePublic();
+      console.log('✅ API Route: File made public.');
+      
+      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
 
-      // Get the signed URL that Firebase generates
-      const [signedUrl] = await fileRef.getSignedUrl({
-        action: 'read',
-        expires: '03-09-2491' // Far future expiration
-      });
+      console.log('✅ API Route: Firebase Storage upload successful');
+      console.log('🔗 Generated public URL:', publicUrl);
 
-      console.log('✅ Firebase Storage upload successful');
-      console.log('🔗 Generated signed URL:', signedUrl);
-
-      // Ensure the signed URL has the required token
-      if (!signedUrl.includes('token=')) {
-        console.error('❌ Signed URL missing authentication token!');
-        throw new Error('Failed to generate authenticated URL for Firebase Storage');
-      }
 
       return NextResponse.json({
-        url: signedUrl,
+        url: publicUrl,
         filePath: filePath,
         bucket: bucket.name
       });
 
     } catch (storageError: any) {
-      console.error('💥 Firebase Storage upload failed:', storageError);
+      console.error('💥 API Route: Firebase Storage upload failed:', storageError);
 
       // Log detailed error information for debugging
-      console.error('🔍 Error details:', {
+      console.error('🔍 API Route: Storage error details:', {
         message: storageError.message,
         code: storageError.code,
         status: storageError.status,
         stack: storageError.stack
       });
 
-      // Fallback to mock URL if Firebase Storage fails
-      const mockUrl = `https://picsum.photos/seed/${file.name}-${Date.now()}/200/200`;
-      console.log('❌ Firebase Storage failed, using mock URL:', mockUrl);
-
-      return NextResponse.json({
-        url: mockUrl,
-        error: storageError.message,
-        note: 'Firebase Storage upload failed, using placeholder URL',
-        firebaseError: true,
-        originalSize: buffer.length,
-        compressedSize: buffer.length
-      }, { status: 200 });
+      return NextResponse.json({ error: `Firebase Storage Error: ${storageError.message}` }, { status: 500 });
     }
 
   } catch (error: any) {
-    console.error('💥 Upload API route error:', error);
+    console.error('💥 API Route: Internal server error:', error);
 
     return NextResponse.json({
       error: 'Internal server error',
