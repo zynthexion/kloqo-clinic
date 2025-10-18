@@ -73,6 +73,7 @@ import { SelectDepartmentDialog } from "@/components/onboarding/select-departmen
 import { useAuth } from "@/firebase";
 import { DepartmentDoctorsDialog } from "@/components/departments/department-doctors-dialog";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const Pregnant = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -117,6 +118,7 @@ export default function DepartmentsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [departmentsPerPage, setDepartmentsPerPage] = useState(8);
+  const [clinicDetails, setClinicDetails] = useState<any>(null);
 
   const filteredDepartments = useMemo(() => {
     return clinicDepartments.filter(department =>
@@ -156,6 +158,7 @@ export default function DepartmentsPage() {
         const clinicDoc = await getDoc(doc(db, "clinics", clinicId));
         if (clinicDoc.exists()) {
           const clinicData = clinicDoc.data();
+          setClinicDetails(clinicData);
           const departmentIds: string[] = clinicData.departments || [];
 
           if (departmentIds.length > 0) {
@@ -353,6 +356,9 @@ export default function DepartmentsPage() {
     (masterDept) => !clinicDepartments.some((clinicDept) => clinicDept.id === masterDept.id)
   );
 
+  const isDepartmentLimitReached = clinicDetails ? clinicDepartments.length >= clinicDetails.numDoctors : false;
+
+
   return (
     <>
       <div className="flex flex-col">
@@ -368,10 +374,23 @@ export default function DepartmentsPage() {
                     onChange={(e) => setSearchTerm(e.target.value)}
                 />
             </div>
-             <Button onClick={() => setIsAddDepartmentOpen(true)}>
-                  <PlusCircle className="mr-2 h-4 w-4" />
-                  Add Department
-              </Button>
+            <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <div className={isDepartmentLimitReached ? "cursor-not-allowed" : ""}>
+                            <Button onClick={() => setIsAddDepartmentOpen(true)} disabled={isDepartmentLimitReached}>
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                Add Department
+                            </Button>
+                        </div>
+                    </TooltipTrigger>
+                    {isDepartmentLimitReached && (
+                        <TooltipContent>
+                            <p>Department limit reached. Go to Profile &gt; Clinic Details to increase the limit.</p>
+                        </TooltipContent>
+                    )}
+                </Tooltip>
+            </TooltipProvider>
         </header>
         <main className="flex-1 p-4 sm:p-6 flex flex-col">
           <div className="grid flex-grow grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
@@ -417,6 +436,8 @@ export default function DepartmentsPage() {
             setIsOpen={setIsAddDepartmentOpen}
             departments={availableMasterDepartments}
             onDepartmentsSelect={handleSaveDepartments}
+            limit={clinicDetails?.numDoctors}
+            currentCount={clinicDepartments.length}
         />
 
         <AlertDialog open={!!deletingDepartment} onOpenChange={(open) => !open && setDeletingDepartment(null)}>
