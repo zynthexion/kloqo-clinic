@@ -38,28 +38,30 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
   const isMobileNumberValid = !errors.mobileNumber && mobileNumber?.length === 10;
 
   useEffect(() => {
-    if (!recaptchaContainerRef.current) return;
-
-    // Ensure we only create one instance of RecaptchaVerifier
-    if (!window.recaptchaVerifier) {
-      const verifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
-        size: 'invisible',
-        callback: () => {
-          // reCAPTCHA solved
-        },
-      });
-      window.recaptchaVerifier = verifier;
-      verifier.render().catch((err) => {
-        console.error("reCAPTCHA render error on mount:", err);
-      });
+    // This effect ensures the reCAPTCHA verifier is set up and cleaned up properly.
+    if (recaptchaContainerRef.current) {
+        // Only initialize if it hasn't been already
+        if (!window.recaptchaVerifier) {
+            const verifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
+                'size': 'invisible',
+                'callback': () => {
+                    // reCAPTCHA solved, allow signInWithPhoneNumber.
+                }
+            });
+            window.recaptchaVerifier = verifier;
+            verifier.render().catch((error) => {
+                console.error("reCAPTCHA render error:", error);
+                setCaptchaFailed(true);
+            });
+        }
     }
 
-    // Cleanup on unmount
+    // Cleanup function to run when the component unmounts
     return () => {
-      if (window.recaptchaVerifier) {
-        window.recaptchaVerifier.clear();
-        // Do not set to undefined, let the next mount handle it
-      }
+        if (window.recaptchaVerifier) {
+            // Using .clear() is the official way to dismantle the widget.
+            window.recaptchaVerifier.clear();
+        }
     };
   }, []);
 
@@ -75,10 +77,12 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
       toast({ title: "OTP Sent", description: "An OTP has been sent to your mobile number." });
     } catch (error: any) {
       console.error("Error sending OTP:", error);
-      // It's possible the verifier needs to be re-rendered on error.
-      // This is a common pattern for solving expired/used-up verifiers.
+      
+      // Reset reCAPTCHA on error. This is a common solution for many auth/internal-error cases.
       if (window.recaptchaVerifier) {
-        window.recaptchaVerifier.render().catch(console.error);
+        window.recaptchaVerifier.render().catch((renderError) => {
+            console.error("reCAPTCHA re-render failed:", renderError);
+        });
       }
 
       if (error.code === 'auth/captcha-check-failed') {
@@ -101,7 +105,7 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
           toast({
             variant: "destructive",
             title: "Failed to Send OTP",
-            description: "Please check the mobile number or try again.",
+            description: "Please check the mobile number or try again. If the problem persists, refresh the page.",
           });
       }
     } finally {
