@@ -437,7 +437,7 @@ export default function ProfilePage() {
                             <form onSubmit={clinicForm.handleSubmit(onClinicSubmit)}>
                                 <CardContent className="space-y-4">
                                     <FormField control={clinicForm.control} name="name" render={({ field }) => (
-                                        <FormItem><FormLabel>Clinic Name</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
+                                        <FormItem><FormLabel>Clinic Name</FormLabel><FormControl><Input {...field} value={field.value || ''} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
                                     )}/>
                                     <FormField control={clinicForm.control} name="type" render={({ field }) => (
                                         <FormItem><FormLabel>Clinic Type</FormLabel>
@@ -460,6 +460,10 @@ export default function ProfilePage() {
                                                   {...field}
                                                   disabled={!isEditingClinic || !isMultiDoctorClinic || isPending}
                                                   min={currentDoctorCount}
+                                                  onChange={(e) => {
+                                                    const value = parseInt(e.target.value, 10);
+                                                    field.onChange(isNaN(value) ? 0 : value);
+                                                  }}
                                               />
                                           </FormControl>
                                           <FormDescription className="text-xs">
@@ -472,7 +476,7 @@ export default function ProfilePage() {
                                         <FormItem><FormLabel>Clinic Registration Number</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
                                     )}/>
                                     <FormField control={clinicForm.control} name="address" render={({ field }) => (
-                                        <FormItem><FormLabel>Address</FormLabel><FormControl><Textarea {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
+                                        <FormItem><FormLabel>Address</FormLabel><FormControl><Textarea {...field} value={field.value || ''} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
                                     )}/>
                                     <FormField control={clinicForm.control} name="mapsLink" render={({ field }) => (
                                         <FormItem><FormLabel>Google Maps Link</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
