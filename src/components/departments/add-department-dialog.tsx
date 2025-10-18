@@ -1,6 +1,7 @@
 
 "use client";
 
+import * as React from "react";
 import { useState, useTransition, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -27,7 +28,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { doc, setDoc, collection, getDoc, getDocs, query, where } from "firebase/firestore";
+import { doc, setDoc, collection, getDoc, getDocs, query, where, updateDoc, arrayUnion } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Department } from "@/lib/types";
 import { useAuth } from "@/firebase";
