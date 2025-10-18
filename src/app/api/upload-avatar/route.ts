@@ -15,16 +15,12 @@ const serviceAccountParams = {
 
 export async function GET() {
   try {
-    console.log('🧪 Testing Firebase Storage bucket...');
-
     // Initialize Firebase Admin SDK
     if (getApps().length === 0) {
-      console.log('Initializing Firebase Admin SDK for bucket test...');
       initializeApp({
         credential: cert(serviceAccountParams),
         storageBucket: 'kloqo-clinic-multi-33968-4c50b.firebasestorage.app',
       });
-      console.log('✅ Firebase Admin SDK initialized successfully');
     }
 
     // Test bucket access
@@ -33,9 +29,6 @@ export async function GET() {
     // Try to list files (this will fail if bucket doesn't exist)
     try {
       const [files] = await bucket.getFiles({ maxResults: 1 });
-      console.log('✅ Firebase Storage bucket exists and is accessible');
-      console.log('📁 Bucket name:', bucket.name);
-      console.log('📊 Files in bucket:', files.length);
 
       return NextResponse.json({
         success: true,
@@ -46,8 +39,6 @@ export async function GET() {
       });
 
     } catch (bucketError: any) {
-      console.error('❌ Bucket test failed:', bucketError.message);
-
       if (bucketError.message?.includes('does not exist')) {
         return NextResponse.json({
           success: false,
@@ -61,8 +52,6 @@ export async function GET() {
     }
 
   } catch (error: any) {
-    console.error('💥 Bucket test error:', error);
-
     return NextResponse.json({
       success: false,
       error: 'Test failed',
@@ -74,16 +63,12 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('🚀 API Route: /api/upload-avatar POST request received.');
-
     // Initialize Firebase Admin SDK
     if (getApps().length === 0) {
-      console.log('🚀 API Route: Initializing Firebase Admin SDK...');
       initializeApp({
         credential: cert(serviceAccountParams),
         storageBucket: 'kloqo-clinic-multi-33968-4c50b.firebasestorage.app',
       });
-      console.log('✅ API Route: Firebase Admin SDK initialized successfully');
     }
 
     const formData = await request.formData();
@@ -91,17 +76,7 @@ export async function POST(request: NextRequest) {
     const clinicId = formData.get('clinicId') as string;
     const userId = formData.get('userId') as string;
 
-    console.log('📋 API Route: Form data received:', {
-      hasFile: !!file,
-      clinicId,
-      userId,
-      fileName: file?.name,
-      fileSize: file?.size,
-      fileType: file?.type
-    });
-
     if (!file || !clinicId || !userId) {
-      console.error('❌ API Route: Missing required fields');
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
@@ -109,8 +84,6 @@ export async function POST(request: NextRequest) {
     const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
     const filePath = `doctor_avatars/${clinicId}/${fileName}`;
     
-    console.log(`🚀 API Route: Preparing to upload to Firebase Storage at path: ${filePath}`);
-
     try {
       const bucket = getStorage().bucket('kloqo-clinic-multi-33968-4c50b.firebasestorage.app');
       const fileRef = bucket.file(filePath);
@@ -124,16 +97,10 @@ export async function POST(request: NextRequest) {
           },
         },
       });
-      console.log('✅ API Route: File saved to bucket.');
 
       await fileRef.makePublic();
-      console.log('✅ API Route: File made public.');
       
       const publicUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
-
-      console.log('✅ API Route: Firebase Storage upload successful');
-      console.log('🔗 Generated public URL:', publicUrl);
-
 
       return NextResponse.json({
         url: publicUrl,
@@ -142,22 +109,10 @@ export async function POST(request: NextRequest) {
       });
 
     } catch (storageError: any) {
-      console.error('💥 API Route: Firebase Storage upload failed:', storageError);
-
-      // Log detailed error information for debugging
-      console.error('🔍 API Route: Storage error details:', {
-        message: storageError.message,
-        code: storageError.code,
-        status: storageError.status,
-        stack: storageError.stack
-      });
-
       return NextResponse.json({ error: `Firebase Storage Error: ${storageError.message}` }, { status: 500 });
     }
 
   } catch (error: any) {
-    console.error('💥 API Route: Internal server error:', error);
-
     return NextResponse.json({
       error: 'Internal server error',
       message: error.message || 'An unknown error occurred',
