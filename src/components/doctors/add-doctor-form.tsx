@@ -17,6 +17,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -378,6 +379,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
         const photoFile = form.getValues('photo');
 
         if (photoFile instanceof File) {
+            console.log("New photo file detected:", photoFile.name, `(${(photoFile.size / 1024).toFixed(2)} KB)`);
             try {
                 const options = {
                     maxSizeMB: 0.5,
@@ -385,13 +387,16 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
                     useWebWorker: true,
                 };
 
+                console.log("Compressing image...");
                 const compressedFile = await imageCompression(photoFile, options);
+                console.log("Image compressed:", compressedFile.name, `(${(compressedFile.size / 1024).toFixed(2)} KB)`);
                 
                 const formData = new FormData();
                 formData.append('file', compressedFile);
                 formData.append('clinicId', clinicId);
                 formData.append('userId', auth.currentUser.uid);
 
+                console.log("Uploading image via API...");
                 const response = await fetch('/api/upload-avatar', {
                     method: 'POST',
                     body: formData,
@@ -404,6 +409,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
 
                 const data = await response.json();
                 photoUrl = data.url;
+                console.log("File uploaded successfully. URL:", photoUrl);
                 
             } catch (uploadError: any) {
                 console.error("Upload error:", uploadError);
@@ -473,6 +479,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    console.log("File selected:", file);
     if (file) {
       if (!file.type.startsWith('image/')) {
         toast({
@@ -494,6 +501,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
 
       form.setValue('photo', file);
       const previewUrl = URL.createObjectURL(file);
+      console.log("Generated preview URL:", previewUrl);
       setPhotoPreview(previewUrl);
     }
   };
@@ -917,3 +925,5 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
     </>
   );
 }
+
+    
