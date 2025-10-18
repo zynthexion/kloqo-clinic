@@ -143,7 +143,7 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
             <FormItem>
               <FormLabel>Owner / Admin Name <span className="text-destructive">*</span></FormLabel>
               <FormControl>
-                <Input placeholder="Dr. Asha Varma" {...field} />
+                <Input placeholder="e.g., Asha Varma" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
