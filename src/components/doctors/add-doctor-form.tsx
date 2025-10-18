@@ -628,6 +628,14 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
                         </FormLabel>
                         <Select onValueChange={(value) => {
                             if (value === 'add_new') {
+                                if (isDepartmentLimitReached) {
+                                    toast({
+                                        variant: "destructive",
+                                        title: "Department Limit Reached",
+                                        description: "Please upgrade your plan to add more departments.",
+                                    });
+                                    return;
+                                }
                                 setIsSelectDepartmentOpen(true);
                             } else {
                                 field.onChange(value);
@@ -645,25 +653,12 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
                               </SelectItem>
                             ))}
                             <Separator />
-                            <TooltipProvider>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <div className={isDepartmentLimitReached ? "opacity-50 cursor-not-allowed" : ""}>
-                                            <SelectItem value="add_new" className="text-primary focus:bg-primary/10 focus:text-primary" disabled={isDepartmentLimitReached}>
-                                                <div className="flex items-center gap-2">
-                                                    <PlusCircleIcon className="h-4 w-4" />
-                                                    Add New Department
-                                                </div>
-                                            </SelectItem>
-                                        </div>
-                                    </TooltipTrigger>
-                                    {isDepartmentLimitReached && (
-                                        <TooltipContent>
-                                            <p>Department limit reached. Upgrade your plan to add more.</p>
-                                        </TooltipContent>
-                                    )}
-                                </Tooltip>
-                            </TooltipProvider>
+                            <SelectItem value="add_new" className="text-primary focus:bg-primary/10 focus:text-primary">
+                                <div className="flex items-center gap-2">
+                                    <PlusCircleIcon className="h-4 w-4" />
+                                    Add New Department
+                                </div>
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -925,5 +920,3 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
     </>
   );
 }
-
-    
