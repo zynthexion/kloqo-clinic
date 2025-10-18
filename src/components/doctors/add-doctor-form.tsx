@@ -44,6 +44,7 @@ import { useAuth } from "@/firebase";
 import { setDoc, doc, getDoc, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import imageCompression from "browser-image-compression";
+import { Textarea } from "../ui/textarea";
 
 const timeSlotSchema = z.object({
   from: z.string().min(1, "Required"),
@@ -185,24 +186,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 
   const watchedAvailabilitySlots = form.watch('availabilitySlots');
 
-  // Debug form validation state (only when fields lose focus now)
-  useEffect(() => {
-    console.log('🔘 Button State Check:', {
-      isPending,
-      formIsValid: form.formState.isValid,
-      buttonEnabled: !isPending && form.formState.isValid,
-      formErrors: form.formState.errors,
-      formValues: form.getValues()
-    });
-  }, [isPending, form.formState.isValid, form.formState.errors, form]);
-
   const applySharedSlotsToSelectedDays = () => {
-    console.log('🎯 Apply Slots Called:', {
-      selectedDays,
-      sharedTimeSlots,
-      validSharedTimeSlots: sharedTimeSlots.filter(ts => ts.from && ts.to)
-    });
-
     if (selectedDays.length === 0) {
         toast({
             variant: "destructive",
@@ -257,34 +241,29 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
       }
 
       try {
-        await auth.currentUser.reload();
-
-        // Check doctor limit before proceeding
-        const clinicDocRef = doc(db, "clinics", clinicId);
-        const clinicDocSnap = await getDoc(clinicDocRef);
-
-        if (clinicDocSnap.exists()) {
-          const clinicData = clinicDocSnap.data();
-          const maxDoctors = clinicData.numDoctors || 1;
-
-          // Count existing doctors in this clinic
-          const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
-          const doctorsSnapshot = await getDocs(doctorsQuery);
-          const currentDoctorCount = doctorsSnapshot.size;
-
-          // If editing, don't count the current doctor being edited
-          const effectiveCount = isEditMode && doctor ? currentDoctorCount : currentDoctorCount;
-
-          if (effectiveCount >= maxDoctors) {
-            toast({
-              variant: "destructive",
-              title: "Doctor Limit Exceeded",
-              description: `Your clinic is limited to ${maxDoctors} doctor${maxDoctors === 1 ? '' : 's'}. Please upgrade your plan or contact support to add more doctors.`,
-            });
-            return;
-          }
+        if (!isEditMode) {
+            const clinicDocRef = doc(db, "clinics", clinicId);
+            const clinicDocSnap = await getDoc(clinicDocRef);
+    
+            if (clinicDocSnap.exists()) {
+              const clinicData = clinicDocSnap.data();
+              const maxDoctors = clinicData.maxDoctors || 1;
+              const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
+              const doctorsSnapshot = await getDocs(doctorsQuery);
+              const currentDoctorCount = doctorsSnapshot.size;
+    
+              if (currentDoctorCount >= maxDoctors) {
+                toast({
+                  variant: "destructive",
+                  title: "Doctor Limit Reached",
+                  description: `Your plan allows for ${maxDoctors} doctor(s). To add more, please upgrade your plan.`,
+                  duration: 6000
+                });
+                return;
+              }
+            }
         }
-
+        
         let photoUrl = doctor?.avatar || `https://picsum.photos/seed/new-doc-${Date.now()}/100/100`;
         const photoFile = form.getValues('photo');
 
@@ -301,7 +280,6 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                 const compressedFile = await imageCompression(photoFile, options);
                 console.log("Image compressed:", compressedFile.name, `(${(compressedFile.size / 1024).toFixed(2)} KB)`);
 
-                // Upload via API route instead of direct Firebase
                 const formData = new FormData();
                 formData.append('file', compressedFile);
                 formData.append('clinicId', clinicId);
@@ -319,20 +297,19 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 
                 const data = await response.json();
                 photoUrl = data.url;
-                console.log("✅ File uploaded successfully via API. URL:", photoUrl.substring(0, 80) + '...');
-
+                console.log("File uploaded successfully via API. URL:", photoUrl);
+                
                 if (data.firebaseError) {
-                  console.warn("⚠️ Firebase upload failed, using fallback URL");
+                  console.warn("Firebase upload failed, using fallback URL");
                 }
-
             } catch (uploadError: any) {
                 console.error("Upload error:", uploadError);
-                console.log(uploadError.message);
                 toast({
                     variant: "destructive",
                     title: "Upload Failed",
                     description: uploadError.message,
                 });
+                console.log(uploadError.message);
                 return;
             }
         }
@@ -372,29 +349,6 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 
         await setDoc(doc(db, "doctors", docId), doctorToSave, { merge: true });
 
-        // Update the clinic's current doctor count
-        const clinicDocRef2 = doc(db, "clinics", clinicId);
-        const clinicDocSnap2 = await getDoc(clinicDocRef2);
-
-        if (clinicDocSnap2.exists()) {
-          const currentCount = clinicDocSnap2.data().currentDoctorCount || 0;
-          await updateDoc(clinicDocRef2, {
-            currentDoctorCount: currentCount + 1
-          });
-        }
-
-        // Log activity for new doctor
-        try {
-          const { addActivity } = await import('@/components/dashboard/recent-activity');
-          await addActivity(
-            'doctor_added',
-            `Dr. ${values.name} added to ${values.department} department`,
-            { doctorId: docId, department: values.department }
-          );
-        } catch (activityError) {
-          console.error('Failed to log doctor addition activity:', activityError);
-        }
-
         onSave(doctorToSave);
         setIsOpen(false);
         form.reset();
@@ -418,7 +372,6 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Validate file type
       if (!file.type.startsWith('image/')) {
         toast({
           variant: "destructive",
@@ -428,7 +381,6 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         return;
       }
 
-      // Validate file size (5MB limit)
       if (file.size > 5 * 1024 * 1024) {
         toast({
           variant: "destructive",
@@ -438,10 +390,8 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         return;
       }
 
-      // Update form value
       form.setValue('photo', file);
 
-      // Create preview
       const reader = new FileReader();
       reader.onloadend = () => {
         setPhotoPreview(reader.result as string);
@@ -456,7 +406,6 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         if (!open) {
             form.reset();
             setPhotoPreview(null);
-            // Reset file input
             const fileInput = document.getElementById('photo-upload') as HTMLInputElement;
             if (fileInput) fileInput.value = '';
         }
@@ -755,23 +704,6 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
               <Button
                 type="submit"
                 disabled={isPending || !form.formState.isValid}
-                onClick={() => {
-                  console.log('🚀 Submit Button Clicked:', {
-                    isPending,
-                    formIsValid: form.formState.isValid,
-                    buttonEnabled: !isPending && form.formState.isValid,
-                    formErrors: form.formState.errors,
-                    formValues: form.getValues()
-                  });
-
-                  // If button is disabled, show why
-                  if (isPending) {
-                    console.log('❌ Button disabled: Form is submitting');
-                  }
-                  if (!form.formState.isValid) {
-                    console.log('❌ Button disabled: Form validation failed', form.formState.errors);
-                  }
-                }}
               >
                 {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {isEditMode ? "Save Changes" : "Save Doctor"}
@@ -783,3 +715,5 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
     </Dialog>
   );
 }
+
+    

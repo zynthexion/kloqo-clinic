@@ -152,3 +152,5 @@ export type User = {
     onboarded?: boolean;
     role?: 'clinicAdmin';
 }
+
+    
