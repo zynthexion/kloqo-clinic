@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -152,7 +153,7 @@ export default function ProfilePage() {
               const clinicData = clinicDocSnap.data();
               setClinicDetails(clinicData);
               clinicForm.reset({
-                name: clinicData.name || '',
+                name: clinicData.name,
                 type: clinicData.type,
                 numDoctors: clinicData.numDoctors,
                 clinicRegNumber: clinicData.clinicRegNumber || '',
@@ -699,5 +700,3 @@ export default function ProfilePage() {
     </>
   );
 }
-
-    
