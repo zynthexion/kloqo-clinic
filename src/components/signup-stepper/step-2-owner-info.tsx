@@ -38,18 +38,29 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
   const isMobileNumberValid = !errors.mobileNumber && mobileNumber?.length === 10;
 
   useEffect(() => {
-    if (recaptchaContainerRef.current && !window.recaptchaVerifier) {
-        window.recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
-            'size': 'invisible',
-            'callback': () => {
-                // reCAPTCHA solved
-            }
-        });
-        window.recaptchaVerifier.render().catch((err) => {
-            console.error("reCAPTCHA render error:", err);
-        });
+    if (!window.recaptchaVerifier && recaptchaContainerRef.current) {
+      window.recaptchaVerifier = new RecaptchaVerifier(
+        auth,
+        recaptchaContainerRef.current,
+        {
+          size: 'invisible',
+          callback: () => {
+            // reCAPTCHA solved, allow signInWithPhoneNumber.
+          },
+        }
+      );
+      window.recaptchaVerifier.render().catch((err) => {
+        console.error("reCAPTCHA render error:", err);
+      });
     }
-  }, [recaptchaContainerRef]);
+
+    return () => {
+      if (window.recaptchaVerifier) {
+        window.recaptchaVerifier.clear();
+        window.recaptchaVerifier = undefined;
+      }
+    };
+  }, []);
 
   const handleSendOtp = async () => {
     if (!isMobileNumberValid || !window.recaptchaVerifier) return;
