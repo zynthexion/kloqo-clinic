@@ -147,8 +147,10 @@ export default function ProfilePage() {
           });
   
           if (userData.clinicId) {
-            const clinicDocRef = doc(db, "clinics", userData.clinicId);
+            const clinicId = userData.clinicId;
+            const clinicDocRef = doc(db, "clinics", clinicId);
             const clinicDocSnap = await getDoc(clinicDocRef);
+            
             if (clinicDocSnap.exists()) {
               const clinicData = clinicDocSnap.data();
               setClinicDetails(clinicData);
@@ -164,12 +166,12 @@ export default function ProfilePage() {
                 hours: clinicData.operatingHours,
               });
   
-              const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", userData.clinicId));
+              const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
               const doctorsSnapshot = await getDocs(doctorsQuery);
               setCurrentDoctorCount(doctorsSnapshot.size);
             }
   
-            const credsQuery = query(collection(db, "mobile-app"), where("clinicId", "==", userData.clinicId));
+            const credsQuery = query(collection(db, "mobile-app"), where("clinicId", "==", clinicId));
             const credsSnapshot = await getDocs(credsQuery);
             if (!credsSnapshot.empty) {
               const credsData = credsSnapshot.docs[0].data() as MobileApp;
@@ -191,7 +193,7 @@ export default function ProfilePage() {
       }
     };
     fetchAllData();
-  }, [auth.currentUser, toast, profileForm, clinicForm, hoursForm, mobileAppForm]);
+  }, [auth.currentUser, toast]);
 
   const onMobileAppSubmit = async (values: MobileAppFormValues) => {
     if (!userProfile?.clinicId) {
