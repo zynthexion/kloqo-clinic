@@ -65,6 +65,7 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, Di
 import { FirestorePermissionError } from "@/firebase/errors";
 import { errorEmitter } from "@/firebase/error-emitter";
 import Link from "next/link";
+import { SendLinkDialog } from "@/components/appointments/send-link-dialog";
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -111,7 +112,6 @@ export default function AppointmentsPage() {
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [primaryPatient, setPrimaryPatient] = useState<Patient | null>(null);
   const [isPending, startTransition] = useTransition();
-  const [isSendingSms, startSmsTransition] = useTransition();
   const [drawerSearchTerm, setDrawerSearchTerm] = useState("");
   const [selectedDrawerDoctor, setSelectedDrawerDoctor] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("upcoming");
@@ -125,6 +125,7 @@ export default function AppointmentsPage() {
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
   const [walkInEstimate, setWalkInEstimate] = useState<WalkInEstimate>(null);
   const [isCalculatingEstimate, setIsCalculatingEstimate] = useState(false);
+  const [isSendLinkDialogOpen, setIsSendLinkDialogOpen] = useState(false);
 
   const { toast } = useToast();
   const isEditing = !!editingAppointment;
@@ -638,47 +639,6 @@ export default function AppointmentsPage() {
     });
   }
 
-  const handleSendTestSms = () => {
-    if (patientSearchTerm.length < 10) {
-      toast({
-        variant: "destructive",
-        title: "Invalid Phone Number",
-        description: "Please enter a valid 10-digit phone number in the search box first.",
-      });
-      return;
-    }
-  
-    startSmsTransition(async () => {
-      try {
-        const response = await fetch('/api/send-sms', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            to: `+91${patientSearchTerm}`,
-            message: "This is a test message from your Kloqo clinic setup.",
-          }),
-        });
-  
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to send SMS.');
-        }
-  
-        toast({
-          title: "SMS Sent Successfully",
-          description: `Test message sent to +91${patientSearchTerm}.`,
-        });
-      } catch (error: any) {
-        console.error("Error sending SMS:", error);
-        toast({
-          variant: "destructive",
-          title: "Failed to Send SMS",
-          description: error.message || "An error occurred. Please check server logs.",
-        });
-      }
-    });
-  };
-
   const handleCancel = (appointment: Appointment) => {
     startTransition(async () => {
       try {
@@ -1056,10 +1016,10 @@ export default function AppointmentsPage() {
                           <FormMessage />
                         </FormItem>
                         <div className="flex justify-end">
-                          <Button type="button" variant="secondary" onClick={handleSendTestSms} disabled={isSendingSms || patientSearchTerm.length < 10}>
-                            {isSendingSms ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-                            Send Test SMS
-                          </Button>
+                            <Button type="button" variant="secondary" onClick={() => setIsSendLinkDialogOpen(true)} disabled={patientSearchTerm.length < 10}>
+                                <LinkIcon className="mr-2 h-4 w-4" />
+                                Send Booking Link
+                            </Button>
                         </div>
                       </div>
                       
@@ -1612,6 +1572,11 @@ export default function AppointmentsPage() {
         </DialogContent>
       </Dialog>
       <WeeklyDoctorAvailability />
+      <SendLinkDialog
+        isOpen={isSendLinkDialogOpen}
+        setIsOpen={setIsSendLinkDialogOpen}
+        phoneNumber={patientSearchTerm}
+      />
     </>
   );
 }
