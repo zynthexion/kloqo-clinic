@@ -38,53 +38,43 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
   const isMobileNumberValid = !errors.mobileNumber && mobileNumber?.length === 10;
 
   useEffect(() => {
-    // This effect ensures the reCAPTCHA verifier is set up and cleaned up properly.
-    if (recaptchaContainerRef.current) {
-        // Only initialize if it hasn't been already
-        if (!window.recaptchaVerifier) {
-            const verifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
-                'size': 'invisible',
-                'callback': () => {
-                    // reCAPTCHA solved, allow signInWithPhoneNumber.
-                }
-            });
-            window.recaptchaVerifier = verifier;
-            verifier.render().catch((error) => {
-                console.error("reCAPTCHA render error:", error);
-                setCaptchaFailed(true);
-            });
-        }
+    if (recaptchaContainerRef.current && !window.recaptchaVerifier) {
+      const verifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
+        size: 'invisible',
+        callback: () => {
+          // reCAPTCHA solved
+        },
+      });
+      window.recaptchaVerifier = verifier;
     }
-
-    // Cleanup function to run when the component unmounts
+    
     return () => {
         if (window.recaptchaVerifier) {
-            // Using .clear() is the official way to dismantle the widget.
             window.recaptchaVerifier.clear();
+            window.recaptchaVerifier = undefined;
         }
     };
   }, []);
 
   const handleSendOtp = async () => {
     if (!isMobileNumberValid || !window.recaptchaVerifier) return;
+    
     setIsSending(true);
     setCaptchaFailed(false);
     const fullNumber = `+91${mobileNumber}`;
+    
     try {
-      const confirmationResult = await signInWithPhoneNumber(auth, fullNumber, window.recaptchaVerifier);
+      const appVerifier = window.recaptchaVerifier;
+      // Ensure the verifier is rendered before use
+      await appVerifier.render(); 
+      const confirmationResult = await signInWithPhoneNumber(auth, fullNumber, appVerifier);
+      
       window.confirmationResult = confirmationResult;
       setOtpSent(true);
       toast({ title: "OTP Sent", description: "An OTP has been sent to your mobile number." });
     } catch (error: any) {
       console.error("Error sending OTP:", error);
       
-      // Reset reCAPTCHA on error. This is a common solution for many auth/internal-error cases.
-      if (window.recaptchaVerifier) {
-        window.recaptchaVerifier.render().catch((renderError) => {
-            console.error("reCAPTCHA re-render failed:", renderError);
-        });
-      }
-
       if (error.code === 'auth/captcha-check-failed') {
           setCaptchaFailed(true);
           toast({
@@ -165,7 +155,7 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
             <FormItem>
               <FormLabel>Owner / Admin Name <span className="text-destructive">*</span></FormLabel>
               <FormControl>
-                <Input placeholder="e.g., Asha Varma" {...field} />
+                <Input placeholder="Asha Varma" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
