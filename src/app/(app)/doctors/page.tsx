@@ -29,7 +29,7 @@ import { db, storage } from "@/lib/firebase";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import type { Doctor, Appointment, LeaveSlot, Department, TimeSlot } from "@/lib/types";
 import { format, parse, isSameDay, getDay, parse as parseDateFns } from "date-fns";
-import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon, PlusCircle, DollarSign, Printer, FileDown, ChevronUp, ChevronDown, Minus, Trophy, Repeat, CalendarCheck } from "lucide-react";
+import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon, PlusCircle, DollarSign, Printer, FileDown, ChevronUp, ChevronDown, Minus, Trophy, Repeat, CalendarCheck, Upload } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -61,6 +61,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/firebase";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import imageCompression from 'browser-image-compression';
 
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -175,6 +176,9 @@ export default function DoctorsPage() {
   const [newDepartment, setNewDepartment] = useState("");
   const [newExperience, setNewExperience] = useState<number | string>("");
   const [newRegistrationNumber, setNewRegistrationNumber] = useState("");
+  const [newPhoto, setNewPhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+
 
   const [isEditingAvailability, setIsEditingAvailability] = useState(false);
   
@@ -292,6 +296,8 @@ export default function DoctorsPage() {
       setNewDepartment(selectedDoctor.department || "");
       setNewExperience(selectedDoctor.experience || 0);
       setNewRegistrationNumber(selectedDoctor.registrationNumber || "");
+      setPhotoPreview(selectedDoctor.avatar);
+      setNewPhoto(null);
       form.reset({
         availabilitySlots: selectedDoctor.availabilitySlots || [],
       });
@@ -304,6 +310,19 @@ export default function DoctorsPage() {
       setIsEditingBooking(false);
     }
   }, [selectedDoctor, appointments, form]);
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setNewPhoto(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPhotoPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
 
   const handleEditAvailability = () => {
     if (!selectedDoctor) return;
@@ -485,27 +504,55 @@ export default function DoctorsPage() {
     };
 
     const handleDetailsSave = async () => {
-        if (!selectedDoctor) return;
+        if (!selectedDoctor || !auth.currentUser) return;
         if (newName.trim() === "" || newSpecialty.trim() === "" || newDepartment.trim() === "") {
             toast({ variant: "destructive", title: "Invalid Details", description: "Name, specialty, and department cannot be empty." });
             return;
         }
 
         startTransition(async () => {
-            const doctorRef = doc(db, "doctors", selectedDoctor.id);
             try {
-                const updatedData = { 
+                let photoUrl = selectedDoctor.avatar;
+                if (newPhoto) {
+                    console.log("New photo file detected for upload:", newPhoto.name);
+                    const options = { maxSizeMB: 0.5, maxWidthOrHeight: 800, useWebWorker: true };
+                    const compressedFile = await imageCompression(newPhoto, options);
+                    const formData = new FormData();
+                    formData.append('file', compressedFile);
+                    formData.append('clinicId', selectedDoctor.clinicId);
+                    formData.append('userId', auth.currentUser!.uid);
+
+                    const response = await fetch('/api/upload-avatar', {
+                        method: 'POST',
+                        body: formData,
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Upload failed');
+                    }
+                    const data = await response.json();
+                    photoUrl = data.url;
+                }
+
+                const updatedData = {
                     name: newName,
                     specialty: newSpecialty,
                     department: newDepartment,
                     experience: Number(newExperience),
                     registrationNumber: newRegistrationNumber,
+                    avatar: photoUrl,
                 };
+                
+                const doctorRef = doc(db, "doctors", selectedDoctor.id);
                 await updateDoc(doctorRef, updatedData);
                 const updatedDoctor = { ...selectedDoctor, ...updatedData };
+                
                 setSelectedDoctor(updatedDoctor);
                 setDoctors(prev => prev.map(d => d.id === selectedDoctor.id ? updatedDoctor : d));
+                setNewPhoto(null);
                 setIsEditingDetails(false);
+
                 toast({
                     title: "Doctor Details Updated",
                     description: `Dr. ${newName}'s details have been updated.`,
@@ -855,14 +902,22 @@ export default function DoctorsPage() {
             <div className="bg-primary text-primary-foreground rounded-lg p-4 grid grid-cols-[auto,1fr,1fr,auto] items-start gap-6 mb-6">
                 {/* Column 1: Image and Basic Info */}
                 <div className="flex items-center gap-4">
-                    <Image
-                        src={selectedDoctor.avatar}
-                        alt={selectedDoctor.name}
-                        width={112}
-                        height={112}
-                        className="rounded-md object-cover"
-                        data-ai-hint="doctor portrait"
-                    />
+                    <div className="relative group">
+                        <Image
+                            src={photoPreview || selectedDoctor.avatar}
+                            alt={selectedDoctor.name}
+                            width={112}
+                            height={112}
+                            className="rounded-md object-cover"
+                            data-ai-hint="doctor portrait"
+                        />
+                         {isEditingDetails && (
+                            <label htmlFor="photo-upload" className="absolute inset-0 bg-black/50 flex items-center justify-center text-white rounded-md cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Upload className="h-6 w-6" />
+                            </label>
+                        )}
+                        <input type="file" id="photo-upload" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+                    </div>
                     <div className="space-y-1">
                         {isEditingDetails ? (
                            <>
@@ -962,7 +1017,7 @@ export default function DoctorsPage() {
                     )}
                      {isEditingDetails && (
                         <div className="flex items-center gap-2">
-                            <Button size="sm" variant="ghost" className="text-white hover:bg-white/20" onClick={() => {setIsEditingDetails(false); /* reset logic handled in useEffect */}} disabled={isPending}>Cancel</Button>
+                            <Button size="sm" variant="ghost" className="text-white hover:bg-white/20" onClick={() => {setIsEditingDetails(false); setPhotoPreview(selectedDoctor.avatar); setNewPhoto(null);}} disabled={isPending}>Cancel</Button>
                             <Button size="sm" className="bg-white text-primary hover:bg-white/90" onClick={handleDetailsSave} disabled={isPending}>
                                 {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />}
                                 Save
