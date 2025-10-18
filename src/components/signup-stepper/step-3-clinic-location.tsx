@@ -10,15 +10,20 @@ import { Loader2, MapPin } from 'lucide-react';
 import { Input } from '../ui/input';
 
 export function Step3ClinicLocation() {
-  const { control, watch, setValue } = useFormContext<SignUpFormData>();
+  const { control, watch, setValue, getValues } = useFormContext<SignUpFormData>();
   const latitude = watch('latitude');
   const longitude = watch('longitude');
   const [isAutoFilling, setIsAutoFilling] = useState(false);
-  const [locationAutoFilled, setLocationAutoFilled] = useState(false);
+  // Use a state that checks if the relevant form fields are already filled to prevent re-fetching
+  const [locationAutoFilled, setLocationAutoFilled] = useState(() => {
+    const values = getValues();
+    return !!(values.addressLine1 || values.city || values.pincode);
+  });
   const { toast } = useToast();
 
   useEffect(() => {
     const autoFillFromLocation = async () => {
+      // Only run if coordinates are present and we haven't already filled the form
       if (latitude && longitude && latitude !== 0 && longitude !== 0 && !locationAutoFilled) {
         setIsAutoFilling(true);
         try {
@@ -28,10 +33,13 @@ export function Step3ClinicLocation() {
           const data = await response.json();
           
           if (data && data.address) {
-            const { road, neighbourhood, city, town, village, county, state_district, state, postcode, country } = data.address;
+            const { road, house_number, neighbourhood, suburb, city, town, village, county, state_district, state, postcode } = data.address;
             
-            setValue('addressLine1', `${road || ''}`, { shouldValidate: true });
-            setValue('addressLine2', `${neighbourhood || ''}`, { shouldValidate: true });
+            const line1Parts = [house_number, road].filter(Boolean);
+            const line2Parts = [neighbourhood, suburb].filter(Boolean);
+
+            setValue('addressLine1', line1Parts.join(' ') || '', { shouldValidate: true });
+            setValue('addressLine2', line2Parts.join(', ') || '', { shouldValidate: true });
             setValue('city', city || town || village || '', { shouldValidate: true });
             setValue('district', state_district || county || '', { shouldValidate: true });
             setValue('state', state || '', { shouldValidate: true });
@@ -56,8 +64,9 @@ export function Step3ClinicLocation() {
       }
     };
 
-    const timeoutId = setTimeout(autoFillFromLocation, 100);
-    return () => clearTimeout(timeoutId);
+    // Run this effect only once if conditions are met
+    autoFillFromLocation();
+    
   }, [latitude, longitude, setValue, toast, locationAutoFilled]);
 
   return (
@@ -73,7 +82,7 @@ export function Step3ClinicLocation() {
         </div>
       )}
 
-      {locationAutoFilled && (
+      {locationAutoFilled && !isAutoFilling && (
         <div className="mb-4 p-3 bg-green-50 border-l-4 border-green-400 text-green-800 rounded flex items-center gap-2">
           <MapPin className="h-4 w-4" />
           <span>Address has been auto-filled. You can edit it if needed.</span>
