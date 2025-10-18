@@ -65,22 +65,23 @@ export function Sidebar() {
       const fetchUserProfileAndClinicData = async () => {
         const userDocRef = doc(db, "users", currentUser.uid);
         const userDoc = await getDoc(userDocRef);
+
         if (userDoc.exists()) {
           const userData = userDoc.data() as User;
           setUserProfile(userData);
 
           if (userData.clinicId) {
-              const clinicDocRef = doc(db, 'clinics', userData.clinicId);
-              const clinicDoc = await getDoc(clinicDocRef);
-              if (clinicDoc.exists()) {
-                  setClinicName(clinicDoc.data().name);
-              }
+            const clinicDocRef = doc(db, 'clinics', userData.clinicId);
+            const clinicDoc = await getDoc(clinicDocRef);
+            if (clinicDoc.exists()) {
+              setClinicName(clinicDoc.data().name);
+            }
           }
         }
       };
       fetchUserProfileAndClinicData();
     }
-  }, [currentUser, pathname]);
+  }, [currentUser]);
 
   const handleLogout = async () => {
     try {
