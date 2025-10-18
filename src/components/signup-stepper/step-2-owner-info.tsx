@@ -38,26 +38,27 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
   const isMobileNumberValid = !errors.mobileNumber && mobileNumber?.length === 10;
 
   useEffect(() => {
-    if (!window.recaptchaVerifier && recaptchaContainerRef.current) {
-      window.recaptchaVerifier = new RecaptchaVerifier(
-        auth,
-        recaptchaContainerRef.current,
-        {
-          size: 'invisible',
-          callback: () => {
-            // reCAPTCHA solved, allow signInWithPhoneNumber.
-          },
-        }
-      );
-      window.recaptchaVerifier.render().catch((err) => {
-        console.error("reCAPTCHA render error:", err);
+    if (!recaptchaContainerRef.current) return;
+
+    // Ensure we only create one instance of RecaptchaVerifier
+    if (!window.recaptchaVerifier) {
+      const verifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
+        size: 'invisible',
+        callback: () => {
+          // reCAPTCHA solved
+        },
+      });
+      window.recaptchaVerifier = verifier;
+      verifier.render().catch((err) => {
+        console.error("reCAPTCHA render error on mount:", err);
       });
     }
 
+    // Cleanup on unmount
     return () => {
       if (window.recaptchaVerifier) {
         window.recaptchaVerifier.clear();
-        window.recaptchaVerifier = undefined;
+        // Do not set to undefined, let the next mount handle it
       }
     };
   }, []);
@@ -74,6 +75,12 @@ export function Step2OwnerInfo({ onVerified }: { onVerified: () => void }) {
       toast({ title: "OTP Sent", description: "An OTP has been sent to your mobile number." });
     } catch (error: any) {
       console.error("Error sending OTP:", error);
+      // It's possible the verifier needs to be re-rendered on error.
+      // This is a common pattern for solving expired/used-up verifiers.
+      if (window.recaptchaVerifier) {
+        window.recaptchaVerifier.render().catch(console.error);
+      }
+
       if (error.code === 'auth/captcha-check-failed') {
           setCaptchaFailed(true);
           toast({
