@@ -420,7 +420,9 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
   };
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log("handlePhotoChange triggered");
     const file = e.target.files?.[0];
+    console.log("Selected file:", file);
     if (file) {
       if (!file.type.startsWith('image/')) {
         toast({
@@ -441,7 +443,9 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
       }
 
       form.setValue('photo', file);
-      setPhotoPreview(URL.createObjectURL(file));
+      const previewUrl = URL.createObjectURL(file);
+      console.log("Generated preview URL:", previewUrl);
+      setPhotoPreview(previewUrl);
     }
   };
 
@@ -668,6 +672,9 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                             Weekly Availability
                             <span className="text-red-500">*</span>
                           </FormLabel>
+                           <FormDescription>
+                             Define the doctor's recurring weekly schedule.
+                           </FormDescription>
                           <FormMessage />
                         </div>
                           <div className="space-y-2">
@@ -797,5 +804,3 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
     </Dialog>
   );
 }
-
-    
