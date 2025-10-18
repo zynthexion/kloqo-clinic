@@ -329,7 +329,6 @@ export default function SignupPage() {
         clinicId: clinicId,
         email: formData.emailAddress,
         name: formData.ownerName,
-        clinicName: formData.clinicName,
         phone: `+91${formData.mobileNumber}`,
         designation: formData.designation,
         onboarded: false,

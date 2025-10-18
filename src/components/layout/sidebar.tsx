@@ -56,6 +56,7 @@ export function Sidebar() {
   const { toast } = useToast();
   const { currentUser } = useAuth();
   const [userProfile, setUserProfile] = useState<User | null>(null);
+  const [clinicName, setClinicName] = useState<string | null>(null);
 
   const isOnboarding = pathname === "/onboarding";
 
@@ -67,6 +68,14 @@ export function Sidebar() {
         if (userDoc.exists()) {
           const userData = userDoc.data() as User;
           setUserProfile(userData);
+
+          if (userData.clinicId) {
+              const clinicDocRef = doc(db, 'clinics', userData.clinicId);
+              const clinicDoc = await getDoc(clinicDocRef);
+              if (clinicDoc.exists()) {
+                  setClinicName(clinicDoc.data().name);
+              }
+          }
         }
       };
       fetchUserProfileAndClinicData();
@@ -171,7 +180,7 @@ export function Sidebar() {
                     </Avatar>
                     <div className="text-left opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100 whitespace-nowrap">
                       <p className="text-sm font-semibold text-sidebar-foreground">{userProfile?.name || 'User'}</p>
-                      <p className="text-xs text-sidebar-foreground/70">{userProfile?.clinicName || 'No Clinic'}</p>
+                      <p className="text-xs text-sidebar-foreground/70">{clinicName || 'No Clinic'}</p>
                     </div>
                     <MoreVertical className="ml-auto h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100" />
                   </div>

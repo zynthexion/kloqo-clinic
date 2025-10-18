@@ -146,11 +146,8 @@ export type User = {
     clinicId: string;
     email: string;
     name: string;
-    clinicName: string;
     phone: string;
     designation: 'Doctor' | 'Owner';
     onboarded?: boolean;
     role?: 'clinicAdmin';
 }
-
-    
