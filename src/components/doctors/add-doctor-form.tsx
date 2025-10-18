@@ -615,7 +615,16 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
                         </FormLabel>
                         <Select onValueChange={(value) => {
                             if (value === 'add_new') {
-                                setIsSelectDepartmentOpen(true);
+                                if (clinicDetails && departments.length >= clinicDetails.numDoctors) {
+                                    toast({
+                                        variant: "destructive",
+                                        title: "Department Limit Reached",
+                                        description: `Your plan allows for ${clinicDetails.numDoctors} department(s). Please upgrade your plan in Profile > Clinic Details to add more.`,
+                                        duration: 6000,
+                                    });
+                                } else {
+                                    setIsSelectDepartmentOpen(true);
+                                }
                             } else {
                                 field.onChange(value);
                             }
@@ -862,6 +871,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
                                     </div>
                                 )) : <p className="text-xs text-muted-foreground text-center pt-6">No availability applied yet.</p>}
                             </div>
+                            <FormMessage />
                           </div>
                       </FormItem>
                     )}
@@ -892,4 +902,3 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
     </>
   );
 }
-
