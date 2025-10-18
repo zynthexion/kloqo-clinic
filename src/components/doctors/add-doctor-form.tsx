@@ -17,11 +17,11 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import {
@@ -279,7 +279,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
     
             if (clinicDocSnap.exists()) {
               const clinicData = clinicDocSnap.data();
-              const maxDoctors = clinicData.maxDoctors || 1;
+              const maxDoctors = clinicData.numDoctors || 1;
               const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
               const doctorsSnapshot = await getDocs(doctorsQuery);
               const currentDoctorCount = doctorsSnapshot.size;
