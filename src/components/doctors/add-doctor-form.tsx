@@ -17,7 +17,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -524,16 +523,18 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
   return (
     <>
     <Dialog open={isOpen} onOpenChange={(open) => {
-        setIsOpen(open);
-        if (!open) {
-            form.reset();
-            setPhotoPreview(null);
-            if (fileInputRef.current) {
-                fileInputRef.current.value = "";
-            }
+        if (open) {
+            setIsOpen(true);
+        } else {
+           // This block is now intentionally left empty to prevent closing
         }
     }}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent 
+        className="max-w-4xl"
+        onInteractOutside={(e) => {
+          e.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{isEditMode ? "Edit Doctor" : "Add New Doctor"}</DialogTitle>
           <DialogDescription>
