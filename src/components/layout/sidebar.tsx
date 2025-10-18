@@ -135,7 +135,7 @@ export function Sidebar() {
         <div className="flex h-20 items-center justify-center p-4 shrink-0">
             <Link href="/" className="flex items-center gap-3">
                 <div className="w-10 h-10 shrink-0 group-hover:hidden transition-opacity duration-200">
-                    <Image src="https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.firebasestorage.app/o/Kloqo_Logowhite.png?alt=media&token=9e517ac9-2622-46f1-ad28-dcdf82611177" alt="Kloqo Icon" width={40} height={40} />
+                    <Image src="https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.firebasestorage.app/o/kloqo_Logo.png?alt=media&token=e31146d5-17c2-4f88-82f0-f5e13fbd3641" alt="Kloqo Icon" width={40} height={40} />
                 </div>
                 <div className="w-32 h-auto shrink-0 hidden group-hover:block transition-opacity duration-200 delay-100">
                      <Image src="https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.firebasestorage.app/o/Kloqo_Logowhite.png?alt=media&token=9e517ac9-2622-46f1-ad28-dcdf82611177" alt="Kloqo Logo" width={128} height={35} />
