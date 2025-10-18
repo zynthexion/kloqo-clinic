@@ -17,6 +17,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -48,6 +49,9 @@ import { Textarea } from "../ui/textarea";
 const timeSlotSchema = z.object({
   from: z.string().min(1, "Required"),
   to: z.string().min(1, "Required"),
+}).refine(data => data.from < data.to, {
+    message: "End time must be after start time.",
+    path: ["to"],
 });
 
 const availabilitySlotSchema = z.object({
@@ -135,7 +139,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
       bio: "",
       experience: 0,
       consultationFee: undefined,
-      averageConsultingTime: 15,
+      averageConsultingTime: 5,
       availabilitySlots: [],
       freeFollowUpDays: 7,
       advanceBookingDays: 30,
@@ -189,7 +193,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         bio: doctor.bio || "",
         experience: doctor.experience || 0,
         consultationFee: doctor.consultationFee,
-        averageConsultingTime: doctor.averageConsultingTime || 15,
+        averageConsultingTime: doctor.averageConsultingTime || 5,
         availabilitySlots: availabilitySlots,
         freeFollowUpDays: doctor.freeFollowUpDays || 7,
         advanceBookingDays: doctor.advanceBookingDays || 30,
@@ -207,7 +211,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         bio: "",
         experience: 0,
         consultationFee: undefined,
-        averageConsultingTime: 15,
+        averageConsultingTime: 5,
         availabilitySlots: [],
         freeFollowUpDays: 7,
         advanceBookingDays: 30,
@@ -678,6 +682,9 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                              Weekly Availability
                              <span className="text-red-500">*</span>
                            </FormLabel>
+                           <FormDescription>
+                             Define the doctor's recurring weekly schedule.
+                           </FormDescription>
                            <FormMessage />
                          </div>
                           <div className="space-y-2">
@@ -816,5 +823,3 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
     </Dialog>
   );
 }
-
-    
