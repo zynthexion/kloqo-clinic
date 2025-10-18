@@ -94,6 +94,7 @@ export default function ProfilePage() {
   const [credentials, setCredentials] = useState<MobileApp | null>(null);
   const [userProfile, setUserProfile] = useState<User | null>(null);
   const [clinicDetails, setClinicDetails] = useState<any | null>(null);
+  const [currentDoctorCount, setCurrentDoctorCount] = useState(0);
   
   const [showPassword, setShowPassword] = useState(false);
   const [showSavedPassword, setShowSavedPassword] = useState(false);
@@ -157,6 +158,11 @@ export default function ProfilePage() {
                 hoursForm.reset({
                     hours: clinicData.operatingHours,
                 });
+
+                // Fetch current doctor count
+                const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", userData.clinicId));
+                const doctorsSnapshot = await getDocs(doctorsQuery);
+                setCurrentDoctorCount(doctorsSnapshot.size);
             }
 
             const credsQuery = query(collection(db, "mobile-app"), where("clinicId", "==", userData.clinicId));
@@ -431,15 +437,15 @@ export default function ProfilePage() {
                                       <div className="flex items-center gap-4">
                                           <div className="flex items-center gap-2">
                                               <div className="text-2xl font-bold text-primary">
-                                                  {clinicDetails?.currentDoctorCount || 0}
+                                                  {currentDoctorCount}
                                               </div>
                                               <div className="text-sm text-muted-foreground">
-                                                  of {clinicDetails?.maxDoctors || 0} doctors
+                                                  of {clinicDetails?.numDoctors || 0} doctors
                                               </div>
                                           </div>
                                           <div className="text-xs text-muted-foreground">
-                                              {clinicDetails?.maxDoctors && clinicDetails?.currentDoctorCount ?
-                                                  `${Math.round((clinicDetails.currentDoctorCount / clinicDetails.maxDoctors) * 100)}% utilized` :
+                                              {clinicDetails?.numDoctors && clinicDetails.numDoctors > 0 ?
+                                                  `${Math.round((currentDoctorCount / clinicDetails.numDoctors) * 100)}% utilized` :
                                                   'No limit set'
                                               }
                                           </div>
@@ -683,5 +689,3 @@ export default function ProfilePage() {
     </>
   );
 }
-
-    
