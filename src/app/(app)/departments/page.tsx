@@ -185,10 +185,24 @@ export default function DepartmentsPage() {
     fetchClinicData();
   }, [fetchClinicData]);
 
+  // Debug: Log all doctors data when it loads
+  useEffect(() => {
+    if (doctors.length > 0) {
+      console.log('📋 All doctors loaded:', doctors.length);
+    }
+  }, [doctors]);
+
 
   const getDoctorAvatar = (doctorName: string) => {
     const doctor = doctors.find((d) => d.name === doctorName);
-    return doctor ? doctor.avatar : "https://picsum.photos/seed/generic-doctor/100/100";
+    const avatarUrl = doctor ? doctor.avatar : "https://picsum.photos/seed/generic-doctor/100/100";
+
+    // Simplified debugging - only log if it's a Firebase URL
+    if (avatarUrl?.includes('firebasestorage.googleapis.com')) {
+      console.log(`🔍 Firebase URL for ${doctorName}:`, avatarUrl.substring(0, 100) + '...');
+    }
+
+    return avatarUrl;
   }
 
   const getDoctorsInDepartment = (departmentName: string) => {
@@ -215,6 +229,10 @@ export default function DepartmentsPage() {
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                            <DropdownMenuItem onSelect={() => setViewingDoctorsDept(department)}>
+                                <Users className="mr-2 h-4 w-4" />
+                                See All Doctors
+                            </DropdownMenuItem>
                             <DropdownMenuItem onSelect={() => onDelete(department)} className="text-red-600">
                                 <Trash className="mr-2 h-4 w-4" />
                                 Delete
@@ -224,17 +242,39 @@ export default function DepartmentsPage() {
                   </div>
                    <div className="flex items-center mt-1">
                       <div className="flex -space-x-2">
-                          {doctorsInDept.slice(0, 3).map((doctorName, index) => (
-                              <Image
-                                  key={index}
-                                  src={getDoctorAvatar(doctorName)}
-                                  alt={doctorName}
-                                  width={24}
-                                  height={24}
-                                  className="rounded-full border-2 border-white object-cover"
-                                  data-ai-hint="doctor portrait"
-                              />
-                          ))}
+                          {doctorsInDept.slice(0, 3).map((doctorName, index) => {
+                              const avatarUrl = getDoctorAvatar(doctorName);
+                              return (
+                                  <div key={index} className="relative">
+                                      <Image
+                                          src={avatarUrl}
+                                          alt={doctorName}
+                                          width={24}
+                                          height={24}
+                                          className="w-6 h-6 rounded-full border-2 border-white object-cover"
+                                          onError={(e) => {
+                                              console.error(`❌ Failed to load doctor avatar for ${doctorName}`);
+                                              console.error(`🔗 Avatar URL causing error:`, avatarUrl);
+                                              console.error(`🔍 URL analysis:`, {
+                                                  length: avatarUrl.length,
+                                                  hasToken: avatarUrl.includes('token='),
+                                                  domain: new URL(avatarUrl).hostname,
+                                                  path: new URL(avatarUrl).pathname
+                                              });
+
+                                              // Prevent infinite retry loop
+                                              if (!e.currentTarget.hasAttribute('data-error-handled')) {
+                                                  e.currentTarget.setAttribute('data-error-handled', 'true');
+                                                  e.currentTarget.src = "https://picsum.photos/seed/generic-doctor/100/100";
+                                              }
+                                          }}
+                                          onLoad={() => {
+                                              console.log(`✅ Doctor avatar loaded successfully for ${doctorName}`);
+                                          }}
+                                      />
+                                  </div>
+                              );
+                          })}
                       </div>
                       {doctorsInDept.length > 0 ? (
                         <span className="text-xs text-muted-foreground ml-2 truncate">

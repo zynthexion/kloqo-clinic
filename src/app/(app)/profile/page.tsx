@@ -426,9 +426,28 @@ export default function ProfilePage() {
                                       </Select>
                                       <FormMessage /></FormItem>
                                   )}/>
-                                  <FormField control={clinicForm.control} name="numDoctors" render={({ field }) => (
-                                      <FormItem><FormLabel>Number of Doctors</FormLabel><FormControl><Input type="number" {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
-                                  )}/>
+                                  <FormItem>
+                                      <FormLabel>Doctor Count</FormLabel>
+                                      <div className="flex items-center gap-4">
+                                          <div className="flex items-center gap-2">
+                                              <div className="text-2xl font-bold text-primary">
+                                                  {clinicDetails?.currentDoctorCount || 0}
+                                              </div>
+                                              <div className="text-sm text-muted-foreground">
+                                                  of {clinicDetails?.maxDoctors || 0} doctors
+                                              </div>
+                                          </div>
+                                          <div className="text-xs text-muted-foreground">
+                                              {clinicDetails?.maxDoctors && clinicDetails?.currentDoctorCount ?
+                                                  `${Math.round((clinicDetails.currentDoctorCount / clinicDetails.maxDoctors) * 100)}% utilized` :
+                                                  'No limit set'
+                                              }
+                                          </div>
+                                      </div>
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                          Current doctors registered vs. maximum allowed by your plan.
+                                      </p>
+                                  </FormItem>
                                   <FormField control={clinicForm.control} name="clinicRegNumber" render={({ field }) => (
                                       <FormItem><FormLabel>Clinic Registration Number</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
                                   )}/>

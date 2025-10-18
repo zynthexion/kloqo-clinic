@@ -310,7 +310,8 @@ export default function SignupPage() {
         longitude: formData.longitude,
         skippedTokenRecurrence: formData.skippedTokenRecurrence,
         walkInTokenAllotment: formData.walkInTokenAllotment,
-        numDoctors: formData.numDoctors,
+        maxDoctors: formData.numDoctors, // This is the limit
+        currentDoctorCount: 0, // This tracks actual count
         clinicRegNumber: formData.clinicRegNumber,
         mapsLink: formData.mapsLink,
         logoUrl,
@@ -441,7 +442,7 @@ export default function SignupPage() {
         <aside className="w-1/4 bg-slate-100 p-8 flex flex-col justify-between">
           <div className="flex-grow flex flex-col overflow-hidden">
             <Link href="/" className="flex items-center gap-2 mb-12 flex-shrink-0">
-               <Image src="https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.appspot.com/o/Kloqo_Logo_full.png?alt=media&token=2f9b97ad-29ae-4812-b189-ba7291a1f005" alt="Kloqo Logo" width={120} height={30} />
+               <Image src="https://firebasestorage.googleapis.com/v0/b/kloqo-clinic-multi-33968-4c50b.firebasestorage.app/o/Kloqo_Logo_full.png?alt=media&token=2f9b97ad-29ae-4812-b189-ba7291a1f005" alt="Kloqo Logo" width={120} height={30} />
             </Link>
             <div className="flex-grow overflow-y-auto pr-4">
                 <StepperNav steps={steps} currentStep={currentStep} />

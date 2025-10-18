@@ -17,6 +17,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -35,13 +36,12 @@ import type { Doctor, Department, AvailabilitySlot } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "../ui/scroll-area";
 import Image from "next/image";
-import { Textarea } from "../ui/textarea";
 import { format, parse } from "date-fns";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/firebase";
-import { setDoc, doc, getDoc } from "firebase/firestore";
+import { setDoc, doc, getDoc, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import imageCompression from "browser-image-compression";
 
@@ -250,7 +250,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         toast({ variant: "destructive", title: "Authentication Error", description: "You must be logged in to save a doctor." });
         return;
       }
-      
+
       if (!clinicId) {
         toast({ variant: "destructive", title: "Configuration Error", description: "Cannot save doctor without a valid clinic ID." });
         return;
@@ -258,6 +258,32 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 
       try {
         await auth.currentUser.reload();
+
+        // Check doctor limit before proceeding
+        const clinicDocRef = doc(db, "clinics", clinicId);
+        const clinicDocSnap = await getDoc(clinicDocRef);
+
+        if (clinicDocSnap.exists()) {
+          const clinicData = clinicDocSnap.data();
+          const maxDoctors = clinicData.numDoctors || 1;
+
+          // Count existing doctors in this clinic
+          const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
+          const doctorsSnapshot = await getDocs(doctorsQuery);
+          const currentDoctorCount = doctorsSnapshot.size;
+
+          // If editing, don't count the current doctor being edited
+          const effectiveCount = isEditMode && doctor ? currentDoctorCount : currentDoctorCount;
+
+          if (effectiveCount >= maxDoctors) {
+            toast({
+              variant: "destructive",
+              title: "Doctor Limit Exceeded",
+              description: `Your clinic is limited to ${maxDoctors} doctor${maxDoctors === 1 ? '' : 's'}. Please upgrade your plan or contact support to add more doctors.`,
+            });
+            return;
+          }
+        }
 
         let photoUrl = doctor?.avatar || `https://picsum.photos/seed/new-doc-${Date.now()}/100/100`;
         const photoFile = form.getValues('photo');
@@ -271,7 +297,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                     maxWidthOrHeight: 800,
                     useWebWorker: true,
                 };
-                
+
                 const compressedFile = await imageCompression(photoFile, options);
                 console.log("Image compressed:", compressedFile.name, `(${(compressedFile.size / 1024).toFixed(2)} KB)`);
 
@@ -293,7 +319,11 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 
                 const data = await response.json();
                 photoUrl = data.url;
-                console.log("File uploaded successfully via API. URL:", photoUrl);
+                console.log("✅ File uploaded successfully via API. URL:", photoUrl.substring(0, 80) + '...');
+
+                if (data.firebaseError) {
+                  console.warn("⚠️ Firebase upload failed, using fallback URL");
+                }
 
             } catch (uploadError: any) {
                 console.error("Upload error:", uploadError);
@@ -306,7 +336,6 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                 return;
             }
         }
-
 
         const docId = values.id || `doc-${Date.now()}`;
         const scheduleString = values.availabilitySlots
@@ -342,6 +371,29 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
         };
 
         await setDoc(doc(db, "doctors", docId), doctorToSave, { merge: true });
+
+        // Update the clinic's current doctor count
+        const clinicDocRef2 = doc(db, "clinics", clinicId);
+        const clinicDocSnap2 = await getDoc(clinicDocRef2);
+
+        if (clinicDocSnap2.exists()) {
+          const currentCount = clinicDocSnap2.data().currentDoctorCount || 0;
+          await updateDoc(clinicDocRef2, {
+            currentDoctorCount: currentCount + 1
+          });
+        }
+
+        // Log activity for new doctor
+        try {
+          const { addActivity } = await import('@/components/dashboard/recent-activity');
+          await addActivity(
+            'doctor_added',
+            `Dr. ${values.name} added to ${values.department} department`,
+            { doctorId: docId, department: values.department }
+          );
+        } catch (activityError) {
+          console.error('Failed to log doctor addition activity:', activityError);
+        }
 
         onSave(doctorToSave);
         setIsOpen(false);

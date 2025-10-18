@@ -9,7 +9,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyDFki6NQ82GGRMR53BJ63Kkl0Y96sLbMH0",
   authDomain: "kloqo-clinic-multi-33968-4c50b.firebaseapp.com",
   projectId: "kloqo-clinic-multi-33968-4c50b",
-  storageBucket: "kloqo-clinic-multi-33968-4c50b.appspot.com",
+  storageBucket: "kloqo-clinic-multi-33968-4c50b.firebasestorage.app",
   messagingSenderId: "932946841357",
   appId: "1:932946841357:web:80bf70d8a57635275f939e",
   measurementId: "G-8L9Y19E0J3"

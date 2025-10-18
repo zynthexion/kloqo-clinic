@@ -48,7 +48,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import Link from 'next/link';
+import { useSearchParams } from "next/navigation";
 import PatientsVsAppointmentsChart from "@/components/dashboard/patients-vs-appointments-chart";
 import { DateRange } from "react-day-picker";
 import { subDays } from 'date-fns';
@@ -133,6 +133,9 @@ export default function DoctorsPage() {
     to: new Date(),
   });
   const [activeTab, setActiveTab] = useState("details");
+
+  const searchParams = useSearchParams();
+  const doctorIdFromUrl = searchParams.get('doctorId');
 
   const form = useForm<WeeklyAvailabilityFormValues>({
     resolver: zodResolver(weeklyAvailabilityFormSchema),
@@ -242,6 +245,17 @@ export default function DoctorsPage() {
 
     fetchAllData();
   }, [auth.currentUser, toast]);
+
+  // Auto-select doctor from URL parameter
+  useEffect(() => {
+    if (doctorIdFromUrl && doctors.length > 0) {
+      const doctorFromUrl = doctors.find(doctor => doctor.id === doctorIdFromUrl);
+      if (doctorFromUrl && (!selectedDoctor || selectedDoctor.id !== doctorIdFromUrl)) {
+        console.log(`🔗 Auto-selecting doctor from URL: ${doctorFromUrl.name}`);
+        setSelectedDoctor(doctorFromUrl);
+      }
+    }
+  }, [doctorIdFromUrl, doctors, selectedDoctor]);
   
 
   useEffect(() => {
