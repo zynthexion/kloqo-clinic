@@ -65,6 +65,7 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, Di
 import { FirestorePermissionError } from "@/firebase/errors";
 import { errorEmitter } from "@/firebase/error-emitter";
 import Link from "next/link";
+import { SendLinkDialog } from "@/components/appointments/send-link-dialog";
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -124,6 +125,7 @@ export default function AppointmentsPage() {
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
   const [walkInEstimate, setWalkInEstimate] = useState<WalkInEstimate>(null);
   const [isCalculatingEstimate, setIsCalculatingEstimate] = useState(false);
+  const [isSendLinkDialogOpen, setIsSendLinkDialogOpen] = useState(false);
 
   const { toast } = useToast();
   const isEditing = !!editingAppointment;
@@ -1014,7 +1016,7 @@ export default function AppointmentsPage() {
                           <FormMessage />
                         </FormItem>
                         <div className="flex justify-end">
-                          <Button type="button" variant="secondary">
+                          <Button type="button" variant="secondary" onClick={() => setIsSendLinkDialogOpen(true)}>
                             <LinkIcon className="mr-2 h-4 w-4" />
                             Send Booking Link
                           </Button>
@@ -1570,6 +1572,11 @@ export default function AppointmentsPage() {
         </DialogContent>
       </Dialog>
       <WeeklyDoctorAvailability />
+      <SendLinkDialog
+        isOpen={isSendLinkDialogOpen}
+        setIsOpen={setIsSendLinkDialogOpen}
+        phoneNumber={form.getValues('phone')}
+      />
     </>
   );
 }
