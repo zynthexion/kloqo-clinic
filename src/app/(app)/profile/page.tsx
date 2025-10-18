@@ -112,7 +112,7 @@ export default function ProfilePage() {
   const profileForm = useForm<ProfileFormValues>({ resolver: zodResolver(profileFormSchema), defaultValues: { name: "", phone: "" } });
   const clinicForm = useForm<ClinicFormValues>({ 
       resolver: zodResolver(clinicFormSchema), 
-      defaultValues: { name: "", type: "Single Doctor", maxDoctors: 1 } 
+      defaultValues: { name: "", type: "Single Doctor", maxDoctors: 1, clinicRegNumber: "", address: "", mapsLink: "" } 
   });
   const hoursForm = useForm<OperatingHoursFormValues>({
     resolver: zodResolver(operatingHoursFormSchema),
@@ -154,9 +154,9 @@ export default function ProfilePage() {
                     name: clinicData.name,
                     type: clinicData.type,
                     maxDoctors: clinicData.maxDoctors,
-                    clinicRegNumber: clinicData.clinicRegNumber,
+                    clinicRegNumber: clinicData.clinicRegNumber || '',
                     address: clinicData.address,
-                    mapsLink: clinicData.mapsLink,
+                    mapsLink: clinicData.mapsLink || '',
                 });
                 hoursForm.reset({
                     hours: clinicData.operatingHours,
@@ -305,9 +305,9 @@ export default function ProfilePage() {
             name: clinicDetails.name,
             type: clinicDetails.type,
             maxDoctors: clinicDetails.maxDoctors,
-            clinicRegNumber: clinicDetails.clinicRegNumber,
+            clinicRegNumber: clinicDetails.clinicRegNumber || '',
             address: clinicDetails.address,
-            mapsLink: clinicDetails.mapsLink,
+            mapsLink: clinicDetails.mapsLink || '',
         }); 
     } 
     setIsEditingClinic(false); 
