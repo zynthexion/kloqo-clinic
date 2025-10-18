@@ -17,7 +17,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -49,6 +48,9 @@ import { Textarea } from "../ui/textarea";
 const timeSlotSchema = z.object({
   from: z.string().min(1, "Required"),
   to: z.string().min(1, "Required"),
+}).refine(data => data.to > data.from, {
+  message: "End time must be after start time.",
+  path: ["to"],
 });
 
 const availabilitySlotSchema = z.object({
@@ -681,7 +683,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
 
                                return (
                                 <div key={index} className="flex items-end gap-2">
-                                   <div className="flex-grow">
+                                   <div className="flex-grow space-y-1">
                                       <Label className="text-xs font-normal">From</Label>
                                       <Input type="time" value={ts.from} onChange={(e) => {
                                           const newShared = [...sharedTimeSlots];
@@ -689,7 +691,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                                           setSharedTimeSlots(newShared);
                                       }} min={minTime} max={maxTime} />
                                    </div>
-                                   <div className="flex-grow">
+                                   <div className="flex-grow space-y-1">
                                       <Label className="text-xs font-normal">To</Label>
                                       <Input type="time" value={ts.to} onChange={(e) => {
                                           const newShared = [...sharedTimeSlots];
