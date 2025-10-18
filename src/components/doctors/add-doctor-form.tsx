@@ -21,7 +21,6 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import {
@@ -36,7 +35,7 @@ import type { Doctor, Department, AvailabilitySlot } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "../ui/scroll-area";
 import Image from "next/image";
-import { format, parse } from "date-fns";
+import { format, parse, addMinutes, isBefore } from "date-fns";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -49,7 +48,12 @@ import { Textarea } from "../ui/textarea";
 const timeSlotSchema = z.object({
   from: z.string().min(1, "Required"),
   to: z.string().min(1, "Required"),
-}).refine(data => data.to > data.from, {
+}).refine(data => {
+    if(!data.from || !data.to) return false;
+    const from = parse(data.from, "HH:mm", new Date());
+    const to = parse(data.to, "HH:mm", new Date());
+    return isBefore(from, to);
+}, {
   message: "End time must be after start time.",
   path: ["to"],
 });
@@ -87,6 +91,20 @@ type AddDoctorFormProps = {
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const dayAbbreviations = ["S", "M", "T", "W", "T", "F", "S"];
+
+const generateTimeOptions = (startTime: string, endTime: string, interval: number): string[] => {
+    const options = [];
+    let currentTime = parse(startTime, "HH:mm", new Date());
+    const end = parse(endTime, "HH:mm", new Date());
+
+    while (isBefore(currentTime, end)) {
+        options.push(format(currentTime, "HH:mm"));
+        currentTime = addMinutes(currentTime, interval);
+    }
+    options.push(format(end, "HH:mm")); // Include the end time
+    return options;
+};
+
 
 export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }: AddDoctorFormProps) {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -655,9 +673,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                             Weekly Availability
                             <span className="text-red-500">*</span>
                           </FormLabel>
-                          <FormDescription>
-                            Define the doctor's recurring weekly schedule.
-                          </FormDescription>
+                          <FormMessage />
                         </div>
                           <div className="space-y-2">
                             <Label>1. Select days to apply time slots to</Label>
@@ -679,26 +695,55 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
                             {sharedTimeSlots.map((ts, index) => {
                                const dayForSlot = selectedDays[0] || daysOfWeek.find(day => !clinicDetails?.operatingHours?.find((h:any) => h.day === day)?.isClosed);
                                const clinicDay = clinicDetails?.operatingHours?.find((h: any) => h.day === dayForSlot);
-                               const minTime = clinicDay?.timeSlots[0]?.open;
-                               const maxTime = clinicDay?.timeSlots[clinicDay.timeSlots.length - 1]?.close;
+                               const clinicOpeningTime = clinicDay?.timeSlots[0]?.open || "00:00";
+                               const clinicClosingTime = clinicDay?.timeSlots[clinicDay.timeSlots.length - 1]?.close || "23:45";
+                               const allTimeOptions = generateTimeOptions(clinicOpeningTime, clinicClosingTime, 15);
+                               
+                               const fromTimeOptions = allTimeOptions.slice(0, -1); // Can't be the last slot
+                               const toTimeOptions = ts.from ? allTimeOptions.filter(t => t > ts.from) : allTimeOptions.slice(1);
 
                                return (
                                 <div key={index} className="flex items-end gap-2">
                                    <div className="flex-grow space-y-1">
                                       <Label className="text-xs font-normal">From</Label>
-                                      <Input type="time" value={ts.from} onChange={(e) => {
+                                      <Select
+                                        value={ts.from}
+                                        onValueChange={(value) => {
                                           const newShared = [...sharedTimeSlots];
-                                          newShared[index].from = e.target.value;
+                                          newShared[index].from = value;
+                                          // If 'to' is now invalid, reset it
+                                          if (newShared[index].to <= value) {
+                                            newShared[index].to = '';
+                                          }
                                           setSharedTimeSlots(newShared);
-                                      }} min={minTime} max={maxTime} />
+                                        }}
+                                      >
+                                        <SelectTrigger><SelectValue placeholder="Start" /></SelectTrigger>
+                                        <SelectContent>
+                                            {fromTimeOptions.map(time => (
+                                                <SelectItem key={`from-${time}`} value={time}>{format(parse(time, "HH:mm", new Date()), 'p')}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                      </Select>
                                    </div>
                                    <div className="flex-grow space-y-1">
                                       <Label className="text-xs font-normal">To</Label>
-                                      <Input type="time" value={ts.to} onChange={(e) => {
+                                      <Select
+                                        value={ts.to}
+                                        onValueChange={(value) => {
                                           const newShared = [...sharedTimeSlots];
-                                          newShared[index].to = e.target.value;
+                                          newShared[index].to = value;
                                           setSharedTimeSlots(newShared);
-                                      }} min={ts.from || minTime} max={maxTime} />
+                                        }}
+                                        disabled={!ts.from}
+                                      >
+                                        <SelectTrigger><SelectValue placeholder="End" /></SelectTrigger>
+                                        <SelectContent>
+                                            {toTimeOptions.map(time => (
+                                                <SelectItem key={`to-${time}`} value={time}>{format(parse(time, "HH:mm", new Date()), 'p')}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                      </Select>
                                    </div>
                                    <Button type="button" variant="ghost" size="icon" onClick={() => setSharedTimeSlots(prev => prev.filter((_, i) => i !== index))} disabled={sharedTimeSlots.length <=1}>
                                         <Trash className="h-4 w-4 text-red-500" />
@@ -757,3 +802,4 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments }
     </Dialog>
   );
 }
+
