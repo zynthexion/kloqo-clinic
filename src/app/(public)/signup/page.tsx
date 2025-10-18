@@ -76,11 +76,7 @@ const signupSchema = z.object({
     }),
 
   // Step 3
-  address1: z.string().min(5, { message: "Address must be at least 5 characters." }),
-  address2: z.string(),
-  city: z.string().min(2, { message: "City must be at least 2 characters." }),
-  state: z.string().min(2, { message: "State must be at least 2 characters." }),
-  pincode: z.string().regex(/^\d{6}$/, "Please enter a valid 6-digit pincode."),
+  address: z.string().min(10, { message: "Address must be at least 10 characters." }),
   mapsLink: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
 
   // Step 4
@@ -128,11 +124,7 @@ const defaultFormData: SignUpFormData = {
   emailAddress: "",
   password: "",
   
-  address1: '',
-  address2: '',
-  city: '',
-  state: 'Kerala',
-  pincode: '',
+  address: '',
   mapsLink: '',
   
   hours: [
@@ -161,7 +153,7 @@ const defaultFormData: SignUpFormData = {
 const stepFields: (keyof SignUpFormData)[][] = [
     ['clinicName', 'clinicType', 'numDoctors', 'skippedTokenRecurrence', 'walkInTokenAllotment'], // Step 1, latitude/longitude are special
     ['ownerName', 'designation', 'mobileNumber', 'emailAddress', 'password'], // Step 2
-    ['address1', 'city', 'state', 'pincode'], // Step 3
+    ['address'], // Step 3
     ['hours', 'avgPatientsPerDay'], // Step 4
     ['plan'], // Step 5
     [], // Step 6
@@ -302,7 +294,7 @@ export default function SignupPage() {
         ownerId: user.uid,
         name: formData.clinicName,
         type: formData.clinicType,
-        address: `${formData.address1}, ${formData.city}, ${formData.state} ${formData.pincode}`,
+        address: formData.address,
         operatingHours: formData.hours,
         plan: formData.plan,
         ownerEmail: formData.emailAddress,

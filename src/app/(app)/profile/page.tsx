@@ -37,6 +37,7 @@ import { cn } from "@/lib/utils";
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 const mobileAppFormSchema = z.object({
   username: z.string().min(2, "Username must be at least 2 characters."),
@@ -61,10 +62,11 @@ const profileFormSchema = z.object({
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
 const clinicFormSchema = z.object({
-    clinicName: z.string().min(2, "Clinic name must be at least 2 characters."),
-    clinicType: z.enum(['Single Doctor', 'Multi-Doctor']),
-    numDoctors: z.coerce.number().min(1),
+    name: z.string().min(2, "Clinic name must be at least 2 characters."),
+    type: z.enum(['Single Doctor', 'Multi-Doctor']),
+    maxDoctors: z.coerce.number().min(1),
     clinicRegNumber: z.string().optional(),
+    address: z.string().min(10, "Address is required."),
     mapsLink: z.string().url().optional().or(z.literal('')),
 });
 type ClinicFormValues = z.infer<typeof clinicFormSchema>;
@@ -110,7 +112,7 @@ export default function ProfilePage() {
   const profileForm = useForm<ProfileFormValues>({ resolver: zodResolver(profileFormSchema), defaultValues: { name: "", phone: "" } });
   const clinicForm = useForm<ClinicFormValues>({ 
       resolver: zodResolver(clinicFormSchema), 
-      defaultValues: { clinicName: "", clinicType: "Single Doctor", numDoctors: 1 } 
+      defaultValues: { name: "", type: "Single Doctor", maxDoctors: 1 } 
   });
   const hoursForm = useForm<OperatingHoursFormValues>({
     resolver: zodResolver(operatingHoursFormSchema),
@@ -149,10 +151,11 @@ export default function ProfilePage() {
                 const clinicData = clinicDocSnap.data();
                 setClinicDetails(clinicData);
                 clinicForm.reset({
-                    clinicName: clinicData.name,
-                    clinicType: clinicData.type,
-                    numDoctors: clinicData.numDoctors,
+                    name: clinicData.name,
+                    type: clinicData.type,
+                    maxDoctors: clinicData.maxDoctors,
                     clinicRegNumber: clinicData.clinicRegNumber,
+                    address: clinicData.address,
                     mapsLink: clinicData.mapsLink,
                 });
                 hoursForm.reset({
@@ -260,13 +263,14 @@ export default function ProfilePage() {
         const clinicRef = doc(db, 'clinics', userProfile.clinicId!);
         try {
             await updateDoc(clinicRef, { 
-                name: values.clinicName,
-                type: values.clinicType,
-                numDoctors: values.numDoctors,
+                name: values.name,
+                type: values.type,
+                maxDoctors: values.maxDoctors,
                 clinicRegNumber: values.clinicRegNumber,
+                address: values.address,
                 mapsLink: values.mapsLink,
             });
-            setClinicDetails(prev => prev ? {...prev, name: values.clinicName, type: values.clinicType, numDoctors: values.numDoctors, clinicRegNumber: values.clinicRegNumber, mapsLink: values.mapsLink } : null);
+            setClinicDetails(prev => prev ? {...prev, ...values} : null);
             toast({ title: "Clinic Details Updated", description: "Your clinic's information has been changed successfully." });
             setIsEditingClinic(false);
         } catch (error) {
@@ -298,10 +302,11 @@ export default function ProfilePage() {
   const handleCancelClinic = () => { 
     if (clinicDetails) { 
         clinicForm.reset({ 
-            clinicName: clinicDetails.name,
-            clinicType: clinicDetails.type,
-            numDoctors: clinicDetails.numDoctors,
+            name: clinicDetails.name,
+            type: clinicDetails.type,
+            maxDoctors: clinicDetails.maxDoctors,
             clinicRegNumber: clinicDetails.clinicRegNumber,
+            address: clinicDetails.address,
             mapsLink: clinicDetails.mapsLink,
         }); 
     } 
@@ -418,10 +423,10 @@ export default function ProfilePage() {
                       <Form {...clinicForm}>
                           <form onSubmit={clinicForm.handleSubmit(onClinicSubmit)}>
                               <CardContent className="space-y-4">
-                                  <FormField control={clinicForm.control} name="clinicName" render={({ field }) => (
+                                  <FormField control={clinicForm.control} name="name" render={({ field }) => (
                                       <FormItem><FormLabel>Clinic Name</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
                                   )}/>
-                                  <FormField control={clinicForm.control} name="clinicType" render={({ field }) => (
+                                  <FormField control={clinicForm.control} name="type" render={({ field }) => (
                                       <FormItem><FormLabel>Clinic Type</FormLabel>
                                       <Select onValueChange={field.onChange} value={field.value} disabled={!isEditingClinic || isPending}>
                                           <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
@@ -440,12 +445,12 @@ export default function ProfilePage() {
                                                   {currentDoctorCount}
                                               </div>
                                               <div className="text-sm text-muted-foreground">
-                                                  of {clinicDetails?.numDoctors || 0} doctors
+                                                  of {clinicDetails?.maxDoctors || 0} doctors
                                               </div>
                                           </div>
                                           <div className="text-xs text-muted-foreground">
-                                              {clinicDetails?.numDoctors && clinicDetails.numDoctors > 0 ?
-                                                  `${Math.round((currentDoctorCount / clinicDetails.numDoctors) * 100)}% utilized` :
+                                              {clinicDetails?.maxDoctors && clinicDetails.maxDoctors > 0 ?
+                                                  `${Math.round((currentDoctorCount / clinicDetails.maxDoctors) * 100)}% utilized` :
                                                   'No limit set'
                                               }
                                           </div>
@@ -457,10 +462,9 @@ export default function ProfilePage() {
                                   <FormField control={clinicForm.control} name="clinicRegNumber" render={({ field }) => (
                                       <FormItem><FormLabel>Clinic Registration Number</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
                                   )}/>
-                                  <FormItem>
-                                      <FormLabel>Address</FormLabel>
-                                      <Input value={clinicDetails?.address || "Not set"} disabled />
-                                  </FormItem>
+                                  <FormField control={clinicForm.control} name="address" render={({ field }) => (
+                                      <FormItem><FormLabel>Address</FormLabel><FormControl><Textarea {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
+                                  )}/>
                                   <FormField control={clinicForm.control} name="mapsLink" render={({ field }) => (
                                       <FormItem><FormLabel>Google Maps Link</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
                                   )}/>

@@ -56,8 +56,7 @@ export function Step7Confirm() {
               <CardTitle className="text-lg">Location</CardTitle>
             </CardHeader>
             <CardContent className="text-sm">
-              <p>{data.address1}, {data.address2}</p>
-              <p>{data.city}, {data.state} - {data.pincode}</p>
+              <p>{data.address}</p>
             </CardContent>
           </Card>
 
