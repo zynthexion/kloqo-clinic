@@ -1014,28 +1014,27 @@ export default function AppointmentsPage() {
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                       <div className="space-y-4">
                         <Popover open={isPatientPopoverOpen} onOpenChange={setIsPatientPopoverOpen}>
-                          <FormItem>
-                            <FormLabel>Search Patient by Phone</FormLabel>
-                            <PopoverAnchor asChild>
-                              <div className="relative">
-                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                <FormControl>
-                                  <Input
-                                    ref={patientInputRef}
-                                    placeholder="Start typing 10-digit phone number..."
-                                    value={patientSearchTerm}
-                                    onChange={handlePatientSearchChange}
-                                    onFocus={() => { if (patientSearchTerm.length < 5) setIsPatientPopoverOpen(false); }}
-                                    className="pl-8"
-                                    maxLength={10}
-                                  />
-                                </FormControl>
-                              </div>
-                            </PopoverAnchor>
-                            <FormMessage />
-                          </FormItem>
+                          <PopoverAnchor asChild>
+                             <FormItem>
+                                <FormLabel>Search Patient by Phone</FormLabel>
+                                  <div className="relative">
+                                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                    <FormControl>
+                                      <Input
+                                        ref={patientInputRef}
+                                        placeholder="Start typing 10-digit phone number..."
+                                        value={patientSearchTerm}
+                                        onChange={handlePatientSearchChange}
+                                        className="pl-8"
+                                        maxLength={10}
+                                      />
+                                    </FormControl>
+                                  </div>
+                                <FormMessage />
+                              </FormItem>
+                          </PopoverAnchor>
 
-                          <PopoverContent className="w-[--radix-popover-anchor-width] p-0" align="start">
+                          <PopoverContent onOpenAutoFocus={(e) => e.preventDefault()} className="w-[--radix-popover-anchor-width] p-0" align="start">
                             <Command>
                               <CommandList>
                                 <CommandEmpty>No patient found.</CommandEmpty>
@@ -1072,24 +1071,24 @@ export default function AppointmentsPage() {
                           </PopoverContent>
                         </Popover>
                         <div className="border p-4 rounded-lg space-y-4">
-                            <div className="flex justify-between items-center">
-                              <Label>Send Patient Booking Link</Label>
-                              <Button type="button" className="self-end" onClick={handleSendLink} disabled={isSendingLink || patientSearchTerm.length < 10}>
-                                  {isSendingLink ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <LinkIcon className="mr-2 h-4 w-4" />}
-                                  Send
-                              </Button>
-                            </div>
-                              <RadioGroup value={linkChannel} onValueChange={(v) => setLinkChannel(v as any)} className="flex items-center space-x-2 flex-grow">
-                                  <Label htmlFor="sms-channel" className="flex items-center gap-2 p-3 rounded-md cursor-pointer flex-1 has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:border-primary border">
-                                  <RadioGroupItem value="sms" id="sms-channel" />
-                                  <MessageSquare className="h-5 w-5" /> SMS
-                                  </Label>
-                                  <Label htmlFor="whatsapp-channel" className="flex items-center gap-2 p-3 rounded-md cursor-pointer flex-1 has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:border-primary border">
-                                  <RadioGroupItem value="whatsapp" id="whatsapp-channel" />
-                                  <Smartphone className="h-5 w-5" /> WhatsApp
-                                  </Label>
-                              </RadioGroup>
+                          <div className="flex justify-between items-center">
+                            <Label>Send Patient Booking Link</Label>
+                            <Button type="button" className="self-end" onClick={handleSendLink} disabled={isSendingLink || patientSearchTerm.length < 10}>
+                                {isSendingLink ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <LinkIcon className="mr-2 h-4 w-4" />}
+                                Send
+                            </Button>
                           </div>
+                            <RadioGroup value={linkChannel} onValueChange={(v) => setLinkChannel(v as any)} className="flex items-center space-x-2 flex-grow">
+                                <Label htmlFor="sms-channel" className="flex items-center gap-2 p-3 rounded-md cursor-pointer flex-1 has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:border-primary border">
+                                <RadioGroupItem value="sms" id="sms-channel" />
+                                <MessageSquare className="h-5 w-5" /> SMS
+                                </Label>
+                                <Label htmlFor="whatsapp-channel" className="flex items-center gap-2 p-3 rounded-md cursor-pointer flex-1 has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:border-primary border">
+                                <RadioGroupItem value="whatsapp" id="whatsapp-channel" />
+                                <Smartphone className="h-5 w-5" /> WhatsApp
+                                </Label>
+                            </RadioGroup>
+                        </div>
                       </div>
                       
                       {(selectedPatient || isNewPatient || isEditing) && (
