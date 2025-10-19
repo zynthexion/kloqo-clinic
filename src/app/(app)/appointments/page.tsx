@@ -1034,7 +1034,7 @@ export default function AppointmentsPage() {
                               </FormItem>
                           </PopoverAnchor>
 
-                          <PopoverContent onOpenAutoFocus={(e) => e.preventDefault()} className="w-[--radix-popover-anchor-width] p-0" align="start">
+                          <PopoverContent onOpenAutoFocus={(e) => e.preventDefault()} className="w-full p-0" align="start">
                             <Command>
                               <CommandList>
                                 <CommandEmpty>No patient found.</CommandEmpty>
@@ -1643,4 +1643,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
