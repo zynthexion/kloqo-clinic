@@ -871,23 +871,28 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
                           <div className="space-y-2 pt-4">
                             <Label>Review and save</Label>
                             <div className="space-y-3 rounded-md border p-3 min-h-[100px]">
-                                {field.value.length > 0 ? field.value.map((fieldItem, index) => (
-                                   <div key={index} className="text-sm">
-                                        <p className="font-semibold">{fieldItem.day}</p>
-                                        <div className="flex flex-wrap gap-1 mt-1">
-                                          {fieldItem.timeSlots.map((ts, i) => {
-                                              if (!ts.from || !ts.to) return null;
-                                              return (
-                                                <Badge key={i} variant="secondary" className="font-normal">
-                                                  {format(parse(ts.from, 'HH:mm', new Date()), 'p')} - {format(parse(ts.to, 'HH:mm', new Date()), 'p')}
-                                                </Badge>
-                                              );
-                                          })}
+                                {field.value && field.value.length > 0 ? (
+                                    [...field.value]
+                                    .sort((a, b) => daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day))
+                                    .map((fieldItem, index) => (
+                                        <div key={index} className="text-sm">
+                                            <p className="font-semibold">{fieldItem.day}</p>
+                                            <div className="flex flex-wrap gap-1 mt-1">
+                                            {fieldItem.timeSlots.map((ts, i) => {
+                                                if (!ts.from || !ts.to) return null;
+                                                return (
+                                                    <Badge key={i} variant="secondary" className="font-normal">
+                                                    {format(parse(ts.from, 'HH:mm', new Date()), 'p')} - {format(parse(ts.to, 'HH:mm', new Date()), 'p')}
+                                                    </Badge>
+                                                );
+                                            })}
+                                            </div>
                                         </div>
-                                    </div>
-                                )) : <p className="text-xs text-muted-foreground text-center pt-6">No availability applied yet.</p>}
+                                    ))
+                                ) : (
+                                    <p className="text-xs text-muted-foreground text-center pt-6">No availability applied yet.</p>
+                                )}
                             </div>
-                            
                           </div>
                       </FormItem>
                     )}
@@ -920,3 +925,5 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
     </>
   );
 }
+
+    
