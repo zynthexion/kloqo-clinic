@@ -696,42 +696,92 @@ export default function AppointmentsPage() {
       toast({ variant: "destructive", title: "Error", description: "Clinic ID not found." });
       return;
     }
-
+  
     startSendingLink(async () => {
-        try {
-            const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-            const path = `/login?clinicId=${clinicId}`;
-            const bookingLink = `${appUrl}${path}`;
-            const message = `Click here to book your appointment: ${bookingLink}`;
-
-            const response = await fetch('/api/send-sms', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    to: `+91${patientSearchTerm}`,
-                    message: message,
-                    channel: linkChannel
-                }),
-            });
-
-            const result = await response.json();
-    
-            if (!response.ok) {
-                throw new Error(result.error || `Failed to send ${linkChannel} message.`);
-            }
-    
+      try {
+        const phoneNumber = `+91${patientSearchTerm}`;
+        let userId: string;
+  
+        // 1. Check if user exists
+        const usersRef = collection(db, "users");
+        const q = query(usersRef, where("phone", "==", phoneNumber));
+        const userSnapshot = await getDocs(q);
+  
+        if (userSnapshot.empty) {
+          // 2. If user does not exist, create user and patient records
+          const batch = writeBatch(db);
+  
+          // Create patient document
+          const newPatientRef = doc(collection(db, "patients"));
+          const newPatientData: Omit<Patient, 'id'> = {
+            name: "New Patient",
+            age: 0,
+            sex: "Other",
+            phone: phoneNumber,
+            clinicIds: [clinicId],
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            totalAppointments: 0,
+          };
+          batch.set(newPatientRef, newPatientData);
+  
+          // Create user document
+          const newUserRef = doc(collection(db, "users"));
+          const newUserData: User = {
+            uid: newUserRef.id,
+            clinicId: clinicId,
+            phone: phoneNumber,
+            role: 'patient',
+            name: "New Patient", // Placeholder name
+            email: "", // Placeholder
+            designation: "Owner", // Default
+          };
+          batch.set(newUserRef, newUserData);
+  
+          await batch.commit();
+          userId = newUserRef.id;
+          toast({ title: "New Patient Pre-registered", description: "User and patient profiles created." });
+        } else {
+          // User exists, get their ID
+          userId = userSnapshot.docs[0].id;
+        }
+  
+        // 3. Send the link
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+        const path = `/login?clinicId=${clinicId}&uid=${userId}`;
+        const bookingLink = `${appUrl}${path}`;
+        const message = `Click here to book your appointment: ${bookingLink}`;
+  
+        const response = await fetch('/api/send-sms', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: phoneNumber,
+            message: message,
+            channel: linkChannel,
+          }),
+        });
+  
+        const result = await response.json();
+  
+        if (!response.ok) {
+          throw new Error(result.error || `Failed to send ${linkChannel} message.`);
+        }
+  
+        toast({
+          title: `${linkChannel === 'sms' ? 'SMS' : 'WhatsApp'} Sent`,
+          description: `Message sent to ${phoneNumber}.`,
+        });
+      } catch (error: any) {
+        console.error(`Error in send link flow:`, error);
+        if (!(error instanceof FirestorePermissionError)) {
             toast({
-                title: `${linkChannel === 'sms' ? 'SMS' : 'WhatsApp'} Sent`,
-                description: `Message sent to +91${patientSearchTerm}.`,
-            });
-        } catch (error: any) {
-            console.error(`Error sending ${linkChannel}:`, error);
-            toast({
-                variant: "destructive",
-                title: `Failed to Send ${linkChannel === 'sms' ? 'SMS' : 'WhatsApp'}`,
-                description: error.message || "An unexpected error occurred.",
+              variant: "destructive",
+              title: `Failed to Send ${linkChannel === 'sms' ? 'SMS' : 'WhatsApp'}`,
+              description: error.message || "An unexpected error occurred.",
             });
         }
+      }
     });
   };
 
@@ -1055,30 +1105,30 @@ export default function AppointmentsPage() {
                   <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                       <div className="space-y-4">
-                        <Popover open={isPatientPopoverOpen} onOpenChange={setIsPatientPopoverOpen}>
-                          <PopoverAnchor asChild>
-                             <FormItem>
-                                <FormLabel>Search Patient by Phone</FormLabel>
-                                  <div className="relative">
-                                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                    <FormControl>
-                                      <Input
-                                        ref={patientInputRef}
-                                        placeholder="Start typing 10-digit phone number..."
-                                        value={patientSearchTerm}
-                                        onChange={handlePatientSearchChange}
-                                        className="pl-8"
-                                        maxLength={10}
-                                      />
-                                    </FormControl>
-                                  </div>
-                                <FormMessage />
-                              </FormItem>
-                          </PopoverAnchor>
+                      <Popover open={isPatientPopoverOpen} onOpenChange={setIsPatientPopoverOpen}>
+                        <PopoverAnchor asChild>
+                            <FormItem>
+                            <FormLabel>Search Patient by Phone</FormLabel>
+                                <div className="relative">
+                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                <FormControl>
+                                    <Input
+                                    ref={patientInputRef}
+                                    placeholder="Start typing 10-digit phone number..."
+                                    value={patientSearchTerm}
+                                    onChange={handlePatientSearchChange}
+                                    className="pl-8"
+                                    maxLength={10}
+                                    />
+                                </FormControl>
+                                </div>
+                            <FormMessage />
+                            </FormItem>
+                        </PopoverAnchor>
 
-                          <PopoverContent onOpenAutoFocus={(e) => e.preventDefault()} className="w-[--radix-popover-trigger-width] p-0" align="start">
+                        <PopoverContent onOpenAutoFocus={(e) => e.preventDefault()} className="w-[--radix-popover-trigger-width] p-0" align="start">
                             <Command>
-                              <CommandList>
+                            <CommandList>
                                 {isPending ? (
                                     <div className="p-4 text-center text-sm text-muted-foreground">Searching...</div>
                                 ) : patientSearchResults.length === 0 && patientSearchTerm.length >= 5 ? (
