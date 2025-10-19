@@ -161,7 +161,7 @@ export default function AppointmentsPage() {
     const querySnapshot = await getDocs(q);
     const results = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Patient));
     setPatientSearchResults(results);
-    setIsPatientPopoverOpen(true);
+    setIsPatientPopoverOpen(results.length > 0 || searchTerm.length >= 5);
   }, []);
 
   useEffect(() => {
@@ -1034,10 +1034,12 @@ export default function AppointmentsPage() {
                               </FormItem>
                           </PopoverAnchor>
 
-                          <PopoverContent onOpenAutoFocus={(e) => e.preventDefault()} className="w-full p-0" align="start">
+                          <PopoverContent onOpenAutoFocus={(e) => e.preventDefault()} className="w-[--radix-popover-trigger-width] p-0" align="start">
                             <Command>
                               <CommandList>
-                                <CommandEmpty>No patient found.</CommandEmpty>
+                                {patientSearchResults.length === 0 && patientSearchTerm.length >= 5 ? (
+                                    <CommandEmpty>No patient found.</CommandEmpty>
+                                ) : (
                                 <CommandGroup>
                                   {patientSearchResults.map((patient) => {
                                     const isClinicPatient = patient.clinicIds?.includes(clinicId!);
@@ -1066,6 +1068,7 @@ export default function AppointmentsPage() {
                                     );
                                   })}
                                 </CommandGroup>
+                                )}
                               </CommandList>
                             </Command>
                           </PopoverContent>
@@ -1643,3 +1646,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
