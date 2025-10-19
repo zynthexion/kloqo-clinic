@@ -28,7 +28,7 @@ import { doc, updateDoc, collection, getDocs, setDoc, getDoc, query, where } fro
 import { db, storage } from "@/lib/firebase";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import type { Doctor, Appointment, LeaveSlot, Department, TimeSlot } from "@/lib/types";
-import { format, parse, isSameDay, getDay, parse as parseDateFns, addMinutes, isBefore } from "date-fns";
+import { format, parse, isSameDay, getDay, parse as parseDateFns, addMinutes, isBefore, isWithinInterval } from "date-fns";
 import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon, PlusCircle, DollarSign, Printer, FileDown, ChevronUp, ChevronDown, Minus, Trophy, Repeat, CalendarCheck, Upload, Trash2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -617,7 +617,7 @@ export default function DoctorsPage() {
           })
           .filter(slot => slot.timeSlots.length > 0);
     
-        const availabilitySlotsToSave = validSlots.map(s => ({
+        const newAvailabilitySlots = validSlots.map(s => ({
           ...s,
           timeSlots: s.timeSlots.map(ts => ({
             from: format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a"),
@@ -625,7 +625,7 @@ export default function DoctorsPage() {
           }))
         }));
 
-        const scheduleString = availabilitySlotsToSave
+        const scheduleString = newAvailabilitySlots
           ?.sort((a, b) => daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day))
           .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${ts.from}-${ts.to}`).join(', ')}`)
           .join('; ');
@@ -633,11 +633,51 @@ export default function DoctorsPage() {
         startTransition(async () => {
             const doctorRef = doc(db, "doctors", selectedDoctor.id);
             try {
+                // --- Start: Leave Slot Cleanup Logic ---
+                const existingLeaveSlots = selectedDoctor.leaveSlots || [];
+                const cleanedLeaveSlots = existingLeaveSlots.map(leaveDay => {
+                    const leaveDate = parseDateFns(leaveDay.date, "yyyy-MM-dd", new Date());
+                    const dayName = format(leaveDate, 'EEEE');
+                    
+                    const availabilityForDay = newAvailabilitySlots.find(s => s.day === dayName);
+
+                    // If the doctor is no longer available on this day of the week, discard all leaves for this date.
+                    if (!availabilityForDay) {
+                        return null;
+                    }
+
+                    // Filter individual leave slots to keep only those within the new availability.
+                    const validLeaveSubSlots = leaveDay.slots.filter(leaveSubSlot => {
+                        const leaveStart = parseDateFns(leaveSubSlot.from, "hh:mm a", leaveDate);
+                        const leaveEnd = parseDateFns(leaveSubSlot.to, "hh:mm a", leaveDate);
+
+                        // Check if the leave slot is within ANY of the new available time slots for that day.
+                        return availabilityForDay.timeSlots.some(availableSlot => {
+                            const availableStart = parseDateFns(availableSlot.from, "hh:mm a", leaveDate);
+                            const availableEnd = parseDateFns(availableSlot.to, "hh:mm a", leaveDate);
+                            return isWithinInterval(leaveStart, { start: availableStart, end: availableEnd }) && isWithinInterval(leaveEnd, { start: availableStart, end: availableEnd });
+                        });
+                    });
+
+                    // If after filtering, there are no leave slots left for this date, discard the entry.
+                    if (validLeaveSubSlots.length === 0) {
+                        return null;
+                    }
+
+                    // Return the leave day with only the valid sub-slots.
+                    return { ...leaveDay, slots: validLeaveSubSlots };
+
+                }).filter((slot): slot is LeaveSlot => slot !== null); // Filter out the null entries.
+                // --- End: Leave Slot Cleanup Logic ---
+
                 await updateDoc(doctorRef, {
-                    availabilitySlots: availabilitySlotsToSave,
+                    availabilitySlots: newAvailabilitySlots,
                     schedule: scheduleString,
+                    leaveSlots: cleanedLeaveSlots, // Save the cleaned leave slots
                 });
-                const updatedDoctor = { ...selectedDoctor, availabilitySlots: availabilitySlotsToSave, schedule: scheduleString };
+
+                const updatedDoctor = { ...selectedDoctor, availabilitySlots: newAvailabilitySlots, schedule: scheduleString, leaveSlots: cleanedLeaveSlots };
+                
                 setSelectedDoctor(updatedDoctor);
                 setDoctors(prev => prev.map(d => d.id === selectedDoctor.id ? updatedDoctor : d));
                 setIsEditingAvailability(false);
@@ -1552,5 +1592,7 @@ export default function DoctorsPage() {
     </>
   );
 }
+
+    
 
     
