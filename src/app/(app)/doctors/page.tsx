@@ -642,18 +642,17 @@ export default function DoctorsPage() {
                     const availabilityForDay = newAvailabilitySlots.find(s => s.day === dayName);
 
                     if (!availabilityForDay) {
-                        continue; // Doctor no longer works on this day, so discard all leaves for this date.
+                        continue; 
                     }
 
                     const validLeaveSubSlots: TimeSlot[] = [];
                     for (const leaveSubSlot of leaveDay.slots) {
-                        const leaveStart = parseDateFns(leaveSubSlot.from, "hh:mm a", new Date(0));
-                        const leaveEnd = parseDateFns(leaveSubSlot.to, "hh:mm a", new Date(0));
+                        const leaveStart = parseDateFns(leaveSubSlot.from, "hh:mm a", new Date());
+                        const leaveEnd = parseDateFns(leaveSubSlot.to, "hh:mm a", new Date());
 
-                        // Check if the leave slot is within ANY of the new available time slots for that day.
                         const isContained = availabilityForDay.timeSlots.some(availableSlot => {
-                            const availableStart = parseDateFns(availableSlot.from, "hh:mm a", new Date(0));
-                            const availableEnd = parseDateFns(availableSlot.to, "hh:mm a", new Date(0));
+                            const availableStart = parseDateFns(availableSlot.from, "hh:mm a", new Date());
+                            const availableEnd = parseDateFns(availableSlot.to, "hh:mm a", new Date());
                             return isWithinInterval({ start: leaveStart, end: leaveEnd }, { start: availableStart, end: availableEnd });
                         });
 
@@ -670,7 +669,7 @@ export default function DoctorsPage() {
                 await updateDoc(doctorRef, {
                     availabilitySlots: newAvailabilitySlots,
                     schedule: scheduleString,
-                    leaveSlots: cleanedLeaveSlots, // Save the cleaned leave slots
+                    leaveSlots: cleanedLeaveSlots,
                 });
 
                 const updatedDoctor = { ...selectedDoctor, availabilitySlots: newAvailabilitySlots, schedule: scheduleString, leaveSlots: cleanedLeaveSlots };
@@ -703,12 +702,36 @@ export default function DoctorsPage() {
             }
             return slot;
         }).filter(slot => slot.timeSlots.length > 0);
+
+        const existingLeaveSlots = selectedDoctor.leaveSlots || [];
+        const cleanedLeaveSlots: LeaveSlot[] = [];
+
+        for (const leaveDay of existingLeaveSlots) {
+            const leaveDate = parseDateFns(leaveDay.date, "yyyy-MM-dd", new Date());
+            const dayName = format(leaveDate, 'EEEE');
+
+            if (dayName !== day) {
+                cleanedLeaveSlots.push(leaveDay);
+                continue;
+            }
+
+            const validLeaveSubSlots = leaveDay.slots.filter(leaveSubSlot => {
+                return !(leaveSubSlot.from === timeSlot.from && leaveSubSlot.to === timeSlot.to);
+            });
+
+            if (validLeaveSubSlots.length > 0) {
+                cleanedLeaveSlots.push({ ...leaveDay, slots: validLeaveSubSlots });
+            }
+        }
     
         startTransition(async () => {
             const doctorRef = doc(db, "doctors", selectedDoctor.id);
             try {
-                await updateDoc(doctorRef, { availabilitySlots: updatedAvailabilitySlots });
-                const updatedDoctor = { ...selectedDoctor, availabilitySlots: updatedAvailabilitySlots };
+                await updateDoc(doctorRef, { 
+                    availabilitySlots: updatedAvailabilitySlots,
+                    leaveSlots: cleanedLeaveSlots 
+                });
+                const updatedDoctor = { ...selectedDoctor, availabilitySlots: updatedAvailabilitySlots, leaveSlots: cleanedLeaveSlots };
                 setSelectedDoctor(updatedDoctor);
                 setDoctors(prev => prev.map(d => d.id === selectedDoctor.id ? updatedDoctor : d));
                 toast({
