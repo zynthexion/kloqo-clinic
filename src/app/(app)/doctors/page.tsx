@@ -70,7 +70,10 @@ const dayAbbreviations = ["S", "M", "T", "W", "T", "F", "S"];
 const timeSlotSchema = z.object({
   from: z.string().min(1, "Required"),
   to: z.string().min(1, "Required"),
-}).refine(data => data.from < data.to, {
+}).refine(data => {
+    if (!data.from || !data.to) return true; // Let the min(1) handle empty fields
+    return data.from < data.to;
+}, {
     message: "End time must be after start time.",
     path: ["to"],
 });
@@ -139,6 +142,19 @@ const DoctorListItem = ({ doctor, onSelect, isSelected }: { doctor: Doctor, onSe
     </Card>
 );
 
+const generateTimeOptions = (startTime: string, endTime: string, interval: number): string[] => {
+    const options = [];
+    let currentTime = parse(startTime, "HH:mm", new Date());
+    const end = parse(endTime, "HH:mm", new Date());
+
+    while (isBefore(currentTime, end)) {
+        options.push(format(currentTime, "HH:mm"));
+        currentTime = addMinutes(currentTime, interval);
+    }
+    options.push(format(end, "HH:mm")); // Include the end time
+    return options;
+};
+
 export default function DoctorsPage() {
   const auth = useAuth();
   const [isPending, startTransition] = useTransition();
@@ -157,11 +173,7 @@ export default function DoctorsPage() {
       availableDays: [],
       availabilitySlots: [],
     },
-  });
-
-  const { fields, append, remove, update } = useFieldArray({
-    control: form.control,
-    name: "availabilitySlots",
+    mode: "onBlur",
   });
   
   const { toast } = useToast();
@@ -697,6 +709,28 @@ export default function DoctorsPage() {
             });
             return;
         }
+
+        for (const day of selectedDays) {
+            const clinicDay = clinicDetails?.operatingHours?.find((h: any) => h.day === day);
+            if (!clinicDay || clinicDay.isClosed) {
+                toast({ variant: "destructive", title: "Invalid Day", description: `Clinic is closed on ${day}.` });
+                return;
+            }
+            
+            for (const slot of validSharedTimeSlots) {
+                let withinHours = false;
+                for (const clinicSlot of clinicDay.timeSlots) {
+                    if (slot.from >= clinicSlot.open && slot.to <= clinicSlot.close) {
+                        withinHours = true;
+                        break;
+                    }
+                }
+                if (!withinHours) {
+                    toast({ variant: "destructive", title: "Invalid Time Slot", description: `Slot for ${day} is outside clinic operating hours.` });
+                    return;
+                }
+            }
+        }
     
         const currentFormSlots = form.getValues('availabilitySlots') || [];
         const newSlotsMap = new Map<string, { day: string; timeSlots: { from: string; to: string }[] }>();
@@ -708,7 +742,7 @@ export default function DoctorsPage() {
         });
         
         const updatedSlots = Array.from(newSlotsMap.values());
-        form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true });
+        form.setValue('availabilitySlots', updatedSlots, { shouldDirty: true, shouldValidate: true });
         
         toast({
             title: "Time Slots Applied",
@@ -1283,47 +1317,95 @@ export default function DoctorsPage() {
                             {isEditingAvailability ? (
                                 <Form {...form}>
                                     <form onSubmit={form.handleSubmit(handleAvailabilitySave)} className="space-y-4">
-                                        
                                       <div className="space-y-2">
                                         <Label>1. Select days to apply time slots to</Label>
                                         <ToggleGroup type="multiple" value={selectedDays} onValueChange={setSelectedDays} variant="outline" className="flex-wrap justify-start">
-                                            {daysOfWeek.map((day, index) => (
-                                                <ToggleGroupItem key={daysOfWeek[index]} value={daysOfWeek[index]} aria-label={`Toggle ${daysOfWeek[index]}`} className="h-9 w-9">
+                                            {daysOfWeek.map((day, index) => {
+                                                const clinicDay = clinicDetails?.operatingHours?.find((h: any) => h.day === day);
+                                                const isDisabled = !clinicDay || clinicDay.isClosed;
+                                                return (
+                                                <ToggleGroupItem key={daysOfWeek[index]} value={daysOfWeek[index]} aria-label={`Toggle ${daysOfWeek[index]}`} className="h-9 w-9" disabled={isDisabled}>
                                                     {dayAbbreviations[index]}
                                                 </ToggleGroupItem>
-                                            ))}
+                                                )
+                                            })}
                                         </ToggleGroup>
                                       </div>
 
-                                      <div className="space-y-2">
-                                        <Label>2. Define time slots</Label>
-                                        {sharedTimeSlots.map((ts, index) => (
-                                            <div key={index} className="flex items-end gap-2">
-                                               <div className="flex-grow">
-                                                  <Label className="text-xs font-normal">From</Label>
-                                                  <Input type="time" value={ts.from} onChange={(e) => {
-                                                      const newShared = [...sharedTimeSlots];
-                                                      newShared[index].from = e.target.value;
-                                                      setSharedTimeSlots(newShared);
-                                                  }} />
-                                               </div>
-                                               <div className="flex-grow">
-                                                  <Label className="text-xs font-normal">To</Label>
-                                                  <Input type="time" value={ts.to} onChange={(e) => {
-                                                      const newShared = [...sharedTimeSlots];
-                                                      newShared[index].to = e.target.value;
-                                                      setSharedTimeSlots(newShared);
-                                                  }} />
-                                               </div>
-                                               <Button type="button" variant="ghost" size="icon" onClick={() => setSharedTimeSlots(prev => prev.filter((_, i) => i !== index))} disabled={sharedTimeSlots.length <=1}>
-                                                    <Trash className="h-4 w-4 text-red-500" />
-                                               </Button>
-                                            </div>
-                                        ))}
-                                        <Button type="button" size="sm" variant="outline" onClick={() => setSharedTimeSlots(prev => [...prev, { from: "", to: "" }])}>
-                                            Add Another Slot
-                                        </Button>
-                                      </div>
+                                        <div className="space-y-2">
+                                            <Label>2. Define time slots</Label>
+                                            {sharedTimeSlots.map((ts, index) => {
+                                                const dayForSlot = selectedDays[0] || daysOfWeek.find(day => !clinicDetails?.operatingHours?.find((h:any) => h.day === day)?.isClosed);
+                                                const clinicDay = clinicDetails?.operatingHours?.find((h: any) => h.day === dayForSlot);
+                                                if (!clinicDay) return null;
+
+                                                const clinicOpeningTime = clinicDay.timeSlots[0]?.open || "00:00";
+                                                const clinicClosingTime = clinicDay.timeSlots[clinicDay.timeSlots.length - 1]?.close || "23:45";
+                                                const allTimeOptions = generateTimeOptions(clinicOpeningTime, clinicClosingTime, 15);
+                                                
+                                                const fromTimeOptions = allTimeOptions.filter(time => 
+                                                  !sharedTimeSlots.filter((_, i) => i !== index).some(slot => time >= slot.from && time < slot.to)
+                                                ).slice(0, -1);
+
+                                                const nextSlotStart = [...sharedTimeSlots]
+                                                    .filter(slot => slot.from > ts.from)
+                                                    .sort((a,b) => a.from.localeCompare(b.from))[0]?.from || clinicClosingTime;
+                                                
+                                                const toTimeOptions = ts.from 
+                                                    ? allTimeOptions.filter(t => t > ts.from && t <= nextSlotStart) 
+                                                    : [];
+
+                                               return (
+                                                <div key={index} className="flex items-end gap-2">
+                                                   <div className="flex-grow space-y-1">
+                                                      <Label className="text-xs font-normal">From</Label>
+                                                      <Select
+                                                        value={ts.from}
+                                                        onValueChange={(value) => {
+                                                          const newShared = [...sharedTimeSlots];
+                                                          newShared[index].from = value;
+                                                          if (newShared[index].to <= value) {
+                                                            newShared[index].to = '';
+                                                          }
+                                                          setSharedTimeSlots(newShared);
+                                                        }}
+                                                      >
+                                                        <SelectTrigger><SelectValue placeholder="Start" /></SelectTrigger>
+                                                        <SelectContent>
+                                                            {fromTimeOptions.map(time => (
+                                                                <SelectItem key={`from-${time}`} value={time}>{format(parse(time, "HH:mm", new Date()), 'p')}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                      </Select>
+                                                   </div>
+                                                   <div className="flex-grow space-y-1">
+                                                      <Label className="text-xs font-normal">To</Label>
+                                                      <Select
+                                                        value={ts.to}
+                                                        onValueChange={(value) => {
+                                                          const newShared = [...sharedTimeSlots];
+                                                          newShared[index].to = value;
+                                                          setSharedTimeSlots(newShared);
+                                                        }}
+                                                        disabled={!ts.from}
+                                                      >
+                                                        <SelectTrigger><SelectValue placeholder="End" /></SelectTrigger>
+                                                        <SelectContent>
+                                                            {toTimeOptions.map(time => (
+                                                                <SelectItem key={`to-${time}`} value={time}>{format(parse(time, "HH:mm", new Date()), 'p')}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                      </Select>
+                                                   </div>
+                                                   <Button type="button" variant="ghost" size="icon" onClick={() => setSharedTimeSlots(prev => prev.filter((_, i) => i !== index))} disabled={sharedTimeSlots.length <=1}>
+                                                        <Trash className="h-4 w-4 text-red-500" />
+                                                   </Button>
+                                                </div>
+                                            )})}
+                                            <Button type="button" size="sm" variant="outline" onClick={() => setSharedTimeSlots(prev => [...prev, { from: "", to: "" }])}>
+                                                Add Another Slot
+                                            </Button>
+                                          </div>
                                       
                                       <Button type="button" className="w-full" onClick={applySharedSlotsToSelectedDays}>
                                         3. Apply to Selected Days
@@ -1358,7 +1440,7 @@ export default function DoctorsPage() {
 
                                       <div className="flex justify-end gap-2 mt-4">
                                         <Button type="button" variant="ghost" onClick={() => setIsEditingAvailability(false)} disabled={isPending}>Cancel</Button>
-                                        <Button type="submit" disabled={isPending}>
+                                        <Button type="submit" disabled={isPending || !form.formState.isValid}>
                                             {isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Saving...</> : 'Save Schedule'}
                                         </Button>
                                       </div>
