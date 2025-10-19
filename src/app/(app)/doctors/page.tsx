@@ -28,8 +28,8 @@ import { doc, updateDoc, collection, getDocs, setDoc, getDoc, query, where } fro
 import { db, storage } from "@/lib/firebase";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import type { Doctor, Appointment, LeaveSlot, Department, TimeSlot } from "@/lib/types";
-import { format, parse, isSameDay, getDay, parse as parseDateFns } from "date-fns";
-import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon, PlusCircle, DollarSign, Printer, FileDown, ChevronUp, ChevronDown, Minus, Trophy, Repeat, CalendarCheck, Upload } from "lucide-react";
+import { format, parse, isSameDay, getDay, parse as parseDateFns, addMinutes, isBefore } from "date-fns";
+import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon, PlusCircle, DollarSign, Printer, FileDown, ChevronUp, ChevronDown, Minus, Trophy, Repeat, CalendarCheck, Upload, Trash2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -70,22 +70,33 @@ const dayAbbreviations = ["S", "M", "T", "W", "T", "F", "S"];
 const timeSlotSchema = z.object({
   from: z.string().min(1, "Required"),
   to: z.string().min(1, "Required"),
+}).refine(data => data.from < data.to, {
+    message: "End time must be after start time.",
+    path: ["to"],
 });
 
 const availabilitySlotSchema = z.object({
   day: z.string(),
   timeSlots: z.array(timeSlotSchema).min(1, "At least one time slot is required."),
+}).refine(data => {
+    const sortedSlots = [...data.timeSlots].sort((a, b) => a.from.localeCompare(b.from));
+    for (let i = 0; i < sortedSlots.length - 1; i++) {
+        if (sortedSlots[i].to > sortedSlots[i+1].from) {
+            return false; // Overlap detected
+        }
+    }
+    return true;
+}, {
+    message: "Time slots cannot overlap.",
+    path: ["timeSlots"],
 });
+
 
 const weeklyAvailabilityFormSchema = z.object({
   availableDays: z.array(z.string()).default([]),
-  availabilitySlots: z.array(availabilitySlotSchema).refine(
-    (slots) => slots.every((slot) => slot.timeSlots.length > 0),
-    {
-      message: "Each selected day must have at least one time slot.",
-    }
-  ),
+  availabilitySlots: z.array(availabilitySlotSchema).min(1, "At least one availability slot is required."),
 });
+
 type WeeklyAvailabilityFormValues = z.infer<typeof weeklyAvailabilityFormSchema>;
 
 const StarRating = ({ rating }: { rating: number }) => (
@@ -1321,21 +1332,26 @@ export default function DoctorsPage() {
                                       <div className="space-y-2 pt-4">
                                         <Label>Review and save</Label>
                                         <div className="space-y-3 rounded-md border p-3 max-h-48 overflow-y-auto">
-                                            {fields.map((field, index) => (
-                                               <div key={field.id} className="text-sm">
-                                                    <p className="font-semibold">{field.day}</p>
-                                                    <div className="flex flex-wrap gap-1 mt-1">
-                                                      {field.timeSlots.map((ts, i) => {
-                                                          if (!ts.from || !ts.to) return null;
-                                                          return (
-                                                            <Badge key={i} variant="secondary" className="font-normal">
-                                                              {format(parseDateFns(ts.from, "HH:mm", new Date()), 'p')} - {format(parseDateFns(ts.to, "HH:mm", new Date()), 'p')}
-                                                            </Badge>
-                                                          );
-                                                      })}
+                                            {form.watch('availabilitySlots') && form.watch('availabilitySlots').length > 0 ? (
+                                                [...form.watch('availabilitySlots')]
+                                                .sort((a, b) => daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day))
+                                                .map((fieldItem, index) => (
+                                                <div key={index} className="text-sm">
+                                                        <p className="font-semibold">{fieldItem.day}</p>
+                                                        <div className="flex flex-wrap gap-1 mt-1">
+                                                        {fieldItem.timeSlots.map((ts, i) => {
+                                                            if (!ts.from || !ts.to) return null;
+                                                            return (
+                                                                <Badge key={i} variant="secondary" className="font-normal">
+                                                                {format(parseDateFns(ts.from, "HH:mm", new Date()), 'p')} - {format(parseDateFns(ts.to, "HH:mm", new Date()), 'p')}
+                                                                </Badge>
+                                                            );
+                                                        })}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))}
+                                                ))
+                                            ) : <p className="text-xs text-muted-foreground text-center pt-6">No availability applied yet.</p>
+                                        }
                                         </div>
                                       </div>
 
@@ -1454,3 +1470,5 @@ export default function DoctorsPage() {
     </>
   );
 }
+
+    
