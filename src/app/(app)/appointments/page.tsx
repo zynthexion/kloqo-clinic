@@ -41,7 +41,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck, UserPlus, Users, Plus, X, Clock, Calendar as CalendarLucide, CheckCircle2, Info, Send } from "lucide-react";
+import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck, UserPlus, Users, Plus, X, Clock, Calendar as CalendarLucide, CheckCircle2, Info, Send, MessageSquare, Smartphone } from "lucide-react";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
@@ -65,7 +65,7 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, Di
 import { FirestorePermissionError } from "@/firebase/errors";
 import { errorEmitter } from "@/firebase/error-emitter";
 import Link from "next/link";
-import { SendLinkDialog } from "@/components/appointments/send-link-dialog";
+import { Label } from "@/components/ui/label";
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -112,6 +112,7 @@ export default function AppointmentsPage() {
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [primaryPatient, setPrimaryPatient] = useState<Patient | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [isSendingLink, startSendingLink] = useTransition();
   const [drawerSearchTerm, setDrawerSearchTerm] = useState("");
   const [selectedDrawerDoctor, setSelectedDrawerDoctor] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("upcoming");
@@ -125,7 +126,9 @@ export default function AppointmentsPage() {
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
   const [walkInEstimate, setWalkInEstimate] = useState<WalkInEstimate>(null);
   const [isCalculatingEstimate, setIsCalculatingEstimate] = useState(false);
-  const [isSendLinkDialogOpen, setIsSendLinkDialogOpen] = useState(false);
+  
+  const [linkChannel, setLinkChannel] = useState<'sms' | 'whatsapp'>('sms');
+  const [linkBookingType, setLinkBookingType] = useState<'advanced' | 'walkin'>('advanced');
 
   const { toast } = useToast();
   const isEditing = !!editingAppointment;
@@ -639,6 +642,58 @@ export default function AppointmentsPage() {
     });
   }
 
+  const handleSendLink = () => {
+    if (patientSearchTerm.length < 10) {
+      toast({
+        variant: "destructive",
+        title: "Invalid Phone Number",
+        description: "Please enter a valid 10-digit phone number.",
+      });
+      return;
+    }
+    if (!clinicId) {
+      toast({ variant: "destructive", title: "Error", description: "Clinic ID not found." });
+      return;
+    }
+
+    startSendingLink(async () => {
+        try {
+            const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+            const path = linkBookingType === 'advanced' ? `/login?clinicId=${clinicId}` : `/consult-today?clinicId=${clinicId}`;
+            const bookingLink = `${appUrl}${path}`;
+            const message = `Click here to book your appointment: ${bookingLink}`;
+
+            const response = await fetch('/api/send-sms', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    to: `+91${patientSearchTerm}`,
+                    message: message,
+                    channel: linkChannel
+                }),
+            });
+
+            const result = await response.json();
+    
+            if (!response.ok) {
+                throw new Error(result.error || `Failed to send ${linkChannel} message.`);
+            }
+    
+            toast({
+                title: `${linkChannel === 'sms' ? 'SMS' : 'WhatsApp'} Sent`,
+                description: `Message sent to +91${patientSearchTerm}.`,
+            });
+        } catch (error: any) {
+            console.error(`Error sending ${linkChannel}:`, error);
+            toast({
+                variant: "destructive",
+                title: `Failed to Send ${linkChannel === 'sms' ? 'SMS' : 'WhatsApp'}`,
+                description: error.message || "An unexpected error occurred.",
+            });
+        }
+    });
+  };
+
   const handleCancel = (appointment: Appointment) => {
     startTransition(async () => {
       try {
@@ -1015,11 +1070,34 @@ export default function AppointmentsPage() {
                           </Popover>
                           <FormMessage />
                         </FormItem>
-                        <div className="flex justify-end">
-                            <Button type="button" variant="secondary" onClick={() => setIsSendLinkDialogOpen(true)} disabled={patientSearchTerm.length < 10}>
-                                <LinkIcon className="mr-2 h-4 w-4" />
-                                Send Booking Link
-                            </Button>
+                        <div className="border p-4 rounded-lg space-y-4">
+                          <Label>Send Patient Booking Link</Label>
+                          <div className="grid grid-cols-2 gap-4">
+                            <RadioGroup value={linkChannel} onValueChange={(v) => setLinkChannel(v as any)} className="flex items-center space-x-2">
+                                <Label htmlFor="sms-channel" className="flex items-center gap-2 p-3 rounded-md cursor-pointer flex-1 has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:border-primary border">
+                                  <RadioGroupItem value="sms" id="sms-channel" />
+                                  <MessageSquare className="h-5 w-5" /> SMS
+                                </Label>
+                                <Label htmlFor="whatsapp-channel" className="flex items-center gap-2 p-3 rounded-md cursor-pointer flex-1 has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:border-primary border">
+                                  <RadioGroupItem value="whatsapp" id="whatsapp-channel" />
+                                  <Smartphone className="h-5 w-5" /> WhatsApp
+                                </Label>
+                            </RadioGroup>
+                            <RadioGroup value={linkBookingType} onValueChange={(v) => setLinkBookingType(v as any)} className="flex items-center space-x-2">
+                                <Label htmlFor="advanced-booking" className="flex items-center gap-2 p-3 rounded-md cursor-pointer flex-1 has-[:checked]:bg-secondary has-[:checked]:text-secondary-foreground border">
+                                  <RadioGroupItem value="advanced" id="advanced-booking" />
+                                  Advanced Booking
+                                </Label>
+                                <Label htmlFor="walkin-booking" className="flex items-center gap-2 p-3 rounded-md cursor-pointer flex-1 has-[:checked]:bg-secondary has-[:checked]:text-secondary-foreground border">
+                                  <RadioGroupItem value="walkin" id="walkin-booking" />
+                                  Walk-in
+                                </Label>
+                            </RadioGroup>
+                          </div>
+                          <Button type="button" className="w-full" onClick={handleSendLink} disabled={isSendingLink || patientSearchTerm.length < 10}>
+                            {isSendingLink ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <LinkIcon className="mr-2 h-4 w-4" />}
+                            Send Booking Link
+                          </Button>
                         </div>
                       </div>
                       
@@ -1572,11 +1650,6 @@ export default function AppointmentsPage() {
         </DialogContent>
       </Dialog>
       <WeeklyDoctorAvailability />
-      <SendLinkDialog
-        isOpen={isSendLinkDialogOpen}
-        setIsOpen={setIsSendLinkDialogOpen}
-        phoneNumber={patientSearchTerm}
-      />
     </>
   );
 }
