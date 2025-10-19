@@ -53,7 +53,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import WeeklyDoctorAvailability from "@/components/dashboard/weekly-doctor-availability";
-import { Popover, PopoverContent, PopoverTrigger, PopoverAnchor } from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverAnchor } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -698,6 +698,10 @@ export default function AppointmentsPage() {
     }
   
     startSendingLink(async () => {
+      let batch: any;
+      let newPatientData: any = {};
+      let newUserData: any = {};
+  
       try {
         const phoneNumber = `+91${patientSearchTerm}`;
         let userId: string;
@@ -709,11 +713,12 @@ export default function AppointmentsPage() {
   
         if (userSnapshot.empty) {
           // 2. If user does not exist, create user and patient records
-          const batch = writeBatch(db);
+          batch = writeBatch(db);
   
           // Create patient document
           const newPatientRef = doc(collection(db, "patients"));
-          const newPatientData: Omit<Patient, 'id'> = {
+          newPatientData = {
+            id: newPatientRef.id, // Ensure ID is part of the data
             name: "New Patient",
             age: 0,
             sex: "Other",
@@ -727,14 +732,14 @@ export default function AppointmentsPage() {
   
           // Create user document
           const newUserRef = doc(collection(db, "users"));
-          const newUserData: User = {
+          newUserData = {
             uid: newUserRef.id,
             clinicId: clinicId,
             phone: phoneNumber,
             role: 'patient',
-            name: "New Patient", // Placeholder name
-            email: "", // Placeholder
-            designation: "Owner", // Default
+            name: "New Patient",
+            email: "",
+            designation: "Owner",
           };
           batch.set(newUserRef, newUserData);
   
@@ -773,13 +778,24 @@ export default function AppointmentsPage() {
           description: `Message sent to ${phoneNumber}.`,
         });
       } catch (error: any) {
-        console.error(`Error in send link flow:`, error);
-        if (!(error instanceof FirestorePermissionError)) {
-            toast({
-              variant: "destructive",
-              title: `Failed to Send ${linkChannel === 'sms' ? 'SMS' : 'WhatsApp'}`,
-              description: error.message || "An unexpected error occurred.",
-            });
+        if (error instanceof FirestorePermissionError) {
+          // This case should be handled if a permission error is thrown from a utility
+          errorEmitter.emit('permission-error', error);
+        } else if (error.code && error.code.startsWith('permission-denied')) {
+          // This handles errors thrown directly by the batch commit
+          const permissionError = new FirestorePermissionError({
+            path: `Batch write for new user/patient`,
+            operation: 'create',
+            requestResourceData: { user: newUserData, patient: newPatientData },
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        } else {
+          console.error(`Error in send link flow:`, error);
+          toast({
+            variant: "destructive",
+            title: `Failed to Send ${linkChannel === 'sms' ? 'SMS' : 'WhatsApp'}`,
+            description: error.message || "An unexpected error occurred.",
+          });
         }
       }
     });
