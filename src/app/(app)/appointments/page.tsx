@@ -1025,6 +1025,7 @@ export default function AppointmentsPage() {
                                     placeholder="Start typing 10-digit phone number..."
                                     value={patientSearchTerm}
                                     onChange={handlePatientSearchChange}
+                                    onFocus={() => { if (patientSearchTerm.length < 5) setIsPatientPopoverOpen(false); }}
                                     className="pl-8"
                                     maxLength={10}
                                   />
@@ -1070,23 +1071,23 @@ export default function AppointmentsPage() {
                           <FormMessage />
                         </FormItem>
                         <div className="border p-4 rounded-lg space-y-4">
+                          <div className="flex justify-between items-center">
                             <Label>Send Patient Booking Link</Label>
-                            <div className="flex gap-4">
-                                <RadioGroup value={linkChannel} onValueChange={(v) => setLinkChannel(v as any)} className="flex items-center space-x-2 flex-grow">
-                                    <Label htmlFor="sms-channel" className="flex items-center gap-2 p-3 rounded-md cursor-pointer flex-1 has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:border-primary border">
-                                    <RadioGroupItem value="sms" id="sms-channel" />
-                                    <MessageSquare className="h-5 w-5" /> SMS
-                                    </Label>
-                                    <Label htmlFor="whatsapp-channel" className="flex items-center gap-2 p-3 rounded-md cursor-pointer flex-1 has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:border-primary border">
-                                    <RadioGroupItem value="whatsapp" id="whatsapp-channel" />
-                                    <Smartphone className="h-5 w-5" /> WhatsApp
-                                    </Label>
-                                </RadioGroup>
-                                <Button type="button" className="self-end" onClick={handleSendLink} disabled={isSendingLink || patientSearchTerm.length < 10}>
-                                    {isSendingLink ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <LinkIcon className="mr-2 h-4 w-4" />}
-                                    Send
-                                </Button>
-                            </div>
+                            <Button type="button" className="self-end" onClick={handleSendLink} disabled={isSendingLink || patientSearchTerm.length < 10}>
+                                {isSendingLink ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <LinkIcon className="mr-2 h-4 w-4" />}
+                                Send
+                            </Button>
+                          </div>
+                            <RadioGroup value={linkChannel} onValueChange={(v) => setLinkChannel(v as any)} className="flex items-center space-x-2 flex-grow">
+                                <Label htmlFor="sms-channel" className="flex items-center gap-2 p-3 rounded-md cursor-pointer flex-1 has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:border-primary border">
+                                <RadioGroupItem value="sms" id="sms-channel" />
+                                <MessageSquare className="h-5 w-5" /> SMS
+                                </Label>
+                                <Label htmlFor="whatsapp-channel" className="flex items-center gap-2 p-3 rounded-md cursor-pointer flex-1 has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:border-primary border">
+                                <RadioGroupItem value="whatsapp" id="whatsapp-channel" />
+                                <Smartphone className="h-5 w-5" /> WhatsApp
+                                </Label>
+                            </RadioGroup>
                         </div>
                       </div>
                       
