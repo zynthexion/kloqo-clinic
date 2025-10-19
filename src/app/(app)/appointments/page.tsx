@@ -1072,8 +1072,7 @@ export default function AppointmentsPage() {
                         </FormItem>
                         <div className="border p-4 rounded-lg space-y-4">
                           <Label>Send Patient Booking Link</Label>
-                          <div className="grid grid-cols-2 gap-4">
-                            <RadioGroup value={linkChannel} onValueChange={(v) => setLinkChannel(v as any)} className="flex items-center space-x-2">
+                           <RadioGroup value={linkChannel} onValueChange={(v) => setLinkChannel(v as any)} className="flex items-center space-x-2">
                                 <Label htmlFor="sms-channel" className="flex items-center gap-2 p-3 rounded-md cursor-pointer flex-1 has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:border-primary border">
                                   <RadioGroupItem value="sms" id="sms-channel" />
                                   <MessageSquare className="h-5 w-5" /> SMS
@@ -1083,17 +1082,6 @@ export default function AppointmentsPage() {
                                   <Smartphone className="h-5 w-5" /> WhatsApp
                                 </Label>
                             </RadioGroup>
-                            <RadioGroup value={linkBookingType} onValueChange={(v) => setLinkBookingType(v as any)} className="flex items-center space-x-2">
-                                <Label htmlFor="advanced-booking" className="flex items-center gap-2 p-3 rounded-md cursor-pointer flex-1 has-[:checked]:bg-secondary has-[:checked]:text-secondary-foreground border">
-                                  <RadioGroupItem value="advanced" id="advanced-booking" />
-                                  Advanced Booking
-                                </Label>
-                                <Label htmlFor="walkin-booking" className="flex items-center gap-2 p-3 rounded-md cursor-pointer flex-1 has-[:checked]:bg-secondary has-[:checked]:text-secondary-foreground border">
-                                  <RadioGroupItem value="walkin" id="walkin-booking" />
-                                  Walk-in
-                                </Label>
-                            </RadioGroup>
-                          </div>
                           <Button type="button" className="w-full" onClick={handleSendLink} disabled={isSendingLink || patientSearchTerm.length < 10}>
                             {isSendingLink ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <LinkIcon className="mr-2 h-4 w-4" />}
                             Send Booking Link
