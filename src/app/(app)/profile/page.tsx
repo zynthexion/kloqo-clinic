@@ -153,8 +153,6 @@ export default function ProfilePage() {
             if (clinicDocSnap.exists()) {
               const clinicData = clinicDocSnap.data();
               setClinicDetails(clinicData);
-              console.log("DEBUG: Fetched clinic details:", clinicData);
-
 
               const clinicResetData = {
                 name: clinicData.name,
@@ -357,9 +355,6 @@ export default function ProfilePage() {
     update(dayIndex, { ...day, isClosed });
   };
 
-  console.log("DEBUG: Watched form values:", clinicForm.watch());
-
-
   const renderContent = () => {
       switch(activeView) {
           case 'profile':
@@ -464,27 +459,24 @@ export default function ProfilePage() {
                                     <FormField
                                       control={clinicForm.control}
                                       name="numDoctors"
-                                      render={({ field }) => {
-                                          console.log("DEBUG: Rendering numDoctors field:", field);
-                                          return (
-                                              <FormItem>
-                                                <FormLabel>Number of Doctors Limit</FormLabel>
-                                                <FormControl>
-                                                  <Input
-                                                    type="number"
-                                                    {...field}
-                                                    onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)}
-                                                    disabled={!isEditingClinic || !isMultiDoctorClinic || isPending}
-                                                    min={currentDoctorCount}
-                                                  />
-                                                </FormControl>
-                                                <FormDescription className="text-xs">
-                                                  Currently using {currentDoctorCount} of {clinicDetails?.numDoctors || 0} available slots.
-                                                </FormDescription>
-                                                <FormMessage />
-                                              </FormItem>
-                                          )
-                                      }}
+                                      render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel>Number of Doctors Limit</FormLabel>
+                                            <FormControl>
+                                              <Input
+                                                type="number"
+                                                {...field}
+                                                onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)}
+                                                disabled={!isEditingClinic || !isMultiDoctorClinic || isPending}
+                                                min={currentDoctorCount}
+                                              />
+                                            </FormControl>
+                                            <FormDescription className="text-xs">
+                                              Currently using {currentDoctorCount} of {clinicDetails?.numDoctors || 0} available slots.
+                                            </FormDescription>
+                                            <FormMessage />
+                                          </FormItem>
+                                      )}
                                     />
                                     <FormField control={clinicForm.control} name="clinicRegNumber" render={({ field }) => (
                                         <FormItem><FormLabel>Clinic Registration Number</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
