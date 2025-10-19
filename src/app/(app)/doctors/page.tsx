@@ -633,42 +633,39 @@ export default function DoctorsPage() {
         startTransition(async () => {
             const doctorRef = doc(db, "doctors", selectedDoctor.id);
             try {
-                // --- Start: Leave Slot Cleanup Logic ---
                 const existingLeaveSlots = selectedDoctor.leaveSlots || [];
-                const cleanedLeaveSlots = existingLeaveSlots.map(leaveDay => {
+                const cleanedLeaveSlots: LeaveSlot[] = [];
+
+                for (const leaveDay of existingLeaveSlots) {
                     const leaveDate = parseDateFns(leaveDay.date, "yyyy-MM-dd", new Date());
                     const dayName = format(leaveDate, 'EEEE');
-                    
                     const availabilityForDay = newAvailabilitySlots.find(s => s.day === dayName);
 
-                    // If the doctor is no longer available on this day of the week, discard all leaves for this date.
                     if (!availabilityForDay) {
-                        return null;
+                        continue; // Doctor no longer works on this day, so discard all leaves for this date.
                     }
 
-                    // Filter individual leave slots to keep only those within the new availability.
-                    const validLeaveSubSlots = leaveDay.slots.filter(leaveSubSlot => {
-                        const leaveStart = parseDateFns(leaveSubSlot.from, "hh:mm a", leaveDate);
-                        const leaveEnd = parseDateFns(leaveSubSlot.to, "hh:mm a", leaveDate);
+                    const validLeaveSubSlots: TimeSlot[] = [];
+                    for (const leaveSubSlot of leaveDay.slots) {
+                        const leaveStart = parseDateFns(leaveSubSlot.from, "hh:mm a", new Date(0));
+                        const leaveEnd = parseDateFns(leaveSubSlot.to, "hh:mm a", new Date(0));
 
                         // Check if the leave slot is within ANY of the new available time slots for that day.
-                        return availabilityForDay.timeSlots.some(availableSlot => {
-                            const availableStart = parseDateFns(availableSlot.from, "hh:mm a", leaveDate);
-                            const availableEnd = parseDateFns(availableSlot.to, "hh:mm a", leaveDate);
-                            return isWithinInterval(leaveStart, { start: availableStart, end: availableEnd }) && isWithinInterval(leaveEnd, { start: availableStart, end: availableEnd });
+                        const isContained = availabilityForDay.timeSlots.some(availableSlot => {
+                            const availableStart = parseDateFns(availableSlot.from, "hh:mm a", new Date(0));
+                            const availableEnd = parseDateFns(availableSlot.to, "hh:mm a", new Date(0));
+                            return isWithinInterval({ start: leaveStart, end: leaveEnd }, { start: availableStart, end: availableEnd });
                         });
-                    });
 
-                    // If after filtering, there are no leave slots left for this date, discard the entry.
-                    if (validLeaveSubSlots.length === 0) {
-                        return null;
+                        if (isContained) {
+                            validLeaveSubSlots.push(leaveSubSlot);
+                        }
                     }
 
-                    // Return the leave day with only the valid sub-slots.
-                    return { ...leaveDay, slots: validLeaveSubSlots };
-
-                }).filter((slot): slot is LeaveSlot => slot !== null); // Filter out the null entries.
-                // --- End: Leave Slot Cleanup Logic ---
+                    if (validLeaveSubSlots.length > 0) {
+                        cleanedLeaveSlots.push({ ...leaveDay, slots: validLeaveSubSlots });
+                    }
+                }
 
                 await updateDoc(doctorRef, {
                     availabilitySlots: newAvailabilitySlots,
