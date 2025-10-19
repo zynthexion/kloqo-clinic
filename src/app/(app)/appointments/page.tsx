@@ -161,7 +161,7 @@ export default function AppointmentsPage() {
     const querySnapshot = await getDocs(q);
     const results = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Patient));
     setPatientSearchResults(results);
-    setIsPatientPopoverOpen(results.length > 0);
+    setIsPatientPopoverOpen(true);
   }, []);
 
   useEffect(() => {
