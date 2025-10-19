@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import type { Appointment, Doctor, Patient, Visit } from "@/lib/types";
+import type { Appointment, Doctor, Patient, Visit, User } from "@/lib/types";
 import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
@@ -150,30 +150,72 @@ export default function AppointmentsPage() {
 
   const patientInputRef = useRef<HTMLInputElement>(null);
 
-  const searchPatients = useCallback(async (searchTerm: string) => {
+  const handlePatientSearch = useCallback(async (searchTerm: string) => {
     if (searchTerm.length < 5) {
       setPatientSearchResults([]);
       setIsPatientPopoverOpen(false);
       return;
     }
     const phoneNumber = `+91${searchTerm}`;
-    const q = query(collection(db, "patients"), where("phone", "==", phoneNumber));
-    const querySnapshot = await getDocs(q);
-    const results = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Patient));
-    setPatientSearchResults(results);
-    setIsPatientPopoverOpen(results.length > 0 || searchTerm.length >= 5);
+    
+    // 1. Query for Primary User
+    const usersRef = collection(db, "users");
+    const q = query(usersRef, where("phone", "==", phoneNumber), where("role", "==", "patient"));
+    const userSnapshot = await getDocs(q);
+
+    if (userSnapshot.empty) {
+      // 2. Handle "No Patient Found"
+      setPatientSearchResults([]);
+      setIsPatientPopoverOpen(true); // Open popover to show "New Patient" state
+      return;
+    }
+
+    // 3. Handle "Patient Found"
+    const primaryUserData = userSnapshot.docs[0].data() as User;
+    const primaryPatientData = {
+      id: primaryUserData.uid,
+      name: primaryUserData.name,
+      phone: primaryUserData.phone,
+      sex: 'Male', // Default, should be on user doc
+      age: 30,     // Default, should be on user doc
+      place: '',   // Default, should be on user doc
+    } as Patient;
+
+    let allPatients: Patient[] = [primaryPatientData];
+
+    // 4. Check for Related Patients
+    const relatedPatientIds = (primaryUserData as any).relatedPatientIds;
+    if (relatedPatientIds && relatedPatientIds.length > 0) {
+      // 5. Fetch Related Patients
+      const patientsRef = collection(db, "patients");
+      const relatedPatientsQuery = query(patientsRef, where("id", "in", relatedPatientIds));
+      const relatedPatientsSnapshot = await getDocs(relatedPatientsQuery);
+      const relatedPatients = relatedPatientsSnapshot.docs.map(doc => doc.data() as Patient);
+      allPatients = [...allPatients, ...relatedPatients];
+    }
+    
+    // 6. Display All Patients
+    setPatientSearchResults(allPatients);
+    setIsPatientPopoverOpen(true);
   }, []);
 
   useEffect(() => {
-    if (patientSearchTerm.length >= 5) {
-      startTransition(() => {
-        searchPatients(patientSearchTerm);
-      });
-    } else {
-      setPatientSearchResults([]);
-      setIsPatientPopoverOpen(false);
-    }
-  }, [patientSearchTerm, searchPatients]);
+    const handler = setTimeout(() => {
+      if (patientSearchTerm.length >= 5) {
+        startTransition(() => {
+          handlePatientSearch(patientSearchTerm);
+        });
+      } else {
+        setPatientSearchResults([]);
+        setIsPatientPopoverOpen(false);
+      }
+    }, 500); // 500ms debounce
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [patientSearchTerm, handlePatientSearch]);
+
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -1037,7 +1079,9 @@ export default function AppointmentsPage() {
                           <PopoverContent onOpenAutoFocus={(e) => e.preventDefault()} className="w-[--radix-popover-trigger-width] p-0" align="start">
                             <Command>
                               <CommandList>
-                                {patientSearchResults.length === 0 && patientSearchTerm.length >= 5 ? (
+                                {isPending ? (
+                                    <div className="p-4 text-center text-sm text-muted-foreground">Searching...</div>
+                                ) : patientSearchResults.length === 0 && patientSearchTerm.length >= 5 ? (
                                     <CommandEmpty>No patient found.</CommandEmpty>
                                 ) : (
                                 <CommandGroup>
@@ -1073,30 +1117,44 @@ export default function AppointmentsPage() {
                             </Command>
                           </PopoverContent>
                         </Popover>
-                        <div className="border p-4 rounded-lg space-y-4">
+                         <div className="border p-4 rounded-lg space-y-4">
                           <div className="flex justify-between items-center">
                             <Label>Send Patient Booking Link</Label>
-                            <Button type="button" className="self-end" onClick={handleSendLink} disabled={isSendingLink || patientSearchTerm.length < 10}>
+                             <RadioGroup value={linkChannel} onValueChange={(v) => setLinkChannel(v as any)} className="flex items-center space-x-2">
+                                <Label htmlFor="sms-channel" className="flex items-center gap-2 cursor-pointer">
+                                  <RadioGroupItem value="sms" id="sms-channel" />
+                                  <MessageSquare className="h-5 w-5" /> SMS
+                                </Label>
+                                <Label htmlFor="whatsapp-channel" className="flex items-center gap-2 cursor-pointer">
+                                  <RadioGroupItem value="whatsapp" id="whatsapp-channel" />
+                                  <Smartphone className="h-5 w-5" /> WhatsApp
+                                </Label>
+                            </RadioGroup>
+                            <Button type="button" onClick={handleSendLink} disabled={isSendingLink || patientSearchTerm.length < 10}>
                                 {isSendingLink ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <LinkIcon className="mr-2 h-4 w-4" />}
                                 Send
                             </Button>
                           </div>
-                            <RadioGroup value={linkChannel} onValueChange={(v) => setLinkChannel(v as any)} className="flex items-center space-x-2 flex-grow">
-                                <Label htmlFor="sms-channel" className="flex items-center gap-2 p-3 rounded-md cursor-pointer flex-1 has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:border-primary border">
-                                <RadioGroupItem value="sms" id="sms-channel" />
-                                <MessageSquare className="h-5 w-5" /> SMS
-                                </Label>
-                                <Label htmlFor="whatsapp-channel" className="flex items-center gap-2 p-3 rounded-md cursor-pointer flex-1 has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:border-primary border">
-                                <RadioGroupItem value="whatsapp" id="whatsapp-channel" />
-                                <Smartphone className="h-5 w-5" /> WhatsApp
-                                </Label>
-                            </RadioGroup>
                         </div>
                       </div>
                       
                       {(selectedPatient || isNewPatient || isEditing) && (
                         <>
                           <div className="pt-4 border-t">
+                             <div className="flex justify-center mb-4">
+                                <FormField control={form.control} name="bookedVia" render={({ field }) => (
+                                  <FormItem>
+                                    <FormControl>
+                                      <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4 rounded-full p-1 bg-muted">
+                                        <Label className={cn("px-4 py-1.5 rounded-full cursor-pointer transition-colors", field.value === 'Advanced Booking' && "bg-background shadow-sm")}>Advanced Booking</Label>
+                                        <Label className={cn("px-4 py-1.5 rounded-full cursor-pointer transition-colors", field.value === 'Walk-in' && "bg-background shadow-sm")}>Walk-in</Label>
+                                        <RadioGroupItem value="Advanced Booking" className="sr-only" />
+                                        <RadioGroupItem value="Walk-in" className="sr-only" />
+                                      </RadioGroup>
+                                    </FormControl>
+                                  </FormItem>
+                                )} />
+                            </div>
                             {primaryPatient && (relatives.length > 0 || isKloqoMember) && !isEditing && (
                               <div className="mb-4">
                                 <Tabs value={bookingFor} onValueChange={(value) => {
@@ -1191,24 +1249,7 @@ export default function AppointmentsPage() {
                                     <FormItem><FormLabel>Place</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                                   )} />
                                 </div>
-                                <FormField control={form.control} name="bookedVia" render={({ field }) => (
-                                  <FormItem className="space-y-3">
-                                    <FormLabel>Booking Type</FormLabel>
-                                    <FormControl>
-                                      <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4">
-                                        <FormItem className="flex items-center space-x-2 space-y-0">
-                                          <FormControl><RadioGroupItem value="Advanced Booking" /></FormControl>
-                                          <FormLabel className="font-normal">Advanced Booking</FormLabel>
-                                        </FormItem>
-                                        <FormItem className="flex items-center space-x-2 space-y-0">
-                                          <FormControl><RadioGroupItem value="Walk-in" /></FormControl>
-                                          <FormLabel className="font-normal">Walk-in</FormLabel>
-                                        </FormItem>
-                                      </RadioGroup>
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )} />
+                                
                                  <FormField
                                     control={form.control}
                                     name="phone"
@@ -1646,5 +1687,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
-    
