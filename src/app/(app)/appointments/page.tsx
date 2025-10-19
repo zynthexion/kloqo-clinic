@@ -53,7 +53,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import WeeklyDoctorAvailability from "@/components/dashboard/weekly-doctor-availability";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger, PopoverAnchor } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -1013,10 +1013,10 @@ export default function AppointmentsPage() {
                   <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                       <div className="space-y-4">
-                        <FormItem>
-                          <FormLabel>Search Patient by Phone</FormLabel>
-                          <Popover open={isPatientPopoverOpen} onOpenChange={setIsPatientPopoverOpen}>
-                            <PopoverTrigger asChild>
+                        <Popover open={isPatientPopoverOpen} onOpenChange={setIsPatientPopoverOpen}>
+                          <FormItem>
+                            <FormLabel>Search Patient by Phone</FormLabel>
+                            <PopoverAnchor asChild>
                               <div className="relative">
                                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                                 <FormControl>
@@ -1031,64 +1031,65 @@ export default function AppointmentsPage() {
                                   />
                                 </FormControl>
                               </div>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                              <Command>
-                                <CommandList>
-                                  <CommandEmpty>No patient found.</CommandEmpty>
-                                  <CommandGroup>
-                                    {patientSearchResults.map((patient) => {
-                                      const isClinicPatient = patient.clinicIds?.includes(clinicId!);
-                                      return (
-                                        <CommandItem
-                                          key={patient.id}
-                                          value={patient.phone}
-                                          onSelect={() => handlePatientSelect(patient)}
-                                          className="flex justify-between items-center"
-                                        >
-                                          <div>
-                                            {patient.name}
-                                            <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
-                                          </div>
-                                          <Badge variant={isClinicPatient ? "secondary" : "outline"} className={cn(
-                                            isClinicPatient ? "text-blue-600 border-blue-500" : "text-amber-600 border-amber-500"
-                                          )}>
-                                            {isClinicPatient ? (
-                                              <UserCheck className="mr-1.5 h-3 w-3" />
-                                            ) : (
-                                              <Crown className="mr-1.5 h-3 w-3" />
-                                            )}
-                                            {isClinicPatient ? "Existing Patient" : "Kloqo Member"}
-                                          </Badge>
-                                        </CommandItem>
-                                      );
-                                    })}
-                                  </CommandGroup>
-                                </CommandList>
-                              </Command>
-                            </PopoverContent>
-                          </Popover>
-                          <FormMessage />
-                        </FormItem>
+                            </PopoverAnchor>
+                            <FormMessage />
+                          </FormItem>
+
+                          <PopoverContent className="w-[--radix-popover-anchor-width] p-0" align="start">
+                            <Command>
+                              <CommandList>
+                                <CommandEmpty>No patient found.</CommandEmpty>
+                                <CommandGroup>
+                                  {patientSearchResults.map((patient) => {
+                                    const isClinicPatient = patient.clinicIds?.includes(clinicId!);
+                                    return (
+                                      <CommandItem
+                                        key={patient.id}
+                                        value={patient.phone}
+                                        onSelect={() => handlePatientSelect(patient)}
+                                        className="flex justify-between items-center"
+                                      >
+                                        <div>
+                                          {patient.name}
+                                          <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
+                                        </div>
+                                        <Badge variant={isClinicPatient ? "secondary" : "outline"} className={cn(
+                                          isClinicPatient ? "text-blue-600 border-blue-500" : "text-amber-600 border-amber-500"
+                                        )}>
+                                          {isClinicPatient ? (
+                                            <UserCheck className="mr-1.5 h-3 w-3" />
+                                          ) : (
+                                            <Crown className="mr-1.5 h-3 w-3" />
+                                          )}
+                                          {isClinicPatient ? "Existing Patient" : "Kloqo Member"}
+                                        </Badge>
+                                      </CommandItem>
+                                    );
+                                  })}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                         <div className="border p-4 rounded-lg space-y-4">
-                          <div className="flex justify-between items-center">
-                            <Label>Send Patient Booking Link</Label>
-                            <Button type="button" className="self-end" onClick={handleSendLink} disabled={isSendingLink || patientSearchTerm.length < 10}>
-                                {isSendingLink ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <LinkIcon className="mr-2 h-4 w-4" />}
-                                Send
-                            </Button>
+                            <div className="flex justify-between items-center">
+                              <Label>Send Patient Booking Link</Label>
+                              <Button type="button" className="self-end" onClick={handleSendLink} disabled={isSendingLink || patientSearchTerm.length < 10}>
+                                  {isSendingLink ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <LinkIcon className="mr-2 h-4 w-4" />}
+                                  Send
+                              </Button>
+                            </div>
+                              <RadioGroup value={linkChannel} onValueChange={(v) => setLinkChannel(v as any)} className="flex items-center space-x-2 flex-grow">
+                                  <Label htmlFor="sms-channel" className="flex items-center gap-2 p-3 rounded-md cursor-pointer flex-1 has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:border-primary border">
+                                  <RadioGroupItem value="sms" id="sms-channel" />
+                                  <MessageSquare className="h-5 w-5" /> SMS
+                                  </Label>
+                                  <Label htmlFor="whatsapp-channel" className="flex items-center gap-2 p-3 rounded-md cursor-pointer flex-1 has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:border-primary border">
+                                  <RadioGroupItem value="whatsapp" id="whatsapp-channel" />
+                                  <Smartphone className="h-5 w-5" /> WhatsApp
+                                  </Label>
+                              </RadioGroup>
                           </div>
-                            <RadioGroup value={linkChannel} onValueChange={(v) => setLinkChannel(v as any)} className="flex items-center space-x-2 flex-grow">
-                                <Label htmlFor="sms-channel" className="flex items-center gap-2 p-3 rounded-md cursor-pointer flex-1 has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:border-primary border">
-                                <RadioGroupItem value="sms" id="sms-channel" />
-                                <MessageSquare className="h-5 w-5" /> SMS
-                                </Label>
-                                <Label htmlFor="whatsapp-channel" className="flex items-center gap-2 p-3 rounded-md cursor-pointer flex-1 has-[:checked]:bg-primary has-[:checked]:text-primary-foreground has-[:checked]:border-primary border">
-                                <RadioGroupItem value="whatsapp" id="whatsapp-channel" />
-                                <Smartphone className="h-5 w-5" /> WhatsApp
-                                </Label>
-                            </RadioGroup>
-                        </div>
                       </div>
                       
                       {(selectedPatient || isNewPatient || isEditing) && (
@@ -1643,3 +1644,4 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
