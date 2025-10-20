@@ -84,10 +84,11 @@ export type Visit = {
 
 export type Patient = {
   id: string;
+  primaryUserId?: string;
   clinicIds?: string[];
   name: string;
   age: number;
-  sex: 'Male' | 'Female' | 'Other';
+  sex: 'Male' | 'Female' | 'Other' | '';
   phone: string;
   email?: string;
   place?: string;
@@ -145,10 +146,10 @@ export type User = {
     uid: string;
     phone: string;
     role?: 'clinicAdmin' | 'patient';
+    patientId?: string;
     clinicId?: string;
     email?: string;
     name?: string;
     designation?: 'Doctor' | 'Owner';
     onboarded?: boolean;
-    patientId?: string;
 }
