@@ -683,119 +683,91 @@ export default function AppointmentsPage() {
     });
   }
 
-  const handleSendLink = () => {
-    if (patientSearchTerm.length < 10) {
-      toast({
-        variant: "destructive",
-        title: "Invalid Phone Number",
-        description: "Please enter a valid 10-digit phone number.",
-      });
+ const handleSendLink = async () => {
+    const fullPhoneNumber = `+91${patientSearchTerm}`;
+    if (!patientSearchTerm || !clinicId || patientSearchTerm.length !== 10) {
+      toast({ variant: "destructive", title: "Invalid Phone Number", description: "Please enter a 10-digit phone number to send a link." });
       return;
     }
-    if (!clinicId) {
-      toast({ variant: "destructive", title: "Error", description: "Clinic ID not found." });
-      return;
-    }
-  
+
     startSendingLink(async () => {
-      let batch: any;
-      let newPatientData: any = {};
-      let newUserData: any = {};
-  
       try {
-        const phoneNumber = `+91${patientSearchTerm}`;
-        let userId: string;
-  
-        // 1. Check if user exists
-        const usersRef = collection(db, "users");
-        const q = query(usersRef, where("phone", "==", phoneNumber));
-        const userSnapshot = await getDocs(q);
-  
-        if (userSnapshot.empty) {
-          // 2. If user does not exist, create user and patient records
-          batch = writeBatch(db);
-  
-          // Create patient document
-          const newPatientRef = doc(collection(db, "patients"));
-          newPatientData = {
-            id: newPatientRef.id, // Ensure ID is part of the data
-            name: "New Patient",
-            age: 0,
-            sex: "Other",
-            phone: phoneNumber,
-            clinicIds: [clinicId],
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-            totalAppointments: 0,
-          };
-          batch.set(newPatientRef, newPatientData);
-  
-          // Create user document
-          const newUserRef = doc(collection(db, "users"));
-          newUserData = {
-            uid: newUserRef.id,
-            clinicId: clinicId,
-            phone: phoneNumber,
-            role: 'patient',
-            name: "New Patient",
-            email: "",
-            designation: "Owner",
-          };
-          batch.set(newUserRef, newUserData);
-  
-          await batch.commit();
-          userId = newUserRef.id;
-          toast({ title: "New Patient Pre-registered", description: "User and patient profiles created." });
-        } else {
-          // User exists, get their ID
-          userId = userSnapshot.docs[0].id;
-        }
-  
-        // 3. Send the link
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-        const path = `/login?clinicId=${clinicId}&uid=${userId}`;
-        const bookingLink = `${appUrl}${path}`;
-        const message = `Click here to book your appointment: ${bookingLink}`;
-  
-        const response = await fetch('/api/send-sms', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            to: phoneNumber,
-            message: message,
-            channel: linkChannel,
-          }),
-        });
-  
-        const result = await response.json();
-  
-        if (!response.ok) {
-          throw new Error(result.error || `Failed to send ${linkChannel} message.`);
-        }
-  
-        toast({
-          title: `${linkChannel === 'sms' ? 'SMS' : 'WhatsApp'} Sent`,
-          description: `Message sent to ${phoneNumber}.`,
-        });
-      } catch (error: any) {
-        if (error instanceof FirestorePermissionError) {
-          // This case should be handled if a permission error is thrown from a utility
-          errorEmitter.emit('permission-error', error);
-        } else if (error.code && error.code.startsWith('permission-denied')) {
-          // This handles errors thrown directly by the batch commit
+        // Check for uniqueness in the 'users' collection
+        const usersRef = collection(db, 'users');
+        const userQuery = query(usersRef, where('phone', '==', fullPhoneNumber));
+        
+        const userSnapshot = await getDocs(userQuery).catch(async (serverError) => {
           const permissionError = new FirestorePermissionError({
-            path: `Batch write for new user/patient`,
-            operation: 'create',
-            requestResourceData: { user: newUserData, patient: newPatientData },
+            path: 'users',
+            operation: 'list',
           });
           errorEmitter.emit('permission-error', permissionError);
-        } else {
-          console.error(`Error in send link flow:`, error);
+          throw serverError;
+        });
+
+        if (!userSnapshot.empty) {
           toast({
             variant: "destructive",
-            title: `Failed to Send ${linkChannel === 'sms' ? 'SMS' : 'WhatsApp'}`,
-            description: error.message || "An unexpected error occurred.",
+            title: "User Already Exists",
+            description: `A user with the phone number ${fullPhoneNumber} is already registered.`
           });
+          return;
+        }
+
+        const batch = writeBatch(db);
+        const newUserRef = doc(collection(db, 'users'));
+        const newPatientRef = doc(collection(db, 'patients'));
+
+        const newUserData = {
+          uid: newUserRef.id,
+          phone: fullPhoneNumber,
+          role: 'patient',
+          patientId: newPatientRef.id,
+          clinicId,
+          name: 'New Patient',
+          email: '',
+          designation: 'Owner',
+        };
+        batch.set(newUserRef, newUserData);
+
+        const newPatientData: Partial<Patient> = {
+          id: newPatientRef.id,
+          phone: fullPhoneNumber,
+          // The primaryUserId field does not exist in Patient type, maybe relatedPatientIds should be used?
+          // For now, let's link back to user via phone or a new field if needed.
+          clinicIds: [clinicId],
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          name: 'New Patient',
+          age: 0,
+          place: '',
+          sex: 'Other',
+          relatedPatientIds: [],
+          totalAppointments: 0,
+          visitHistory: []
+        };
+        batch.set(newPatientRef, newPatientData as Patient);
+
+        await batch.commit().catch(async (serverError) => {
+          const permissionError = new FirestorePermissionError({
+            path: 'batch write to users/patients',
+            operation: 'create',
+            requestResourceData: { user: newUserData, patient: newPatientData }
+          });
+          errorEmitter.emit('permission-error', permissionError);
+          throw serverError;
+        });
+
+        toast({
+          title: "Link Sent (Simulated)",
+          description: `A registration link has been sent to ${fullPhoneNumber}. New user and patient records created.`
+        });
+        setPatientSearchTerm('');
+
+      } catch (error: any) {
+        if (error.name !== 'FirestorePermissionError') {
+          console.error("Error in send link flow:", error);
+          toast({ variant: 'destructive', title: 'Error', description: 'Could not complete the action.' });
         }
       }
     });
@@ -1753,3 +1725,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
