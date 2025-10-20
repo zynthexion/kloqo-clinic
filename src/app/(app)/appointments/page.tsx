@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useTransition, useCallback } from "react";
@@ -143,8 +144,7 @@ async function calculateWalkInDetails(
   const q = query(
     appointmentsRef,
     where('doctor', '==', doctor.name),
-    where('date', '==', todayDateStr),
-    orderBy('time', 'asc')
+    where('date', '==', todayDateStr)
   );
   const querySnapshot = await getDocs(q);
   const todaysAppointments = querySnapshot.docs.map(doc => doc.data() as Appointment);
@@ -161,7 +161,7 @@ async function calculateWalkInDetails(
   );
 
   // 4. Find the starting point for our search
-  const lastAppointment = todaysAppointments[todaysAppointments.length - 1];
+  const lastAppointment = todaysAppointments.sort((a,b) => parseTime(a.time, now).getTime() - parseTime(b.time, now).getTime()).pop();
   const lastAppointmentTime = lastAppointment ? parseTime(lastAppointment.time, now) : now;
   const searchStartTime = isAfter(lastAppointmentTime, now) ? lastAppointmentTime : now;
 
@@ -976,11 +976,6 @@ export default function AppointmentsPage() {
       const endTime = parseDateFns(session.to, 'hh:mm a', selectedDate);
 
       while (currentTime < endTime) {
-        if (isPast(currentTime) && !isToday(currentTime)) {
-          currentTime = new Date(currentTime.getTime() + selectedDoctor.averageConsultingTime! * 60000);
-          continue;
-        }
-
         const slotTime = format(currentTime, "hh:mm a");
         let status: 'available' | 'booked' | 'leave' = 'available';
 
@@ -994,11 +989,12 @@ export default function AppointmentsPage() {
           status = 'leave';
         }
 
+        if (isToday(selectedDate) && subMinutes(currentTime, 30) < new Date()) {
+            status = 'booked'; 
+        }
+
         if (status === 'available') {
-            if (isToday(selectedDate) && subMinutes(currentTime, 30) < new Date()) {
-                // If the slot is today and less than 30 mins away, it's not available for advanced booking
-                status = 'booked'; 
-            } else if (availableCount < MAX_VISIBLE_SLOTS) {
+            if (availableCount < MAX_VISIBLE_SLOTS) {
                 slots.push({ time: slotTime, status });
                 availableCount++;
             }
@@ -1748,3 +1744,4 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
