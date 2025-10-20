@@ -150,61 +150,69 @@ export default function AppointmentsPage() {
 
   const patientInputRef = useRef<HTMLInputElement>(null);
 
-  const handlePatientSearch = useCallback(async (searchTerm: string) => {
-    if (searchTerm.length < 5) {
-      setPatientSearchResults([]);
-      setIsPatientPopoverOpen(false);
-      return;
-    }
-    const phoneNumber = `+91${searchTerm}`;
-    
-    // 1. Query for Primary User
-    const usersRef = collection(db, "users");
-    const q = query(usersRef, where("phone", "==", phoneNumber), where("role", "==", "patient"));
-    const userSnapshot = await getDocs(q);
+  const handlePatientSearch = useCallback(async (phone: string) => {
+        if (phone.length < 10 || !clinicId) {
+            setPatientSearchResults([]);
+            setIsPatientPopoverOpen(false);
+            return;
+        };
+        setIsPatientPopoverOpen(true);
+        startTransition(() => {
+          form.reset();
+        });
+        
+        try {
+            const fullPhoneNumber = `+91${phone}`;
+            const usersRef = collection(db, 'users');
+            
+            const userQuery = query(usersRef, where('phone', '==', fullPhoneNumber), where('role', '==', 'patient'));
+            const userSnapshot = await getDocs(userQuery);
 
-    if (userSnapshot.empty) {
-      // 2. Handle "No Patient Found"
-      setPatientSearchResults([]);
-      setIsPatientPopoverOpen(true); // Open popover to show "New Patient" state
-      return;
-    }
+            if (userSnapshot.empty) {
+                setPatientSearchResults([]);
+                form.setValue('phone', phone);
+                return;
+            }
 
-    // 3. Handle "Patient Found"
-    const primaryUserData = userSnapshot.docs[0].data() as User;
-    const primaryPatientData = {
-      id: primaryUserData.uid,
-      name: primaryUserData.name,
-      phone: primaryUserData.phone,
-      sex: 'Male', // Default, should be on user doc
-      age: 30,     // Default, should be on user doc
-      place: '',   // Default, should be on user doc
-    } as Patient;
+            const primaryUserData = userSnapshot.docs[0].data() as User;
+            const primaryPatientData = {
+                id: primaryUserData.uid, // Assuming user uid can be patient id
+                name: primaryUserData.name,
+                phone: primaryUserData.phone,
+                // These are defaults, ideally user doc would have more profile info
+                sex: 'Male', 
+                age: 30,
+                place: '',
+            } as Patient;
 
-    let allPatients: Patient[] = [primaryPatientData];
+            let allRelatedPatients: Patient[] = [primaryPatientData];
 
-    // 4. Check for Related Patients
-    const relatedPatientIds = (primaryUserData as any).relatedPatientIds;
-    if (relatedPatientIds && relatedPatientIds.length > 0) {
-      // 5. Fetch Related Patients
-      const patientsRef = collection(db, "patients");
-      const relatedPatientsQuery = query(patientsRef, where("id", "in", relatedPatientIds));
-      const relatedPatientsSnapshot = await getDocs(relatedPatientsQuery);
-      const relatedPatients = relatedPatientsSnapshot.docs.map(doc => doc.data() as Patient);
-      allPatients = [...allPatients, ...relatedPatients];
-    }
-    
-    // 6. Display All Patients
-    setPatientSearchResults(allPatients);
-    setIsPatientPopoverOpen(true);
-  }, []);
+            if ((primaryUserData as any).relatedPatientIds && (primaryUserData as any).relatedPatientIds.length > 0) {
+                const patientsRef = collection(db, 'patients');
+                const relatedPatientsQuery = query(patientsRef, where('__name__', 'in', (primaryUserData as any).relatedPatientIds));
+                const relatedSnapshot = await getDocs(relatedPatientsQuery);
+                const relatedPatients = relatedSnapshot.docs.map(doc => {
+                    const data = { id: doc.id, ...doc.data()} as Patient;
+                    return data;
+                });
+                allRelatedPatients = [...allRelatedPatients, ...relatedPatients];
+            }
+
+            setPatientSearchResults(allRelatedPatients);
+
+        } catch (error) {
+            console.error("Error searching patient:", error);
+            toast({variant: 'destructive', title: 'Search Error', description: 'Could not perform patient search.'});
+        } finally {
+            // No need to set isSearchingPatient to false if not using it
+        }
+  }, [clinicId, toast, form]);
+
 
   useEffect(() => {
     const handler = setTimeout(() => {
       if (patientSearchTerm.length >= 5) {
-        startTransition(() => {
-          handlePatientSearch(patientSearchTerm);
-        });
+        handlePatientSearch(patientSearchTerm);
       } else {
         setPatientSearchResults([]);
         setIsPatientPopoverOpen(false);
@@ -686,92 +694,90 @@ export default function AppointmentsPage() {
  const handleSendLink = async () => {
     const fullPhoneNumber = `+91${patientSearchTerm}`;
     if (!patientSearchTerm || !clinicId || patientSearchTerm.length !== 10) {
-      toast({ variant: "destructive", title: "Invalid Phone Number", description: "Please enter a 10-digit phone number to send a link." });
-      return;
+        toast({ variant: "destructive", title: "Invalid Phone Number", description: "Please enter a 10-digit phone number to send a link." });
+        return;
     }
 
     startSendingLink(async () => {
-      try {
-        // Check for uniqueness in the 'users' collection
-        const usersRef = collection(db, 'users');
-        const userQuery = query(usersRef, where('phone', '==', fullPhoneNumber));
-        
-        const userSnapshot = await getDocs(userQuery).catch(async (serverError) => {
-          const permissionError = new FirestorePermissionError({
-            path: 'users',
-            operation: 'list',
-          });
-          errorEmitter.emit('permission-error', permissionError);
-          throw serverError;
-        });
+        try {
+            const usersRef = collection(db, 'users');
+            const userQuery = query(usersRef, where('phone', '==', fullPhoneNumber));
+            
+            const userSnapshot = await getDocs(userQuery).catch(async (serverError) => {
+                const permissionError = new FirestorePermissionError({
+                    path: 'users',
+                    operation: 'list',
+                });
+                errorEmitter.emit('permission-error', permissionError);
+                throw serverError;
+            });
 
-        if (!userSnapshot.empty) {
-          toast({
-            variant: "destructive",
-            title: "User Already Exists",
-            description: `A user with the phone number ${fullPhoneNumber} is already registered.`
-          });
-          return;
+            if (!userSnapshot.empty) {
+                toast({
+                    variant: "destructive",
+                    title: "User Already Exists",
+                    description: `A user with the phone number ${fullPhoneNumber} is already registered.`
+                });
+                return;
+            }
+
+            const batch = writeBatch(db);
+            const newUserRef = doc(collection(db, 'users'));
+            const newPatientRef = doc(collection(db, 'patients'));
+
+            const newUserData: Omit<User, 'uid'> & {uid: string} = {
+                uid: newUserRef.id,
+                phone: fullPhoneNumber,
+                role: 'patient',
+                patientId: newPatientRef.id, // This links user to patient
+                clinicId: clinicId!,
+                name: "New Patient", // Placeholder
+                email: "", // Placeholder
+                designation: 'Owner', // Default, maybe not applicable
+            };
+
+            const newPatientData: Patient = {
+                id: newPatientRef.id,
+                phone: fullPhoneNumber,
+                clinicIds: [clinicId!],
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+                name: 'New Patient',
+                age: 0,
+                place: '',
+                sex: 'Other',
+                relatedPatientIds: [],
+                totalAppointments: 0,
+                visitHistory: []
+            };
+
+            batch.set(newUserRef, newUserData);
+            batch.set(newPatientRef, newPatientData);
+
+            await batch.commit().catch(async (serverError) => {
+                const permissionError = new FirestorePermissionError({
+                    path: `Batch write for new user/patient`,
+                    operation: 'create',
+                    requestResourceData: { user: newUserData, patient: newPatientData }
+                });
+                errorEmitter.emit('permission-error', permissionError);
+                throw serverError;
+            });
+
+            toast({
+                title: "Link Sent (Simulated)",
+                description: `A registration link has been sent to ${fullPhoneNumber}. New user and patient records created.`
+            });
+            setPatientSearchTerm('');
+
+        } catch (error: any) {
+             if (error.name !== 'FirestorePermissionError') {
+                 console.error("Error in send link flow:", error);
+                 toast({ variant: 'destructive', title: 'Error', description: 'Could not complete the action.' });
+             }
         }
-
-        const batch = writeBatch(db);
-        const newUserRef = doc(collection(db, 'users'));
-        const newPatientRef = doc(collection(db, 'patients'));
-
-        const newUserData = {
-          uid: newUserRef.id,
-          phone: fullPhoneNumber,
-          role: 'patient',
-          patientId: newPatientRef.id,
-          clinicId,
-          name: 'New Patient',
-          email: '',
-          designation: 'Owner',
-        };
-        batch.set(newUserRef, newUserData);
-
-        const newPatientData: Partial<Patient> = {
-          id: newPatientRef.id,
-          phone: fullPhoneNumber,
-          // The primaryUserId field does not exist in Patient type, maybe relatedPatientIds should be used?
-          // For now, let's link back to user via phone or a new field if needed.
-          clinicIds: [clinicId],
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-          name: 'New Patient',
-          age: 0,
-          place: '',
-          sex: 'Other',
-          relatedPatientIds: [],
-          totalAppointments: 0,
-          visitHistory: []
-        };
-        batch.set(newPatientRef, newPatientData as Patient);
-
-        await batch.commit().catch(async (serverError) => {
-          const permissionError = new FirestorePermissionError({
-            path: 'batch write to users/patients',
-            operation: 'create',
-            requestResourceData: { user: newUserData, patient: newPatientData }
-          });
-          errorEmitter.emit('permission-error', permissionError);
-          throw serverError;
-        });
-
-        toast({
-          title: "Link Sent (Simulated)",
-          description: `A registration link has been sent to ${fullPhoneNumber}. New user and patient records created.`
-        });
-        setPatientSearchTerm('');
-
-      } catch (error: any) {
-        if (error.name !== 'FirestorePermissionError') {
-          console.error("Error in send link flow:", error);
-          toast({ variant: 'destructive', title: 'Error', description: 'Could not complete the action.' });
-        }
-      }
     });
-  };
+};
 
   const handleCancel = (appointment: Appointment) => {
     startTransition(async () => {
@@ -1725,5 +1731,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
-    
