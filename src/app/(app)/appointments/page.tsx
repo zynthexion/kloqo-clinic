@@ -139,59 +139,62 @@ async function calculateWalkInDetails(
   const now = new Date();
   const todayDateStr = format(now, 'd MMMM yyyy');
 
-  // 1. Fetch all of today's appointments for the doctor
+  // 1. Fetch all of today's appointments for the doctor, ordered by token number
   const appointmentsRef = collection(db, 'appointments');
   const q = query(
     appointmentsRef,
     where('doctor', '==', doctor.name),
-    where('date', '==', todayDateStr)
+    where('date', '==', todayDateStr),
+    orderBy('numericToken', 'asc')
   );
   const querySnapshot = await getDocs(q);
   const todaysAppointments = querySnapshot.docs.map(doc => doc.data() as Appointment);
+  
+  // 2. Separate advanced bookings from all appointments
+  const advancedBookings = todaysAppointments.filter(apt => apt.bookedVia === 'Advanced Booking');
 
-  // 2. Generate all possible time slots for the doctor today
+  // 3. Generate all possible time slots for the doctor today
   const allPossibleSlots = generateAllTimeSlotsForDay(doctor, now);
   if (allPossibleSlots.length === 0) {
     throw new Error('Doctor has no available slots today.');
   }
 
-  // 3. Get a set of timestamps for already booked appointments
+  // 4. Get a set of timestamps for already booked advanced appointments
   const bookedTimestamps = new Set(
-    todaysAppointments.map(apt => parseTime(apt.time, now).getTime())
+    advancedBookings.map(apt => parseTime(apt.time, now).getTime())
   );
 
-  // 4. Find the starting point for our search
-  const lastAppointment = todaysAppointments.sort((a,b) => parseTime(a.time, now).getTime() - parseTime(b.time, now).getTime()).pop();
+  // 5. Find the starting point for our search (later of now or last appointment)
+  const lastAppointment = todaysAppointments.length > 0 ? todaysAppointments[todaysAppointments.length - 1] : null;
   const lastAppointmentTime = lastAppointment ? parseTime(lastAppointment.time, now) : now;
   const searchStartTime = isAfter(lastAppointmentTime, now) ? lastAppointmentTime : now;
 
-  // 5. Find the next available slot after the search start time
-  let nextAvailableSlotIndex = allPossibleSlots.findIndex(slot => isAfter(slot, searchStartTime));
-  if (nextAvailableSlotIndex === -1) { // If no slots are after searchStartTime, start from the first possible slot
-      nextAvailableSlotIndex = 0;
-  }
+  // 6. Find the next available slot after the search start time
+  let nextAvailableSlotIndex = allPossibleSlots.findIndex(slot => isAfter(slot, searchStartTime) && !bookedTimestamps.has(slot.getTime()));
 
-  // 6. Iterate to find the actual walk-in slot, skipping `walkInTokenAllotment` number of *available* slots
+  // 7. Iterate to find the actual walk-in slot, skipping `walkInTokenAllotment` number of *available* slots
   let availableSlotsSkipped = 0;
   let finalWalkInSlotIndex = -1;
 
-  for (let i = nextAvailableSlotIndex; i < allPossibleSlots.length; i++) {
-    const slot = allPossibleSlots[i];
-    if (!bookedTimestamps.has(slot.getTime())) { // Check if the slot is truly available
-      if (availableSlotsSkipped < walkInTokenAllotment) {
-        availableSlotsSkipped++;
-      } else {
-        finalWalkInSlotIndex = i;
-        break;
+  if (nextAvailableSlotIndex !== -1) {
+    for (let i = nextAvailableSlotIndex; i < allPossibleSlots.length; i++) {
+      const slot = allPossibleSlots[i];
+      if (!bookedTimestamps.has(slot.getTime())) { // Check if the slot is truly available
+        if (availableSlotsSkipped < walkInTokenAllotment) {
+          availableSlotsSkipped++;
+        } else {
+          finalWalkInSlotIndex = i;
+          break;
+        }
       }
     }
   }
 
-  // 7. If no suitable slot is found after skipping, it means we ran out of slots.
+  // 8. If no suitable slot is found after skipping, it means we ran out of slots.
   if (finalWalkInSlotIndex === -1) {
     // Fallback: just find the very next available slot without skipping, if any
     finalWalkInSlotIndex = allPossibleSlots.findIndex(
-      (slot, index) => index >= nextAvailableSlotIndex && !bookedTimestamps.has(slot.getTime())
+      (slot, index) => index >= (nextAvailableSlotIndex !== -1 ? nextAvailableSlotIndex : 0) && !bookedTimestamps.has(slot.getTime())
     );
     if (finalWalkInSlotIndex === -1) {
         throw new Error('No available walk-in slots remaining for today.');
@@ -200,7 +203,7 @@ async function calculateWalkInDetails(
   
   const estimatedTime = allPossibleSlots[finalWalkInSlotIndex];
 
-  // 8. Calculate new token number and patients ahead
+  // 9. Calculate new token number and patients ahead
   const newNumericToken = todaysAppointments.length > 0
     ? Math.max(...todaysAppointments.map(a => a.numericToken)) + 1
     : 1;
@@ -375,7 +378,7 @@ export default function AppointmentsPage() {
 
         if (doctorsList.length > 0 && !form.getValues('doctor')) {
           const firstDoctor = doctorsList[0];
-          form.setValue("doctor", firstDoctor.id);
+          form.setValue("doctor", firstDoctor.id, { shouldValidate: true });
           form.setValue("department", firstDoctor.department || "", { shouldValidate: true });
         }
       } catch (error) {
@@ -451,7 +454,9 @@ export default function AppointmentsPage() {
   }, [editingAppointment, form, doctors, resetForm]);
 
   const selectedDoctor = useMemo(() => {
-    return doctors.find(d => d.id === form.watch("doctor")) || null;
+    const doctorId = form.watch("doctor");
+    if (!doctorId) return doctors.length > 0 ? doctors[0] : null;
+    return doctors.find(d => d.id === doctorId) || null;
   }, [doctors, form.watch("doctor")]);
 
   const selectedDate = form.watch("date");
@@ -1396,7 +1401,7 @@ export default function AppointmentsPage() {
                                 <FormField control={form.control} name="doctor" render={({ field }) => (
                                   <FormItem>
                                     <FormLabel>Doctor</FormLabel>
-                                    <Select onValueChange={onDoctorChange} defaultValue={doctors.length > 0 ? doctors[0].id : ""} value={field.value}>
+                                    <Select onValueChange={onDoctorChange} value={field.value} defaultValue={doctors.length > 0 ? doctors[0].id : ""}>
                                       <FormControl>
                                         <SelectTrigger>
                                           <SelectValue placeholder="Select a doctor" />
@@ -1744,4 +1749,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
