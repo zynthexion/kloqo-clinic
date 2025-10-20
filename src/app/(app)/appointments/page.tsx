@@ -698,7 +698,6 @@ export default function AppointmentsPage() {
 
     setIsSendingLink(true);
     try {
-        // Check for uniqueness in the 'users' collection
         const usersRef = collection(db, 'users');
         const userQuery = query(usersRef, where('phone', '==', fullPhoneNumber));
         
@@ -972,7 +971,10 @@ export default function AppointmentsPage() {
         }
 
         if (status === 'available') {
-            if (availableCount < MAX_VISIBLE_SLOTS) {
+            if (isToday(selectedDate) && subMinutes(currentTime, 30) < new Date()) {
+                // If the slot is today and less than 30 mins away, it's not available for advanced booking
+                status = 'booked'; 
+            } else if (availableCount < MAX_VISIBLE_SLOTS) {
                 slots.push({ time: slotTime, status });
                 availableCount++;
             }
