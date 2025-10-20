@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -105,7 +106,7 @@ export default function PatientHistoryPage() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
                       <p className="text-sm text-muted-foreground">Phone</p>
-                      <p className="font-medium">{patient.phone}</p>
+                      <p className="font-medium">{patient.phone || 'N/A'}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Place</p>
@@ -157,6 +158,8 @@ export default function PatientHistoryPage() {
                                     ? "success"
                                     : visit.status === "Pending"
                                     ? "warning"
+                                    : visit.status === "No-show"
+                                    ? "no-show"
                                     : "destructive"
                                 }
                               >

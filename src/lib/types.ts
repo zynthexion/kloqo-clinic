@@ -81,7 +81,7 @@ export type Visit = {
   doctor: string;
   department: string;
   treatment: string;
-  status: 'Confirmed' | 'Pending' | 'Cancelled' | 'Completed';
+  status: 'Confirmed' | 'Pending' | 'Cancelled' | 'Completed' | 'No-show';
 }
 
 export type Patient = {

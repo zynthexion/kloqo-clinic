@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useTransition } from "react";
@@ -26,9 +27,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { doc, setDoc, updateDoc, arrayUnion, collection } from "firebase/firestore";
+import { doc, setDoc, updateDoc, arrayUnion, collection, writeBatch, getDocs, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Patient, NewRelative } from "@/lib/types";
+import type { Patient, User } from "@/lib/types";
 
 const formSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters."),
@@ -70,28 +71,73 @@ export function AddRelativeDialog({
   const onSubmit = (values: AddRelativeFormValues) => {
     startTransition(async () => {
       try {
-        const newRelativeId = doc(collection(db, "patients")).id;
-        const relativeRef = doc(db, "patients", newRelativeId);
+        const batch = writeBatch(db);
+        const newRelativePatientRef = doc(collection(db, "patients"));
         const primaryMemberRef = doc(db, "patients", primaryMemberId);
 
-        const newRelativeData: Patient = {
-          id: newRelativeId,
-          name: values.name,
-          age: values.age,
-          sex: values.sex,
-          phone: values.phone ? `+91${values.phone}` : "",
-          place: values.place,
-          totalAppointments: 0,
-          visitHistory: [],
-          relatedPatientIds: [primaryMemberId],
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
+        const relativePhone = values.phone ? `+91${values.phone}` : "";
+        let newRelativeData: Patient;
 
-        await setDoc(relativeRef, newRelativeData);
-        await updateDoc(primaryMemberRef, {
-          relatedPatientIds: arrayUnion(newRelativeId),
+        if (relativePhone) {
+          const usersRef = collection(db, "users");
+          const userQuery = query(usersRef, where("phone", "==", relativePhone));
+          const userSnapshot = await getDocs(userQuery);
+
+          if (!userSnapshot.empty) {
+            toast({
+              variant: "destructive",
+              title: "Phone Number In Use",
+              description: "This phone number is already registered to another user.",
+            });
+            return;
+          }
+          
+          const newUserRef = doc(collection(db, 'users'));
+          const newUserData: User = {
+            uid: newUserRef.id,
+            phone: relativePhone,
+            role: 'patient',
+            patientId: newRelativePatientRef.id
+          };
+          batch.set(newUserRef, newUserData);
+
+          newRelativeData = {
+            id: newRelativePatientRef.id,
+            primaryUserId: newUserRef.id,
+            name: values.name,
+            age: values.age,
+            sex: values.sex,
+            phone: relativePhone,
+            place: values.place,
+            totalAppointments: 0,
+            visitHistory: [],
+            relatedPatientIds: [primaryMemberId],
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          };
+
+        } else {
+            newRelativeData = {
+              id: newRelativePatientRef.id,
+              name: values.name,
+              age: values.age,
+              sex: values.sex,
+              phone: "", // Phone is empty as per requirement
+              place: values.place,
+              totalAppointments: 0,
+              visitHistory: [],
+              relatedPatientIds: [primaryMemberId],
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            };
+        }
+
+        batch.set(newRelativePatientRef, newRelativeData);
+        batch.update(primaryMemberRef, {
+          relatedPatientIds: arrayUnion(newRelativePatientRef.id),
         });
+
+        await batch.commit();
         
         onRelativeAdded(newRelativeData);
 
@@ -182,7 +228,7 @@ export function AddRelativeDialog({
                   <FormControl>
                     <Input type="tel" placeholder="Enter 10-digit number" {...field} />
                   </FormControl>
-                  <FormMessage />
+                   <FormMessage />
                 </FormItem>
               )}
             />
