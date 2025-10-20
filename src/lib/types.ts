@@ -92,6 +92,7 @@ export type Patient = {
   age: number;
   sex: 'Male' | 'Female' | 'Other' | '';
   phone: string;
+  communicationPhone?: string;
   email?: string;
   place?: string;
   totalAppointments: number;

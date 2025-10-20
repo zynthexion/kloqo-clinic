@@ -27,7 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { doc, setDoc, updateDoc, arrayUnion, collection, writeBatch, getDocs, query, where, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, updateDoc, arrayUnion, collection, writeBatch, getDocs, query, where, serverTimestamp, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Patient, User } from "@/lib/types";
 
@@ -75,6 +75,14 @@ export function AddRelativeDialog({
         const newRelativePatientRef = doc(collection(db, "patients"));
         const primaryMemberRef = doc(db, "patients", primaryMemberId);
 
+        const primaryMemberSnap = await getDoc(primaryMemberRef);
+        if (!primaryMemberSnap.exists()) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Primary member not found.'});
+            return;
+        }
+        const primaryMemberData = primaryMemberSnap.data() as Patient;
+        const primaryMemberPhone = primaryMemberData.phone;
+
         const relativePhone = values.phone ? `+91${values.phone}` : "";
         let newRelativeData: Patient;
 
@@ -108,6 +116,7 @@ export function AddRelativeDialog({
             age: values.age,
             sex: values.sex,
             phone: relativePhone,
+            communicationPhone: relativePhone,
             place: values.place,
             totalAppointments: 0,
             visitHistory: [],
@@ -122,7 +131,8 @@ export function AddRelativeDialog({
               name: values.name,
               age: values.age,
               sex: values.sex,
-              phone: "", // Phone is empty as per requirement
+              phone: "", // Phone is empty
+              communicationPhone: primaryMemberPhone, // Main user's phone
               place: values.place,
               totalAppointments: 0,
               visitHistory: [],
