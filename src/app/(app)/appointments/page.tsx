@@ -150,55 +150,55 @@ export default function AppointmentsPage() {
   const patientInputRef = useRef<HTMLInputElement>(null);
 
   const handlePatientSearch = useCallback(async (phone: string) => {
-    if (phone.length < 10 || !clinicId) {
-        setPatientSearchResults([]);
-        if (phone.length >= 5) {
-          setIsPatientPopoverOpen(false);
+        if (phone.length < 10 || !clinicId) {
+            setPatientSearchResults([]);
+            if (phone.length >= 5) {
+              setIsPatientPopoverOpen(false);
+            }
+            return;
         }
-        return;
-    }
     
-    startTransition(async () => {
-        try {
-            const fullPhoneNumber = `+91${phone}`;
-            const patientsRef = collection(db, 'patients');
-            
-            // Find the primary user record first based on the phone number
-            const primaryQuery = query(patientsRef, where('phone', '==', fullPhoneNumber));
-            const primarySnapshot = await getDocs(primaryQuery);
+        startTransition(async () => {
+            try {
+                const fullPhoneNumber = `+91${phone}`;
+                const patientsRef = collection(db, 'patients');
+                
+                // Find the primary user record first based on the phone number
+                const primaryQuery = query(patientsRef, where('phone', '==', fullPhoneNumber));
+                const primarySnapshot = await getDocs(primaryQuery);
 
-            if (primarySnapshot.empty) {
-                setPatientSearchResults([]);
+                if (primarySnapshot.empty) {
+                    setPatientSearchResults([]);
+                    setIsPatientPopoverOpen(true);
+                    form.setValue('phone', phone);
+                    return;
+                }
+
+                const primaryDoc = primarySnapshot.docs[0];
+                const primaryPatient = { id: primaryDoc.id, ...primaryDoc.data() } as Patient;
+                primaryPatient.isKloqoMember = primaryPatient.clinicIds?.includes(clinicId);
+
+                let allRelatedPatients: Patient[] = [primaryPatient];
+
+                if (primaryPatient.relatedPatientIds && primaryPatient.relatedPatientIds.length > 0) {
+                    const relatedPatientsQuery = query(patientsRef, where('__name__', 'in', primaryPatient.relatedPatientIds));
+                    const relatedSnapshot = await getDocs(relatedPatientsQuery);
+                    const relatedPatients = relatedSnapshot.docs.map(doc => {
+                        const data = { id: doc.id, ...doc.data()} as Patient;
+                        data.isKloqoMember = data.clinicIds?.includes(clinicId);
+                        return data;
+                    });
+                    allRelatedPatients = [...allRelatedPatients, ...relatedPatients];
+                }
+
+                setPatientSearchResults(allRelatedPatients);
                 setIsPatientPopoverOpen(true);
-                form.setValue('phone', phone);
-                return;
+
+            } catch (error) {
+                console.error("Error searching patient:", error);
+                toast({variant: 'destructive', title: 'Search Error', description: 'Could not perform patient search.'});
             }
-
-            const primaryDoc = primarySnapshot.docs[0];
-            const primaryPatient = { id: primaryDoc.id, ...primaryDoc.data() } as Patient;
-            primaryPatient.isKloqoMember = primaryPatient.clinicIds?.includes(clinicId);
-
-            let allRelatedPatients: Patient[] = [primaryPatient];
-
-            if (primaryPatient.relatedPatientIds && primaryPatient.relatedPatientIds.length > 0) {
-                const relatedPatientsQuery = query(patientsRef, where('__name__', 'in', primaryPatient.relatedPatientIds));
-                const relatedSnapshot = await getDocs(relatedPatientsQuery);
-                const relatedPatients = relatedSnapshot.docs.map(doc => {
-                    const data = { id: doc.id, ...doc.data()} as Patient;
-                    data.isKloqoMember = data.clinicIds?.includes(clinicId);
-                    return data;
-                });
-                allRelatedPatients = [...allRelatedPatients, ...relatedPatients];
-            }
-
-            setPatientSearchResults(allRelatedPatients);
-            setIsPatientPopoverOpen(true);
-
-        } catch (error) {
-            console.error("Error searching patient:", error);
-            toast({variant: 'destructive', title: 'Search Error', description: 'Could not perform patient search.'});
-        }
-    });
+        });
   }, [clinicId, toast, form]);
 
 
@@ -747,14 +747,18 @@ export default function AppointmentsPage() {
             batch.set(newUserRef, newUserData);
             batch.set(newPatientRef, newPatientData);
 
-            await batch.commit().catch(async (serverError) => {
+            await batch.commit().catch(async (serverError: any) => {
+              if (serverError.code && serverError.code.startsWith('permission-denied')) {
                 const permissionError = new FirestorePermissionError({
-                    path: `Batch write for new user/patient`,
-                    operation: 'create',
-                    requestResourceData: { user: newUserData, patient: newPatientData }
+                  path: `Batch write for new user/patient`,
+                  operation: 'create',
+                  requestResourceData: { user: newUserData, patient: newPatientData }
                 });
                 errorEmitter.emit('permission-error', permissionError);
+                throw permissionError;
+              } else {
                 throw serverError;
+              }
             });
 
             toast({
@@ -1229,7 +1233,7 @@ export default function AppointmentsPage() {
                                       <CardContent className="space-y-3">
                                         {relatives.length > 0 ? (
                                           <ScrollArea className="h-40">
-                                            {relatives.map(relative => (
+                                            {relatives.map((relative) => (
                                               <div key={relative.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted">
                                                 <div className="flex items-center gap-3">
                                                   <Avatar className="h-8 w-8">
