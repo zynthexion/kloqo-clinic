@@ -150,56 +150,54 @@ export default function AppointmentsPage() {
   const patientInputRef = useRef<HTMLInputElement>(null);
 
   const handlePatientSearch = useCallback(async (phone: string) => {
-        if (phone.length < 10 || !clinicId) {
+    if (phone.length < 10 || !clinicId) {
+      setPatientSearchResults([]);
+      setIsPatientPopoverOpen(false);
+      return;
+    }
+  
+    startTransition(async () => {
+      try {
+        const fullPhoneNumber = `+91${phone}`;
+        const patientsRef = collection(db, 'patients');
+        
+        // Find the primary user record first based on the phone number
+        const primaryQuery = query(patientsRef, where('phone', '==', fullPhoneNumber));
+        const primarySnapshot = await getDocs(primaryQuery);
+
+        if (primarySnapshot.empty) {
             setPatientSearchResults([]);
-            if (phone.length >= 5) {
-              setIsPatientPopoverOpen(false);
-            }
+            setIsPatientPopoverOpen(false);
+            form.setValue('phone', phone);
             return;
         }
-    
-        startTransition(async () => {
-            try {
-                const fullPhoneNumber = `+91${phone}`;
-                const patientsRef = collection(db, 'patients');
-                
-                // Find the primary user record first based on the phone number
-                const primaryQuery = query(patientsRef, where('phone', '==', fullPhoneNumber));
-                const primarySnapshot = await getDocs(primaryQuery);
 
-                if (primarySnapshot.empty) {
-                    setPatientSearchResults([]);
-                    setIsPatientPopoverOpen(false);
-                    form.setValue('phone', phone);
-                    return;
-                }
+        setIsPatientPopoverOpen(true);
 
-                setIsPatientPopoverOpen(true);
+        const primaryDoc = primarySnapshot.docs[0];
+        const primaryPatient = { id: primaryDoc.id, ...primaryDoc.data() } as Patient;
+        primaryPatient.isKloqoMember = primaryPatient.clinicIds?.includes(clinicId);
 
-                const primaryDoc = primarySnapshot.docs[0];
-                const primaryPatient = { id: primaryDoc.id, ...primaryDoc.data() } as Patient;
-                primaryPatient.isKloqoMember = primaryPatient.clinicIds?.includes(clinicId);
+        let allRelatedPatients: Patient[] = [primaryPatient];
 
-                let allRelatedPatients: Patient[] = [primaryPatient];
+        if (primaryPatient.relatedPatientIds && primaryPatient.relatedPatientIds.length > 0) {
+            const relatedPatientsQuery = query(patientsRef, where('__name__', 'in', primaryPatient.relatedPatientIds));
+            const relatedSnapshot = await getDocs(relatedPatientsQuery);
+            const relatedPatients = relatedSnapshot.docs.map(doc => {
+                const data = { id: doc.id, ...doc.data()} as Patient;
+                data.isKloqoMember = data.clinicIds?.includes(clinicId);
+                return data;
+            });
+            allRelatedPatients = [...allRelatedPatients, ...relatedPatients];
+        }
 
-                if (primaryPatient.relatedPatientIds && primaryPatient.relatedPatientIds.length > 0) {
-                    const relatedPatientsQuery = query(patientsRef, where('__name__', 'in', primaryPatient.relatedPatientIds));
-                    const relatedSnapshot = await getDocs(relatedPatientsQuery);
-                    const relatedPatients = relatedSnapshot.docs.map(doc => {
-                        const data = { id: doc.id, ...doc.data()} as Patient;
-                        data.isKloqoMember = data.clinicIds?.includes(clinicId);
-                        return data;
-                    });
-                    allRelatedPatients = [...allRelatedPatients, ...relatedPatients];
-                }
+        setPatientSearchResults(allRelatedPatients);
 
-                setPatientSearchResults(allRelatedPatients);
-
-            } catch (error) {
-                console.error("Error searching patient:", error);
-                toast({variant: 'destructive', title: 'Search Error', description: 'Could not perform patient search.'});
-            }
-        });
+      } catch (error) {
+        console.error("Error searching patient:", error);
+        toast({variant: 'destructive', title: 'Search Error', description: 'Could not perform patient search.'});
+      }
+    });
   }, [clinicId, toast, form]);
 
 
@@ -250,6 +248,12 @@ export default function AppointmentsPage() {
         const doctorsSnapshot = await getDocs(doctorsQuery);
         const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
         setDoctors(doctorsList);
+
+        if (doctorsList.length > 0 && !isEditing) {
+          const firstDoctor = doctorsList[0];
+          form.setValue("doctor", firstDoctor.id);
+          form.setValue("department", firstDoctor.department || "", { shouldValidate: true });
+        }
       } catch (error) {
         console.error("Error fetching data:", error);
         if (!(error instanceof FirestorePermissionError)) {
@@ -267,7 +271,7 @@ export default function AppointmentsPage() {
     if (auth.currentUser) {
       fetchInitialData();
     }
-  }, [auth.currentUser, toast]);
+  }, [auth.currentUser, toast, form, isEditing]);
 
   const resetForm = useCallback(() => {
     setEditingAppointment(null);
@@ -435,8 +439,8 @@ export default function AppointmentsPage() {
     const bookedTimes = allAppointmentsToday.map(appt => appt.time.getTime());
     
     // Consider leave slots
-    const leaveSlotsForToday = selectedDoctor.leaveSlots?.filter(ls => isSameDay(parseDateFns(ls.date, 'yyyy-MM-dd', new Date()), now)) || [];
-    const leaveTimes = leaveSlotsForToday.flatMap(ls => {
+    const leaveSlotsForToday = selectedDoctor.leaveSlots?.filter(ls => ls.date && isSameDay(parseDateFns(ls.date, 'yyyy-MM-dd', new Date()), now)) || [];
+    const leaveTimeSlots = leaveSlotsForToday.flatMap(ls => {
         const slots = [];
         let currentTime = parseTime(ls.slots[0].from, now);
         const endTime = parseTime(ls.slots[0].to, now);
@@ -450,7 +454,7 @@ export default function AppointmentsPage() {
     const nextAvailableSlot = allPossibleSlots.find(slot => 
       slot > now && 
       !bookedTimes.includes(slot.getTime()) &&
-      !leaveTimes.includes(slot.getTime())
+      !leaveTimeSlots.includes(slot.getTime())
     );
 
     let finalValidTime: Date | null;
@@ -687,12 +691,13 @@ export default function AppointmentsPage() {
  const handleSendLink = async () => {
     const fullPhoneNumber = `+91${patientSearchTerm}`;
     if (!patientSearchTerm || !clinicId || patientSearchTerm.length !== 10) {
-      toast({ variant: "destructive", title: "Invalid Phone Number", description: "Please enter a 10-digit phone number to send a link." });
-      return;
+        toast({ variant: "destructive", title: "Invalid Phone Number", description: "Please enter a 10-digit phone number to send a link." });
+        return;
     }
 
     setIsSendingLink(true);
     try {
+        // Check for uniqueness in the 'users' collection
         const usersRef = collection(db, 'users');
         const userQuery = query(usersRef, where('phone', '==', fullPhoneNumber));
         
@@ -916,20 +921,11 @@ export default function AppointmentsPage() {
   }, [selectedDoctor]);
 
   const leaveDates = useMemo(() => {
-    if (!selectedDoctor?.leaveSlots || !selectedDoctor.availabilitySlots) return [];
+    if (!selectedDoctor?.leaveSlots) return [];
     return selectedDoctor.leaveSlots
-      .filter(leaveSlot => {
-        if (!leaveSlot.date) return false;
-        const leaveDate = parse(leaveSlot.date, 'yyyy-MM-dd', new Date());
-        const dayName = daysOfWeek[getDay(leaveDate)];
-        const availabilityForDay = selectedDoctor.availabilitySlots?.find(s => s.day === dayName);
-        if (!availabilityForDay) return false;
-        const totalSlotsForDay = availabilityForDay.timeSlots.length;
-        const leaveSlotsCount = leaveSlot.slots.length;
-        return leaveSlotsCount >= totalSlotsForDay;
-      })
+      .filter(leaveSlot => leaveSlot && leaveSlot.date && leaveSlot.slots?.length > 0)
       .map(ls => parse(ls.date, 'yyyy-MM-dd', new Date()));
-  }, [selectedDoctor?.leaveSlots, selectedDoctor?.availabilitySlots]);
+  }, [selectedDoctor?.leaveSlots]);
 
   const sessionSlots = useMemo(() => {
     if (!selectedDate || !selectedDoctor || !selectedDoctor.averageConsultingTime) {
@@ -1727,5 +1723,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
-    
