@@ -1039,7 +1039,7 @@ export default function AppointmentsPage() {
       patientName: relative.name,
       age: relative.age,
       sex: capitalizedSex as "Male" | "Female" | "Other",
-      phone: primaryPatient?.phone.replace('+91', '') || '', // Use primary patient's phone
+      phone: primaryPatient?.communicationPhone?.replace('+91', '') || '', // Use primary patient's phone
       place: relative.place || "",
     });
     toast({ title: `Selected Relative: ${relative.name}`, description: "You are now booking an appointment for the selected relative." });
@@ -1359,7 +1359,7 @@ export default function AppointmentsPage() {
                                     </Label>
                                 </RadioGroup>
                             </div>
-                            {primaryPatient && (relatives.length > 0 || isKloqoMember) && !isEditing && (
+                            {primaryPatient && (isKloqoMember || relatives.length > 0) && !isEditing && (
                               <div className="mb-4">
                                 <Tabs value={bookingFor} onValueChange={(value) => {
                                   setBookingFor(value);
@@ -1372,7 +1372,7 @@ export default function AppointmentsPage() {
                                       patientName: primaryPatient.name,
                                       age: primaryPatient.age,
                                       sex: capitalizedSex as "Male" | "Female" | "Other",
-                                      phone: primaryPatient.phone.replace('+91', ''),
+                                      phone: primaryPatient.communicationPhone?.replace('+91', '') || '',
                                       place: primaryPatient.place || "",
                                     });
                                   }
@@ -1412,12 +1412,20 @@ export default function AppointmentsPage() {
                                             ))}
                                           </ScrollArea>
                                         ) : (
-                                          <p className="text-center text-xs text-muted-foreground py-4">No relatives found.</p>
+                                          <div className="text-center py-4 space-y-2">
+                                            <p className="text-xs text-muted-foreground">No relatives found for this patient.</p>
+                                            <Button type="button" size="sm" variant="outline" onClick={() => setIsAddRelativeDialogOpen(true)}>
+                                                <UserPlus className="mr-2 h-4 w-4" />
+                                                Add New Relative
+                                            </Button>
+                                          </div>
                                         )}
-                                        <Button type="button" className="w-full" variant="outline" onClick={() => setIsAddRelativeDialogOpen(true)}>
-                                          <UserPlus className="mr-2 h-4 w-4" />
-                                          Add New Relative
-                                        </Button>
+                                        {relatives.length > 0 && (
+                                          <Button type="button" className="w-full" variant="outline" onClick={() => setIsAddRelativeDialogOpen(true)}>
+                                              <UserPlus className="mr-2 h-4 w-4" />
+                                              Add New Relative
+                                          </Button>
+                                        )}
                                       </CardContent>
                                     </Card>
                                   </TabsContent>
