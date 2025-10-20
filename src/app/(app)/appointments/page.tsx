@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useEffect, useState, useMemo, useRef, useTransition, useCallback } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import type { Appointment, Doctor, Patient, Visit, User } from "@/lib/types";
+import type { Appointment, Doctor, Patient, User } from "@/lib/types";
 import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc, orderBy, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
@@ -813,17 +813,8 @@ export default function AppointmentsPage() {
 
           if (!isEditing) {
             const patientRef = doc(db, 'patients', patientForAppointmentId);
-            const newVisit: Visit = {
-              appointmentId: appointmentId,
-              date: appointmentDateStr,
-              time: appointmentTimeStr,
-              doctor: selectedDoctor.name,
-              department: values.department,
-              status: 'Pending',
-              treatment: 'General Consultation',
-            };
             await updateDoc(patientRef, {
-              visitHistory: arrayUnion(newVisit),
+              visitHistory: arrayUnion(appointmentId),
               totalAppointments: increment(1),
               updatedAt: serverTimestamp(),
             });
@@ -1901,5 +1892,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
-    

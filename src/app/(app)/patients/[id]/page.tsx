@@ -4,9 +4,9 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { collection, getDocs, query, where, doc, getDoc } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, getDoc, documentId } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Appointment, Patient, Visit } from "@/lib/types";
+import type { Appointment, Patient } from "@/lib/types";
 import { DashboardHeader } from "@/components/layout/header";
 import {
   Card,
@@ -37,6 +37,7 @@ export default function PatientHistoryPage() {
   const auth = useAuth();
 
   const [patient, setPatient] = useState<Patient | null>(null);
+  const [visitHistory, setVisitHistory] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -51,15 +52,26 @@ export default function PatientHistoryPage() {
 
         if (patientDocSnap.exists()) {
           const patientData = patientDocSnap.data() as Patient;
-          const sortedHistory = patientData.visitHistory?.sort(
-            (a, b) => {
-              const dateA = parse(a.date, "d MMMM yyyy", new Date()).getTime();
-              const dateB = parse(b.date, "d MMMM yyyy", new Date()).getTime();
-              return dateB - dateA;
-            }
-          ) || [];
-          
-          setPatient({ ...patientData, visitHistory: sortedHistory });
+          setPatient(patientData);
+
+          if (patientData.visitHistory && patientData.visitHistory.length > 0) {
+            const appointmentsRef = collection(db, 'appointments');
+            // Firestore 'in' queries are limited to 30 items. 
+            // If a patient can have more, we'd need to batch this.
+            const historyQuery = query(appointmentsRef, where(documentId(), 'in', patientData.visitHistory));
+            const historySnapshot = await getDocs(historyQuery);
+            const historyAppointments = historySnapshot.docs.map(d => d.data() as Appointment);
+
+            const sortedHistory = historyAppointments.sort((a, b) => {
+                 const dateA = parse(a.date, "d MMMM yyyy", new Date()).getTime();
+                 const dateB = parse(b.date, "d MMMM yyyy", new Date()).getTime();
+                 return dateB - dateA;
+            });
+            setVisitHistory(sortedHistory);
+          } else {
+            setVisitHistory([]);
+          }
+
         } else {
           console.error("Patient not found");
         }
@@ -74,7 +86,7 @@ export default function PatientHistoryPage() {
     fetchPatientHistory();
   }, [patientId, auth.currentUser]);
 
-  const lastVisit = patient?.visitHistory?.[0];
+  const lastVisit = visitHistory[0];
 
   return (
     <>
@@ -143,9 +155,9 @@ export default function PatientHistoryPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {patient.visitHistory && patient.visitHistory.length > 0 ? (
-                        patient.visitHistory.map((visit) => (
-                          <TableRow key={visit.appointmentId}>
+                      {visitHistory.length > 0 ? (
+                        visitHistory.map((visit) => (
+                          <TableRow key={visit.id}>
                             <TableCell>{visit.date}</TableCell>
                             <TableCell>{visit.time}</TableCell>
                             <TableCell>{visit.doctor}</TableCell>

@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -25,9 +26,9 @@ import {
   Search,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { collection, getDocs, query, where, getDoc, doc } from "firebase/firestore";
+import { collection, getDocs, query, where, getDoc, doc, documentId } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Patient } from "@/lib/types";
+import type { Patient, Appointment } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -39,9 +40,13 @@ import {
 import Link from "next/link";
 import { useAuth } from "@/firebase";
 
+type EnrichedPatient = Patient & {
+    lastVisit?: Appointment;
+}
+
 export default function PatientsPage() {
   const auth = useAuth();
-  const [patients, setPatients] = useState<Patient[]>([]);
+  const [patients, setPatients] = useState<EnrichedPatient[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -64,11 +69,44 @@ export default function PatientsPage() {
           return;
         }
 
-        const patientsQuery = query(collection(db, "patients"), where("clinicId", "==", clinicId));
+        const patientsQuery = query(collection(db, "patients"), where("clinicIds", "array-contains", clinicId));
         const patientsSnapshot = await getDocs(patientsQuery);
         const clinicPatients = patientsSnapshot.docs.map(doc => doc.data() as Patient);
 
-        setPatients(clinicPatients);
+        const allAppointmentIds = clinicPatients.flatMap(p => p.visitHistory || []);
+        let allAppointments: Record<string, Appointment> = {};
+
+        if(allAppointmentIds.length > 0) {
+            // Firestore 'in' queries are limited to 30 items, so we might need to batch
+            const appointmentChunks = [];
+            for (let i = 0; i < allAppointmentIds.length; i += 30) {
+                appointmentChunks.push(allAppointmentIds.slice(i, i + 30));
+            }
+            
+            const appointmentPromises = appointmentChunks.map(chunk => 
+                getDocs(query(collection(db, 'appointments'), where(documentId(), 'in', chunk)))
+            );
+
+            const appointmentSnapshots = await Promise.all(appointmentPromises);
+            appointmentSnapshots.forEach(snapshot => {
+                snapshot.docs.forEach(doc => {
+                    allAppointments[doc.id] = doc.data() as Appointment;
+                });
+            });
+        }
+        
+        const enrichedPatients = clinicPatients.map(patient => {
+            if (patient.visitHistory && patient.visitHistory.length > 0) {
+                const lastAppointmentId = patient.visitHistory[patient.visitHistory.length - 1];
+                return {
+                    ...patient,
+                    lastVisit: allAppointments[lastAppointmentId]
+                };
+            }
+            return patient;
+        });
+
+        setPatients(enrichedPatients);
       } catch (error) {
         console.error("Error fetching patients:", error);
       } finally {
@@ -235,15 +273,14 @@ export default function PatientsPage() {
                     ))
                   ) : (
                     currentPatients.map((patient) => {
-                      const lastVisit = patient.visitHistory && patient.visitHistory.length > 0 ? patient.visitHistory[patient.visitHistory.length - 1] : null;
                       return (
                       <TableRow key={patient.id}>
                         <TableCell className="font-medium">{patient.name}</TableCell>
                         <TableCell>{patient.age}</TableCell>
                         <TableCell>{patient.sex}</TableCell>
                         <TableCell>{patient.phone}</TableCell>
-                        <TableCell>{lastVisit ? lastVisit.date : 'N/A'}</TableCell>
-                        <TableCell>{lastVisit ? lastVisit.doctor : 'N/A'}</TableCell>
+                        <TableCell>{patient.lastVisit ? patient.lastVisit.date : 'N/A'}</TableCell>
+                        <TableCell>{patient.lastVisit ? patient.lastVisit.doctor : 'N/A'}</TableCell>
                         <TableCell>
                           <Button asChild variant="link" className="p-0 h-auto text-primary">
                             <Link href={`/patients/${patient.id}`}>View History</Link>

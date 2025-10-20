@@ -73,17 +73,6 @@ export type Appointment = {
   slotIndex?: number;
 };
 
-export type Visit = {
-  appointmentId: string;
-  clinicId?: string;
-  date: string;
-  time: string;
-  doctor: string;
-  department: string;
-  treatment: string;
-  status: 'Confirmed' | 'Pending' | 'Cancelled' | 'Completed' | 'No-show';
-}
-
 export type Patient = {
   id: string;
   primaryUserId?: string;
@@ -96,7 +85,7 @@ export type Patient = {
   email?: string;
   place?: string;
   totalAppointments: number;
-  visitHistory?: Visit[];
+  visitHistory?: string[]; // Changed from Visit[] to string[]
   createdAt: any; // Can be Date or Firestore Timestamp
   updatedAt: any; // Can be Date or Firestore Timestamp
   relatedPatientIds?: string[];
