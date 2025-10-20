@@ -718,16 +718,13 @@ export default function AppointmentsPage() {
             const newUserRef = doc(collection(db, 'users'));
             const newPatientRef = doc(collection(db, 'patients'));
 
-            const newUserData: Omit<User, 'uid'> & {uid: string} = {
+            const newUserData: Partial<User> & { uid: string, phone: string, role: 'patient', patientId: string } = {
                 uid: newUserRef.id,
                 phone: fullPhoneNumber,
                 role: 'patient',
                 patientId: newPatientRef.id,
-                clinicId: clinicId!,
-                name: "New Patient",
-                email: "",
-                designation: 'Owner',
             };
+            
 
             const newPatientData: Patient = {
                 id: newPatientRef.id,
@@ -755,10 +752,8 @@ export default function AppointmentsPage() {
                   requestResourceData: { user: newUserData, patient: newPatientData }
                 });
                 errorEmitter.emit('permission-error', permissionError);
-                throw permissionError;
-              } else {
-                throw serverError;
               }
+              throw serverError;
             });
 
             toast({

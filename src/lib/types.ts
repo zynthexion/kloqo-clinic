@@ -143,11 +143,12 @@ export type MobileApp = {
 
 export type User = {
     uid: string;
-    clinicId: string;
-    email: string;
-    name: string;
     phone: string;
-    designation: 'Doctor' | 'Owner';
+    role?: 'clinicAdmin' | 'patient';
+    clinicId?: string;
+    email?: string;
+    name?: string;
+    designation?: 'Doctor' | 'Owner';
     onboarded?: boolean;
-    role?: 'clinicAdmin';
+    patientId?: string;
 }
