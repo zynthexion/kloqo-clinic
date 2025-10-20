@@ -111,7 +111,7 @@ export default function AppointmentsPage() {
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [primaryPatient, setPrimaryPatient] = useState<Patient | null>(null);
   const [isPending, startTransition] = useTransition();
-  const [isSendingLink, startSendingLink] = useTransition();
+  const [isSendingLink, setIsSendingLink] = useTransition();
   const [drawerSearchTerm, setDrawerSearchTerm] = useState("");
   const [selectedDrawerDoctor, setSelectedDrawerDoctor] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("upcoming");
@@ -169,10 +169,12 @@ export default function AppointmentsPage() {
 
                 if (primarySnapshot.empty) {
                     setPatientSearchResults([]);
-                    setIsPatientPopoverOpen(true);
+                    setIsPatientPopoverOpen(false);
                     form.setValue('phone', phone);
                     return;
                 }
+
+                setIsPatientPopoverOpen(true);
 
                 const primaryDoc = primarySnapshot.docs[0];
                 const primaryPatient = { id: primaryDoc.id, ...primaryDoc.data() } as Patient;
@@ -192,7 +194,6 @@ export default function AppointmentsPage() {
                 }
 
                 setPatientSearchResults(allRelatedPatients);
-                setIsPatientPopoverOpen(true);
 
             } catch (error) {
                 console.error("Error searching patient:", error);
@@ -691,84 +692,84 @@ export default function AppointmentsPage() {
       return;
     }
 
-    startSendingLink(async () => {
-      try {
+    setIsSendingLink(true);
+    try {
         const usersRef = collection(db, 'users');
         const userQuery = query(usersRef, where('phone', '==', fullPhoneNumber));
         
         const userSnapshot = await getDocs(userQuery).catch(async (serverError) => {
-          const permissionError = new FirestorePermissionError({
-            path: 'users',
-            operation: 'list',
-          });
-          errorEmitter.emit('permission-error', permissionError);
-          throw serverError;
+            const permissionError = new FirestorePermissionError({
+                path: 'users',
+                operation: 'list',
+            });
+            errorEmitter.emit('permission-error', permissionError);
+            throw serverError;
         });
 
+
         if (!userSnapshot.empty) {
-          toast({
-            variant: "destructive",
-            title: "User Already Exists",
-            description: `A user with the phone number ${fullPhoneNumber} is already registered.`
-          });
-          return;
+            toast({
+                variant: "destructive",
+                title: "User Already Exists",
+                description: `A user with the phone number ${fullPhoneNumber} is already registered.`
+            });
+            setIsSendingLink(false);
+            return;
         }
 
         const batch = writeBatch(db);
         const newUserRef = doc(collection(db, 'users'));
         const newPatientRef = doc(collection(db, 'patients'));
 
-        const newUserData: Omit<User, 'clinicId' | 'designation' | 'email' | 'name'> = {
-          uid: newUserRef.id,
-          phone: fullPhoneNumber,
-          role: 'patient',
-          patientId: newPatientRef.id,
+        const newUserData: Pick<User, 'uid' | 'phone' | 'role' | 'patientId'> = {
+            uid: newUserRef.id,
+            phone: fullPhoneNumber,
+            role: 'patient',
+            patientId: newPatientRef.id,
         };
+        batch.set(newUserRef, newUserData);
 
         const newPatientData: Patient = {
-          id: newPatientRef.id,
-          primaryUserId: newUserRef.id,
-          phone: fullPhoneNumber,
-          clinicIds: [clinicId!],
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-          name: '',
-          age: 0,
-          place: '',
-          sex: '',
-          relatedPatientIds: [],
-          totalAppointments: 0,
-          visitHistory: []
+            id: newPatientRef.id,
+            primaryUserId: newUserRef.id,
+            phone: fullPhoneNumber,
+            clinicIds: [clinicId],
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            name: '',
+            age: 0,
+            sex: '',
+            place: '',
+            relatedPatientIds: [],
+            visitHistory: [],
+            totalAppointments: 0,
         };
-
-        batch.set(newUserRef, newUserData);
         batch.set(newPatientRef, newPatientData);
 
-        await batch.commit().catch(async (serverError: any) => {
-          if (serverError.code && serverError.code.startsWith('permission-denied')) {
+        await batch.commit().catch(async (serverError) => {
             const permissionError = new FirestorePermissionError({
-              path: `Batch write for new user/patient`,
-              operation: 'create',
-              requestResourceData: { user: newUserData, patient: newPatientData }
+                path: 'users or patients',
+                operation: 'write',
+                requestResourceData: { user: newUserData, patient: newPatientData }
             });
             errorEmitter.emit('permission-error', permissionError);
-          }
-          throw serverError;
+            throw serverError;
         });
 
         toast({
-          title: "Link Sent (Simulated)",
-          description: `A registration link has been sent to ${fullPhoneNumber}. New user and patient records created.`
+            title: "Link Sent (Simulated)",
+            description: `A registration link has been sent to ${fullPhoneNumber}. New user and patient records created.`
         });
-        setPatientSearchTerm('');
+        setPatientSearchTerm(''); 
 
-      } catch (error: any) {
-        if (error.name !== 'FirestorePermissionError') {
-          console.error("Error in send link flow:", error);
-          toast({ variant: 'destructive', title: 'Error', description: 'Could not complete the action.' });
-        }
-      }
-    });
+    } catch (error: any) {
+         if (error.name !== 'FirestorePermissionError') {
+             console.error("Error in send link flow:", error);
+             toast({ variant: 'destructive', title: 'Error', description: 'Could not complete the action.' });
+         }
+    } finally {
+        setIsSendingLink(false);
+    }
   };
 
   const handleCancel = (appointment: Appointment) => {
@@ -1131,7 +1132,7 @@ export default function AppointmentsPage() {
                                         className="flex justify-between items-center"
                                       >
                                         <div>
-                                          {patient.name}
+                                          {patient.name || "Unnamed Patient"}
                                           <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
                                         </div>
                                         <Badge variant={isClinicPatient ? "secondary" : "outline"} className={cn(
