@@ -328,13 +328,12 @@ export default function AppointmentsPage() {
         const fullPhoneNumber = `+91${phone}`;
         const patientsRef = collection(db, 'patients');
         
-        // Find the primary user record first based on the phone number
-        const primaryQuery = query(patientsRef, where('phone', '==', fullPhoneNumber));
+        const primaryQuery = query(patientsRef, where('phone', '==', fullPhoneNumber), limit(1));
         const primarySnapshot = await getDocs(primaryQuery);
 
         if (primarySnapshot.empty) {
             setPatientSearchResults([]);
-            setIsPatientPopoverOpen(false); // Keep it closed if no user found
+            setIsPatientPopoverOpen(false);
             form.setValue('phone', phone);
             return;
         }
@@ -342,26 +341,9 @@ export default function AppointmentsPage() {
         const primaryDoc = primarySnapshot.docs[0];
         const primaryPatient = { id: primaryDoc.id, ...primaryDoc.data() } as Patient;
         primaryPatient.isKloqoMember = primaryPatient.clinicIds?.includes(clinicId);
-
-        let allRelatedPatients: Patient[] = [primaryPatient];
-
-        if (primaryPatient.relatedPatientIds && primaryPatient.relatedPatientIds.length > 0) {
-            const relatedPatientsQuery = query(patientsRef, where('__name__', 'in', primaryPatient.relatedPatientIds));
-            const relatedSnapshot = await getDocs(relatedPatientsQuery);
-            const relatedPatients = relatedSnapshot.docs.map(doc => {
-                const data = { id: doc.id, ...doc.data()} as Patient;
-                data.isKloqoMember = data.clinicIds?.includes(clinicId);
-                return data;
-            });
-            allRelatedPatients = [...allRelatedPatients, ...relatedPatients];
-        }
         
-        if (allRelatedPatients.length > 0) {
-          setPatientSearchResults(allRelatedPatients);
-          setIsPatientPopoverOpen(true);
-        } else {
-          setIsPatientPopoverOpen(false);
-        }
+        setPatientSearchResults([primaryPatient]);
+        setIsPatientPopoverOpen(true);
 
       } catch (error) {
         console.error("Error searching patient:", error);
@@ -1837,6 +1819,8 @@ export default function AppointmentsPage() {
 }
 
 
+
+    
 
     
 
