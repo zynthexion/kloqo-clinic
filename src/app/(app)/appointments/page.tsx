@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useTransition, useCallback } from "react";
@@ -70,7 +71,7 @@ const formSchema = z.object({
   id: z.string().optional(),
   patientName: z.string().min(2, { message: "Name must be at least 2 characters." }),
   sex: z.enum(["Male", "Female", "Other"]),
-  phone: z.string().min(10, { message: "Phone number must be at least 10 digits." }),
+  phone: z.string(),
   age: z.coerce.number().min(0, "Age cannot be negative."),
   doctor: z.string().min(1, { message: "Please select a doctor." }),
   department: z.string().min(1, { message: "Department is required." }),
@@ -1437,9 +1438,9 @@ export default function AppointmentsPage() {
                                         <FormControl>
                                         <Input
                                             type="tel"
-                                            placeholder="Enter 10-digit number"
+                                            placeholder="Auto-filled"
                                             {...field}
-                                            disabled={isEditing}
+                                            disabled
                                         />
                                         </FormControl>
                                         <FormDescription className="text-xs">This number will be used for appointment communication.</FormDescription>
