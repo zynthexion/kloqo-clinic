@@ -130,15 +130,21 @@ function generateAllTimeSlotsForDay(doctor: Doctor, date: Date): Date[] {
 
 
 /**
- * Calculates the next available walk-in slot, estimated time, and queue position.
+ * Calculates walk-in token details including estimated time and queue position
  */
-async function calculateWalkInDetails(
-  doctor: Doctor
-): Promise<WalkInEstimate> {
+export async function calculateWalkInDetails(
+  doctor: Doctor,
+  walkInTokenAllotment: number = 3 // Default spacing
+): Promise<{
+  estimatedTime: Date;
+  patientsAhead: number;
+  numericToken: number;
+  slotIndex: number;
+}> {
   const now = new Date();
   const todayDateStr = format(now, 'd MMMM yyyy');
 
-  // 1. Fetch all of today's appointments for the doctor, ordered by token number
+  // 1. Fetch all appointments for today to identify booked slots and the last walk-in
   const appointmentsRef = collection(db, 'appointments');
   const q = query(
     appointmentsRef,
@@ -146,11 +152,13 @@ async function calculateWalkInDetails(
     where('date', '==', todayDateStr),
     orderBy('numericToken', 'asc')
   );
+
   const querySnapshot = await getDocs(q);
   const todaysAppointments = querySnapshot.docs.map(doc => doc.data() as Appointment);
-  
-  // 2. Separate advanced bookings from all appointments
+
+  // 2. Separate different types of appointments
   const advancedBookings = todaysAppointments.filter(apt => apt.bookedVia === 'Advanced Booking');
+  const walkIns = todaysAppointments.filter(apt => apt.bookedVia === 'Walk-in');
 
   // 3. Generate all possible time slots for the doctor today
   const allPossibleSlots = generateAllTimeSlotsForDay(doctor, now);
@@ -162,34 +170,70 @@ async function calculateWalkInDetails(
   const bookedTimestamps = new Set(
     advancedBookings.map(apt => parseTime(apt.time, now).getTime())
   );
-  
-  // 5. Find the index of the first slot that is after the current time
-  let searchStartIndex = allPossibleSlots.findIndex(slot => isAfter(slot, now));
 
-  // If no future slot is found (e.g., it's past the last slot time), use the last slot.
-  if (searchStartIndex === -1) {
-      searchStartIndex = allPossibleSlots.length - 1;
-  }
-  
-  // 6. Iterate from the search start index to find the first truly available slot
+  // 5. Find the time of the last scheduled appointment (advanced or walk-in)
+  const lastAdvancedBookingTime = advancedBookings.length > 0
+    ? parseTime(advancedBookings[advancedBookings.length - 1].time, now)
+    : new Date(0); // Epoch if no advanced bookings
+
+  const lastWalkInTime = walkIns.length > 0
+    ? parseTime(walkIns[walkIns.length - 1].time, now)
+    : new Date(0);
+    
+  // 6. Determine the starting point for our search
+  const searchStartTime = isAfter(now, lastWalkInTime) ? now : lastWalkInTime;
+
+  // Find the index of the slot right after our search start time
+  let searchStartIndex = allPossibleSlots.findIndex(slot => isAfter(slot, searchStartTime));
+  if (searchStartIndex === -1) searchStartIndex = allPossibleSlots.length; // Start from the end if all slots are in the past
+
   let finalWalkInSlotIndex = -1;
-  for (let i = searchStartIndex; i < allPossibleSlots.length; i++) {
+
+  // 7. Decide which logic to use: spacing or consecutive
+  if (isAfter(searchStartTime, lastAdvancedBookingTime)) {
+    // ---- LOGIC 1: AFTER ALL ADVANCED BOOKINGS ARE DONE ----
+    // Find the very next consecutive available slot
+    for (let i = searchStartIndex; i < allPossibleSlots.length; i++) {
       const slot = allPossibleSlots[i];
       if (!bookedTimestamps.has(slot.getTime())) {
-          // This is the first available slot after the current time
+        finalWalkInSlotIndex = i;
+        break;
+      }
+    }
+  } else {
+    // ---- LOGIC 2: BEFORE THE LAST ADVANCED BOOKING ----
+    // Find the next slot after skipping `walkInTokenAllotment` number of *available* slots
+    let availableSlotsSkipped = 0;
+    for (let i = searchStartIndex; i < allPossibleSlots.length; i++) {
+      const slot = allPossibleSlots[i];
+      if (!bookedTimestamps.has(slot.getTime())) {
+        // This is an available slot
+        if (availableSlotsSkipped >= walkInTokenAllotment) {
           finalWalkInSlotIndex = i;
           break;
+        }
+        availableSlotsSkipped++;
       }
+    }
   }
 
-  // 7. If no available slot is found, the day is fully booked.
+  // 8. Handle cases where no slot is found
   if (finalWalkInSlotIndex === -1) {
-      throw new Error('No available walk-in slots remaining for today.');
+    // If spacing logic fails, try to find ANY available slot at the end
+    for (let i = allPossibleSlots.length - 1; i >= searchStartIndex; i--) {
+        if (!bookedTimestamps.has(allPossibleSlots[i].getTime())) {
+            finalWalkInSlotIndex = i;
+            break;
+        }
+    }
+    if (finalWalkInSlotIndex === -1) {
+        throw new Error('No available walk-in slots remaining for today.');
+    }
   }
 
   const estimatedTime = allPossibleSlots[finalWalkInSlotIndex];
 
-  // 8. Calculate new token number and patients ahead
+  // 9. Calculate new token number and patients ahead
   const newNumericToken = todaysAppointments.length > 0
     ? Math.max(...todaysAppointments.map(a => a.numericToken)) + 1
     : 1;
@@ -303,8 +347,12 @@ export default function AppointmentsPage() {
             allRelatedPatients = [...allRelatedPatients, ...relatedPatients];
         }
         
-        setPatientSearchResults(allRelatedPatients);
-        setIsPatientPopoverOpen(true); // Open only if we have results
+        if (allRelatedPatients.length > 0) {
+          setPatientSearchResults(allRelatedPatients);
+          setIsPatientPopoverOpen(true);
+        } else {
+          setIsPatientPopoverOpen(false);
+        }
 
       } catch (error) {
         console.error("Error searching patient:", error);
@@ -607,8 +655,7 @@ export default function AppointmentsPage() {
             return;
           }
           const date = new Date();
-          const tokenData = await generateNextToken(date, 'W');
-
+          
           const appointmentData: Omit<Appointment, 'id'> = {
             bookedVia: appointmentType,
             clinicId: selectedDoctor.clinicId,
@@ -623,8 +670,8 @@ export default function AppointmentsPage() {
             place: values.place,
             status: 'Pending',
             time: format(walkInEstimate.estimatedTime, "hh:mm a"),
-            tokenNumber: tokenData.tokenNumber,
-            numericToken: tokenData.numericToken,
+            tokenNumber: `W${String(walkInEstimate.numericToken).padStart(3, '0')}`,
+            numericToken: walkInEstimate.numericToken,
             slotIndex: walkInEstimate.slotIndex,
             treatment: "General Consultation",
           };
@@ -632,7 +679,7 @@ export default function AppointmentsPage() {
           await setDoc(appointmentRef, { ...appointmentData, id: appointmentRef.id });
           setAppointments(prev => [...prev, { ...appointmentData, id: appointmentRef.id }]);
 
-          setGeneratedToken(tokenData.tokenNumber);
+          setGeneratedToken(appointmentData.tokenNumber);
           setIsTokenModalOpen(true);
 
         } else {
@@ -980,7 +1027,7 @@ export default function AppointmentsPage() {
           status = 'leave';
         }
 
-        if (isToday(selectedDate) && subMinutes(currentTime, 30) < new Date()) {
+        if (isToday(selectedDate) && isBefore(currentTime, subMinutes(new Date(), -30))) {
             status = 'booked'; 
         }
 
@@ -1189,11 +1236,11 @@ export default function AppointmentsPage() {
                           <div className="pt-4 border-t">
                              <div className="flex justify-center mb-4">
                                 <RadioGroup onValueChange={(value) => form.setValue('bookedVia', value as any)} value={form.watch('bookedVia')} className="flex items-center space-x-4 rounded-full p-1 bg-muted">
-                                    <Label htmlFor="advanced-booking" className={cn("px-4 py-1.5 rounded-full cursor-pointer transition-colors", form.watch('bookedVia') === 'Advanced Booking' && "bg-background shadow-sm")}>
+                                    <Label htmlFor="advanced-booking" className={cn("px-4 py-1.5 rounded-full cursor-pointer transition-colors", form.watch('bookedVia') === 'Advanced Booking' ? "bg-background shadow-sm" : "")}>
                                         <RadioGroupItem value="Advanced Booking" id="advanced-booking" className="sr-only" />
                                         Advanced Booking
                                     </Label>
-                                    <Label htmlFor="walk-in" className={cn("px-4 py-1.5 rounded-full cursor-pointer transition-colors", form.watch('bookedVia') === 'Walk-in' && "bg-background shadow-sm")}>
+                                    <Label htmlFor="walk-in" className={cn("px-4 py-1.5 rounded-full cursor-pointer transition-colors", form.watch('bookedVia') === 'Walk-in' ? "bg-background shadow-sm" : "")}>
                                         <RadioGroupItem value="Walk-in" id="walk-in" className="sr-only" />
                                         Walk-in
                                     </Label>
