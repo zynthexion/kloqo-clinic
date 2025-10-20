@@ -637,6 +637,7 @@ export default function DoctorsPage() {
                 const cleanedLeaveSlots: LeaveSlot[] = [];
 
                 for (const leaveDay of existingLeaveSlots) {
+                    if (!leaveDay.date) continue;
                     const leaveDate = parseDateFns(leaveDay.date, "yyyy-MM-dd", new Date());
                     const dayName = format(leaveDate, 'EEEE');
                     const availabilityForDay = newAvailabilitySlots.find(s => s.day === dayName);
@@ -707,6 +708,7 @@ export default function DoctorsPage() {
         const cleanedLeaveSlots: LeaveSlot[] = [];
 
         for (const leaveDay of existingLeaveSlots) {
+            if (!leaveDay.date) continue;
             const leaveDate = parseDateFns(leaveDay.date, "yyyy-MM-dd", new Date());
             const dayName = format(leaveDate, 'EEEE');
 
@@ -1616,4 +1618,5 @@ export default function DoctorsPage() {
     
 
     
+
 
