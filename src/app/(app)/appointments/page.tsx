@@ -1183,10 +1183,14 @@ export default function AppointmentsPage() {
                                   <FormItem>
                                     <FormControl>
                                       <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4 rounded-full p-1 bg-muted">
-                                        <Label className={cn("px-4 py-1.5 rounded-full cursor-pointer transition-colors", field.value === 'Advanced Booking' && "bg-background shadow-sm")}>Advanced Booking</Label>
-                                        <Label className={cn("px-4 py-1.5 rounded-full cursor-pointer transition-colors", field.value === 'Walk-in' && "bg-background shadow-sm")}>Walk-in</Label>
-                                        <RadioGroupItem value="Advanced Booking" className="sr-only" />
-                                        <RadioGroupItem value="Walk-in" className="sr-only" />
+                                        <Label className={cn("px-4 py-1.5 rounded-full cursor-pointer transition-colors", field.value === 'Advanced Booking' && "bg-background shadow-sm")}>
+                                          <RadioGroupItem value="Advanced Booking" className="sr-only" />
+                                          Advanced Booking
+                                        </Label>
+                                        <Label className={cn("px-4 py-1.5 rounded-full cursor-pointer transition-colors", field.value === 'Walk-in' && "bg-background shadow-sm")}>
+                                          <RadioGroupItem value="Walk-in" className="sr-only" />
+                                          Walk-in
+                                        </Label>
                                       </RadioGroup>
                                     </FormControl>
                                   </FormItem>
@@ -1724,3 +1728,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
