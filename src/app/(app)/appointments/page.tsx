@@ -72,17 +72,26 @@ const formSchema = z.object({
   patientName: z.string().min(2, { message: "Name must be at least 2 characters." }),
   sex: z.enum(["Male", "Female", "Other"]),
   phone: z.string(),
-  age: z.coerce.number().min(0, "Age cannot be negative."),
+  age: z.coerce.number({
+    required_error: "Age is required.",
+    invalid_type_error: "Age must be a number."
+  }).min(0, "Age cannot be negative.").optional(),
   doctor: z.string().min(1, { message: "Please select a doctor." }),
   department: z.string().min(1, { message: "Department is required." }),
-  date: z.date({
-    required_error: "A date is required."
-  }).optional(),
+  date: z.date().optional(),
   time: z.string().optional(),
   place: z.string().min(2, { message: "Place must be at least 2 characters." }),
   bookedVia: z.enum(["Advanced Booking", "Walk-in"]),
   tokenNumber: z.string().optional(),
   patientId: z.string().optional(),
+}).refine(data => {
+    if (data.bookedVia === 'Advanced Booking') {
+        return !!data.date && !!data.time;
+    }
+    return true;
+}, {
+    message: "Date and time are required for advanced bookings.",
+    path: ["date"], // You can point to a general or specific field
 });
 
 type AppointmentFormValues = z.infer<typeof formSchema>;
@@ -303,7 +312,7 @@ export default function AppointmentsPage() {
     defaultValues: {
       patientName: "",
       phone: "",
-      age: 0,
+      age: undefined,
       sex: "Male",
       doctor: "",
       department: "",
@@ -428,7 +437,6 @@ export default function AppointmentsPage() {
   useEffect(() => {
     // Only run this logic once when the component has loaded appointments
     if (appointments.length > 0) {
-      const now = new Date();
       const noShowAppointments = appointments.filter(apt => 
         apt.status === 'Pending' && isPast(parseAppointmentDateTime(apt.date, apt.time))
       );
@@ -483,7 +491,7 @@ export default function AppointmentsPage() {
     form.reset({
       patientName: "",
       phone: "",
-      age: 0,
+      age: undefined,
       sex: "Male",
       doctor: doctors.length > 0 ? doctors[0].id : "",
       department: doctors.length > 0 ? doctors[0].department || "" : "",
@@ -753,7 +761,7 @@ export default function AppointmentsPage() {
             sex: values.sex,
             patientId: patientForAppointmentId,
             patientName: values.patientName,
-            age: values.age,
+            age: values.age!,
             communicationPhone: communicationPhone,
             place: values.place,
             status: 'Pending',
@@ -787,7 +795,7 @@ export default function AppointmentsPage() {
             patientName: patientForAppointmentName,
             sex: values.sex,
             communicationPhone: communicationPhone,
-            age: values.age,
+            age: values.age!,
             doctor: selectedDoctor.name,
             date: appointmentDateStr,
             time: appointmentTimeStr,
@@ -1218,6 +1226,32 @@ export default function AppointmentsPage() {
 
   const isNewPatient = patientSearchTerm.length >= 10 && !selectedPatient;
   const isKloqoMember = primaryPatient && !primaryPatient.clinicIds?.includes(clinicId!);
+  
+  const isDateDisabled = (date: Date) => {
+    if (!selectedDoctor) return true;
+    
+    // Standard checks
+    const isPastDate = date < new Date(new Date().setHours(0, 0, 0, 0));
+    const isNotAvailableDay = !availableDaysOfWeek.includes(getDay(date));
+    const isOnLeave = leaveDates.some(leaveDate => isSameDay(date, leaveDate));
+    if (isPastDate || isNotAvailableDay || isOnLeave) return true;
+    
+    // Today-specific logic for advanced booking
+    if (isToday(date) && appointmentType === 'Advanced Booking') {
+        const firstSlot = selectedDoctor.availabilitySlots
+            ?.find(s => s.day === format(date, 'EEEE'))
+            ?.timeSlots[0];
+        if (firstSlot) {
+            const firstSlotTime = parseTime(firstSlot.from, date);
+            // Disable if current time is 30 mins or less from the first slot start time
+            if (isAfter(new Date(), subMinutes(firstSlotTime, 30))) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+  };
 
   return (
     <>
@@ -1409,7 +1443,7 @@ export default function AppointmentsPage() {
                                     <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                                   )} />
                                   <FormField control={form.control} name="age" render={({ field }) => (
-                                    <FormItem><FormLabel>Age</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                                    <FormItem><FormLabel>Age</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
                                   )} />
                                   <FormField control={form.control} name="sex" render={({ field }) => (
                                     <FormItem><FormLabel>Gender</FormLabel>
@@ -1463,12 +1497,7 @@ export default function AppointmentsPage() {
                                           if (date) field.onChange(date);
                                           form.clearErrors("date");
                                         }}
-                                        disabled={(date) =>
-                                          date < new Date(new Date().setHours(0, 0, 0, 0)) ||
-                                          !selectedDoctor ||
-                                          !availableDaysOfWeek.includes(getDay(date)) ||
-                                          leaveDates.some(leaveDate => isSameDay(date, leaveDate))
-                                        }
+                                        disabled={isDateDisabled}
                                         initialFocus
                                         modifiers={selectedDoctor ? { available: { dayOfWeek: availableDaysOfWeek }, leave: leaveDates } : { leave: leaveDates }}
                                         modifiersStyles={{
@@ -1554,7 +1583,7 @@ export default function AppointmentsPage() {
                                                                 variant={form.getValues("time") === format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm') ? "default" : "outline"}
                                                                 onClick={() => {
                                                                     const val = format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm');
-                                                                    form.setValue("time", val);
+                                                                    form.setValue("time", val, { shouldValidate: true });
                                                                     if (val) form.clearErrors("time");
                                                                 }}
                                                                 disabled={slot.status !== 'available'}
@@ -1578,7 +1607,14 @@ export default function AppointmentsPage() {
                           <div className="flex justify-end items-center pt-4">
                             <div className="flex justify-end gap-2">
                               {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
-                              <Button type="submit" disabled={isPending || (appointmentType === 'Walk-in' && !walkInEstimate)}>
+                              <Button
+                                type="submit"
+                                disabled={
+                                    isPending ||
+                                    (appointmentType === 'Walk-in' && !walkInEstimate) ||
+                                    !form.formState.isValid
+                                }
+                               >
                                 {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                 {isEditing ? "Save Changes" : "Book Appointment"}
                               </Button>
