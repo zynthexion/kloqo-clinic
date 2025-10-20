@@ -247,7 +247,7 @@ export async function calculateWalkInDetails(
   // Count patients with appointments scheduled between now and the user's estimated time
   const patientsAhead = todaysAppointments.filter(apt => {
       const aptTime = parseAppointmentDateTime(apt.date, apt.time);
-      const isActive = apt.status !== 'Completed' && apt.status !== 'Cancelled' && !apt.isSkipped && apt.status !== 'No-show';
+      const isActive = apt.status !== 'Completed' && apt.status !== 'Cancelled' && !apt.isSkipped;
       return isActive && isAfter(aptTime, now) && isBefore(aptTime, estimatedTime!);
   }).length;
   
@@ -277,7 +277,7 @@ export default function AppointmentsPage() {
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [primaryPatient, setPrimaryPatient] = useState<Patient | null>(null);
   const [isPending, startTransition] = useTransition();
-  const [isSendingLink, setIsSendingLink] = useTransition();
+  const [isSendingLink, setIsSendingLink] = useState(false);
   const [drawerSearchTerm, setDrawerSearchTerm] = useState("");
   const [selectedDrawerDoctor, setSelectedDrawerDoctor] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("upcoming");
