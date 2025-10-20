@@ -1012,7 +1012,7 @@ export default function AppointmentsPage() {
       patientName: patient.name,
       age: patient.age,
       sex: capitalizedSex as "Male" | "Female" | "Other",
-      phone: patient.phone.replace('+91', ''),
+      phone: patient.communicationPhone?.replace('+91', ''),
       place: patient.place || "",
     });
 
@@ -1359,7 +1359,7 @@ export default function AppointmentsPage() {
                                     </Label>
                                 </RadioGroup>
                             </div>
-                            {primaryPatient && (isKloqoMember || relatives.length > 0) && !isEditing && (
+                            {primaryPatient && !isEditing && (
                               <div className="mb-4">
                                 <Tabs value={bookingFor} onValueChange={(value) => {
                                   setBookingFor(value);
