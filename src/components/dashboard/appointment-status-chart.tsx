@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useMemo, useTransition } from "react";
@@ -19,16 +20,16 @@ const COLORS = {
   completed: "hsl(var(--chart-2))",
   upcoming: "hsl(var(--chart-1))",
   cancelled: "hsl(var(--chart-3))",
-  didNotShow: "hsl(var(--destructive))",
+  "No-show": "hsl(var(--muted-foreground))",
 };
 
-const ALL_STATUSES = ["completed", "upcoming", "cancelled", "didNotShow"];
+const ALL_STATUSES = ["completed", "upcoming", "cancelled", "No-show"];
 
 const statusLabels: { [key: string]: string } = {
   completed: "Completed",
   upcoming: "Upcoming",
   cancelled: "Cancelled",
-  didNotShow: "Didn't Show Up",
+  "No-show": "No-show",
 };
 
 type AppointmentStatusChartProps = {
@@ -73,10 +74,11 @@ export default function AppointmentStatusChart({ dateRange, doctorId }: Appointm
 
   useEffect(() => {
     fetchAppointments();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.currentUser]);
 
-  const { chartData, didNotShowAppointments } = useMemo(() => {
-    if (!dateRange?.from) return { chartData: [], didNotShowAppointments: [] };
+  const { chartData, noShowAppointments } = useMemo(() => {
+    if (!dateRange?.from) return { chartData: [], noShowAppointments: [] };
 
     let filteredAppointments = appointments;
 
@@ -99,39 +101,40 @@ export default function AppointmentStatusChart({ dateRange, doctorId }: Appointm
       }
     });
 
-    const completed = rangeAppointments.filter(apt => apt.status === 'Completed' || (apt.status === 'Confirmed' && isPast(parse(apt.date, 'd MMMM yyyy', new Date())))).length;
+    const completed = rangeAppointments.filter(apt => apt.status === 'Completed').length;
     const upcoming = rangeAppointments.filter(apt => (apt.status === 'Confirmed' || apt.status === 'Pending') && isFuture(parse(apt.date, 'd MMMM yyyy', new Date()))).length;
     const cancelled = rangeAppointments.filter(apt => apt.status === 'Cancelled').length;
     
-    const didNotShowAppointments = rangeAppointments.filter(apt => apt.status === 'Pending' && isPast(parse(`${apt.date} ${apt.time}`, 'd MMMM yyyy hh:mm a', new Date())));
+    const noShow = rangeAppointments.filter(apt => apt.status === 'No-show').length;
+    
+    const pendingPastAppointments = rangeAppointments.filter(apt => apt.status === 'Pending' && isPast(parse(`${apt.date} ${apt.time}`, 'd MMMM yyyy hh:mm a', new Date())));
 
     const data = [
       { name: "completed", value: completed },
       { name: "upcoming", value: upcoming },
       { name: "cancelled", value: cancelled },
-      { name: "didNotShow", value: didNotShowAppointments.length },
+      { name: "No-show", value: noShow + pendingPastAppointments.length },
     ].filter(item => item.value > 0);
     
-    return { chartData: data, didNotShowAppointments };
+    return { chartData: data, noShowAppointments: pendingPastAppointments };
 
   }, [appointments, dateRange, doctorId, doctors]);
   
   const handleUpdateNoShows = () => {
-    if (didNotShowAppointments.length === 0) return;
+    if (noShowAppointments.length === 0) return;
 
     startTransition(async () => {
         const batch = writeBatch(db);
-        didNotShowAppointments.forEach(appointment => {
+        noShowAppointments.forEach(appointment => {
             const appointmentRef = doc(db, "appointments", appointment.id);
-            // Using "Cancelled" as "Did Not Show" is not a status option
-            batch.update(appointmentRef, { status: "Cancelled" });
+            batch.update(appointmentRef, { status: "No-show" });
         });
 
         try {
             await batch.commit();
             toast({
                 title: "Appointments Updated",
-                description: `${didNotShowAppointments.length} appointment(s) have been marked as 'Cancelled'.`
+                description: `${noShowAppointments.length} appointment(s) have been marked as 'No-show'.`
             });
             // Re-fetch data to update the UI
             fetchAppointments();
@@ -212,7 +215,7 @@ export default function AppointmentStatusChart({ dateRange, doctorId }: Appointm
                     </div>
                 ))}
             </div>
-            {didNotShowAppointments.length > 0 && (
+            {noShowAppointments.length > 0 && (
                 <Button
                     variant="destructive"
                     size="sm"
@@ -221,7 +224,7 @@ export default function AppointmentStatusChart({ dateRange, doctorId }: Appointm
                     disabled={isUpdating}
                 >
                     {isUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Mark {didNotShowAppointments.length} No-Shows as Cancelled
+                    Mark {noShowAppointments.length} No-Shows
                 </Button>
             )}
         </CardFooter>

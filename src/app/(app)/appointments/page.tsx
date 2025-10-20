@@ -248,7 +248,7 @@ export async function calculateWalkInDetails(
   // Count patients with appointments scheduled between now and the user's estimated time
   const patientsAhead = todaysAppointments.filter(apt => {
       const aptTime = parseAppointmentDateTime(apt.date, apt.time);
-      const isActive = apt.status !== 'Completed' && apt.status !== 'Cancelled' && !apt.isSkipped;
+      const isActive = apt.status !== 'Completed' && apt.status !== 'Cancelled' && !apt.isSkipped && apt.status !== 'No-show';
       return isActive && isAfter(aptTime, now) && isBefore(aptTime, estimatedTime!);
   }).length;
   
@@ -456,7 +456,7 @@ export default function AppointmentsPage() {
           const batch = writeBatch(db);
           noShowAppointments.forEach(appointment => {
             const appointmentRef = doc(db, "appointments", appointment.id);
-            batch.update(appointmentRef, { status: "Cancelled" });
+            batch.update(appointmentRef, { status: "No-show" });
           });
 
           try {
@@ -465,14 +465,14 @@ export default function AppointmentsPage() {
             // Update local state to reflect the change immediately
             setAppointments(prev => prev.map(apt => {
               if (noShowAppointments.some(ns => ns.id === apt.id)) {
-                return { ...apt, status: 'Cancelled' };
+                return { ...apt, status: 'No-show' };
               }
               return apt;
             }));
 
             toast({
               title: "Appointments Updated",
-              description: `${noShowAppointments.length} pending appointment(s) with past times have been marked as 'Cancelled'.`,
+              description: `${noShowAppointments.length} pending appointment(s) have been marked as 'No-show'.`,
             });
 
           } catch (error) {
@@ -1587,6 +1587,7 @@ export default function AppointmentsPage() {
                               <TabsTrigger value="all">All</TabsTrigger>
                               <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
                               <TabsTrigger value="completed">Completed</TabsTrigger>
+                              <TabsTrigger value="no-show">No-show</TabsTrigger>
                             </TabsList>
                           </Tabs>
                         </div>

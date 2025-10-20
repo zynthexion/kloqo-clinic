@@ -63,7 +63,7 @@ export type Appointment = {
   date: string;
   time: string;
   department: string;
-  status: 'Confirmed' | 'Pending' | 'Cancelled' | 'Completed';
+  status: 'Confirmed' | 'Pending' | 'Cancelled' | 'Completed' | 'No-show';
   treatment: string;
   tokenNumber: string;
   numericToken: number;
