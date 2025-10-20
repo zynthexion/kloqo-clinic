@@ -626,21 +626,7 @@ export default function AppointmentsPage() {
         
         const patientPhoneNumber = values.phone.startsWith('+91') ? values.phone : `+91${values.phone}`;
         const communicationPhone = primaryPatient?.phone || patientPhoneNumber;
-
-        // Uniqueness check for new patients
-        if (!selectedPatient && !isEditing) {
-             const q = query(collection(db, 'patients'), where('phone', '==', patientPhoneNumber));
-             const existingPatientSnap = await getDocs(q);
-             if (!existingPatientSnap.empty) {
-                 toast({
-                     variant: "destructive",
-                     title: "Duplicate Patient",
-                     description: "A patient with this phone number already exists. Please search for them instead.",
-                 });
-                 return;
-             }
-        }
-
+        
         const patientDataToUpdate = {
           name: values.patientName,
           age: values.age,
@@ -665,19 +651,80 @@ export default function AppointmentsPage() {
           batch.update(patientRef, updateData);
           patientForAppointmentName = values.patientName;
         } else {
-          const newPatientRef = doc(collection(db, 'patients'));
-          const newPatientData: Patient = {
-            id: newPatientRef.id,
-            ...patientDataToUpdate,
-            clinicIds: [clinicId],
-            visitHistory: [],
-            totalAppointments: 0,
-            relatedPatientIds: [],
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          };
-          batch.set(newPatientRef, newPatientData);
-          patientForAppointmentId = newPatientRef.id;
+          // Creating a new user and patient
+          const usersRef = collection(db, 'users');
+          const userQuery = query(usersRef, where('phone', '==', patientPhoneNumber));
+          const userSnapshot = await getDocs(userQuery);
+
+          let userId: string;
+          let patientId: string;
+          const patientRef = doc(collection(db, 'patients'));
+          patientId = patientRef.id;
+
+          if (userSnapshot.empty) {
+            // User does not exist, create new user and patient
+            const newUserRef = doc(collection(db, 'users'));
+            userId = newUserRef.id;
+            
+            const newUserData: User = {
+                uid: userId,
+                phone: patientPhoneNumber,
+                role: 'patient',
+                patientId: patientId,
+            };
+            batch.set(newUserRef, newUserData);
+
+            const newPatientData: Patient = {
+              id: patientId,
+              primaryUserId: userId,
+              ...patientDataToUpdate,
+              clinicIds: [clinicId],
+              visitHistory: [],
+              totalAppointments: 0,
+              relatedPatientIds: [],
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            };
+            batch.set(patientRef, newPatientData);
+
+          } else {
+            // User exists, just create/update patient
+            const existingUser = userSnapshot.docs[0].data() as User;
+            userId = existingUser.uid;
+            
+            const existingPatientRef = doc(db, 'patients', existingUser.patientId!);
+            const existingPatientSnap = await getFirestoreDoc(existingPatientRef);
+
+            if (existingPatientSnap.exists()) {
+                // Patient record exists, update it and ensure clinicId is present
+                patientId = existingPatientSnap.id;
+                const updateData: any = {
+                    ...patientDataToUpdate,
+                    updatedAt: serverTimestamp()
+                };
+                if (!existingPatientSnap.data().clinicIds?.includes(clinicId)) {
+                    updateData.clinicIds = arrayUnion(clinicId);
+                }
+                batch.update(existingPatientRef, updateData);
+            } else {
+                // This case is unlikely if DB is consistent, but handles it.
+                // User exists but patient record is missing. Create it.
+                const newPatientData: Patient = {
+                  id: patientId,
+                  primaryUserId: userId,
+                  ...patientDataToUpdate,
+                  clinicIds: [clinicId],
+                  visitHistory: [],
+                  totalAppointments: 0,
+                  relatedPatientIds: [],
+                  createdAt: serverTimestamp(),
+                  updatedAt: serverTimestamp(),
+                };
+                batch.set(patientRef, newPatientData);
+            }
+          }
+
+          patientForAppointmentId = patientId;
           patientForAppointmentName = values.patientName;
         }
 
@@ -1827,3 +1874,4 @@ export default function AppointmentsPage() {
     
 
     
+
