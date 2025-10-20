@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useTransition, useCallback } from "react";
@@ -53,7 +51,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import WeeklyDoctorAvailability from "@/components/dashboard/weekly-doctor-availability";
-import { Popover, PopoverContent, PopoverAnchor } from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -151,16 +149,15 @@ export default function AppointmentsPage() {
   const patientInputRef = useRef<HTMLInputElement>(null);
 
   const handlePatientSearch = useCallback(async (phone: string) => {
-        if (phone.length < 10 || !clinicId) {
-            setPatientSearchResults([]);
-            setIsPatientPopoverOpen(false);
-            return;
-        };
-        setIsPatientPopoverOpen(true);
-        startTransition(() => {
-          form.reset();
-        });
-        
+    if (phone.length < 10 || !clinicId) {
+        setPatientSearchResults([]);
+        if (phone.length >= 5) {
+          setIsPatientPopoverOpen(false);
+        }
+        return;
+    }
+    
+    startTransition(async () => {
         try {
             const fullPhoneNumber = `+91${phone}`;
             const usersRef = collection(db, 'users');
@@ -170,6 +167,7 @@ export default function AppointmentsPage() {
 
             if (userSnapshot.empty) {
                 setPatientSearchResults([]);
+                setIsPatientPopoverOpen(true);
                 form.setValue('phone', phone);
                 return;
             }
@@ -199,13 +197,12 @@ export default function AppointmentsPage() {
             }
 
             setPatientSearchResults(allRelatedPatients);
-
+            setIsPatientPopoverOpen(true);
         } catch (error) {
             console.error("Error searching patient:", error);
             toast({variant: 'destructive', title: 'Search Error', description: 'Could not perform patient search.'});
-        } finally {
-            // No need to set isSearchingPatient to false if not using it
         }
+    });
   }, [clinicId, toast, form]);
 
 
@@ -1100,7 +1097,7 @@ export default function AppointmentsPage() {
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                       <div className="space-y-4">
                       <Popover open={isPatientPopoverOpen} onOpenChange={setIsPatientPopoverOpen}>
-                        <PopoverAnchor asChild>
+                        <PopoverTrigger asChild>
                             <FormItem>
                             <FormLabel>Search Patient by Phone</FormLabel>
                                 <div className="relative">
@@ -1118,7 +1115,7 @@ export default function AppointmentsPage() {
                                 </div>
                             <FormMessage />
                             </FormItem>
-                        </PopoverAnchor>
+                        </PopoverTrigger>
 
                         <PopoverContent onOpenAutoFocus={(e) => e.preventDefault()} className="w-[--radix-popover-trigger-width] p-0" align="start">
                             <Command>
@@ -1659,7 +1656,7 @@ export default function AppointmentsPage() {
                                               <DropdownMenuItem onClick={() => handleComplete(appointment)}>
                                                 Completed
                                               </DropdownMenuItem>
-                                              <DropdownMenuItem onClick={() => setEditingAppointment(appointment)}>
+                                              <DropdownMenuItem onClick={()={() => setEditingAppointment(appointment)}>
                                                 Reschedule
                                               </DropdownMenuItem>
                                             </>
