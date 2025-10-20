@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useTransition, useCallback } from "react";
@@ -285,14 +286,14 @@ export default function AppointmentsPage() {
       phone: "",
       age: 0,
       sex: "Male",
-      doctor: "",
-      department: "",
+      doctor: doctors.length > 0 ? doctors[0].id : "",
+      department: doctors.length > 0 ? doctors[0].department || "" : "",
       date: undefined,
       time: undefined,
       place: "",
       bookedVia: "Advanced Booking",
     });
-  }, [form]);
+  }, [form, doctors]);
 
   useEffect(() => {
     if (editingAppointment) {
@@ -1373,9 +1374,7 @@ export default function AppointmentsPage() {
                                 <FormField control={form.control} name="doctor" render={({ field }) => (
                                   <FormItem>
                                     <FormLabel>Doctor</FormLabel>
-                                    <Select onValueChange={(value) => {
-                                      onDoctorChange(value);
-                                    }} value={field.value}>
+                                    <Select onValueChange={onDoctorChange} value={field.value} defaultValue={doctors.length > 0 ? doctors[0].id : ""}>
                                       <FormControl>
                                         <SelectTrigger>
                                           <SelectValue placeholder="Select a doctor" />
