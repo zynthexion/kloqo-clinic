@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useTransition, useCallback } from "react";
@@ -339,10 +338,10 @@ export default function AppointmentsPage() {
         }
 
         const primaryDoc = primarySnapshot.docs[0];
-        const primaryPatient = { id: primaryDoc.id, ...primaryDoc.data() } as Patient;
-        primaryPatient.isKloqoMember = primaryPatient.clinicIds?.includes(clinicId);
+        const primaryPatientData = { id: primaryDoc.id, ...primaryDoc.data() } as Patient;
+        primaryPatientData.isKloqoMember = primaryPatientData.clinicIds?.includes(clinicId);
         
-        setPatientSearchResults([primaryPatient]);
+        setPatientSearchResults([primaryPatientData]);
         setIsPatientPopoverOpen(true);
 
       } catch (error) {
@@ -505,8 +504,8 @@ export default function AppointmentsPage() {
             if (patientDoc.exists()) {
               const patientData = patientDoc.data() as Patient;
               setSelectedPatient(patientData);
-              setPatientSearchTerm(patientData.phone.replace('+91', ''));
-              form.setValue('phone', patientData.phone.replace('+91', ''));
+              setPatientSearchTerm(patientData.communicationPhone?.replace('+91', '') || '');
+              form.setValue('phone', patientData.communicationPhone?.replace('+91', '') || '');
             }
           }
         };
@@ -624,7 +623,7 @@ export default function AppointmentsPage() {
         let patientForAppointmentId: string;
         let patientForAppointmentName: string;
         
-        const patientPhoneNumber = values.phone.startsWith('+91') ? values.phone : `+91${values.phone}`;
+        const patientPhoneNumber = `+91${values.phone}`;
         const communicationPhone = primaryPatient?.phone || patientPhoneNumber;
         
         const patientDataToUpdate = {
@@ -632,7 +631,8 @@ export default function AppointmentsPage() {
           age: values.age,
           sex: values.sex,
           place: values.place,
-          phone: patientPhoneNumber,
+          phone: values.phone ? patientPhoneNumber : "",
+          communicationPhone: communicationPhone,
         };
 
         if (isEditing && editingAppointment) {
@@ -1039,7 +1039,7 @@ export default function AppointmentsPage() {
       patientName: relative.name,
       age: relative.age,
       sex: capitalizedSex as "Male" | "Female" | "Other",
-      phone: relative.phone.replace('+91', ''),
+      phone: primaryPatient?.phone.replace('+91', '') || '', // Use primary patient's phone
       place: relative.place || "",
     });
     toast({ title: `Selected Relative: ${relative.name}`, description: "You are now booking an appointment for the selected relative." });
@@ -1439,7 +1439,7 @@ export default function AppointmentsPage() {
                                             type="tel"
                                             placeholder="Enter 10-digit number"
                                             {...field}
-                                            disabled={bookingFor === 'member' || isEditing}
+                                            disabled={isEditing}
                                         />
                                         </FormControl>
                                         <FormDescription className="text-xs">This number will be used for appointment communication.</FormDescription>
@@ -1864,3 +1864,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
