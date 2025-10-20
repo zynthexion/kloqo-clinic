@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useTransition, useCallback } from "react";
@@ -173,24 +174,24 @@ export default function AppointmentsPage() {
             }
 
             const primaryUserData = userSnapshot.docs[0].data() as User;
-            const primaryPatientData = {
-                id: primaryUserData.uid, // Assuming user uid can be patient id
-                name: primaryUserData.name,
-                phone: primaryUserData.phone,
-                // These are defaults, ideally user doc would have more profile info
-                sex: 'Male', 
-                age: 30,
-                place: '',
-            } as Patient;
+            const patientDoc = await getFirestoreDoc(doc(db, "patients", primaryUserData.patientId!));
+            if (!patientDoc.exists()) {
+                setPatientSearchResults([]);
+                setIsPatientPopoverOpen(true);
+                return
+            }
+            const primaryPatientData = { id: patientDoc.id, ...patientDoc.data() } as Patient;
+            primaryPatientData.isKloqoMember = primaryPatientData.clinicIds?.includes(clinicId);
 
             let allRelatedPatients: Patient[] = [primaryPatientData];
 
-            if ((primaryUserData as any).relatedPatientIds && (primaryUserData as any).relatedPatientIds.length > 0) {
+            if ((primaryPatientData as any).relatedPatientIds && (primaryPatientData as any).relatedPatientIds.length > 0) {
                 const patientsRef = collection(db, 'patients');
-                const relatedPatientsQuery = query(patientsRef, where('__name__', 'in', (primaryUserData as any).relatedPatientIds));
+                const relatedPatientsQuery = query(patientsRef, where('__name__', 'in', (primaryPatientData as any).relatedPatientIds));
                 const relatedSnapshot = await getDocs(relatedPatientsQuery);
                 const relatedPatients = relatedSnapshot.docs.map(doc => {
                     const data = { id: doc.id, ...doc.data()} as Patient;
+                    data.isKloqoMember = data.clinicIds?.includes(clinicId);
                     return data;
                 });
                 allRelatedPatients = [...allRelatedPatients, ...relatedPatients];
@@ -1127,7 +1128,7 @@ export default function AppointmentsPage() {
                                 ) : (
                                 <CommandGroup>
                                   {patientSearchResults.map((patient) => {
-                                    const isClinicPatient = patient.clinicIds?.includes(clinicId!);
+                                    const isClinicPatient = patient.isKloqoMember;
                                     return (
                                       <CommandItem
                                         key={patient.id}
@@ -1656,7 +1657,7 @@ export default function AppointmentsPage() {
                                               <DropdownMenuItem onClick={() => handleComplete(appointment)}>
                                                 Completed
                                               </DropdownMenuItem>
-                                              <DropdownMenuItem onClick={()={() => setEditingAppointment(appointment)}>
+                                              <DropdownMenuItem onClick={() => setEditingAppointment(appointment)}>
                                                 Reschedule
                                               </DropdownMenuItem>
                                             </>
