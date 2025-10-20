@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
-import { collection, getDocs, query, where, getDoc, doc } from "firebase/firestore";
+import { useEffect, useState, useMemo, useTransition } from "react";
+import { collection, getDocs, query, where, getDoc, doc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/firebase";
 import type { Appointment, Doctor } from "@/lib/types";
@@ -11,6 +11,9 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import type { DateRange } from "react-day-picker";
 import { isWithinInterval, parse, isPast, isFuture, startOfDay } from "date-fns";
 import { Skeleton } from "../ui/skeleton";
+import { Button } from "../ui/button";
+import { Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 const COLORS = {
   completed: "hsl(var(--chart-2))",
@@ -38,38 +41,42 @@ export default function AppointmentStatusChart({ dateRange, doctorId }: Appointm
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isUpdating, startTransition] = useTransition();
+  const { toast } = useToast();
+
+  const fetchAppointments = async () => {
+    if (!auth.currentUser) return;
+    setLoading(true);
+    try {
+        const userDoc = await getDoc(doc(db, "users", auth.currentUser!.uid));
+        const clinicId = userDoc.data()?.clinicId;
+        if (!clinicId) {
+            setLoading(false);
+            return;
+        }
+        
+        const appointmentsQuery = query(collection(db, "appointments"), where("clinicId", "==", clinicId));
+        const appointmentsSnapshot = await getDocs(appointmentsQuery);
+        const appointmentsList = appointmentsSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}) as Appointment);
+        setAppointments(appointmentsList);
+        
+        const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
+        const doctorsSnapshot = await getDocs(doctorsQuery);
+        const doctorsList = doctorsSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}) as Doctor);
+        setDoctors(doctorsList);
+    } catch(e) {
+        console.error("Failed to fetch appointments", e);
+    } finally {
+        setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (!auth.currentUser) {
-        setLoading(false);
-        return;
-    }
-    const fetchAppointments = async () => {
-      setLoading(true);
-      const userDoc = await getDoc(doc(db, "users", auth.currentUser!.uid));
-      const clinicId = userDoc.data()?.clinicId;
-      if (!clinicId) {
-          setLoading(false);
-          return;
-      }
-      
-      const appointmentsQuery = query(collection(db, "appointments"), where("clinicId", "==", clinicId));
-      const appointmentsSnapshot = await getDocs(appointmentsQuery);
-      const appointmentsList = appointmentsSnapshot.docs.map(doc => doc.data() as Appointment);
-      setAppointments(appointmentsList);
-      
-      const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
-      const doctorsSnapshot = await getDocs(doctorsQuery);
-      const doctorsList = doctorsSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}) as Doctor);
-      setDoctors(doctorsList);
-
-      setLoading(false);
-    };
     fetchAppointments();
   }, [auth.currentUser]);
 
-  const chartData = useMemo(() => {
-    if (!dateRange?.from) return [];
+  const { chartData, didNotShowAppointments } = useMemo(() => {
+    if (!dateRange?.from) return { chartData: [], didNotShowAppointments: [] };
 
     let filteredAppointments = appointments;
 
@@ -95,17 +102,50 @@ export default function AppointmentStatusChart({ dateRange, doctorId }: Appointm
     const completed = rangeAppointments.filter(apt => apt.status === 'Completed' || (apt.status === 'Confirmed' && isPast(parse(apt.date, 'd MMMM yyyy', new Date())))).length;
     const upcoming = rangeAppointments.filter(apt => (apt.status === 'Confirmed' || apt.status === 'Pending') && isFuture(parse(apt.date, 'd MMMM yyyy', new Date()))).length;
     const cancelled = rangeAppointments.filter(apt => apt.status === 'Cancelled').length;
-    const didNotShow = rangeAppointments.filter(apt => apt.status === 'Pending' && isPast(parse(apt.date, 'd MMMM yyyy', new Date()))).length;
+    
+    const didNotShowAppointments = rangeAppointments.filter(apt => apt.status === 'Pending' && isPast(parse(`${apt.date} ${apt.time}`, 'd MMMM yyyy hh:mm a', new Date())));
 
-    return [
+    const data = [
       { name: "completed", value: completed },
       { name: "upcoming", value: upcoming },
       { name: "cancelled", value: cancelled },
-      { name: "didNotShow", value: didNotShow },
+      { name: "didNotShow", value: didNotShowAppointments.length },
     ].filter(item => item.value > 0);
+    
+    return { chartData: data, didNotShowAppointments };
 
   }, [appointments, dateRange, doctorId, doctors]);
   
+  const handleUpdateNoShows = () => {
+    if (didNotShowAppointments.length === 0) return;
+
+    startTransition(async () => {
+        const batch = writeBatch(db);
+        didNotShowAppointments.forEach(appointment => {
+            const appointmentRef = doc(db, "appointments", appointment.id);
+            // Using "Cancelled" as "Did Not Show" is not a status option
+            batch.update(appointmentRef, { status: "Cancelled" });
+        });
+
+        try {
+            await batch.commit();
+            toast({
+                title: "Appointments Updated",
+                description: `${didNotShowAppointments.length} appointment(s) have been marked as 'Cancelled'.`
+            });
+            // Re-fetch data to update the UI
+            fetchAppointments();
+        } catch (error) {
+            console.error("Error updating appointments:", error);
+            toast({
+                variant: "destructive",
+                title: "Update Failed",
+                description: "Could not update appointment statuses. Please try again."
+            })
+        }
+    });
+  }
+
   if (loading) {
     return (
         <Card className="h-full flex flex-col">
@@ -139,7 +179,7 @@ export default function AppointmentStatusChart({ dateRange, doctorId }: Appointm
                             borderRadius: "var(--radius)",
                             border: "1px solid hsl(var(--border))",
                         }}
-                        labelFormatter={(value) => statusLabels[value]}
+                        labelFormatter={(value) => statusLabels[value as string]}
                     />
                     <Pie
                         data={chartData}
@@ -163,7 +203,7 @@ export default function AppointmentStatusChart({ dateRange, doctorId }: Appointm
         )}
       </CardContent>
       {chartData.length > 0 && (
-        <CardFooter className="flex-col gap-2 text-sm pt-4">
+        <CardFooter className="flex-col gap-4 text-sm pt-4">
             <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
                 {ALL_STATUSES.map(status => (
                     <div key={status} className="flex items-center gap-2">
@@ -172,6 +212,18 @@ export default function AppointmentStatusChart({ dateRange, doctorId }: Appointm
                     </div>
                 ))}
             </div>
+            {didNotShowAppointments.length > 0 && (
+                <Button
+                    variant="destructive"
+                    size="sm"
+                    className="w-full mt-2"
+                    onClick={handleUpdateNoShows}
+                    disabled={isUpdating}
+                >
+                    {isUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Mark {didNotShowAppointments.length} No-Shows as Cancelled
+                </Button>
+            )}
         </CardFooter>
       )}
     </Card>
