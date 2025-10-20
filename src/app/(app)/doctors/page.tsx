@@ -870,7 +870,7 @@ export default function DoctorsPage() {
 
   const leaveDates = useMemo(() => {
       return (selectedDoctor?.leaveSlots || [])
-          .filter(ls => ls.slots.length > 0)
+          .filter(ls => ls && ls.slots && ls.slots.length > 0)
           .map(ls => parse(ls.date, 'yyyy-MM-dd', new Date()));
   }, [selectedDoctor?.leaveSlots]);
 
@@ -1616,3 +1616,4 @@ export default function DoctorsPage() {
     
 
     
+
