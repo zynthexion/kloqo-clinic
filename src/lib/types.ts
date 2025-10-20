@@ -66,9 +66,11 @@ export type Appointment = {
   status: 'Confirmed' | 'Pending' | 'Cancelled' | 'Completed';
   treatment: string;
   tokenNumber: string;
+  numericToken: number;
   bookedVia: 'Advanced Booking' | 'Walk-in';
   place?: string;
   isSkipped?: boolean;
+  slotIndex?: number;
 };
 
 export type Visit = {

@@ -16,10 +16,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Appointment, Doctor, Patient, Visit, User } from "@/lib/types";
-import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc } from "firebase/firestore";
+import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
-import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes } from "date-fns";
+import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes, isAfter } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
   Form,
@@ -93,7 +93,186 @@ const MAX_VISIBLE_SLOTS = 6;
 type WalkInEstimate = {
   estimatedTime: Date;
   patientsAhead: number;
+  numericToken: number;
+  slotIndex: number;
 } | null;
+
+/**
+ * Generates all time slots for today based on availability
+ */
+function generateTimeSlots(timeSlots: { from: string; to: string }[], referenceDate: Date): Date[] {
+  const slots: Date[] = [];
+  const slotDuration = 15; // minutes
+
+  for (const slot of timeSlots) {
+    const startTime = parse(slot.from, 'hh:mm a', referenceDate);
+    const endTime = parse(slot.to, 'hh:mm a', referenceDate);
+
+    let currentSlot = startTime;
+    while (isBefore(currentSlot, endTime)) {
+      slots.push(currentSlot);
+      currentSlot = addMinutes(currentSlot, slotDuration);
+    }
+  }
+
+  return slots;
+}
+
+/**
+ * Finds the index of the current or next slot
+ */
+function findCurrentSlotIndex(slots: Date[], now: Date): number {
+  for (let i = 0; i < slots.length; i++) {
+    if (isAfter(slots[i], now) || slots[i].getTime() === now.getTime()) {
+      return i;
+    }
+  }
+  // If all slots have passed, return the last slot index
+  return slots.length - 1;
+}
+
+/**
+ * Finds the slot index based on token number (fallback if slotIndex not stored)
+ */
+function findSlotIndexByToken(slots: Date[], tokenNumber: number): number {
+  // For walk-ins without stored slotIndex, estimate based on token order
+  return Math.min(tokenNumber - 1, slots.length - 1);
+}
+
+/**
+ * Gets the estimated time for walk-in based on slot index
+ * Walk-ins don't occupy slots, they just get estimated times
+ */
+function getEstimatedTimeForWalkIn(
+  allSlots: Date[],
+  targetSlotIndex: number,
+  now: Date
+): { slotIndex: number; estimatedTime: Date } {
+  // Ensure the slot index is within bounds
+  if (targetSlotIndex >= allSlots.length) {
+    throw new Error('No available slots remaining for walk-in today');
+  }
+  
+  const clampedIndex = Math.max(0, Math.min(targetSlotIndex, allSlots.length - 1));
+  const estimatedTime = allSlots[clampedIndex];
+
+  // If the estimated time has already passed, use next available slot
+  if (isBefore(estimatedTime, now)) {
+    const currentSlotIndex = findCurrentSlotIndex(allSlots, now);
+    if (currentSlotIndex >= allSlots.length) {
+      throw new Error('All slots for today have passed');
+    }
+    return {
+      slotIndex: currentSlotIndex,
+      estimatedTime: allSlots[currentSlotIndex],
+    };
+  }
+
+  return {
+    slotIndex: clampedIndex,
+    estimatedTime,
+  };
+}
+
+
+/**
+ * Calculates walk-in token details including estimated time and queue position
+ * 
+ * Key Logic:
+ * - Walk-ins DON'T occupy slots (only booked appointments occupy slots)
+ * - BEFORE last advanced appointment: Walk-ins spaced by walkInTokenAllotment (e.g., 5 slots)
+ * - AFTER last advanced appointment: Walk-ins can be assigned to consecutive slots
+ */
+async function calculateWalkInDetails(
+    doctor: Doctor,
+    walkInTokenAllotment: number = 5
+  ): Promise<WalkInEstimate> {
+    const now = new Date();
+    const todayDate = format(now, 'd MMMM yyyy');
+    const todayDay = format(now, 'EEEE');
+  
+    // Step 1: Get today's availability slots
+    const todaysAvailability = doctor.availabilitySlots?.find(s => s.day === todayDay);
+    
+    if (!todaysAvailability || !todaysAvailability.timeSlots?.length) {
+      throw new Error('Doctor not available today');
+    }
+  
+    const allSlots = generateTimeSlots(todaysAvailability.timeSlots, now);
+  
+    // Step 2: Fetch all appointments for today
+    const appointmentsRef = collection(db, 'appointments');
+    const appointmentsQuery = query(
+      appointmentsRef,
+      where('doctor', '==', doctor.name),
+      where('date', '==', todayDate),
+      orderBy('numericToken', 'asc')
+    );
+  
+    const appointmentsSnapshot = await getDocs(appointmentsQuery);
+    const appointments = appointmentsSnapshot.docs.map(doc => doc.data() as Appointment);
+  
+    // Separate walk-ins and advanced (booked) appointments
+    const walkIns = appointments.filter(apt => apt.bookedVia === 'Walk-in');
+    const advancedAppointments = appointments.filter(apt => 
+      apt.tokenNumber?.startsWith('A') || apt.bookedVia === 'Advanced Booking'
+    );
+  
+    // Step 3: Find the last advanced appointment's slot
+    const lastAdvancedSlotIndex = advancedAppointments.length > 0
+      ? Math.max(...advancedAppointments.map(apt => apt.slotIndex ?? 0))
+      : -1;
+  
+    // Step 4: Find the last walk-in
+    const lastWalkIn = walkIns.length > 0 ? walkIns[walkIns.length - 1] : null;
+  
+    // Step 5: Determine the starting point for the new walk-in
+    let startingSlotIndex: number;
+  
+    if (!lastWalkIn) {
+      // No previous walk-ins: Start from current time + walkInTokenAllotment slots
+      const currentSlotIndex = findCurrentSlotIndex(allSlots, now);
+      startingSlotIndex = currentSlotIndex + walkInTokenAllotment;
+    } else {
+      // Previous walk-ins exist
+      const lastWalkInSlotIndex = lastWalkIn.slotIndex ?? findSlotIndexByToken(allSlots, lastWalkIn.numericToken);
+      
+      // Check if the last walk-in is already after all advanced appointments
+      if (lastWalkInSlotIndex > lastAdvancedSlotIndex) {
+        // We're already past all advanced appointments - consecutive slots
+        startingSlotIndex = lastWalkInSlotIndex + 1;
+      } else {
+        // Still have advanced appointments ahead - use spacing
+        startingSlotIndex = lastWalkInSlotIndex + walkInTokenAllotment;
+      }
+    }
+  
+    // Step 6: Get estimated time for this walk-in
+    const { slotIndex: availableSlotIndex, estimatedTime } = getEstimatedTimeForWalkIn(
+      allSlots,
+      startingSlotIndex,
+      now
+    );
+  
+    // Step 7: Calculate the new token number
+    const newNumericToken = appointments.length > 0
+      ? Math.max(...appointments.map(a => a.numericToken)) + 1
+      : 1;
+  
+    // Step 8: Calculate patients ahead (all appointments before this slot)
+    const patientsAhead = appointments.filter(apt => {
+      const aptSlotIndex = apt.slotIndex ?? 0;
+      return aptSlotIndex < availableSlotIndex;
+    }).length;
+  
+    return {
+      estimatedTime,
+      patientsAhead,
+      numericToken: newNumericToken,
+      slotIndex: availableSlotIndex,
+    };
+}
+
 
 export default function AppointmentsPage() {
   const auth = useAuth();
@@ -334,8 +513,8 @@ export default function AppointmentsPage() {
   const selectedDate = form.watch("date");
   const appointmentType = form.watch("bookedVia");
 
-  const generateNextToken = async (date: Date, type: 'A' | 'W'): Promise<string> => {
-    if (!clinicId || !selectedDoctor) return `${type}001`;
+  const generateNextToken = async (date: Date, type: 'A' | 'W'): Promise<{tokenNumber: string, numericToken: number}> => {
+    if (!clinicId || !selectedDoctor) return { tokenNumber: `${type}001`, numericToken: 1 };
     const dateStr = format(date, "d MMMM yyyy");
     const appointmentsRef = collection(db, 'appointments');
     const q = query(
@@ -354,7 +533,7 @@ export default function AppointmentsPage() {
     }).filter(num => !isNaN(num) && num > 0);
     const lastToken = tokenNumbers.length > 0 ? Math.max(...tokenNumbers) : 0;
     const nextTokenNum = lastToken + 1;
-    return `${type}${String(nextTokenNum).padStart(3, '0')}`;
+    return { tokenNumber: `${type}${String(nextTokenNum).padStart(3, '0')}`, numericToken: nextTokenNum };
   };
 
   const isWithinBookingWindow = (doctor: Doctor | null): boolean => {
@@ -389,112 +568,10 @@ export default function AppointmentsPage() {
     return isWithinBookingWindow(selectedDoctor);
   }, [appointmentType, selectedDoctor]);
 
-  const calculateWalkInDetails = useCallback(async (): Promise<WalkInEstimate> => {
-    if (!db || !selectedDoctor || !clinicDetails) return null;
-
-    const now = new Date();
-    const consultationTime = selectedDoctor.averageConsultingTime || 15;
-
-    const parseTime = (timeStr: string, date: Date): Date => {
-      const newDate = new Date(date);
-      const [time, modifier] = timeStr.split(' ');
-      let [hours, minutes] = time.split(':').map(Number);
-      if (modifier === 'PM' && hours < 12) hours += 12;
-      if (modifier === 'AM' && hours === 12) hours = 0;
-      newDate.setHours(hours, minutes, 0, 0);
-      return newDate;
-    };
-
-    const dayOfWeek = format(now, 'EEEE');
-    const availabilityForDay = selectedDoctor.availabilitySlots?.find(slot => slot.day === dayOfWeek);
-    if (!availabilityForDay) return null;
-
-    const workingSessions = availabilityForDay.timeSlots.map(session => ({
-        start: parseTime(session.from, now),
-        end: parseTime(session.to, now)
-    }));
-
-    const dateStr = format(now, "d MMMM yyyy");
-    const appointmentsRef = collection(db, 'appointments');
-    const q = query(appointmentsRef, where('clinicId', '==', selectedDoctor.clinicId), where('doctor', '==', selectedDoctor.name), where('date', '==', dateStr));
-    const querySnapshot = await getDocs(q);
-
-    const allAppointmentsToday = querySnapshot.docs.map(doc => {
-      const data = doc.data();
-      return {
-        time: parseTime(data.time, now),
-        token: data.tokenNumber as string,
-      };
-    }).sort((a, b) => a.time.getTime() - b.time.getTime());
-
-    const allPossibleSlots: Date[] = [];
-    availabilityForDay.timeSlots.forEach(timeSlot => {
-      let currentTime = parseTime(timeSlot.from, now);
-      const endTime = parseTime(timeSlot.to, now);
-      while (isBefore(currentTime, endTime)) {
-        allPossibleSlots.push(new Date(currentTime));
-        currentTime = addMinutes(currentTime, consultationTime);
-      }
-    });
-
-    const bookedTimes = allAppointmentsToday.map(appt => appt.time.getTime());
-    
-    // Consider leave slots
-    const leaveSlotsForToday = selectedDoctor.leaveSlots?.filter(ls => ls.date && isSameDay(parseDateFns(ls.date, 'yyyy-MM-dd', new Date()), now)) || [];
-    const leaveTimeSlots = leaveSlotsForToday.flatMap(ls => {
-        const slots = [];
-        let currentTime = parseTime(ls.slots[0].from, now);
-        const endTime = parseTime(ls.slots[0].to, now);
-        while (isBefore(currentTime, endTime)) {
-            slots.push(currentTime.getTime());
-            currentTime = addMinutes(currentTime, consultationTime);
-        }
-        return slots;
-    });
-
-    const nextAvailableSlot = allPossibleSlots.find(slot => 
-      slot > now && 
-      !bookedTimes.includes(slot.getTime()) &&
-      !leaveTimeSlots.includes(slot.getTime())
-    );
-
-    let finalValidTime: Date | null;
-
-    if (nextAvailableSlot) {
-      finalValidTime = nextAvailableSlot;
-    } else {
-        return null; // No available slot found
-    }
-    
-    // Ensure the slot is within a working session
-    let inSession = false;
-    for (const session of workingSessions) {
-        if (finalValidTime >= session.start && finalValidTime < session.end) {
-            inSession = true;
-            break;
-        }
-    }
-    if (!inSession) {
-        // If not in a session, find the start of the next available session
-        const nextSession = workingSessions.find(s => s.start > now);
-        if (nextSession) {
-            finalValidTime = nextSession.start;
-        } else {
-            return null; // No more sessions today
-        }
-    }
-    
-    if (!finalValidTime) return null;
-
-    const patientsAhead = allAppointmentsToday.filter(appt => appt.time >= now && appt.time < finalValidTime!).length;
-    return { estimatedTime: finalValidTime!, patientsAhead };
-
-  }, [db, selectedDoctor, clinicDetails]);
-
   useEffect(() => {
     if (appointmentType === 'Walk-in' && selectedDoctor && isWalkInAvailable) {
       setIsCalculatingEstimate(true);
-      calculateWalkInDetails().then(details => {
+      calculateWalkInDetails(selectedDoctor).then(details => {
         setWalkInEstimate(details);
         setIsCalculatingEstimate(false);
       }).catch(err => {
@@ -505,7 +582,7 @@ export default function AppointmentsPage() {
     } else {
       setWalkInEstimate(null);
     }
-  }, [appointmentType, selectedDoctor, isWalkInAvailable, calculateWalkInDetails]);
+  }, [appointmentType, selectedDoctor, isWalkInAvailable]);
 
   async function onSubmit(values: AppointmentFormValues) {
     if (!auth.currentUser || !clinicId || !selectedDoctor) {
@@ -595,7 +672,7 @@ export default function AppointmentsPage() {
             return;
           }
           const date = new Date();
-          const tokenNumber = await generateNextToken(date, 'W');
+          const tokenData = await generateNextToken(date, 'W');
 
           const appointmentData: Omit<Appointment, 'id'> = {
             bookedVia: appointmentType,
@@ -611,14 +688,16 @@ export default function AppointmentsPage() {
             place: values.place,
             status: 'Pending',
             time: format(walkInEstimate.estimatedTime, "hh:mm a"),
-            tokenNumber: tokenNumber,
+            tokenNumber: tokenData.tokenNumber,
+            numericToken: tokenData.numericToken,
+            slotIndex: walkInEstimate.slotIndex,
             treatment: "General Consultation",
           };
           const appointmentRef = doc(collection(db, 'appointments'));
           await setDoc(appointmentRef, { ...appointmentData, id: appointmentRef.id });
           setAppointments(prev => [...prev, { ...appointmentData, id: appointmentRef.id }]);
 
-          setGeneratedToken(tokenNumber);
+          setGeneratedToken(tokenData.tokenNumber);
           setIsTokenModalOpen(true);
 
         } else {
@@ -627,7 +706,7 @@ export default function AppointmentsPage() {
             return;
           }
           const appointmentId = isEditing && editingAppointment ? editingAppointment.id : doc(collection(db, "appointments")).id;
-          const tokenNumber = isEditing && editingAppointment ? editingAppointment.tokenNumber : await generateNextToken(values.date, 'A');
+          const tokenData = isEditing && editingAppointment ? { tokenNumber: editingAppointment.tokenNumber, numericToken: editingAppointment.numericToken } : await generateNextToken(values.date, 'A');
           const appointmentDateStr = format(values.date, "d MMMM yyyy");
           const appointmentTimeStr = format(parseDateFns(values.time, "HH:mm", new Date()), "hh:mm a");
 
@@ -645,7 +724,8 @@ export default function AppointmentsPage() {
             department: values.department,
             status: isEditing ? editingAppointment!.status : "Pending",
             treatment: "General Consultation",
-            tokenNumber: tokenNumber,
+            tokenNumber: tokenData.tokenNumber,
+            numericToken: tokenData.numericToken,
             bookedVia: values.bookedVia,
             place: values.place,
           };
