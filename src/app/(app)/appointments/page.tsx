@@ -442,6 +442,54 @@ export default function AppointmentsPage() {
       fetchInitialData();
     }
   }, [auth.currentUser, toast, form]);
+  
+  useEffect(() => {
+    // Only run this logic once when the component has loaded appointments
+    if (appointments.length > 0) {
+      const now = new Date();
+      const noShowAppointments = appointments.filter(apt => 
+        apt.status === 'Pending' && isPast(parseAppointmentDateTime(apt.date, apt.time))
+      );
+
+      if (noShowAppointments.length > 0) {
+        startTransition(async () => {
+          const batch = writeBatch(db);
+          noShowAppointments.forEach(appointment => {
+            const appointmentRef = doc(db, "appointments", appointment.id);
+            batch.update(appointmentRef, { status: "Cancelled" });
+          });
+
+          try {
+            await batch.commit();
+            
+            // Update local state to reflect the change immediately
+            setAppointments(prev => prev.map(apt => {
+              if (noShowAppointments.some(ns => ns.id === apt.id)) {
+                return { ...apt, status: 'Cancelled' };
+              }
+              return apt;
+            }));
+
+            toast({
+              title: "Appointments Updated",
+              description: `${noShowAppointments.length} pending appointment(s) with past times have been marked as 'Cancelled'.`,
+            });
+
+          } catch (error) {
+            console.error("Error batch updating no-show appointments:", error);
+            if (!(error instanceof FirestorePermissionError)) {
+              toast({
+                variant: "destructive",
+                title: "Update Failed",
+                description: "Could not update appointment statuses for no-shows.",
+              });
+            }
+          }
+        });
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]); // Rerunning only when loading state changes from true to false
 
   const resetForm = useCallback(() => {
     setEditingAppointment(null);
@@ -1788,6 +1836,8 @@ export default function AppointmentsPage() {
 }
 
 
+
+    
 
     
 
