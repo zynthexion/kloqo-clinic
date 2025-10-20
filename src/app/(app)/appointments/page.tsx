@@ -104,6 +104,11 @@ function parseTime(timeString: string, referenceDate: Date): Date {
     return parse(timeString, 'hh:mm a', referenceDate);
 }
 
+function parseAppointmentDateTime(dateStr: string, timeStr: string): Date {
+    return parse(`${dateStr} ${timeStr}`, 'd MMMM yyyy hh:mm a', new Date());
+}
+
+
 /**
  * Generates all possible 15-minute time slots for a doctor on a given day.
  */
@@ -172,9 +177,8 @@ export async function calculateWalkInDetails(
   );
 
   // 5. Find the time of the last scheduled appointment (advanced or walk-in)
-  const lastAdvancedBooking = advancedBookings.length > 0 ? advancedBookings[advancedBookings.length - 1] : null;
-  const lastAdvancedBookingTime = lastAdvancedBooking
-    ? parseTime(lastAdvancedBooking.time, now)
+  const lastAdvancedBookingTime = advancedBookings.length > 0 
+    ? parseTime(advancedBookings[advancedBookings.length - 1].time, now)
     : new Date(0);
 
   const lastWalkIn = walkIns.length > 0 ? walkIns[walkIns.length - 1] : null;
@@ -186,13 +190,7 @@ export async function calculateWalkInDetails(
   // Find the index of the slot right after our search start time
   let searchStartIndex = allPossibleSlots.findIndex(slot => isAfter(slot, searchStartTime));
   if (searchStartIndex === -1) {
-    // If no future slots, start from the first slot after current time if no walk-ins yet
-    if (!lastWalkIn) {
-      searchStartIndex = allPossibleSlots.findIndex(slot => isAfter(slot, now));
-      if (searchStartIndex === -1) searchStartIndex = allPossibleSlots.length;
-    } else {
-      searchStartIndex = allPossibleSlots.length; // Start from the end if all slots are in the past
-    }
+    searchStartIndex = allPossibleSlots.length; // Start from the end if all slots are in the past
   }
 
   let finalWalkInSlotIndex = -1;
@@ -247,13 +245,13 @@ export async function calculateWalkInDetails(
     ? Math.max(...todaysAppointments.map(a => a.numericToken)) + 1
     : 1;
 
+  // Count patients with appointments scheduled between now and the user's estimated time
   const patientsAhead = todaysAppointments.filter(apt => {
-    const aptTime = parseTime(apt.time, now);
-    const isActive = apt.status !== 'Completed' && apt.status !== 'Cancelled' && !apt.isSkipped;
-    return isActive && isBefore(aptTime, estimatedTime);
+      const aptTime = parseAppointmentDateTime(apt.date, apt.time);
+      const isActive = apt.status !== 'Completed' && apt.status !== 'Cancelled' && !apt.isSkipped;
+      return isActive && isAfter(aptTime, now) && isBefore(aptTime, estimatedTime!);
   }).length;
   
-
   return {
     estimatedTime,
     patientsAhead,
@@ -1790,5 +1788,7 @@ export default function AppointmentsPage() {
 }
 
 
+
+    
 
     
