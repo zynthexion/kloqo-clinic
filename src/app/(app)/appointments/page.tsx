@@ -133,8 +133,7 @@ function generateAllTimeSlotsForDay(doctor: Doctor, date: Date): Date[] {
  * Calculates the next available walk-in slot, estimated time, and queue position.
  */
 async function calculateWalkInDetails(
-  doctor: Doctor,
-  walkInTokenAllotment: number = 5
+  doctor: Doctor
 ): Promise<WalkInEstimate> {
   const now = new Date();
   const todayDateStr = format(now, 'd MMMM yyyy');
@@ -163,47 +162,34 @@ async function calculateWalkInDetails(
   const bookedTimestamps = new Set(
     advancedBookings.map(apt => parseTime(apt.time, now).getTime())
   );
+  
+  // 5. Find the index of the first slot that is after the current time
+  let searchStartIndex = allPossibleSlots.findIndex(slot => isAfter(slot, now));
 
-  // 5. Find the starting point for our search (later of now or last appointment)
-  const lastAppointment = todaysAppointments.length > 0 ? todaysAppointments[todaysAppointments.length - 1] : null;
-  const lastAppointmentTime = lastAppointment ? parseTime(lastAppointment.time, now) : now;
-  const searchStartTime = isAfter(lastAppointmentTime, now) ? lastAppointmentTime : now;
-
-  // 6. Find the next available slot after the search start time
-  let nextAvailableSlotIndex = allPossibleSlots.findIndex(slot => isAfter(slot, searchStartTime) && !bookedTimestamps.has(slot.getTime()));
-
-  // 7. Iterate to find the actual walk-in slot, skipping `walkInTokenAllotment` number of *available* slots
-  let availableSlotsSkipped = 0;
-  let finalWalkInSlotIndex = -1;
-
-  if (nextAvailableSlotIndex !== -1) {
-    for (let i = nextAvailableSlotIndex; i < allPossibleSlots.length; i++) {
-      const slot = allPossibleSlots[i];
-      if (!bookedTimestamps.has(slot.getTime())) { // Check if the slot is truly available
-        if (availableSlotsSkipped < walkInTokenAllotment) {
-          availableSlotsSkipped++;
-        } else {
-          finalWalkInSlotIndex = i;
-          break;
-        }
-      }
-    }
-  }
-
-  // 8. If no suitable slot is found after skipping, it means we ran out of slots.
-  if (finalWalkInSlotIndex === -1) {
-    // Fallback: just find the very next available slot without skipping, if any
-    finalWalkInSlotIndex = allPossibleSlots.findIndex(
-      (slot, index) => index >= (nextAvailableSlotIndex !== -1 ? nextAvailableSlotIndex : 0) && !bookedTimestamps.has(slot.getTime())
-    );
-    if (finalWalkInSlotIndex === -1) {
-        throw new Error('No available walk-in slots remaining for today.');
-    }
+  // If no future slot is found (e.g., it's past the last slot time), use the last slot.
+  if (searchStartIndex === -1) {
+      searchStartIndex = allPossibleSlots.length - 1;
   }
   
+  // 6. Iterate from the search start index to find the first truly available slot
+  let finalWalkInSlotIndex = -1;
+  for (let i = searchStartIndex; i < allPossibleSlots.length; i++) {
+      const slot = allPossibleSlots[i];
+      if (!bookedTimestamps.has(slot.getTime())) {
+          // This is the first available slot after the current time
+          finalWalkInSlotIndex = i;
+          break;
+      }
+  }
+
+  // 7. If no available slot is found, the day is fully booked.
+  if (finalWalkInSlotIndex === -1) {
+      throw new Error('No available walk-in slots remaining for today.');
+  }
+
   const estimatedTime = allPossibleSlots[finalWalkInSlotIndex];
 
-  // 9. Calculate new token number and patients ahead
+  // 8. Calculate new token number and patients ahead
   const newNumericToken = todaysAppointments.length > 0
     ? Math.max(...todaysAppointments.map(a => a.numericToken)) + 1
     : 1;
@@ -1202,22 +1188,16 @@ export default function AppointmentsPage() {
                         <>
                           <div className="pt-4 border-t">
                              <div className="flex justify-center mb-4">
-                                <FormField control={form.control} name="bookedVia" render={({ field }) => (
-                                  <FormItem>
-                                    <FormControl>
-                                      <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4 rounded-full p-1 bg-muted">
-                                        <Label htmlFor="advanced-booking" className={cn("px-4 py-1.5 rounded-full cursor-pointer transition-colors", field.value === 'Advanced Booking' && "bg-background shadow-sm")}>
-                                          <RadioGroupItem value="Advanced Booking" id="advanced-booking" className="sr-only" />
-                                          Advanced Booking
-                                        </Label>
-                                        <Label htmlFor="walk-in" className={cn("px-4 py-1.5 rounded-full cursor-pointer transition-colors", field.value === 'Walk-in' && "bg-background shadow-sm")}>
-                                          <RadioGroupItem value="Walk-in" id="walk-in" className="sr-only" />
-                                          Walk-in
-                                        </Label>
-                                      </RadioGroup>
-                                    </FormControl>
-                                  </FormItem>
-                                )} />
+                                <RadioGroup onValueChange={(value) => form.setValue('bookedVia', value as any)} value={form.watch('bookedVia')} className="flex items-center space-x-4 rounded-full p-1 bg-muted">
+                                    <Label htmlFor="advanced-booking" className={cn("px-4 py-1.5 rounded-full cursor-pointer transition-colors", form.watch('bookedVia') === 'Advanced Booking' && "bg-background shadow-sm")}>
+                                        <RadioGroupItem value="Advanced Booking" id="advanced-booking" className="sr-only" />
+                                        Advanced Booking
+                                    </Label>
+                                    <Label htmlFor="walk-in" className={cn("px-4 py-1.5 rounded-full cursor-pointer transition-colors", form.watch('bookedVia') === 'Walk-in' && "bg-background shadow-sm")}>
+                                        <RadioGroupItem value="Walk-in" id="walk-in" className="sr-only" />
+                                        Walk-in
+                                    </Label>
+                                </RadioGroup>
                             </div>
                             {primaryPatient && (relatives.length > 0 || isKloqoMember) && !isEditing && (
                               <div className="mb-4">
@@ -1749,3 +1729,4 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
