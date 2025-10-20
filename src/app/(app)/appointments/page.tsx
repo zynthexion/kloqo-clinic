@@ -134,7 +134,7 @@ function generateAllTimeSlotsForDay(doctor: Doctor, date: Date): Date[] {
  */
 export async function calculateWalkInDetails(
   doctor: Doctor,
-  walkInTokenAllotment: number = 3 // Default spacing
+  walkInTokenAllotment: number = 3
 ): Promise<{
   estimatedTime: Date;
   patientsAhead: number;
@@ -554,7 +554,8 @@ export default function AppointmentsPage() {
   useEffect(() => {
     if (appointmentType === 'Walk-in' && selectedDoctor && isWalkInAvailable) {
       setIsCalculatingEstimate(true);
-      calculateWalkInDetails(selectedDoctor).then(details => {
+      const allotment = clinicDetails?.walkInTokenAllotment || 3;
+      calculateWalkInDetails(selectedDoctor, allotment).then(details => {
         setWalkInEstimate(details);
         setIsCalculatingEstimate(false);
       }).catch(err => {
@@ -565,7 +566,7 @@ export default function AppointmentsPage() {
     } else {
       setWalkInEstimate(null);
     }
-  }, [appointmentType, selectedDoctor, isWalkInAvailable]);
+  }, [appointmentType, selectedDoctor, isWalkInAvailable, clinicDetails]);
 
   async function onSubmit(values: AppointmentFormValues) {
     if (!auth.currentUser || !clinicId || !selectedDoctor) {
@@ -1777,3 +1778,6 @@ export default function AppointmentsPage() {
   );
 }
 
+
+
+    
