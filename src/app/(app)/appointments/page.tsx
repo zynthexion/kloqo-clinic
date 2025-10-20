@@ -386,19 +386,18 @@ export default function AppointmentsPage() {
 
   const calculateWalkInDetails = useCallback(async (): Promise<WalkInEstimate> => {
     if (!db || !selectedDoctor || !clinicDetails) return null;
-    
+
     const now = new Date();
     const consultationTime = selectedDoctor.averageConsultingTime || 15;
-    const walkInTokenAllotment = clinicDetails?.walkInTokenAllotment || 5;
 
     const parseTime = (timeStr: string, date: Date): Date => {
-        const newDate = new Date(date);
-        const [time, modifier] = timeStr.split(' ');
-        let [hours, minutes] = time.split(':').map(Number);
-        if (modifier === 'PM' && hours < 12) hours += 12;
-        if (modifier === 'AM' && hours === 12) hours = 0;
-        newDate.setHours(hours, minutes, 0, 0);
-        return newDate;
+      const newDate = new Date(date);
+      const [time, modifier] = timeStr.split(' ');
+      let [hours, minutes] = time.split(':').map(Number);
+      if (modifier === 'PM' && hours < 12) hours += 12;
+      if (modifier === 'AM' && hours === 12) hours = 0;
+      newDate.setHours(hours, minutes, 0, 0);
+      return newDate;
     };
 
     const dayOfWeek = format(now, 'EEEE');
@@ -416,71 +415,71 @@ export default function AppointmentsPage() {
     const querySnapshot = await getDocs(q);
 
     const allAppointmentsToday = querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-            time: parseTime(data.time, now),
-            token: data.tokenNumber as string,
-        };
+      const data = doc.data();
+      return {
+        time: parseTime(data.time, now),
+        token: data.tokenNumber as string,
+      };
     }).sort((a, b) => a.time.getTime() - b.time.getTime());
 
     const allPossibleSlots: Date[] = [];
     availabilityForDay.timeSlots.forEach(timeSlot => {
-        let currentTime = parseTime(timeSlot.from, now);
-        const endTime = parseTime(timeSlot.to, now);
-        while (isBefore(currentTime, endTime)) {
-            allPossibleSlots.push(new Date(currentTime));
-            currentTime = addMinutes(currentTime, consultationTime);
-        }
+      let currentTime = parseTime(timeSlot.from, now);
+      const endTime = parseTime(timeSlot.to, now);
+      while (isBefore(currentTime, endTime)) {
+        allPossibleSlots.push(new Date(currentTime));
+        currentTime = addMinutes(currentTime, consultationTime);
+      }
     });
 
     const bookedTimes = allAppointmentsToday.map(appt => appt.time.getTime());
-    const nextAvailableSlot = allPossibleSlots.find(slot => slot > now && !bookedTimes.includes(slot.getTime()));
+    
+    // Consider leave slots
+    const leaveSlotsForToday = selectedDoctor.leaveSlots?.filter(ls => isSameDay(parseDateFns(ls.date, 'yyyy-MM-dd', new Date()), now)) || [];
+    const leaveTimes = leaveSlotsForToday.flatMap(ls => {
+        const slots = [];
+        let currentTime = parseTime(ls.slots[0].from, now);
+        const endTime = parseTime(ls.slots[0].to, now);
+        while (isBefore(currentTime, endTime)) {
+            slots.push(currentTime.getTime());
+            currentTime = addMinutes(currentTime, consultationTime);
+        }
+        return slots;
+    });
 
-    let estimatedTime: Date;
+    const nextAvailableSlot = allPossibleSlots.find(slot => 
+      slot > now && 
+      !bookedTimes.includes(slot.getTime()) &&
+      !leaveTimes.includes(slot.getTime())
+    );
+
+    let finalValidTime: Date | null;
 
     if (nextAvailableSlot) {
-        estimatedTime = nextAvailableSlot;
+      finalValidTime = nextAvailableSlot;
     } else {
-        const futureAppointments = allAppointmentsToday.filter(appt => appt.time >= now);
-        const queueStartTime = futureAppointments.length > 0 ? futureAppointments[futureAppointments.length - 1].time : now;
-
-        const appointmentsAfterQueueStart = futureAppointments.filter(appt =>
-            !appt.token.startsWith('W') && appt.time > queueStartTime
-        );
-
-        let slotAfterAllotment: Date;
-        if (appointmentsAfterQueueStart.length >= walkInTokenAllotment) {
-            slotAfterAllotment = addMinutes(appointmentsAfterQueueStart[walkInTokenAllotment - 1].time, consultationTime);
-        } else {
-            const lastPersonTime = appointmentsAfterQueueStart.length > 0 ? appointmentsAfterQueueStart[appointmentsAfterQueueStart.length - 1].time : queueStartTime;
-            slotAfterAllotment = addMinutes(lastPersonTime, consultationTime * (walkInTokenAllotment - appointmentsAfterQueueStart.length));
-        }
-        estimatedTime = slotAfterAllotment;
-    }
-
-    let finalValidTime = null;
-    for (const session of workingSessions) {
-        if (estimatedTime >= session.start && estimatedTime < session.end) {
-            finalValidTime = estimatedTime;
-            break;
-        }
-        if (estimatedTime < session.start) {
-            finalValidTime = session.start;
-            break;
-        }
+        return null; // No available slot found
     }
     
-    if (!finalValidTime) {
-        const lastSessionEnd = workingSessions[workingSessions.length - 1].end;
-        if (estimatedTime > lastSessionEnd) return null;
-        
+    // Ensure the slot is within a working session
+    let inSession = false;
+    for (const session of workingSessions) {
+        if (finalValidTime >= session.start && finalValidTime < session.end) {
+            inSession = true;
+            break;
+        }
+    }
+    if (!inSession) {
+        // If not in a session, find the start of the next available session
         const nextSession = workingSessions.find(s => s.start > now);
         if (nextSession) {
             finalValidTime = nextSession.start;
         } else {
-            return null;
+            return null; // No more sessions today
         }
     }
+    
+    if (!finalValidTime) return null;
 
     const patientsAhead = allAppointmentsToday.filter(appt => appt.time >= now && appt.time < finalValidTime!).length;
     return { estimatedTime: finalValidTime!, patientsAhead };
@@ -733,9 +732,6 @@ export default function AppointmentsPage() {
             id: newPatientRef.id,
             primaryUserId: newUserRef.id,
             phone: fullPhoneNumber,
-            clinicIds: [clinicId],
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
             name: '',
             age: 0,
             sex: '',
@@ -743,6 +739,9 @@ export default function AppointmentsPage() {
             relatedPatientIds: [],
             visitHistory: [],
             totalAppointments: 0,
+            clinicIds: [clinicId],
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
         };
         batch.set(newPatientRef, newPatientData);
 
@@ -1118,9 +1117,7 @@ export default function AppointmentsPage() {
                             <CommandList>
                                 {isPending ? (
                                     <div className="p-4 text-center text-sm text-muted-foreground">Searching...</div>
-                                ) : patientSearchResults.length === 0 && patientSearchTerm.length >= 5 ? (
-                                    <CommandEmpty>No patient found.</CommandEmpty>
-                                ) : (
+                                ) : patientSearchResults.length > 0 ? (
                                 <CommandGroup>
                                   {patientSearchResults.map((patient) => {
                                     const isClinicPatient = patient.clinicIds?.includes(clinicId!);
@@ -1149,6 +1146,8 @@ export default function AppointmentsPage() {
                                     );
                                   })}
                                 </CommandGroup>
+                                ) : (
+                                   patientSearchTerm.length >= 5 && <CommandEmpty>No patient found.</CommandEmpty>
                                 )}
                               </CommandList>
                             </Command>
@@ -1183,12 +1182,12 @@ export default function AppointmentsPage() {
                                   <FormItem>
                                     <FormControl>
                                       <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4 rounded-full p-1 bg-muted">
-                                        <Label className={cn("px-4 py-1.5 rounded-full cursor-pointer transition-colors", field.value === 'Advanced Booking' && "bg-background shadow-sm")}>
-                                          <RadioGroupItem value="Advanced Booking" className="sr-only" />
+                                        <Label htmlFor="advanced-booking" className={cn("px-4 py-1.5 rounded-full cursor-pointer transition-colors", field.value === 'Advanced Booking' && "bg-background shadow-sm")}>
+                                          <RadioGroupItem value="Advanced Booking" id="advanced-booking" className="sr-only" />
                                           Advanced Booking
                                         </Label>
-                                        <Label className={cn("px-4 py-1.5 rounded-full cursor-pointer transition-colors", field.value === 'Walk-in' && "bg-background shadow-sm")}>
-                                          <RadioGroupItem value="Walk-in" className="sr-only" />
+                                        <Label htmlFor="walk-in" className={cn("px-4 py-1.5 rounded-full cursor-pointer transition-colors", field.value === 'Walk-in' && "bg-background shadow-sm")}>
+                                          <RadioGroupItem value="Walk-in" id="walk-in" className="sr-only" />
                                           Walk-in
                                         </Label>
                                       </RadioGroup>
