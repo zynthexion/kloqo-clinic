@@ -157,7 +157,7 @@ export async function calculateWalkInDetails(
   const todaysAppointments = querySnapshot.docs.map(doc => doc.data() as Appointment);
 
   // 2. Separate different types of appointments
-  const advancedBookings = todaysAppointments.filter(apt => apt.bookedVia === 'Advanced Booking');
+  const advancedBookings = todaysAppointments.filter(apt => apt.bookedVia !== 'Walk-in');
   const walkIns = todaysAppointments.filter(apt => apt.bookedVia === 'Walk-in');
 
   // 3. Generate all possible time slots for the doctor today
@@ -176,16 +176,24 @@ export async function calculateWalkInDetails(
     ? parseTime(advancedBookings[advancedBookings.length - 1].time, now)
     : new Date(0); // Epoch if no advanced bookings
 
-  const lastWalkInTime = walkIns.length > 0
-    ? parseTime(walkIns[walkIns.length - 1].time, now)
-    : new Date(0);
+  const lastWalkIn = walkIns.length > 0 ? walkIns[walkIns.length - 1] : null;
+  const lastWalkInTime = lastWalkIn ? parseTime(lastWalkIn.time, now) : new Date(0);
     
   // 6. Determine the starting point for our search
   const searchStartTime = isAfter(now, lastWalkInTime) ? now : lastWalkInTime;
 
   // Find the index of the slot right after our search start time
   let searchStartIndex = allPossibleSlots.findIndex(slot => isAfter(slot, searchStartTime));
-  if (searchStartIndex === -1) searchStartIndex = allPossibleSlots.length; // Start from the end if all slots are in the past
+  if (searchStartIndex === -1) {
+    // If no future slots, start from the first slot after current time if no walk-ins yet
+    if (!lastWalkIn) {
+      searchStartIndex = allPossibleSlots.findIndex(slot => isAfter(slot, now));
+      if (searchStartIndex === -1) searchStartIndex = allPossibleSlots.length;
+    } else {
+      searchStartIndex = allPossibleSlots.length; // Start from the end if all slots are in the past
+    }
+  }
+
 
   let finalWalkInSlotIndex = -1;
 
@@ -202,7 +210,7 @@ export async function calculateWalkInDetails(
     }
   } else {
     // ---- LOGIC 2: BEFORE THE LAST ADVANCED BOOKING ----
-    // Find the next slot after skipping `walkInTokenAllotment` number of *available* slots
+    // Find the next slot after skipping `walkInTokenAllotment` number of *truly available* slots
     let availableSlotsSkipped = 0;
     for (let i = searchStartIndex; i < allPossibleSlots.length; i++) {
       const slot = allPossibleSlots[i];
@@ -219,8 +227,9 @@ export async function calculateWalkInDetails(
 
   // 8. Handle cases where no slot is found
   if (finalWalkInSlotIndex === -1) {
-    // If spacing logic fails, try to find ANY available slot at the end
-    for (let i = allPossibleSlots.length - 1; i >= searchStartIndex; i--) {
+    // If spacing logic fails (e.g., not enough available slots to skip),
+    // find the *very first* available slot after the search start index.
+    for (let i = searchStartIndex; i < allPossibleSlots.length; i++) {
         if (!bookedTimestamps.has(allPossibleSlots[i].getTime())) {
             finalWalkInSlotIndex = i;
             break;
@@ -1429,7 +1438,7 @@ export default function AppointmentsPage() {
                                 <FormField control={form.control} name="doctor" render={({ field }) => (
                                   <FormItem>
                                     <FormLabel>Doctor</FormLabel>
-                                    <Select onValueChange={onDoctorChange} value={field.value} defaultValue={doctors.length > 0 ? doctors[0].id : ""}>
+                                    <Select onValueChange={onDoctorChange} defaultValue={doctors.length > 0 ? doctors[0].id : ""} value={field.value}>
                                       <FormControl>
                                         <SelectTrigger>
                                           <SelectValue placeholder="Select a doctor" />
