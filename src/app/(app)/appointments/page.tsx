@@ -161,33 +161,27 @@ export default function AppointmentsPage() {
     startTransition(async () => {
         try {
             const fullPhoneNumber = `+91${phone}`;
-            const usersRef = collection(db, 'users');
+            const patientsRef = collection(db, 'patients');
             
-            const userQuery = query(usersRef, where('phone', '==', fullPhoneNumber), where('role', '==', 'patient'));
-            const userSnapshot = await getDocs(userQuery);
+            // Find the primary user record first based on the phone number
+            const primaryQuery = query(patientsRef, where('phone', '==', fullPhoneNumber));
+            const primarySnapshot = await getDocs(primaryQuery);
 
-            if (userSnapshot.empty) {
+            if (primarySnapshot.empty) {
                 setPatientSearchResults([]);
                 setIsPatientPopoverOpen(true);
                 form.setValue('phone', phone);
                 return;
             }
 
-            const primaryUserData = userSnapshot.docs[0].data() as User;
-            const patientDoc = await getFirestoreDoc(doc(db, "patients", primaryUserData.patientId!));
-            if (!patientDoc.exists()) {
-                setPatientSearchResults([]);
-                setIsPatientPopoverOpen(true);
-                return
-            }
-            const primaryPatientData = { id: patientDoc.id, ...patientDoc.data() } as Patient;
-            primaryPatientData.isKloqoMember = primaryPatientData.clinicIds?.includes(clinicId);
+            const primaryDoc = primarySnapshot.docs[0];
+            const primaryPatient = { id: primaryDoc.id, ...primaryDoc.data() } as Patient;
+            primaryPatient.isKloqoMember = primaryPatient.clinicIds?.includes(clinicId);
 
-            let allRelatedPatients: Patient[] = [primaryPatientData];
+            let allRelatedPatients: Patient[] = [primaryPatient];
 
-            if ((primaryPatientData as any).relatedPatientIds && (primaryPatientData as any).relatedPatientIds.length > 0) {
-                const patientsRef = collection(db, 'patients');
-                const relatedPatientsQuery = query(patientsRef, where('__name__', 'in', (primaryPatientData as any).relatedPatientIds));
+            if (primaryPatient.relatedPatientIds && primaryPatient.relatedPatientIds.length > 0) {
+                const relatedPatientsQuery = query(patientsRef, where('__name__', 'in', primaryPatient.relatedPatientIds));
                 const relatedSnapshot = await getDocs(relatedPatientsQuery);
                 const relatedPatients = relatedSnapshot.docs.map(doc => {
                     const data = { id: doc.id, ...doc.data()} as Patient;
@@ -199,6 +193,7 @@ export default function AppointmentsPage() {
 
             setPatientSearchResults(allRelatedPatients);
             setIsPatientPopoverOpen(true);
+
         } catch (error) {
             console.error("Error searching patient:", error);
             toast({variant: 'destructive', title: 'Search Error', description: 'Could not perform patient search.'});
@@ -727,11 +722,11 @@ export default function AppointmentsPage() {
                 uid: newUserRef.id,
                 phone: fullPhoneNumber,
                 role: 'patient',
-                patientId: newPatientRef.id, // This links user to patient
+                patientId: newPatientRef.id,
                 clinicId: clinicId!,
-                name: "New Patient", // Placeholder
-                email: "", // Placeholder
-                designation: 'Owner', // Default, maybe not applicable
+                name: "New Patient",
+                email: "",
+                designation: 'Owner',
             };
 
             const newPatientData: Patient = {
@@ -1128,7 +1123,7 @@ export default function AppointmentsPage() {
                                 ) : (
                                 <CommandGroup>
                                   {patientSearchResults.map((patient) => {
-                                    const isClinicPatient = patient.isKloqoMember;
+                                    const isClinicPatient = patient.clinicIds?.includes(clinicId!);
                                     return (
                                       <CommandItem
                                         key={patient.id}
