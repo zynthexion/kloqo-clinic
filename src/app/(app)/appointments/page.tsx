@@ -172,9 +172,10 @@ export async function calculateWalkInDetails(
   );
 
   // 5. Find the time of the last scheduled appointment (advanced or walk-in)
-  const lastAdvancedBookingTime = advancedBookings.length > 0
-    ? parseTime(advancedBookings[advancedBookings.length - 1].time, now)
-    : new Date(0); // Epoch if no advanced bookings
+  const lastAdvancedBooking = advancedBookings.length > 0 ? advancedBookings[advancedBookings.length - 1] : null;
+  const lastAdvancedBookingTime = lastAdvancedBooking
+    ? parseTime(lastAdvancedBooking.time, now)
+    : new Date(0);
 
   const lastWalkIn = walkIns.length > 0 ? walkIns[walkIns.length - 1] : null;
   const lastWalkInTime = lastWalkIn ? parseTime(lastWalkIn.time, now) : new Date(0);
@@ -193,7 +194,6 @@ export async function calculateWalkInDetails(
       searchStartIndex = allPossibleSlots.length; // Start from the end if all slots are in the past
     }
   }
-
 
   let finalWalkInSlotIndex = -1;
 
@@ -249,8 +249,10 @@ export async function calculateWalkInDetails(
 
   const patientsAhead = todaysAppointments.filter(apt => {
     const aptTime = parseTime(apt.time, now);
-    return isBefore(aptTime, estimatedTime);
+    const isActive = apt.status !== 'Completed' && apt.status !== 'Cancelled' && !apt.isSkipped;
+    return isActive && isBefore(aptTime, estimatedTime);
   }).length;
+  
 
   return {
     estimatedTime,
