@@ -16,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Appointment, Doctor, Patient, User } from "@/lib/types";
-import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc, orderBy, limit } from "firebase/firestore";
+import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes, isAfter } from "date-fns";
@@ -337,6 +337,7 @@ export default function AppointmentsPage() {
         const fullPhoneNumber = `+91${phone}`;
         const patientsRef = collection(db, 'patients');
         
+        const { getDocs, query, collection, where, limit } = await import('firebase/firestore');
         const primaryQuery = query(patientsRef, where('phone', '==', fullPhoneNumber), limit(1));
         const primarySnapshot = await getDocs(primaryQuery);
 
@@ -1039,7 +1040,7 @@ export default function AppointmentsPage() {
       patientName: relative.name,
       age: relative.age,
       sex: capitalizedSex as "Male" | "Female" | "Other",
-      phone: primaryPatient?.communicationPhone?.replace('+91', '') || '', // Use primary patient's phone
+      phone: primaryPatient?.phone?.replace('+91', '') || '', // Use primary patient's phone
       place: relative.place || "",
     });
     toast({ title: `Selected Relative: ${relative.name}`, description: "You are now booking an appointment for the selected relative." });
