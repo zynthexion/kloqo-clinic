@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useTransition, useCallback } from "react";
@@ -862,24 +863,57 @@ export default function DoctorsPage() {
     });
   }, [selectedDoctor]);
 
-  const dailyLeaveSlots = useMemo((): number[] => {
+ const dailyLeaveSlots = useMemo((): { start: Date; end: Date }[] => {
     if (!selectedDoctor?.leaveSlots) return [];
-    return selectedDoctor.leaveSlots
-        .map(leave => {
-            if (typeof leave === 'string') {
-                return parseISO(leave);
+
+    const slotsForDate: Date[] = [];
+
+    (selectedDoctor.leaveSlots || []).forEach(leave => {
+        if (typeof leave === 'string') {
+            try {
+                const date = parseISO(leave);
+                if (isSameDay(date, leaveCalDate)) {
+                    slotsForDate.push(date);
+                }
+            } catch { /* ignore invalid date strings */ }
+        } else if (leave && leave.date && Array.isArray(leave.slots)) {
+            if (isSameDay(parse(leave.date, 'yyyy-MM-dd', new Date()), leaveCalDate)) {
+                leave.slots.forEach(timeSlot => {
+                    let currentTime = parseTimeUtil(timeSlot.from, leaveCalDate);
+                    const endTime = parseTimeUtil(timeSlot.to, leaveCalDate);
+                    while (currentTime < endTime) {
+                        slotsForDate.push(new Date(currentTime));
+                        currentTime = addMinutes(currentTime, selectedDoctor.averageConsultingTime || 15);
+                    }
+                });
             }
-            if (leave && typeof (leave as any).toDate === 'function') {
-                return (leave as any).toDate();
-            }
-            if (leave instanceof Date) {
-                return leave;
-            }
-            return new Date(NaN);
-        })
-        .filter(date => !isNaN(date.getTime()) && format(date, 'yyyy-MM-dd') === format(leaveCalDate, 'yyyy-MM-dd'))
-        .map(date => date.getTime());
-}, [selectedDoctor?.leaveSlots, leaveCalDate]);
+        }
+    });
+
+    if (slotsForDate.length === 0) return [];
+    
+    slotsForDate.sort((a, b) => a.getTime() - b.getTime());
+
+    const combinedBreaks: { start: Date; end: Date }[] = [];
+    let currentBreak: { start: Date; end: Date } | null = null;
+    const consultationTime = selectedDoctor.averageConsultingTime || 15;
+
+    for (const slot of slotsForDate) {
+        if (!currentBreak) {
+            currentBreak = { start: slot, end: addMinutes(slot, consultationTime) };
+        } else if (slot.getTime() === currentBreak.end.getTime()) {
+            currentBreak.end = addMinutes(slot, consultationTime);
+        } else {
+            combinedBreaks.push(currentBreak);
+            currentBreak = { start: slot, end: addMinutes(slot, consultationTime) };
+        }
+    }
+    if (currentBreak) {
+        combinedBreaks.push(currentBreak);
+    }
+
+    return combinedBreaks;
+}, [selectedDoctor?.leaveSlots, leaveCalDate, selectedDoctor?.averageConsultingTime]);
 
   const allTimeSlotsForDay = useMemo((): Date[] => {
     if (!selectedDoctor || !leaveCalDate) return [];
@@ -990,13 +1024,27 @@ export default function DoctorsPage() {
         toast({ variant: 'destructive', title: 'Error', description: 'No break found to cancel.' });
         return;
     }
+
+    const dayBreakSlots = (selectedDoctor.leaveSlots || []).filter(leave => {
+       if (typeof leave === 'string') {
+          try { return isSameDay(parseISO(leave), leaveCalDate); } catch { return false; }
+        }
+        return isSameDay(parse(leave.date, 'yyyy-MM-dd', new Date()), leaveCalDate);
+    });
+
+    if (dayBreakSlots.length === 0) {
+        toast({ variant: 'destructive', title: 'Error', description: 'Inconsistent break data.' });
+        return;
+    }
     
     setIsSubmittingBreak(true);
     try {
         const batch = writeBatch(db);
         const consultationTime = selectedDoctor.averageConsultingTime || 15;
-        const breakStart = new Date(Math.min(...dailyLeaveSlots));
-        const breakEnd = new Date(Math.max(...dailyLeaveSlots));
+        
+        // This assumes one break per day for simplicity.
+        const breakStart = parseISO(dayBreakSlots[0] as string);
+        const breakEnd = parseISO(dayBreakSlots[dayBreakSlots.length - 1] as string);
         const totalBreakDuration = differenceInMinutes(breakEnd, breakStart) + consultationTime;
 
         const dateStr = format(leaveCalDate, 'd MMMM yyyy');
@@ -1031,13 +1079,13 @@ export default function DoctorsPage() {
             try {
               return format(parseISO(leave), 'yyyy-MM-dd') !== leaveDateStr;
             } catch {
-              return true; // Keep malformed data
+              return true;
             }
           }
           if (typeof leave === 'object' && leave.date) {
             return leave.date !== leaveDateStr;
           }
-          return true; // Keep if format is unknown
+          return true;
         });
 
         batch.update(doctorRef, { leaveSlots: updatedLeaveSlots });
@@ -1482,19 +1530,21 @@ export default function DoctorsPage() {
                                         <div className="grid grid-cols-3 gap-2">
                                             {allTimeSlotsForDay.map((slot) => {
                                                 const isSelected = (startSlot && slot >= startSlot && endSlot && slot <= endSlot) || (startSlot?.getTime() === slot.getTime() && !endSlot);
-                                                const isOnLeave = dailyLeaveSlots.includes(slot.getTime());
+                                                const isOnLeave = dailyLeaveSlots.some(breakPeriod => slot >= breakPeriod.start && slot < breakPeriod.end);
                                                 const isBooked = allBookedSlots.includes(slot.getTime());
 
                                                 return (
                                                     <Button
                                                         key={slot.toISOString()}
                                                         variant={isSelected ? 'default' : 'outline'}
-                                                        className={cn("h-auto py-2 flex-col", 
-                                                            isSelected && 'bg-destructive/80 hover:bg-destructive text-white',
-                                                            isOnLeave && 'bg-red-200 text-red-800 border-red-300 cursor-not-allowed',
-                                                            !isSelected && !isOnLeave && 'hover:bg-accent'
-                                                        )}
+                                                        className={cn("h-auto py-2 flex-col", {
+                                                          'bg-destructive/80 hover:bg-destructive text-white': isSelected,
+                                                          'bg-red-200 text-red-800 border-red-300 cursor-not-allowed': isOnLeave,
+                                                          'bg-muted text-muted-foreground cursor-not-allowed line-through': isBooked && !isOnLeave,
+                                                          'hover:bg-accent': !isSelected && !isOnLeave && !isBooked
+                                                        })}
                                                         onClick={() => handleSlotClick(slot)}
+                                                        disabled={isOnLeave || isBooked}
                                                     >
                                                         <span className="font-semibold">{format(slot, 'hh:mm a')}</span>
                                                         {isBooked && !isOnLeave && <span className="text-xs">Booked</span>}
@@ -1505,13 +1555,11 @@ export default function DoctorsPage() {
                                          {allTimeSlotsForDay.length === 0 && <p className="text-sm text-muted-foreground text-center pt-4">No slots available for this day.</p>}
                                     </div>
                                     <div className="text-center mt-4 mb-2 text-sm text-muted-foreground">
-                                        {dailyLeaveSlots.length > 0 ? (() => {
-                                                const breakStart = new Date(Math.min(...dailyLeaveSlots));
-                                                const breakEnd = new Date(Math.max(...dailyLeaveSlots));
-                                                const consultationTime = selectedDoctor?.averageConsultingTime || 15;
-                                                return `Break: ${format(breakStart, 'hh:mm a')} - ${format(addMinutes(breakEnd, consultationTime), 'hh:mm a')}`;
-                                            })()
-                                        : startSlot && !endSlot ? (
+                                        {dailyLeaveSlots.length > 0 ? (
+                                            dailyLeaveSlots.map((breakPeriod, index) => (
+                                              <div key={index}>Break: {format(breakPeriod.start, 'hh:mm a')} - {format(breakPeriod.end, 'hh:mm a')}</div>
+                                            ))
+                                        ) : startSlot && !endSlot ? (
                                             "Select an end time for the break."
                                         ) : startSlot && endSlot ? (
                                             `New break: ${format(startSlot, 'hh:mm a')} to ${format(addMinutes(endSlot, (selectedDoctor.averageConsultingTime || 15)), 'hh:mm a')}`
@@ -1803,6 +1851,8 @@ export default function DoctorsPage() {
 
     
 
+
+    
 
     
 
