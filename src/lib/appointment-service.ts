@@ -95,27 +95,33 @@ export async function calculateWalkInDetails(
   const lastWalkIn = walkIns.length > 0 ? walkIns[walkIns.length - 1] : null;
 
   // Step 5: Determine new walk-in slot
-  let startingSlotIndex: number;
-  let isAfterAdvanced = false;
+  let targetSlotIndex: number;
 
   if (!lastWalkIn) {
-    const currentSlotIndex = findCurrentSlotIndex(allSlots, now);
-    startingSlotIndex = currentSlotIndex + walkInTokenAllotment;
+      // First walk-in of the day
+      const currentSlotIndex = findCurrentSlotIndex(allSlots, now);
+      const advancedBookingsAfterNow = advancedAppointments.filter(
+          a => (a.slotIndex ?? 0) >= currentSlotIndex
+      ).length;
+
+      // The target is `walkInTokenAllotment` slots after the current time, plus any advanced bookings in that window.
+      targetSlotIndex = currentSlotIndex + walkInTokenAllotment + advancedBookingsAfterNow;
   } else {
     const lastWalkInSlot = lastWalkIn.slotIndex ?? findSlotIndexByToken(allSlots, lastWalkIn.numericToken);
     if (lastWalkInSlot > lastAdvancedSlotIndex) {
-      isAfterAdvanced = true;
-      startingSlotIndex = lastWalkInSlot + 1;
+      // Already past all advanced bookings, so just take the next slot
+      targetSlotIndex = lastWalkInSlot + 1;
     } else {
-      startingSlotIndex = lastWalkInSlot + walkInTokenAllotment;
-      if (startingSlotIndex > lastAdvancedSlotIndex) isAfterAdvanced = true;
+      // Still within advanced bookings, space it out
+      targetSlotIndex = lastWalkInSlot + walkInTokenAllotment;
     }
   }
+
 
   // Step 6: Calculate estimated time
   let { slotIndex: availableSlotIndex, estimatedTime } = getEstimatedTimeForWalkIn(
     allSlots,
-    startingSlotIndex,
+    targetSlotIndex,
     now
   );
 
@@ -130,7 +136,11 @@ export async function calculateWalkInDetails(
     appointments.length > 0 ? Math.max(...appointments.map(a => a.numericToken)) + 1 : 1;
 
   // Step 9: Calculate queue position
-  const patientsAhead = appointments.filter(a => (a.slotIndex ?? 0) < availableSlotIndex).length;
+  const patientsAhead = appointments.filter(a => {
+      const aptTime = parse(a.time, "hh:mm a", now);
+      return isBefore(aptTime, estimatedTime);
+  }).length;
+
 
   return {
     estimatedTime,
@@ -182,13 +192,15 @@ function getEstimatedTimeForWalkIn(
   targetSlotIndex: number,
   now: Date
 ): { slotIndex: number; estimatedTime: Date } {
-  if (targetSlotIndex >= allSlots.length) {
-    // If overflow, extend beyond last slot
-    const lastSlot = allSlots[allSlots.length - 1];
-    const overflowIndex = targetSlotIndex - (allSlots.length - 1);
-    const estimatedTime = addMinutes(lastSlot, overflowIndex * 5);
-    return { slotIndex: targetSlotIndex, estimatedTime };
-  }
+    if (targetSlotIndex >= allSlots.length) {
+        // If the target is beyond available slots, create a new theoretical slot
+        const lastSlot = allSlots[allSlots.length - 1];
+        const slotDuration = allSlots.length > 1 ? differenceInMinutes(allSlots[1], allSlots[0]) : 15;
+        const slotsToAdd = targetSlotIndex - (allSlots.length - 1);
+        const estimatedTime = addMinutes(lastSlot, slotsToAdd * slotDuration);
+        return { slotIndex: targetSlotIndex, estimatedTime };
+    }
+
 
   const clampedIndex = Math.max(0, Math.min(targetSlotIndex, allSlots.length - 1));
   const estimatedTime = allSlots[clampedIndex];
@@ -199,11 +211,4 @@ function getEstimatedTimeForWalkIn(
   }
 
   return { slotIndex: clampedIndex, estimatedTime };
-}
-
-/**
- * Helper function to parse time strings
- */
-export function parseTime(timeString: string, referenceDate: Date): Date {
-  return parse(timeString, 'hh:mm a', referenceDate);
 }
