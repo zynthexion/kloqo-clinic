@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useCallback, useTransition } from "react";
@@ -90,7 +89,7 @@ const formSchema = z.object({
     return true;
 }, {
     message: "Date and time are required for advanced bookings.",
-    path: ["date"], // You can point to a general or specific field
+    path: ["date"],
 });
 
 type AppointmentFormValues = z.infer<typeof formSchema>;
@@ -1900,3 +1899,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
