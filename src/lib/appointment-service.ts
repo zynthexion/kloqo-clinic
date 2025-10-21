@@ -56,7 +56,19 @@ export async function generateNextToken(
 
 
 /**
- * Calculates walk-in token details based on a sophisticated ruleset.
+ * Calculates walk-in token details including estimated time and queue position
+ *
+ * Logic:
+ * - Advanced appointments occupy slots
+ * - Walk-ins do NOT occupy slots—they get estimated times based on available slots
+ * - Before last advanced appointment: Walk-ins spaced by `walkInTokenAllotment` slots
+ * - After last advanced appointment: Walk-ins placed consecutively
+ * 
+ * Features:
+ * ✅ Walk-in opens 30 min before consultation
+ * ✅ Walk-in closes 30 min before consultation end
+ * ✅ Proper spacing logic for walk-ins
+ * ✅ Auto-extends availability beyond end time for last-minute walk-ins
  */
 export async function calculateWalkInDetails(
   doctor: Doctor,
@@ -72,7 +84,7 @@ export async function calculateWalkInDetails(
   const todayDay = format(now, 'EEEE');
   const slotDuration = doctor.averageConsultingTime || 15;
 
-  // Rule 1: Check Walk-in Window
+  // Step 1: Doctor's availability & Walk-in Window Check
   const todaysAvailability = doctor.availabilitySlots?.find(s => s.day === todayDay);
   if (!todaysAvailability || !todaysAvailability.timeSlots?.length) {
     throw new Error('Doctor not available today');
@@ -92,13 +104,13 @@ export async function calculateWalkInDetails(
     throw new Error('Walk-in registration is closed for the day.');
   }
 
-  // Rule 2: Generate Time Slots
+  // Step 2: Generate Time Slots (these represent the doctor's available consultation slots)
   const allSlots = generateTimeSlots(todaysAvailability.timeSlots, now, slotDuration);
   if (allSlots.length === 0) {
       throw new Error('No consultation slots could be generated for today.');
   }
 
-  // Fetch today's appointments to analyze the queue
+  // Step 3: Fetch today's appointments
   const appointmentsRef = collection(db, 'appointments');
   const appointmentsQuery = query(
     appointmentsRef,
@@ -109,44 +121,69 @@ export async function calculateWalkInDetails(
   const appointmentsSnapshot = await getDocs(appointmentsQuery);
   const appointments = appointmentsSnapshot.docs.map(doc => doc.data() as Appointment);
 
+  // Separate advanced and walk-in appointments
   const advancedAppointments = appointments.filter(a => a.bookedVia !== 'Walk-in');
-  const walkIns = appointments.filter(a => a.bookedVia === 'Walk-in');
+  const walkInAppointments = appointments.filter(a => a.bookedVia === 'Walk-in');
   
-  // Rule 5 (part 1): Create a set of occupied slots by advanced bookings
+  // Advanced appointments occupy actual slots
   const occupiedSlots = new Set(advancedAppointments.map(a => a.slotIndex).filter(i => i !== undefined));
-
-  // Rule 3 & 4: Determine Starting Slot
+  
+  // Find the last advanced appointment slot
   const lastAdvancedSlotIndex = advancedAppointments.length > 0
-    ? Math.max(...advancedAppointments.map(a => a.slotIndex ?? 0))
+    ? Math.max(...advancedAppointments.map(a => a.slotIndex ?? -1))
     : -1;
-  const lastWalkIn = walkIns.length > 0 ? walkIns[walkIns.length - 1] : null;
 
+  // Find the last walk-in appointment
+  const lastWalkIn = walkInAppointments.length > 0 
+    ? walkInAppointments[walkInAppointments.length - 1] 
+    : null;
+
+  // Step 4: Determine target slot for this new walk-in
   let targetSlotIndex: number;
 
   if (!lastWalkIn) {
-    // First walk-in of the day
-    targetSlotIndex = lastAdvancedSlotIndex + walkInTokenAllotment;
+    // Case A: No previous walk-ins - First walk-in of the day
+    
+    // Determine reference slot (starting point)
+    let referenceSlotIndex: number;
+    if (isBefore(now, availabilityStart)) {
+      // Current time is before availability start
+      referenceSlotIndex = 0; // Start from first slot
+    } else {
+      // Current time is after availability start - find next slot after now
+      referenceSlotIndex = findCurrentSlotIndex(allSlots, now);
+    }
+    
+    // Place walk-in at (referenceSlot + walkInTokenAllotment)
+    // This ensures spacing from the start
+    targetSlotIndex = referenceSlotIndex + walkInTokenAllotment;
+    
   } else {
+    // Case B: Previous walk-ins exist
     const lastWalkInSlotIndex = lastWalkIn.slotIndex ?? 0;
+    
     if (lastWalkInSlotIndex > lastAdvancedSlotIndex) {
-      // We are past all advanced bookings, so walk-ins are consecutive
+      // Last walk-in is already after all advanced appointments
+      // Place consecutively (no spacing needed)
       targetSlotIndex = lastWalkInSlotIndex + 1;
     } else {
-      // Still have advanced bookings, so space out the walk-in
+      // Last walk-in is before the last advanced appointment
+      // Apply spacing to avoid crowding scheduled patients
       targetSlotIndex = lastWalkInSlotIndex + walkInTokenAllotment;
     }
   }
 
-  // Rule 5 (part 2): Avoid Collisions
+  // Step 5: Skip over any occupied slots (advanced appointments)
+  // Walk-ins don't occupy slots themselves, but we can't assign them to times when advanced appointments exist
   let finalSlotIndex = targetSlotIndex;
   while (occupiedSlots.has(finalSlotIndex)) {
     finalSlotIndex++;
   }
 
-  // Rule 6 & 7: Handle Overflow and Get Estimated Time
+  // Step 6: Calculate estimated time based on final slot index
   let estimatedTime: Date;
   if (finalSlotIndex >= allSlots.length) {
-    // Overflow: extend the schedule
+    // Extend beyond doctor's scheduled hours
     const lastSlotTime = allSlots[allSlots.length - 1];
     const slotsToAdd = finalSlotIndex - (allSlots.length - 1);
     estimatedTime = addMinutes(lastSlotTime, slotsToAdd * slotDuration);
@@ -154,26 +191,40 @@ export async function calculateWalkInDetails(
     estimatedTime = allSlots[finalSlotIndex];
   }
   
-  // If calculated time is in the past, find the next available slot from NOW
+  // Step 7: Ensure estimated time is not in the past
   if (isBefore(estimatedTime, now)) {
-      let nextAvailableIndex = findCurrentSlotIndex(allSlots, now);
-      while(occupiedSlots.has(nextAvailableIndex)) {
-          nextAvailableIndex++;
-      }
-      finalSlotIndex = nextAvailableIndex;
-       if (finalSlotIndex >= allSlots.length) {
-            const lastSlotTime = allSlots[allSlots.length - 1];
-            const slotsToAdd = finalSlotIndex - (allSlots.length - 1);
-            estimatedTime = addMinutes(lastSlotTime, slotsToAdd * slotDuration);
-       } else {
-            estimatedTime = allSlots[finalSlotIndex];
-       }
+    // Find the next available slot from current time
+    let nextAvailableFromNow = findCurrentSlotIndex(allSlots, now);
+    
+    // Skip occupied slots
+    while (occupiedSlots.has(nextAvailableFromNow)) {
+      nextAvailableFromNow++;
+    }
+    
+    finalSlotIndex = nextAvailableFromNow;
+    
+    if (finalSlotIndex >= allSlots.length) {
+      const lastSlotTime = allSlots[allSlots.length - 1];
+      const slotsToAdd = finalSlotIndex - (allSlots.length - 1);
+      estimatedTime = addMinutes(lastSlotTime, slotsToAdd * slotDuration);
+    } else {
+      estimatedTime = allSlots[finalSlotIndex];
+    }
   }
 
-  // Rule 8: Token and Queue
+  // Step 8: Generate numeric token (sequential across all appointments)
   const numericTokens = appointments.map(a => a.numericToken);
-  const newNumericToken = numericTokens.length > 0 ? Math.max(...numericTokens, 0) + 1 : 1;
-  const patientsAhead = appointments.filter(a => (a.slotIndex ?? -1) < finalSlotIndex).length;
+  const newNumericToken = numericTokens.length > 0 ? Math.max(...numericTokens) + 1 : 1;
+  
+  // Step 9: Calculate patients ahead
+  // Count all pending/confirmed appointments (both advanced and walk-in) with earlier slot indices
+  const pendingAppointments = appointments.filter(a => 
+    a.status === 'Pending' || a.status === 'Confirmed'
+  );
+  const patientsAhead = pendingAppointments.filter(a => {
+    const aptSlotIndex = a.slotIndex ?? 0;
+    return aptSlotIndex < finalSlotIndex;
+  }).length;
 
   return {
     estimatedTime,
@@ -184,6 +235,9 @@ export async function calculateWalkInDetails(
 }
 
 
+/**
+ * Generates all time slots for the given time ranges
+ */
 function generateTimeSlots(timeSlots: TimeSlot[], referenceDate: Date, slotDuration: number): Date[] {
   const slots: Date[] = [];
   for (const slot of timeSlots) {
@@ -199,9 +253,15 @@ function generateTimeSlots(timeSlots: TimeSlot[], referenceDate: Date, slotDurat
 }
 
 
+/**
+ * Finds the index of the current or next slot after the given time
+ */
 function findCurrentSlotIndex(slots: Date[], now: Date): number {
   for (let i = 0; i < slots.length; i++) {
-    if (isAfter(slots[i], now) || slots[i].getTime() === now.getTime()) return i;
+    if (isAfter(slots[i], now) || slots[i].getTime() === now.getTime()) {
+      return i;
+    }
   }
+  // If all slots are in the past, return length (next slot would be after the last)
   return slots.length;
 }
