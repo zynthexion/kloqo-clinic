@@ -2,7 +2,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo, useTransition } from "react";
+import React, { useState, useEffect, useMemo, useTransition, useCallback } from "react";
 import Image from "next/image";
 import {
   Card,
@@ -24,17 +24,16 @@ import {
 } from "@/components/ui/table";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
-import { doc, updateDoc, collection, getDocs, setDoc, getDoc, query, where } from "firebase/firestore";
+import { doc, updateDoc, collection, getDocs, setDoc, getDoc, query, where, writeBatch } from "firebase/firestore";
 import { db, storage } from "@/lib/firebase";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import type { Doctor, Appointment, LeaveSlot, Department, TimeSlot } from "@/lib/types";
-import { format, parse, isSameDay, getDay, parse as parseDateFns, addMinutes, isBefore, isWithinInterval } from "date-fns";
+import { format, parse, isSameDay, getDay, parse as parseDateFns, addMinutes, isBefore, isWithinInterval, differenceInMinutes, isPast, parseISO } from "date-fns";
 import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon, PlusCircle, DollarSign, Printer, FileDown, ChevronUp, ChevronDown, Minus, Trophy, Repeat, CalendarCheck, Upload, Trash2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
-import { TimeSlots } from "@/components/doctors/time-slots";
 import { useForm, useFieldArray } from "react-hook-form";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormDescription, FormMessage } from "@/components/ui/form";
 import { z } from "zod";
@@ -47,7 +46,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
+import { cn, parseTime as parseTimeUtil } from "@/lib/utils";
 import { useSearchParams } from "next/navigation";
 import PatientsVsAppointmentsChart from "@/components/dashboard/patients-vs-appointments-chart";
 import { DateRange } from "react-day-picker";
@@ -62,6 +61,9 @@ import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/firebase";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import imageCompression from 'browser-image-compression';
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -182,8 +184,7 @@ export default function DoctorsPage() {
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [clinicDepartments, setClinicDepartments] = useState<Department[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [leaveCalDate, setLeaveCalDate] = useState<Date | undefined>(new Date());
+  const [leaveCalDate, setLeaveCalDate] = useState<Date>(new Date());
   const [clinicDetails, setClinicDetails] = useState<any>(null);
   
   const [isEditingTime, setIsEditingTime] = useState(false);
@@ -220,6 +221,11 @@ export default function DoctorsPage() {
   const [isEditingBooking, setIsEditingBooking] = useState(false);
   const [newBooking, setNewBooking] = useState<number | string>(0);
 
+  // State for break scheduling
+  const [startSlot, setStartSlot] = useState<Date | null>(null);
+  const [endSlot, setEndSlot] = useState<Date | null>(null);
+  const [allBookedSlots, setAllBookedSlots] = useState<number[]>([]);
+  const [isSubmittingBreak, setIsSubmittingBreak] = useState(false);
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -278,7 +284,7 @@ export default function DoctorsPage() {
     };
 
     fetchAllData();
-  }, [auth.currentUser, toast]);
+  }, [auth.currentUser, toast, selectedDoctor]);
 
   // Auto-select doctor from URL parameter
   useEffect(() => {
@@ -293,21 +299,6 @@ export default function DoctorsPage() {
 
   useEffect(() => {
     if (selectedDoctor) {
-      const doctorAppointments = appointments.filter(
-        (apt) => apt.doctor === selectedDoctor.name
-      );
-
-      if (doctorAppointments.length > 0) {
-          try {
-            const firstAptDate = parse(doctorAppointments[0].date, 'd MMMM yyyy', new Date());
-            if (!isNaN(firstAptDate.getTime())) {
-              setSelectedDate(firstAptDate);
-            }
-          } catch(e) {
-              // ignore invalid date
-          }
-      }
-      
       setNewAvgTime(selectedDoctor.averageConsultingTime || "");
       setNewFee(selectedDoctor.consultationFee || "");
       setNewFollowUp(selectedDoctor.freeFollowUpDays || 0);
@@ -332,6 +323,15 @@ export default function DoctorsPage() {
       setIsEditingBooking(false);
     }
   }, [selectedDoctor, appointments, form]);
+
+  useEffect(() => {
+    if (selectedDoctor && leaveCalDate) {
+        const dateStr = format(leaveCalDate, 'd MMMM yyyy');
+        const appointmentsOnDate = appointments.filter(apt => apt.doctor === selectedDoctor.name && apt.date === dateStr);
+        const fetchedBookedSlots = appointmentsOnDate.map(d => parseTimeUtil(d.time, leaveCalDate).getTime());
+        setAllBookedSlots(fetchedBookedSlots);
+    }
+  }, [selectedDoctor, leaveCalDate, appointments]);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -818,88 +818,6 @@ export default function DoctorsPage() {
         
         setSelectedDays([]);
     };
-
-    const handleLeaveUpdate = async (updatedLeaveSlots: LeaveSlot[]) => {
-        if (!selectedDoctor) return;
-        startTransition(async () => {
-            const doctorRef = doc(db, "doctors", selectedDoctor.id);
-            try {
-                await updateDoc(doctorRef, { leaveSlots: updatedLeaveSlots });
-                const updatedDoctor = { ...selectedDoctor, leaveSlots: updatedLeaveSlots };
-                setSelectedDoctor(updatedDoctor);
-                setDoctors(prev => prev.map(d => d.id === selectedDoctor.id ? updatedDoctor : d));
-
-                toast({
-                    title: "Leave Updated",
-                    description: `Leave schedule for Dr. ${selectedDoctor.name} has been updated.`,
-                });
-            } catch (error) {
-                console.error("Error updating leave:", error);
-                toast({
-                    variant: "destructive",
-                    title: "Update Failed",
-                    description: "Could not update leave information.",
-                });
-            }
-        });
-    };
-
-    const doctorAppointments = useMemo(() => {
-        if (!selectedDoctor) return [];
-        return appointments.filter(apt => apt.doctor === selectedDoctor.name);
-    }, [appointments, selectedDoctor]);
-
-
-  const filteredAppointments = useMemo(() => {
-    if (!selectedDate) return [];
-
-    return doctorAppointments.filter((appointment) => {
-        try {
-            const parsedDate = parse(appointment.date, 'd MMMM yyyy', new Date());
-            return isSameDay(parsedDate, selectedDate);
-        } catch (e) {
-            console.error("Error parsing date:", e);
-            return false;
-        }
-    });
-  }, [doctorAppointments, selectedDate]);
-  
-  const availableDaysOfWeek = useMemo(() => {
-    if (!selectedDoctor?.availabilitySlots) return [];
-    const dayNames = selectedDoctor.availabilitySlots.map(s => s.day);
-    return daysOfWeek.reduce((acc, day, index) => {
-        if (dayNames.includes(day)) {
-            acc.push(index);
-        }
-        return acc;
-    }, [] as number[]);
-  }, [selectedDoctor?.availabilitySlots]);
-
-  const leaveDates = useMemo(() => {
-      if (!selectedDoctor?.leaveSlots) return [];
-      return selectedDoctor.leaveSlots
-          .filter(ls => ls?.date && Array.isArray(ls.slots) && ls.slots.length > 0)
-          .map(ls => parse(ls.date, 'yyyy-MM-dd', new Date()));
-  }, [selectedDoctor?.leaveSlots]);
-
-  const isAppointmentOnLeave = (appointment: Appointment): boolean => {
-      if (!selectedDoctor?.leaveSlots || !appointment) return false;
-      
-      const aptDate = parse(appointment.date, "d MMMM yyyy", new Date());
-      const leaveForDay = selectedDoctor.leaveSlots.find(ls => ls.date && isSameDay(parse(ls.date, "yyyy-MM-dd", new Date()), aptDate));
-      
-      if (!leaveForDay) return false;
-
-      const aptTime = parseDateFns(appointment.time, "hh:mm a", new Date(0));
-      
-      return leaveForDay.slots.some(leaveSlot => {
-          const leaveStart = parseDateFns(leaveSlot.from, "hh:mm a", new Date(0));
-          const leaveEnd = parseDateFns(leaveSlot.to, "hh:mm a", new Date(0));
-          return aptTime >= leaveStart && aptTime < leaveEnd;
-      });
-  };
-
-  const isDoctorOnLeave = selectedDate ? leaveDates.some(d => isSameDay(d, selectedDate)) : false;
   
   const filteredDoctors = useMemo(() => {
     return doctors.filter(doctor => {
@@ -944,6 +862,179 @@ export default function DoctorsPage() {
         return now >= startTime && now <= endTime;
     });
   }, [selectedDoctor]);
+
+  // Break Scheduling Logic
+  const dailyLeaveSlots = useMemo(() => {
+    if (!selectedDoctor?.leaveSlots || !leaveCalDate) return [];
+    return selectedDoctor.leaveSlots
+        .filter(leave => isSameDay(parseISO(leave.date), leaveCalDate))
+        .flatMap(leave => leave.slots);
+  }, [selectedDoctor, leaveCalDate]);
+
+  const allTimeSlotsForDay = useMemo((): Date[] => {
+    if (!selectedDoctor || !leaveCalDate) return [];
+    const dayOfWeek = format(leaveCalDate, 'EEEE');
+    const doctorAvailabilityForDay = selectedDoctor.availabilitySlots?.find(slot => slot.day === dayOfWeek);
+    if (!doctorAvailabilityForDay) return [];
+
+    const slots: Date[] = [];
+    const consultationTime = selectedDoctor.averageConsultingTime || 15;
+
+    doctorAvailabilityForDay.timeSlots.forEach(timeSlot => {
+        let currentTime = parseTimeUtil(timeSlot.from, leaveCalDate);
+        const endTime = parseTimeUtil(timeSlot.to, leaveCalDate);
+        while (currentTime < endTime) {
+            slots.push(new Date(currentTime));
+            currentTime = addMinutes(currentTime, consultationTime);
+        }
+    });
+    return slots;
+  }, [selectedDoctor, leaveCalDate]);
+
+  const slotsInSelection = useMemo(() => {
+    if (!startSlot || !endSlot || !selectedDoctor) return [];
+    const slots: Date[] = [];
+    let currentTime = new Date(startSlot);
+    const consultationTime = selectedDoctor.averageConsultingTime || 15;
+    
+    while (currentTime <= endSlot) {
+        slots.push(new Date(currentTime));
+        currentTime = addMinutes(currentTime, consultationTime);
+    }
+    return slots;
+  }, [startSlot, endSlot, selectedDoctor]);
+
+  const handleSlotClick = (slot: Date) => {
+    const isOnLeave = dailyLeaveSlots.some(leaveSlot => parseTimeUtil(leaveSlot.from, leaveCalDate).getTime() === slot.getTime());
+    if (isOnLeave) return;
+
+    if (!startSlot || endSlot) {
+        setStartSlot(slot);
+        setEndSlot(null);
+    } else if (slot > startSlot) {
+        setEndSlot(slot);
+    } else {
+        setStartSlot(slot);
+        setEndSlot(null);
+    }
+  };
+
+  const handleConfirmBreak = async () => {
+    if (!startSlot || !endSlot || !selectedDoctor || !auth.currentUser || !leaveCalDate) {
+        toast({ variant: 'destructive', title: 'Invalid Selection', description: 'Please select a valid start and end time.' });
+        return;
+    }
+    setIsSubmittingBreak(true);
+    try {
+        const batch = writeBatch(db);
+        const breakDuration = differenceInMinutes(endSlot, startSlot) + (selectedDoctor.averageConsultingTime || 15);
+        const dateStr = format(leaveCalDate, 'd MMMM yyyy');
+        
+        const appointmentsQuery = query(collection(db, "appointments"), 
+            where("doctor", "==", selectedDoctor.name),
+            where("clinicId", "==", selectedDoctor.clinicId),
+            where("date", "==", dateStr)
+        );
+        const snapshot = await getDocs(appointmentsQuery);
+        const appointmentsToUpdate: {id: string, newTime: Date}[] = [];
+
+        snapshot.docs.forEach(docSnap => {
+            const appt = docSnap.data() as Appointment;
+            if (!appt.time) return;
+            const apptTime = parseTimeUtil(appt.time, leaveCalDate);
+            if (apptTime >= startSlot) {
+                appointmentsToUpdate.push({ id: docSnap.id, newTime: addMinutes(apptTime, breakDuration) });
+            }
+        });
+
+        for (const appt of appointmentsToUpdate) {
+            const apptRef = doc(db, 'appointments', appt.id);
+            batch.update(apptRef, { time: format(appt.newTime, 'hh:mm a') });
+        }
+
+        const doctorRef = doc(db, 'doctors', selectedDoctor.id);
+        const newLeaveSlotsForDate: TimeSlot[] = slotsInSelection.map(slot => ({
+            from: format(slot, 'hh:mm a'),
+            to: format(addMinutes(slot, (selectedDoctor.averageConsultingTime || 15) -1), 'hh:mm a')
+        }));
+
+        const otherLeaveSlots = (selectedDoctor.leaveSlots || []).filter(ls => ls.date !== format(leaveCalDate, 'yyyy-MM-dd'));
+        const updatedLeaveSlots = [...otherLeaveSlots, {date: format(leaveCalDate, 'yyyy-MM-dd'), slots: newLeaveSlotsForDate}];
+
+        batch.update(doctorRef, { leaveSlots: updatedLeaveSlots });
+        
+        await batch.commit();
+
+        toast({ title: 'Break Scheduled', description: 'Appointments have been rescheduled.'});
+        const updatedDoctor = {...selectedDoctor, leaveSlots: updatedLeaveSlots };
+        setSelectedDoctor(updatedDoctor);
+        setDoctors(prev => prev.map(d => d.id === updatedDoctor.id ? updatedDoctor : d));
+        setStartSlot(null);
+        setEndSlot(null);
+
+    } catch (error) {
+        console.error("Error scheduling break:", error);
+        toast({ variant: 'destructive', title: 'Error', description: 'Failed to schedule break.' });
+    } finally {
+        setIsSubmittingBreak(false);
+    }
+  };
+
+  const handleCancelBreak = async () => {
+    if (!selectedDoctor || !leaveCalDate || dailyLeaveSlots.length === 0) {
+        return;
+    }
+    setIsSubmittingBreak(true);
+    try {
+        const batch = writeBatch(db);
+        const breakStart = parseTimeUtil(dailyLeaveSlots[0].from, leaveCalDate);
+        const breakEnd = parseTimeUtil(dailyLeaveSlots[dailyLeaveSlots.length - 1].to, leaveCalDate);
+        const breakDuration = differenceInMinutes(breakEnd, breakStart) + 1; // Simplified
+
+        const dateStr = format(leaveCalDate, 'd MMMM yyyy');
+        const appointmentsQuery = query(collection(db, "appointments"), 
+            where("doctor", "==", selectedDoctor.name),
+            where("clinicId", "==", selectedDoctor.clinicId),
+            where("date", "==", dateStr)
+        );
+        const snapshot = await getDocs(appointmentsQuery);
+        const appointmentsToUpdate: {id: string, newTime: Date}[] = [];
+        
+        snapshot.docs.forEach(docSnap => {
+            const appt = docSnap.data() as Appointment;
+            if (!appt.time) return;
+            const apptTime = parseTimeUtil(appt.time, leaveCalDate);
+            if (apptTime > breakEnd) {
+                 appointmentsToUpdate.push({ id: docSnap.id, newTime: addMinutes(apptTime, -breakDuration) });
+            }
+        });
+        
+        for (const appt of appointmentsToUpdate) {
+            const apptRef = doc(db, 'appointments', appt.id);
+            batch.update(apptRef, { time: format(appt.newTime, 'hh:mm a') });
+        }
+
+        const doctorRef = doc(db, 'doctors', selectedDoctor.id);
+        const updatedLeaveSlots = (selectedDoctor.leaveSlots || []).filter(ls => ls.date !== format(leaveCalDate, 'yyyy-MM-dd'));
+
+        batch.update(doctorRef, { leaveSlots: updatedLeaveSlots });
+        
+        await batch.commit();
+
+        toast({ title: 'Break Canceled', description: 'The break has been removed.'});
+        const updatedDoctor = {...selectedDoctor, leaveSlots: updatedLeaveSlots };
+        setSelectedDoctor(updatedDoctor);
+        setDoctors(prev => prev.map(d => d.id === updatedDoctor.id ? updatedDoctor : d));
+        setStartSlot(null);
+        setEndSlot(null);
+
+    } catch (error) {
+         console.error("Error canceling break:", error);
+         toast({ variant: 'destructive', title: 'Error', description: 'Failed to cancel break.' });
+    } finally {
+        setIsSubmittingBreak(false);
+    }
+  };
 
 
   return (
@@ -1339,32 +1430,78 @@ export default function DoctorsPage() {
                         </Card>
                         <Card>
                             <CardHeader>
-                                <CardTitle className="flex items-center gap-2"><CalendarIcon className="w-5 h-5" /> Mark Leave</CardTitle>
-                                <CardDescription>Select dates to view or edit time slot availability.</CardDescription>
+                                <CardTitle className="flex items-center gap-2"><CalendarIcon className="w-5 h-5" /> Schedule Break</CardTitle>
+                                <CardDescription>Select a date and time range to schedule a break. This will reschedule existing appointments.</CardDescription>
                             </CardHeader>
                             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Calendar
-                                    mode="single"
-                                    selected={leaveCalDate}
-                                    onSelect={setLeaveCalDate}
-                                    className="rounded-md border w-full"
-                                    modifiers={{ 
-                                        available: { dayOfWeek: availableDaysOfWeek },
-                                        leave: leaveDates,
-                                    }}
-                                    modifiersStyles={{
-                                        available: { backgroundColor: '#D4EDDA', color: '#155724' },
-                                        leave: { color: 'red', fontWeight: 'bold' }
-                                    }}
-                                />
-                                <TimeSlots
-                                selectedDate={leaveCalDate}
-                                availabilitySlots={selectedDoctor.availabilitySlots || []}
-                                leaveSlots={selectedDoctor.leaveSlots || []}
-                                appointments={doctorAppointments}
-                                onLeaveUpdate={handleLeaveUpdate}
-                                isPending={isPending}
-                                />
+                               <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !leaveCalDate && "text-muted-foreground")}>
+                                            <CalendarIcon className="mr-2 h-4 w-4" />
+                                            {leaveCalDate ? format(leaveCalDate, "PPP") : <span>Pick a date</span>}
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0">
+                                        <Calendar
+                                            mode="single"
+                                            selected={leaveCalDate}
+                                            onSelect={(d) => d && setLeaveCalDate(d)}
+                                            disabled={(date) => date < new Date() || !selectedDoctor.availabilitySlots?.some(s => s.day === format(date, 'EEEE'))}
+                                            initialFocus
+                                        />
+                                    </PopoverContent>
+                                </Popover>
+                                <div className="p-4 border rounded-md h-full flex flex-col">
+                                    <h3 className="font-semibold mb-2">
+                                        Slots for {format(leaveCalDate, "MMM d")}
+                                    </h3>
+                                    <div className="space-y-2 flex-grow overflow-y-auto">
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {allTimeSlotsForDay.map((slot) => {
+                                                const isSelected = (startSlot && slot >= startSlot && endSlot && slot <= endSlot) || (startSlot?.getTime() === slot.getTime() && !endSlot);
+                                                const isOnLeave = dailyLeaveSlots.some(leaveSlot => parseTimeUtil(leaveSlot.from, leaveCalDate).getTime() <= slot.getTime() && parseTimeUtil(leaveSlot.to, leaveCalDate).getTime() >= slot.getTime());
+                                                const isBooked = allBookedSlots.includes(slot.getTime());
+
+                                                return (
+                                                    <Button
+                                                        key={slot.toISOString()}
+                                                        variant={isSelected ? 'default' : 'outline'}
+                                                        className={cn("h-auto py-2 flex-col", 
+                                                            isSelected && 'bg-destructive/80 hover:bg-destructive text-white',
+                                                            isOnLeave && 'bg-red-200 text-red-800 border-red-300 cursor-not-allowed',
+                                                            !isSelected && !isOnLeave && 'hover:bg-accent'
+                                                        )}
+                                                        onClick={() => handleSlotClick(slot)}
+                                                    >
+                                                        <span className="font-semibold">{format(slot, 'hh:mm a')}</span>
+                                                        {isBooked && !isOnLeave && <span className="text-xs">Booked</span>}
+                                                    </Button>
+                                                );
+                                            })}
+                                        </div>
+                                         {allTimeSlotsForDay.length === 0 && <p className="text-sm text-muted-foreground text-center pt-4">No slots available.</p>}
+                                    </div>
+                                     <div className="text-center mt-4 mb-2 text-sm text-muted-foreground">
+                                        {dailyLeaveSlots.length > 0 ? (
+                                            `Break from ${dailyLeaveSlots[0].from} to ${dailyLeaveSlots[dailyLeaveSlots.length - 1].to}`
+                                        ) : startSlot && !endSlot ? (
+                                            "Select an end time for the break."
+                                        ) : startSlot && endSlot ? (
+                                            `New break: ${format(startSlot, 'hh:mm a')} to ${format(addMinutes(endSlot, (selectedDoctor.averageConsultingTime || 15) -1), 'hh:mm a')}`
+                                        ) : (
+                                        "Select a start and end time for the break."
+                                        )}
+                                    </div>
+                                    {dailyLeaveSlots.length > 0 ? (
+                                        <Button className="w-full" variant="secondary" disabled={isSubmittingBreak} onClick={handleCancelBreak}>
+                                            {isSubmittingBreak ? <Loader2 className="animate-spin" /> : 'Cancel This Break'}
+                                        </Button>
+                                    ) : (
+                                        <Button className="w-full" variant="destructive" disabled={!startSlot || !endSlot || isSubmittingBreak} onClick={handleConfirmBreak}>
+                                            {isSubmittingBreak ? <Loader2 className="animate-spin" /> : 'Confirm Break'}
+                                        </Button>
+                                    )}
+                                </div>
                             </CardContent>
                         </Card>
                     </div>
@@ -1624,6 +1761,7 @@ export default function DoctorsPage() {
     
 
     
+
 
 
 
