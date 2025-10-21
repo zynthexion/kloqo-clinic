@@ -1,3 +1,4 @@
+
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
@@ -57,7 +58,7 @@ export async function calculateWalkInDetails(
     throw new Error(`Walk-in booking opens at ${format(walkInOpenTime, 'hh:mm a')}`);
   }
   if (isAfter(now, walkInCloseTime)) {
-    throw new Error('Walk-in booking for today is closed');
+    throw new Error('Walk-in booking closed for today');
   }
 
   // Step 3: Fetch all today's appointments
@@ -87,29 +88,30 @@ export async function calculateWalkInDetails(
   let targetSlotIndex: number;
 
   if (walkIns.length === 0) {
-    // First walk-in of the day
-    const currentSlotIndex = findCurrentSlotIndex(allSlots, now);
+    // First walk-in of the day.
     const lastAdvancedSlotIndex = advancedAppointments.length > 0
       ? Math.max(...advancedAppointments.map(a => a.slotIndex ?? -1))
       : -1;
+    const currentSlotIndex = findCurrentSlotIndex(allSlots, now);
     
-    // Start calculating from whichever is later: the current time or the last booked slot.
-    const baseSlotIndex = Math.max(currentSlotIndex, lastAdvancedSlotIndex);
-    targetSlotIndex = baseSlotIndex + walkInTokenAllotment;
-
+    // The base is the later of the current time or the last booked appointment.
+    const baseIndex = Math.max(currentSlotIndex, lastAdvancedSlotIndex);
+    
+    targetSlotIndex = baseIndex + walkInTokenAllotment;
   } else {
-    // There are existing walk-ins
+    // There are existing walk-ins, so schedule relative to the last one.
     const lastWalkIn = walkIns[walkIns.length - 1];
     const lastWalkInSlotIndex = lastWalkIn.slotIndex ?? findSlotIndexByToken(allSlots, lastWalkIn.numericToken);
+    
     const lastAdvancedSlotIndex = advancedAppointments.length > 0
         ? Math.max(...advancedAppointments.map(a => a.slotIndex ?? -1))
         : -1;
 
     if (lastWalkInSlotIndex > lastAdvancedSlotIndex) {
-      // If the last walk-in is already past all advanced bookings, schedule consecutively.
+      // If last walk-in is already past all advanced bookings, schedule consecutively.
       targetSlotIndex = lastWalkInSlotIndex + 1;
     } else {
-      // Otherwise, space it out.
+      // Otherwise, space it out from the last walk-in.
       targetSlotIndex = lastWalkInSlotIndex + walkInTokenAllotment;
     }
   }
@@ -148,6 +150,7 @@ export async function calculateWalkInDetails(
   // Step 8: Calculate queue position accurately
   const patientsAhead = appointments.filter(a => {
       const aptTime = parse(a.time, 'hh:mm a', now);
+      // Count appointments that are after the current time but before the new estimated time
       return isAfter(aptTime, now) && isBefore(aptTime, estimatedTime);
   }).length;
 
