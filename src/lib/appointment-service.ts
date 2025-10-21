@@ -95,25 +95,21 @@ export async function calculateWalkInDetails(
   const lastWalkIn = walkIns.length > 0 ? walkIns[walkIns.length - 1] : null;
 
   // Step 5: Determine new walk-in slot
-  let targetSlotIndex: number;
+  let startingSlotIndex: number;
 
   if (!lastWalkIn) {
-      // First walk-in of the day
-      const currentSlotIndex = findCurrentSlotIndex(allSlots, now);
-      const advancedBookingsAfterNow = advancedAppointments.filter(
-          a => (a.slotIndex ?? 0) >= currentSlotIndex
-      ).length;
-
-      // The target is `walkInTokenAllotment` slots after the current time, plus any advanced bookings in that window.
-      targetSlotIndex = currentSlotIndex + walkInTokenAllotment + advancedBookingsAfterNow;
+    // No previous walk-ins. Base it on the last advanced booking.
+    const lastOccupiedSlot = lastAdvancedSlotIndex > -1 ? lastAdvancedSlotIndex : findCurrentSlotIndex(allSlots, now);
+    startingSlotIndex = lastOccupiedSlot + walkInTokenAllotment;
   } else {
     const lastWalkInSlot = lastWalkIn.slotIndex ?? findSlotIndexByToken(allSlots, lastWalkIn.numericToken);
+    
+    // If the last walk-in is already past all advanced bookings, go to the next slot.
+    // Otherwise, add the allotment.
     if (lastWalkInSlot > lastAdvancedSlotIndex) {
-      // Already past all advanced bookings, so just take the next slot
-      targetSlotIndex = lastWalkInSlot + 1;
+      startingSlotIndex = lastWalkInSlot + 1;
     } else {
-      // Still within advanced bookings, space it out
-      targetSlotIndex = lastWalkInSlot + walkInTokenAllotment;
+      startingSlotIndex = lastWalkInSlot + walkInTokenAllotment;
     }
   }
 
@@ -121,7 +117,7 @@ export async function calculateWalkInDetails(
   // Step 6: Calculate estimated time
   let { slotIndex: availableSlotIndex, estimatedTime } = getEstimatedTimeForWalkIn(
     allSlots,
-    targetSlotIndex,
+    startingSlotIndex,
     now
   );
 
@@ -136,11 +132,7 @@ export async function calculateWalkInDetails(
     appointments.length > 0 ? Math.max(...appointments.map(a => a.numericToken)) + 1 : 1;
 
   // Step 9: Calculate queue position
-  const patientsAhead = appointments.filter(a => {
-      const aptTime = parse(a.time, "hh:mm a", now);
-      return isBefore(aptTime, estimatedTime);
-  }).length;
-
+  const patientsAhead = appointments.filter(a => (a.slotIndex ?? 0) < availableSlotIndex).length;
 
   return {
     estimatedTime,
