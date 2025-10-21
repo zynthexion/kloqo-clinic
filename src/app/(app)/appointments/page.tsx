@@ -645,6 +645,26 @@ export default function AppointmentsPage() {
           const appointmentDateStr = format(values.date, "d MMMM yyyy");
           const appointmentTimeStr = format(parseDateFns(values.time, "HH:mm", new Date()), "hh:mm a");
 
+          let slotIndex = -1;
+          const dayOfWeek = daysOfWeek[getDay(values.date)];
+          const availabilityForDay = selectedDoctor.availabilitySlots?.find(s => s.day === dayOfWeek);
+          if (availabilityForDay) {
+            let currentIndex = 0;
+            for (const session of availabilityForDay.timeSlots) {
+              let currentTime = parseDateFns(session.from, 'hh:mm a', values.date);
+              const endTime = parseDateFns(session.to, 'hh:mm a', values.date);
+              while (isBefore(currentTime, endTime)) {
+                if (format(currentTime, "hh:mm a") === appointmentTimeStr) {
+                  slotIndex = currentIndex;
+                  break;
+                }
+                currentTime = addMinutes(currentTime, selectedDoctor.averageConsultingTime || 15);
+                currentIndex++;
+              }
+              if (slotIndex !== -1) break;
+            }
+          }
+
           const appointmentData: Appointment = {
             id: appointmentId,
             clinicId: clinicId,
@@ -663,6 +683,7 @@ export default function AppointmentsPage() {
             numericToken: tokenData.numericToken,
             bookedVia: values.bookedVia,
             place: values.place,
+            slotIndex: slotIndex
           };
 
           const appointmentRef = doc(db, 'appointments', appointmentId);
@@ -1837,5 +1858,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
-    
