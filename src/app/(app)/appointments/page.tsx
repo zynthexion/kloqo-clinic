@@ -93,7 +93,7 @@ const formSchema = z.object({
     return true;
 }, {
     message: "Date and time are required for advanced bookings.",
-    path: ["date"],
+    path: ["time"],
 });
 
 type AppointmentFormValues = z.infer<typeof formSchema>;
