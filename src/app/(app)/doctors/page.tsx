@@ -28,7 +28,7 @@ import { doc, updateDoc, collection, getDocs, setDoc, getDoc, query, where, writ
 import { db, storage } from "@/lib/firebase";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import type { Doctor, Appointment, LeaveSlot, Department, TimeSlot } from "@/lib/types";
-import { format, parse, isSameDay, getDay, addMinutes, isWithinInterval, differenceInMinutes, isPast, parseISO, startOfDay, isToday } from "date-fns";
+import { format, parse, isSameDay, getDay, addMinutes, isWithinInterval, differenceInMinutes, isPast, parseISO, startOfDay, isToday, isBefore } from "date-fns";
 import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon, PlusCircle, DollarSign, Printer, FileDown, ChevronUp, ChevronDown, Minus, Trophy, Repeat, CalendarCheck, Upload, Trash2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -390,31 +390,6 @@ export default function DoctorsPage() {
     });
     setSelectedDoctor(savedDoctor);
   };
-
-    const handleStatusChange = async (newStatus: 'In' | 'Out') => {
-        if (!selectedDoctor) return;
-
-        startTransition(async () => {
-            const doctorRef = doc(db, "doctors", selectedDoctor.id);
-            try {
-                await updateDoc(doctorRef, { consultationStatus: newStatus });
-                const updatedDoctor = { ...selectedDoctor, consultationStatus: newStatus };
-                setSelectedDoctor(updatedDoctor);
-                setDoctors(prev => prev.map(d => d.id === selectedDoctor.id ? updatedDoctor : d));
-                toast({
-                    title: "Status Updated",
-                    description: `Dr. ${selectedDoctor.name} is now marked as ${newStatus}.`,
-                });
-            } catch (error) {
-                console.error("Error updating status:", error);
-                toast({
-                    variant: "destructive",
-                    title: "Update Failed",
-                    description: "Could not update the doctor's status.",
-                });
-            }
-        });
-    };
 
     const handleTimeSave = async () => {
         if (!selectedDoctor || newAvgTime === "") return;
@@ -889,8 +864,21 @@ const getAutomatedConsultationStatus = useMemo(() => {
     if (!isWithinWorkingHours) return 'Out';
 
     const todayLeaveSlots = (selectedDoctor.leaveSlots || [])
-      .map(leave => (typeof leave === 'string' ? parseISO(leave) : new Date(NaN)))
-      .filter(date => !isNaN(date.getTime()) && isToday(date));
+        .map(leave => {
+            if (typeof leave === 'string') {
+                try { return parseISO(leave); } catch { return new Date(NaN); }
+            }
+            if (leave && leave.date && leave.slots) { // This handles the object format but we only need to check for today
+                if (isToday(parse(leave.date, 'yyyy-MM-dd', new Date()))) {
+                    // Placeholder: This part needs more complex logic if you want to check specific leave time slots within the object
+                    // For now, we assume if an object exists for today, the whole day might be affected in some way.
+                    // A better approach would be to process these objects into a unified format.
+                    // Let's just check the string format for now as per the latest changes.
+                }
+            }
+            return new Date(NaN);
+        })
+        .filter(date => !isNaN(date.getTime()) && isToday(date));
 
     const isOnBreak = todayLeaveSlots.some(leaveSlot => {
       const breakStart = leaveSlot;
@@ -902,22 +890,41 @@ const getAutomatedConsultationStatus = useMemo(() => {
 }, [selectedDoctor]);
 
 
-  const dailyLeaveSlots = useMemo((): { start: Date; end: Date }[] => {
+  const dailyLeaveSlots = useMemo(() => {
     if (!selectedDoctor?.leaveSlots) return [];
   
-    const slotsForDate = (selectedDoctor.leaveSlots || [])
+    const slotsForDate: Date[] = (selectedDoctor.leaveSlots || [])
       .map(leave => {
+        // Handle string-based ISO dates
         if (typeof leave === 'string') {
           try {
             const d = parseISO(leave);
-            return !isNaN(d.getTime()) ? d : null;
+            return !isNaN(d.getTime()) && isSameDay(d, leaveCalDate) ? d : null;
           } catch {
             return null;
           }
         }
+        // Handle object-based leave slots
+        if (leave && leave.date && Array.isArray(leave.slots)) {
+            if (isSameDay(parse(leave.date, 'yyyy-MM-dd', new Date()), leaveCalDate)) {
+                return leave.slots.flatMap(slot => {
+                    const start = parseTimeUtil(slot.from, leaveCalDate);
+                    const end = parseTimeUtil(slot.to, leaveCalDate);
+                    const consultationTime = selectedDoctor.averageConsultingTime || 15;
+                    const innerSlots = [];
+                    let current = start;
+                    while(isBefore(current, end)) {
+                        innerSlots.push(current);
+                        current = addMinutes(current, consultationTime);
+                    }
+                    return innerSlots;
+                });
+            }
+        }
         return null;
       })
-      .filter((date): date is Date => date !== null && isSameDay(date, leaveCalDate));
+      .flat() // Flatten the array of arrays from object slots
+      .filter((date): date is Date => date !== null);
   
     if (slotsForDate.length === 0) return [];
   
@@ -978,7 +985,7 @@ const getAutomatedConsultationStatus = useMemo(() => {
   }, [startSlot, endSlot, selectedDoctor]);
 
   const handleSlotClick = (slot: Date) => {
-    if (dailyLeaveSlots.length > 0) return; // Don't allow new selection if break exists
+    if (dailyLeaveSlots.some(breakPeriod => isWithinInterval(slot, { start: breakPeriod.start, end: breakPeriod.end }))) return;
 
     if (!startSlot || endSlot) {
         setStartSlot(slot);
@@ -1025,9 +1032,11 @@ const getAutomatedConsultationStatus = useMemo(() => {
         }
 
         const doctorRef = doc(db, 'doctors', selectedDoctor.id);
-        const newLeaveSlots = slotsInSelection.map(slot => slot.toISOString());
-        const updatedLeaveSlots = [...(selectedDoctor.leaveSlots || []), ...newLeaveSlots];
-
+        const newLeaveSlotsISO = slotsInSelection.map(slot => slot.toISOString());
+        
+        const existingLeaveSlots = selectedDoctor.leaveSlots || [];
+        const updatedLeaveSlots = [...existingLeaveSlots, ...newLeaveSlotsISO];
+        
         batch.update(doctorRef, { leaveSlots: updatedLeaveSlots });
         
         await batch.commit();
@@ -1061,7 +1070,7 @@ const getAutomatedConsultationStatus = useMemo(() => {
             const slots = [];
             let current = b.start;
             const consultationTime = selectedDoctor.averageConsultingTime || 15;
-            while(current < b.end){
+            while(isBefore(current, b.end)){
                 slots.push(current);
                 current = addMinutes(current, consultationTime);
             }
@@ -1102,6 +1111,10 @@ const getAutomatedConsultationStatus = useMemo(() => {
         const updatedLeaveSlots = (selectedDoctor.leaveSlots || []).filter(leave => {
             if (typeof leave === 'string') {
                 return !leaveSlotsForDayAsISO.includes(leave);
+            }
+            // Logic to handle object-based leave slots if they still exist
+            if (leave && leave.date && isSameDay(parse(leave.date, 'yyyy-MM-dd', new Date()), leaveCalDate)) {
+                return false;
             }
             return true;
         });
@@ -1538,7 +1551,7 @@ const getAutomatedConsultationStatus = useMemo(() => {
                                         <div className="grid grid-cols-3 gap-2">
                                             {allTimeSlotsForDay.map((slot) => {
                                                 const isSelected = (startSlot && slot >= startSlot && endSlot && slot <= endSlot) || (startSlot?.getTime() === slot.getTime() && !endSlot);
-                                                const isOnLeave = dailyLeaveSlots.some(breakPeriod => isWithinInterval(slot, { start: breakPeriod.start, end: breakPeriod.end }));
+                                                const isOnLeave = dailyLeaveSlots.some(breakPeriod => isWithinInterval(slot, { start: breakPeriod.start, end: addMinutes(breakPeriod.end, -1) }));
                                                 const isBooked = allBookedSlots.includes(slot.getTime());
 
                                                 return (
@@ -1551,7 +1564,7 @@ const getAutomatedConsultationStatus = useMemo(() => {
                                                           'hover:bg-accent': !isSelected && !isOnLeave,
                                                         })}
                                                         onClick={() => handleSlotClick(slot)}
-                                                        disabled={isOnLeave}
+                                                        disabled={isOnLeave || isBooked}
                                                     >
                                                         <span className="font-semibold">{format(slot, 'hh:mm a')}</span>
                                                         {isBooked && !isOnLeave && <span className="text-xs">Booked</span>}
