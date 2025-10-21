@@ -38,7 +38,7 @@ export type Doctor = {
   bio?: string;
   averageConsultingTime?: number;
   availabilitySlots?: AvailabilitySlot[];
-  leaveSlots?: LeaveSlot[];
+  leaveSlots?: (LeaveSlot | string)[];
   degrees?: string[];
   experience?: number;
   rating?: number;
@@ -63,7 +63,7 @@ export type Appointment = {
   date: string;
   time: string;
   department: string;
-  status: 'Confirmed' | 'Pending' | 'Cancelled' | 'Completed' | 'No-show';
+  status: 'Confirmed' | 'Pending' | 'Cancelled' | 'Completed' | 'No-show' | 'Skipped';
   treatment: string;
   tokenNumber: string;
   numericToken: number;
@@ -145,3 +145,4 @@ export type User = {
     designation?: 'Doctor' | 'Owner';
     onboarded?: boolean;
 }
+

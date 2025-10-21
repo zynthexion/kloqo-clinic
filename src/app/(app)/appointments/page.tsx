@@ -258,7 +258,7 @@ export async function calculateWalkInDetails(
   // Count patients with appointments scheduled between now and the user's estimated time
   const patientsAhead = todaysAppointments.filter(apt => {
       const aptTime = parseAppointmentDateTime(apt.date, apt.time);
-      const isActive = apt.status !== 'Completed' && apt.status !== 'Cancelled' && !apt.isSkipped;
+      const isActive = apt.status !== 'Completed' && apt.status !== 'Cancelled' && apt.status !== 'Skipped';
       return isActive && isAfter(aptTime, now) && isBefore(aptTime, estimatedTime!);
   }).length;
   
@@ -960,12 +960,12 @@ export default function AppointmentsPage() {
     startTransition(async () => {
       try {
         const appointmentRef = doc(db, "appointments", appointment.id);
-        await updateDoc(appointmentRef, { isSkipped: true });
+        await updateDoc(appointmentRef, { status: 'Skipped' });
         setAppointments(prev => {
-          const updated = prev.map(a => a.id === appointment.id ? { ...a, isSkipped: true } : a);
+          const updated = prev.map(a => a.id === appointment.id ? { ...a, status: 'Skipped' } : a);
           return [
-            ...updated.filter(a => !a.isSkipped),
-            ...updated.filter(a => a.isSkipped),
+            ...updated.filter(a => a.status !== 'Skipped'),
+            ...updated.filter(a => a.status === 'Skipped'),
           ];
         });
         toast({ title: "Appointment Skipped" });
@@ -1074,10 +1074,19 @@ export default function AppointmentsPage() {
 
   const leaveDates = useMemo(() => {
     if (!selectedDoctor?.leaveSlots) return [];
-    return selectedDoctor.leaveSlots
-        .filter(ls => ls?.date && Array.isArray(ls.slots) && ls.slots.length > 0)
-        .map(ls => parse(ls.date, 'yyyy-MM-dd', new Date()));
+    return (selectedDoctor.leaveSlots || [])
+    .map(leave => {
+        if (typeof leave === 'string') {
+            try { return parse(leave, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", new Date()); } catch { return null; }
+        }
+        if (leave && leave.date) {
+            try { return parse(leave.date, 'yyyy-MM-dd', new Date()); } catch { return null; }
+        }
+        return null;
+    })
+    .filter((date): date is Date => date !== null);
   }, [selectedDoctor?.leaveSlots]);
+
 
   const sessionSlots = useMemo(() => {
     if (!selectedDate || !selectedDoctor || !selectedDoctor.averageConsultingTime) {
@@ -1094,8 +1103,8 @@ export default function AppointmentsPage() {
       .filter(apt => apt.doctor === selectedDoctor.name && apt.date === formattedDate)
       .map(apt => apt.time);
     
-    const leaveForDate = selectedDoctor.leaveSlots?.find(ls => ls.date && isSameDay(parse(ls.date, 'yyyy-MM-dd', new Date()), selectedDate));
-    const leaveTimeSlots = leaveForDate ? leaveForDate.slots : [];
+    const leaveForDate = selectedDoctor.leaveSlots?.find(ls => typeof ls !== 'string' && ls.date && isSameDay(parse(ls.date, 'yyyy-MM-dd', new Date()), selectedDate));
+    const leaveTimeSlots = leaveForDate && typeof leaveForDate !== 'string' ? leaveForDate.slots : [];
 
     const sessions = availabilityForDay.timeSlots.map((session, sessionIndex) => {
       const slots = [];
@@ -1145,16 +1154,23 @@ export default function AppointmentsPage() {
       const doctorForApt = doctors.find(d => d.name === appointment.doctor);
       if (!doctorForApt || !doctorForApt.leaveSlots) return false;
       const aptDate = parse(appointment.date, "d MMMM yyyy", new Date());
-      const leaveForDay = doctorForApt.leaveSlots.find(ls => ls.date && isSameDay(parse(ls.date, "yyyy-MM-dd", new Date()), aptDate));
-      if (!leaveForDay) return false;
-
-      const aptTime = parseDateFns(appointment.time, "hh:mm a", new Date(0));
       
-      return leaveForDay.slots.some(leaveSlot => {
-          const leaveStart = parseDateFns(leaveSlot.from, "hh:mm a", new Date(0));
-          const leaveEnd = parseDateFns(leaveSlot.to, "hh:mm a", new Date(0));
-          return aptTime >= leaveStart && aptTime < leaveEnd;
-      });
+      return (doctorForApt.leaveSlots || []).some(leave => {
+        if (typeof leave === 'string') {
+            const leaveDate = parse(leave, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", new Date());
+            const aptTime = parse(appointment.time, "hh:mm a", aptDate);
+            return leaveDate.getTime() === aptTime.getTime();
+        }
+        if (leave.date && isSameDay(parse(leave.date, "yyyy-MM-dd", new Date()), aptDate)) {
+            const aptTime = parseDateFns(appointment.time, "hh:mm a", new Date(0));
+            return leave.slots.some(leaveSlot => {
+                const leaveStart = parseDateFns(leaveSlot.from, "hh:mm a", new Date(0));
+                const leaveEnd = parseDateFns(leaveSlot.to, "hh:mm a", new Date(0));
+                return aptTime >= leaveStart && aptTime < leaveEnd;
+            });
+        }
+        return false;
+    });
   };
 
   const filteredAppointments = useMemo(() => {
@@ -1218,15 +1234,17 @@ export default function AppointmentsPage() {
   const today = format(new Date(), "d MMMM yyyy");
   
   const todaysAppointments = useMemo(() => {
-    return filteredAppointments
-      .filter(apt => apt.date === today)
-      .sort((a, b) => {
-        // Prioritize non-skipped appointments
-        if (a.isSkipped && !b.isSkipped) return 1;
-        if (!a.isSkipped && b.isSkipped) return -1;
-        // Then sort by numeric token
-        return a.numericToken - b.numericToken;
-      });
+    const filteredForToday = filteredAppointments.filter(apt => apt.date === today);
+  
+    // Separate skipped appointments
+    const skipped = filteredForToday.filter(apt => apt.status === 'Skipped');
+    const notSkipped = filteredForToday.filter(apt => apt.status !== 'Skipped');
+  
+    // Sort non-skipped appointments by numeric token
+    notSkipped.sort((a, b) => a.numericToken - b.numericToken);
+  
+    // Combine the lists
+    return [...notSkipped, ...skipped];
   }, [filteredAppointments, today]);
 
   const isNewPatient = patientSearchTerm.length >= 10 && !selectedPatient;
@@ -1260,7 +1278,7 @@ export default function AppointmentsPage() {
   
   const firstUpcomingDoctor = useMemo(() => {
     if (todaysAppointments.length === 0) return null;
-    const firstUpcomingAppointment = todaysAppointments.find(apt => !apt.isSkipped && (apt.status === 'Confirmed' || apt.status === 'Pending'));
+    const firstUpcomingAppointment = todaysAppointments.find(apt => apt.status !== 'Skipped' && (apt.status === 'Confirmed' || apt.status === 'Pending'));
     if (!firstUpcomingAppointment) return null;
     return doctors.find(d => d.name === firstUpcomingAppointment.doctor) || null;
   }, [todaysAppointments, doctors]);
@@ -1634,7 +1652,7 @@ export default function AppointmentsPage() {
                                 type="submit"
                                 disabled={
                                     isPending ||
-                                    (appointmentType === 'Walk-in' && !walkInEstimate) ||
+                                    (appointmentType === 'Walk-in' && (!walkInEstimate || isCalculatingEstimate)) ||
                                     !form.formState.isValid
                                 }
                                >
@@ -1772,7 +1790,7 @@ export default function AppointmentsPage() {
                             {filteredAppointments.map((appointment) => (
                               <TableRow key={appointment.id} className={cn(
                                 isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30",
-                                appointment.isSkipped && "bg-orange-100 dark:bg-orange-900/30"
+                                appointment.status === 'Skipped' && "bg-orange-100 dark:bg-orange-900/30"
                               )}>
                                 <TableCell className="font-medium">{appointment.patientName}</TableCell>
                                 <TableCell>{appointment.age}</TableCell>
@@ -1825,12 +1843,12 @@ export default function AppointmentsPage() {
                           </TableHeader>
                           <TableBody>
                             {todaysAppointments
-                              .filter(apt => activeTab === 'upcoming' ? (apt.status === 'Confirmed' || apt.status === 'Pending') : apt.status === 'Completed')
+                              .filter(apt => activeTab === 'upcoming' ? (apt.status === 'Confirmed' || apt.status === 'Pending' || apt.status === 'Skipped') : apt.status === 'Completed')
                               .map((appointment, index) => (
                                 <TableRow
                                   key={appointment.id}
                                   className={cn(
-                                    appointment.isSkipped && "bg-red-200/50 dark:bg-red-900/60"
+                                    appointment.status === 'Skipped' && "bg-red-200/50 dark:bg-red-900/60"
                                   )}
                                 >
                                   <TableCell className="font-medium">{appointment.patientName}</TableCell>
@@ -1841,7 +1859,7 @@ export default function AppointmentsPage() {
                                       <Badge variant="success">Completed</Badge>
                                     ) : (
                                         <div className="flex justify-end gap-2">
-                                            {index === 0 && !appointment.isSkipped && (
+                                            {index === 0 && appointment.status !== 'Skipped' && (
                                                 <TooltipProvider>
                                                   <Tooltip>
                                                     <TooltipTrigger asChild>
