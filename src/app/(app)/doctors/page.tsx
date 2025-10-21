@@ -888,64 +888,65 @@ export default function DoctorsPage() {
     });
   }, [selectedDoctor]);
 
- const dailyLeaveSlots = useMemo((): { start: Date; end: Date }[] => {
+  const dailyLeaveSlots = useMemo((): { start: Date; end: Date }[] => {
     if (!selectedDoctor?.leaveSlots) return [];
-
-    const slotsForDate: Date[] = [];
-
-    (selectedDoctor.leaveSlots || []).forEach(leave => {
-        let leaveDate: Date | null = null;
-        try {
-            if (typeof leave === 'string') {
-                leaveDate = parseISO(leave);
-            } else if (leave && leave.date && Array.isArray(leave.slots)) {
-                // This is the new format, let's process it
-                const datePart = leave.date;
-                leave.slots.forEach(timeSlot => {
-                    const startDateTime = parse(`${datePart} ${timeSlot.from}`, 'yyyy-MM-dd hh:mm a', new Date());
-                    const endDateTime = parse(`${datePart} ${timeSlot.to}`, 'yyyy-MM-dd hh:mm a', new Date());
-                    
-                    if (!isNaN(startDateTime.getTime())) {
-                        let currentTime = startDateTime;
-                        const consultationTime = selectedDoctor.averageConsultingTime || 15;
-                        while(currentTime < endDateTime) {
-                            if (isSameDay(currentTime, leaveCalDate)) {
-                                slotsForDate.push(new Date(currentTime));
-                            }
-                            currentTime = addMinutes(currentTime, consultationTime);
-                        }
-                    }
-                });
-                return; // skip to next leave item
-            }
-            if (leaveDate && isSameDay(leaveDate, leaveCalDate)) {
-                 slotsForDate.push(leaveDate);
-            }
-        } catch { /* ignore invalid date strings */ }
-    });
+  
+    const slotsForDate: Date[] = (selectedDoctor.leaveSlots || []).map(leave => {
+        if (typeof leave === 'string') {
+            return parseISO(leave);
+        }
+        // Handle potential Firestore Timestamp objects
+        if (leave && typeof (leave as any).toDate === 'function') {
+            return (leave as any).toDate();
+        }
+        if (leave instanceof Date) {
+            return leave;
+        }
+        // Handle the new object format
+        if (leave && typeof leave === 'object' && 'date' in leave && 'slots' in leave) {
+            const datePart = (leave as LeaveSlot).date;
+            const timeSlots = (leave as LeaveSlot).slots;
+            return timeSlots.flatMap(ts => {
+                const start = parse(`${datePart} ${ts.from}`, 'yyyy-MM-dd hh:mm a', new Date());
+                const end = parse(`${datePart} ${ts.to}`, 'yyyy-MM-dd hh:mm a', new Date());
+                const interval = selectedDoctor.averageConsultingTime || 15;
+                const slotTimes: Date[] = [];
+                let current = start;
+                while (current < end) {
+                    slotTimes.push(current);
+                    current = addMinutes(current, interval);
+                }
+                return slotTimes;
+            });
+        }
+        return new Date(NaN); // Return invalid date for unhandled types
+    }).flat().filter(date => !isNaN(date.getTime()) && format(date, 'yyyy-MM-dd') === format(leaveCalDate, 'yyyy-MM-dd'));
 
     if (slotsForDate.length === 0) return [];
-    
+  
     slotsForDate.sort((a, b) => a.getTime() - b.getTime());
-
+  
     const combinedBreaks: { start: Date; end: Date }[] = [];
     let currentBreak: { start: Date; end: Date } | null = null;
     const consultationTime = selectedDoctor.averageConsultingTime || 15;
-
+  
     for (const slot of slotsForDate) {
         if (!currentBreak) {
             currentBreak = { start: slot, end: addMinutes(slot, consultationTime) };
         } else if (slot.getTime() === currentBreak.end.getTime()) {
+            // This slot is contiguous with the current break, extend the break
             currentBreak.end = addMinutes(slot, consultationTime);
         } else {
+            // This slot starts a new break
             combinedBreaks.push(currentBreak);
             currentBreak = { start: slot, end: addMinutes(slot, consultationTime) };
         }
     }
+    // Add the last break
     if (currentBreak) {
         combinedBreaks.push(currentBreak);
     }
-
+  
     return combinedBreaks;
 }, [selectedDoctor?.leaveSlots, leaveCalDate, selectedDoctor?.averageConsultingTime]);
 
@@ -1058,7 +1059,7 @@ export default function DoctorsPage() {
         toast({ variant: 'destructive', title: 'Error', description: 'No break found to cancel.' });
         return;
     }
-
+  
     setIsSubmittingBreak(true);
     try {
         const batch = writeBatch(db);
@@ -1067,7 +1068,7 @@ export default function DoctorsPage() {
         const breakStart = dailyLeaveSlots[0].start;
         const breakEnd = dailyLeaveSlots[dailyLeaveSlots.length - 1].end;
         const totalBreakDuration = differenceInMinutes(breakEnd, breakStart);
-
+  
         const dateStr = format(leaveCalDate, 'd MMMM yyyy');
         const appointmentsQuery = query(collection(db, "appointments"), 
             where("doctor", "==", selectedDoctor.name),
@@ -1091,35 +1092,42 @@ export default function DoctorsPage() {
             const apptRef = doc(db, 'appointments', appt.id);
             batch.update(apptRef, { time: format(appt.newTime, 'hh:mm a') });
         }
-
+  
         const doctorRef = doc(db, 'doctors', selectedDoctor.id);
         const leaveDateStr = format(leaveCalDate, 'yyyy-MM-dd');
         
+        // Filter out all types of leave entries for the selected day
         const updatedLeaveSlots = (selectedDoctor.leaveSlots || []).filter(leave => {
           if (typeof leave === 'string') {
             try {
               return !isSameDay(parseISO(leave), leaveCalDate);
             } catch {
-              return true;
+              return true; // Keep malformed strings
             }
           }
-          if (typeof leave === 'object' && leave && leave.date) {
-            return leave.date !== leaveDateStr;
+          if (typeof leave === 'object' && leave && 'date' in leave) {
+            return (leave as LeaveSlot).date !== leaveDateStr;
           }
-          return true;
+           if (leave instanceof Date) {
+            return !isSameDay(leave, leaveCalDate);
+          }
+          if (leave && typeof (leave as any).toDate === 'function') {
+            return !isSameDay((leave as any).toDate(), leaveCalDate);
+          }
+          return true; // Keep if format is unknown
         });
-
+  
         batch.update(doctorRef, { leaveSlots: updatedLeaveSlots });
         
         await batch.commit();
-
-        toast({ title: 'Break Canceled', description: 'The break has been removed.'});
+  
+        toast({ title: 'Break Canceled', description: 'The break has been removed and appointments have been rescheduled.'});
         const updatedDoctor = {...selectedDoctor, leaveSlots: updatedLeaveSlots };
         setSelectedDoctor(updatedDoctor);
         setDoctors(prev => prev.map(d => d.id === updatedDoctor.id ? updatedDoctor : d));
         setStartSlot(null);
         setEndSlot(null);
-
+  
     } catch (error) {
          console.error("Error canceling break:", error);
          toast({ variant: 'destructive', title: 'Error', description: 'Failed to cancel break.' });
@@ -1880,3 +1888,5 @@ export default function DoctorsPage() {
     
 
     
+
+  
