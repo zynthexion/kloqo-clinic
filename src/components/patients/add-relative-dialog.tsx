@@ -81,7 +81,7 @@ export function AddRelativeDialog({
             return;
         }
         const primaryMemberData = primaryMemberSnap.data() as Patient;
-        const primaryMemberPhone = primaryMemberData.phone;
+        const primaryMemberPhone = primaryMemberData.communicationPhone;
 
         const relativePhone = values.phone ? `+91${values.phone}` : "";
         let newRelativeData: Patient;
