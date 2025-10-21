@@ -87,6 +87,7 @@ export function AddRelativeDialog({
         let newRelativeData: Patient;
 
         if (relativePhone) {
+          // Case 1: Relative HAS a phone number
           const usersRef = collection(db, "users");
           const userQuery = query(usersRef, where("phone", "==", relativePhone));
           const userSnapshot = await getDocs(userQuery);
@@ -115,28 +116,31 @@ export function AddRelativeDialog({
             name: values.name,
             age: values.age,
             sex: values.sex,
-            phone: relativePhone,
-            communicationPhone: relativePhone,
+            phone: relativePhone, // Set phone field
+            communicationPhone: relativePhone, // Set communication phone
             place: values.place,
             totalAppointments: 0,
             visitHistory: [],
             relatedPatientIds: [primaryMemberId],
+            clinicIds: primaryMemberData.clinicIds || [],
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           };
 
         } else {
+            // Case 2: Relative does NOT have a phone number
             newRelativeData = {
               id: newRelativePatientRef.id,
               name: values.name,
               age: values.age,
               sex: values.sex,
-              phone: "", // Phone is empty
-              communicationPhone: primaryMemberPhone, // Main user's phone
+              phone: "", // Phone is explicitly empty
+              communicationPhone: primaryMemberPhone, // Main user's phone for communication
               place: values.place,
               totalAppointments: 0,
               visitHistory: [],
               relatedPatientIds: [primaryMemberId],
+              clinicIds: primaryMemberData.clinicIds || [],
               createdAt: serverTimestamp(),
               updatedAt: serverTimestamp(),
             };
