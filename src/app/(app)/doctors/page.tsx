@@ -633,12 +633,22 @@ export default function DoctorsPage() {
         startTransition(async () => {
             const doctorRef = doc(db, "doctors", selectedDoctor.id);
             try {
-                const existingLeaveSlots: LeaveSlot[] = selectedDoctor.leaveSlots || [];
-                const cleanedLeaveSlots: LeaveSlot[] = [];
+                const existingLeaveSlots: (LeaveSlot | string)[] = selectedDoctor.leaveSlots || [];
+                const cleanedLeaveSlots: (LeaveSlot | string)[] = [];
 
-                for (const leaveDay of existingLeaveSlots) {
-                    if (!leaveDay.date || !Array.isArray(leaveDay.slots)) continue;
-                    const leaveDate = parse(leaveDay.date, "yyyy-MM-dd", new Date());
+                for (const leave of existingLeaveSlots) {
+                    let leaveDate: Date;
+                    let isStringFormat = false;
+
+                    if (typeof leave === 'string') {
+                        leaveDate = parseISO(leave);
+                        isStringFormat = true;
+                    } else if (leave && leave.date && Array.isArray(leave.slots)) {
+                        leaveDate = parse(leave.date, 'yyyy-MM-dd', new Date());
+                    } else {
+                        continue;
+                    }
+
                     if (isNaN(leaveDate.getTime())) continue;
 
                     const dayName = format(leaveDate, 'EEEE');
@@ -648,25 +658,36 @@ export default function DoctorsPage() {
                         continue; 
                     }
 
-                    const validLeaveSubSlots: TimeSlot[] = [];
-                    for (const leaveSubSlot of leaveDay.slots) {
-                        const leaveStart = parse(leaveSubSlot.from, "hh:mm a", new Date());
-                        const leaveEnd = parse(leaveSubSlot.to, "hh:mm a", new Date());
-                        if (isNaN(leaveStart.getTime()) || isNaN(leaveEnd.getTime())) continue;
-
-                        const isContained = availabilityForDay.timeSlots.some(availableSlot => {
+                    if (isStringFormat) {
+                        const leaveTime = leaveDate;
+                         const isContained = availabilityForDay.timeSlots.some(availableSlot => {
                             const availableStart = parse(availableSlot.from, "hh:mm a", new Date());
                             const availableEnd = parse(availableSlot.to, "hh:mm a", new Date());
-                            return isWithinInterval({ start: leaveStart, end: leaveEnd }, { start: availableStart, end: availableEnd });
+                            return isWithinInterval({ start: leaveTime, end: leaveTime }, { start: availableStart, end: availableEnd });
                         });
-
-                        if (isContained) {
-                            validLeaveSubSlots.push(leaveSubSlot);
+                         if (isContained) {
+                            cleanedLeaveSlots.push(leave);
                         }
-                    }
+                    } else {
+                        const validLeaveSubSlots: TimeSlot[] = [];
+                        for (const leaveSubSlot of (leave as LeaveSlot).slots) {
+                            const leaveStart = parse(leaveSubSlot.from, "hh:mm a", new Date());
+                            const leaveEnd = parse(leaveSubSlot.to, "hh:mm a", new Date());
+                            if (isNaN(leaveStart.getTime()) || isNaN(leaveEnd.getTime())) continue;
 
-                    if (validLeaveSubSlots.length > 0) {
-                        cleanedLeaveSlots.push({ ...leaveDay, slots: validLeaveSubSlots });
+                            const isContained = availabilityForDay.timeSlots.some(availableSlot => {
+                                const availableStart = parse(availableSlot.from, "hh:mm a", new Date());
+                                const availableEnd = parse(availableSlot.to, "hh:mm a", new Date());
+                                return isWithinInterval({ start: leaveStart, end: leaveEnd }, { start: availableStart, end: availableEnd });
+                            });
+
+                            if (isContained) {
+                                validLeaveSubSlots.push(leaveSubSlot);
+                            }
+                        }
+                        if (validLeaveSubSlots.length > 0) {
+                            cleanedLeaveSlots.push({ ...(leave as LeaveSlot), slots: validLeaveSubSlots });
+                        }
                     }
                 }
 
@@ -707,27 +728,31 @@ export default function DoctorsPage() {
             return slot;
         }).filter(slot => slot.timeSlots.length > 0);
 
-        const existingLeaveSlots: LeaveSlot[] = selectedDoctor.leaveSlots || [];
-        const cleanedLeaveSlots: LeaveSlot[] = [];
+        const existingLeaveSlots: (LeaveSlot | string)[] = selectedDoctor.leaveSlots || [];
+        const cleanedLeaveSlots: (LeaveSlot | string)[] = [];
 
-        for (const leaveDay of existingLeaveSlots) {
-            if (!leaveDay.date || !Array.isArray(leaveDay.slots)) continue;
+        for (const leave of existingLeaveSlots) {
+            if (typeof leave === 'string') {
+                cleanedLeaveSlots.push(leave);
+                continue;
+            }
+            if (!leave.date || !Array.isArray(leave.slots)) continue;
 
-            const leaveDate = parse(leaveDay.date, 'yyyy-MM-dd', new Date());
+            const leaveDate = parse(leave.date, 'yyyy-MM-dd', new Date());
             if (isNaN(leaveDate.getTime())) continue;
 
             const dayName = format(leaveDate, 'EEEE');
             if (dayName !== day) {
-                cleanedLeaveSlots.push(leaveDay);
+                cleanedLeaveSlots.push(leave);
                 continue;
             }
 
-            const validLeaveSubSlots = leaveDay.slots.filter(leaveSubSlot => {
+            const validLeaveSubSlots = leave.slots.filter(leaveSubSlot => {
                 return !(leaveSubSlot.from === timeSlot.from && leaveSubSlot.to === timeSlot.to);
             });
 
             if (validLeaveSubSlots.length > 0) {
-                cleanedLeaveSlots.push({ ...leaveDay, slots: validLeaveSubSlots });
+                cleanedLeaveSlots.push({ ...leave, slots: validLeaveSubSlots });
             }
         }
     
@@ -869,25 +894,34 @@ export default function DoctorsPage() {
     const slotsForDate: Date[] = [];
 
     (selectedDoctor.leaveSlots || []).forEach(leave => {
-        if (typeof leave === 'string') {
-            try {
-                const date = parseISO(leave);
-                if (isSameDay(date, leaveCalDate)) {
-                    slotsForDate.push(date);
-                }
-            } catch { /* ignore invalid date strings */ }
-        } else if (leave && leave.date && Array.isArray(leave.slots)) {
-            if (isSameDay(parse(leave.date, 'yyyy-MM-dd', new Date()), leaveCalDate)) {
+        let leaveDate: Date | null = null;
+        try {
+            if (typeof leave === 'string') {
+                leaveDate = parseISO(leave);
+            } else if (leave && leave.date && Array.isArray(leave.slots)) {
+                // This is the new format, let's process it
+                const datePart = leave.date;
                 leave.slots.forEach(timeSlot => {
-                    let currentTime = parseTimeUtil(timeSlot.from, leaveCalDate);
-                    const endTime = parseTimeUtil(timeSlot.to, leaveCalDate);
-                    while (currentTime < endTime) {
-                        slotsForDate.push(new Date(currentTime));
-                        currentTime = addMinutes(currentTime, selectedDoctor.averageConsultingTime || 15);
+                    const startDateTime = parse(`${datePart} ${timeSlot.from}`, 'yyyy-MM-dd hh:mm a', new Date());
+                    const endDateTime = parse(`${datePart} ${timeSlot.to}`, 'yyyy-MM-dd hh:mm a', new Date());
+                    
+                    if (!isNaN(startDateTime.getTime())) {
+                        let currentTime = startDateTime;
+                        const consultationTime = selectedDoctor.averageConsultingTime || 15;
+                        while(currentTime < endDateTime) {
+                            if (isSameDay(currentTime, leaveCalDate)) {
+                                slotsForDate.push(new Date(currentTime));
+                            }
+                            currentTime = addMinutes(currentTime, consultationTime);
+                        }
                     }
                 });
+                return; // skip to next leave item
             }
-        }
+            if (leaveDate && isSameDay(leaveDate, leaveCalDate)) {
+                 slotsForDate.push(leaveDate);
+            }
+        } catch { /* ignore invalid date strings */ }
     });
 
     if (slotsForDate.length === 0) return [];
@@ -1025,27 +1059,14 @@ export default function DoctorsPage() {
         return;
     }
 
-    const dayBreakSlots = (selectedDoctor.leaveSlots || []).filter(leave => {
-       if (typeof leave === 'string') {
-          try { return isSameDay(parseISO(leave), leaveCalDate); } catch { return false; }
-        }
-        return isSameDay(parse(leave.date, 'yyyy-MM-dd', new Date()), leaveCalDate);
-    });
-
-    if (dayBreakSlots.length === 0) {
-        toast({ variant: 'destructive', title: 'Error', description: 'Inconsistent break data.' });
-        return;
-    }
-    
     setIsSubmittingBreak(true);
     try {
         const batch = writeBatch(db);
         const consultationTime = selectedDoctor.averageConsultingTime || 15;
         
-        // This assumes one break per day for simplicity.
-        const breakStart = parseISO(dayBreakSlots[0] as string);
-        const breakEnd = parseISO(dayBreakSlots[dayBreakSlots.length - 1] as string);
-        const totalBreakDuration = differenceInMinutes(breakEnd, breakStart) + consultationTime;
+        const breakStart = dailyLeaveSlots[0].start;
+        const breakEnd = dailyLeaveSlots[dailyLeaveSlots.length - 1].end;
+        const totalBreakDuration = differenceInMinutes(breakEnd, breakStart);
 
         const dateStr = format(leaveCalDate, 'd MMMM yyyy');
         const appointmentsQuery = query(collection(db, "appointments"), 
@@ -1061,7 +1082,7 @@ export default function DoctorsPage() {
             const appt = docSnap.data() as Appointment;
             if (!appt.time) return;
             const apptTime = parseTimeUtil(appt.time, leaveCalDate);
-             if (apptTime > breakEnd) {
+             if (apptTime >= breakEnd) {
                  appointmentsToUpdate.push({ id: docSnap.id, newTime: addMinutes(apptTime, -totalBreakDuration) });
             }
         });
@@ -1077,12 +1098,12 @@ export default function DoctorsPage() {
         const updatedLeaveSlots = (selectedDoctor.leaveSlots || []).filter(leave => {
           if (typeof leave === 'string') {
             try {
-              return format(parseISO(leave), 'yyyy-MM-dd') !== leaveDateStr;
+              return !isSameDay(parseISO(leave), leaveCalDate);
             } catch {
               return true;
             }
           }
-          if (typeof leave === 'object' && leave.date) {
+          if (typeof leave === 'object' && leave && leave.date) {
             return leave.date !== leaveDateStr;
           }
           return true;
@@ -1851,6 +1872,8 @@ export default function DoctorsPage() {
 
     
 
+
+    
 
     
 
