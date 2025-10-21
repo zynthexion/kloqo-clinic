@@ -863,13 +863,36 @@ export default function DoctorsPage() {
     });
   }, [selectedDoctor]);
 
-  // Break Scheduling Logic
   const dailyLeaveSlots = useMemo((): TimeSlot[] => {
-      if (!selectedDoctor?.leaveSlots || !leaveCalDate) return [];
-      const dateStr = format(leaveCalDate, 'yyyy-MM-dd');
-      const leaveDay = selectedDoctor.leaveSlots.find(ls => ls.date === dateStr);
-      return leaveDay ? leaveDay.slots : [];
-  }, [selectedDoctor?.leaveSlots, leaveCalDate]);
+    if (!selectedDoctor?.leaveSlots || !leaveCalDate) return [];
+  
+    const dateStr = format(leaveCalDate, 'yyyy-MM-dd');
+    
+    // This is the defensive part. It handles both old and new data structures.
+    for (const leave of selectedDoctor.leaveSlots) {
+        // Handle new structure: object with date and slots
+        if (typeof leave === 'object' && leave !== null && 'date' in leave && leave.date === dateStr) {
+            return leave.slots || [];
+        }
+        // Handle old structure: array of ISO strings
+        if (typeof leave === 'string') {
+            try {
+                const parsedDate = parseISO(leave);
+                if (format(parsedDate, 'yyyy-MM-dd') === dateStr) {
+                    // This indicates old data format, which we can't fully represent as TimeSlot[],
+                    // but we can at least find if there's *any* leave on this day.
+                    // For UI display, we'll need to reconstruct a minimal TimeSlot.
+                    console.warn("Detected old leave slot format. Partial display only.");
+                    return [{ from: format(parsedDate, 'hh:mm a'), to: format(addMinutes(parsedDate, selectedDoctor.averageConsultingTime || 15), 'hh:mm a')}];
+                }
+            } catch (e) {
+                console.error("Could not parse old leave slot string:", leave, e);
+            }
+        }
+    }
+  
+    return [];
+  }, [selectedDoctor?.leaveSlots, leaveCalDate, selectedDoctor?.averageConsultingTime]);
 
   const allTimeSlotsForDay = useMemo((): Date[] => {
     if (!selectedDoctor || !leaveCalDate) return [];
@@ -962,8 +985,11 @@ export default function DoctorsPage() {
         const doctorRef = doc(db, 'doctors', selectedDoctor.id);
         const leaveDateStr = format(leaveCalDate, 'yyyy-MM-dd');
         
-        const otherLeaveSlots = (selectedDoctor.leaveSlots || []).filter(ls => ls.date !== leaveDateStr);
-        const existingSlotsForDate = (selectedDoctor.leaveSlots || []).find(ls => ls.date === leaveDateStr)?.slots || [];
+        const otherLeaveSlots = (selectedDoctor.leaveSlots || []).filter(ls => {
+          if (typeof ls === 'string') return true; // Keep old format for now
+          return ls.date !== leaveDateStr
+        });
+        const existingSlotsForDate = (selectedDoctor.leaveSlots || []).find(ls => typeof ls === 'object' && ls.date === leaveDateStr)?.slots || [];
 
         const newLeaveSlot = { from: format(newBreakStart, 'hh:mm a'), to: format(newBreakEnd, 'hh:mm a') };
         const updatedSlotsForDate = [...existingSlotsForDate, newLeaveSlot].sort((a, b) => a.from.localeCompare(b.from));
@@ -1027,7 +1053,7 @@ export default function DoctorsPage() {
         const leaveDateStr = format(leaveCalDate, 'yyyy-MM-dd');
         
         const updatedLeaveSlots = (selectedDoctor.leaveSlots || []).map(ls => {
-            if (ls.date === leaveDateStr) {
+            if (typeof ls === 'object' && ls.date === leaveDateStr) {
                 const newSlots = ls.slots.filter(s => s.from !== breakToCancel.from || s.to !== breakToCancel.to);
                 return newSlots.length > 0 ? { ...ls, slots: newSlots } : null;
             }
@@ -1788,6 +1814,7 @@ export default function DoctorsPage() {
     
 
     
+
 
 
 
