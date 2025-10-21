@@ -116,8 +116,7 @@ export async function calculateWalkInDetails(
   let { slotIndex: availableSlotIndex, estimatedTime } = getEstimatedTimeForWalkIn(
     allSlots,
     startingSlotIndex,
-    now,
-    slotDuration
+    now
   );
 
   // Step 7: Handle overflow beyond availability end (auto-extension)
@@ -151,7 +150,7 @@ function generateTimeSlots(timeSlots: TimeSlot[], referenceDate: Date, slotDurat
     const endTime = parse(slot.to, 'hh:mm a', referenceDate);
     let current = startTime;
     while (isBefore(current, endTime)) {
-      slots.push(new Date(current));
+      slots.push(current);
       current = addMinutes(current, slotDuration);
     }
   }
@@ -181,37 +180,27 @@ function findSlotIndexByToken(slots: Date[], tokenNumber: number): number {
 function getEstimatedTimeForWalkIn(
   allSlots: Date[],
   targetSlotIndex: number,
-  now: Date,
-  slotDuration: number
+  now: Date
 ): { slotIndex: number; estimatedTime: Date } {
   if (targetSlotIndex >= allSlots.length) {
     // If overflow, extend beyond last slot
     const lastSlot = allSlots[allSlots.length - 1];
     const overflowIndex = targetSlotIndex - (allSlots.length - 1);
-    const estimatedTime = addMinutes(lastSlot, overflowIndex * slotDuration);
+    const estimatedTime = addMinutes(lastSlot, overflowIndex * 5);
     return { slotIndex: targetSlotIndex, estimatedTime };
   }
 
   const clampedIndex = Math.max(0, Math.min(targetSlotIndex, allSlots.length - 1));
-  let estimatedTime = allSlots[clampedIndex];
+  const estimatedTime = allSlots[clampedIndex];
 
   if (isBefore(estimatedTime, now)) {
-    const currentSlotIndex = findCurrentSlotIndex(allSlots, now);
-    if (currentSlotIndex >= allSlots.length) {
-       throw new Error('All slots for today have passed');
-    }
-    estimatedTime = allSlots[currentSlotIndex];
-    return {
-      slotIndex: currentSlotIndex,
-      estimatedTime: estimatedTime,
-    };
+    const currentIndex = findCurrentSlotIndex(allSlots, now);
+    return { slotIndex: currentIndex, estimatedTime: allSlots[currentIndex] };
   }
 
-  return {
-    slotIndex: clampedIndex,
-    estimatedTime,
-  };
+  return { slotIndex: clampedIndex, estimatedTime };
 }
+
 /**
  * Helper function to parse time strings
  */
