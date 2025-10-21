@@ -1117,15 +1117,13 @@ export default function AppointmentsPage() {
   
   const todaysAppointments = useMemo(() => {
     const filteredForToday = filteredAppointments.filter(apt => apt.date === today);
-  
-    // Separate skipped appointments
     const skipped = filteredForToday.filter(apt => apt.status === 'Skipped');
     const notSkipped = filteredForToday.filter(apt => apt.status !== 'Skipped');
   
-    // Sort non-skipped appointments by numeric token
-    notSkipped.sort((a, b) => a.numericToken - b.numericToken);
+    const parseTimeForSort = (timeStr: string) => parse(timeStr, "hh:mm a", new Date()).getTime();
   
-    // Combine the lists
+    notSkipped.sort((a, b) => parseTimeForSort(a.time) - parseTimeForSort(b.time));
+  
     return [...notSkipped, ...skipped];
   }, [filteredAppointments, today]);
 
