@@ -1519,7 +1519,11 @@ export default function DoctorsPage() {
                                       "Select a start and end time for the break."
                                       )}
                                     </div>
-                                    {dailyLeaveSlots.length === 0 && (
+                                    {dailyLeaveSlots.length > 0 ? (
+                                        <Button className="w-full" variant="secondary" disabled={isSubmittingBreak} onClick={() => handleCancelBreak(dailyLeaveSlots[0])}>
+                                            {isSubmittingBreak ? <Loader2 className="animate-spin" /> : 'Cancel This Break'}
+                                        </Button>
+                                    ) : (
                                         <Button className="w-full" variant="destructive" disabled={!startSlot || !endSlot || isSubmittingBreak} onClick={handleConfirmBreak}>
                                             {isSubmittingBreak ? <Loader2 className="animate-spin" /> : 'Confirm Break'}
                                         </Button>
@@ -1784,6 +1788,7 @@ export default function DoctorsPage() {
     
 
     
+
 
 
 
