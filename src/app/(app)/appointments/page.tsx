@@ -980,7 +980,7 @@ export default function AppointmentsPage() {
           status = 'leave';
         }
 
-        if (isToday(selectedDate) && isBefore(currentTime, subMinutes(new Date(), -30))) {
+        if (isToday(selectedDate) && isBefore(currentTime, subMinutes(new Date(), 30))) {
             status = 'booked'; 
         }
 
@@ -1838,4 +1838,4 @@ export default function AppointmentsPage() {
   );
 }
 
-```
+    
