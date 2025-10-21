@@ -67,6 +67,7 @@ import { errorEmitter } from "@/firebase/error-emitter";
 import Link from "next/link";
 import { Label } from "@/components/ui/label";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -1256,6 +1257,16 @@ export default function AppointmentsPage() {
 
     return false;
   };
+  
+  const firstUpcomingDoctor = useMemo(() => {
+    if (todaysAppointments.length === 0) return null;
+    const firstUpcomingAppointment = todaysAppointments.find(apt => !apt.isSkipped && (apt.status === 'Confirmed' || apt.status === 'Pending'));
+    if (!firstUpcomingAppointment) return null;
+    return doctors.find(d => d.name === firstUpcomingAppointment.doctor) || null;
+  }, [todaysAppointments, doctors]);
+  
+  const isDoctorInConsultation = firstUpcomingDoctor?.consultationStatus === 'In';
+
 
   return (
     <>
@@ -1831,14 +1842,52 @@ export default function AppointmentsPage() {
                                     ) : (
                                         <div className="flex justify-end gap-2">
                                             {index === 0 && !appointment.isSkipped && (
-                                                <Button variant="ghost" size="icon" className="p-0 h-auto text-green-600 hover:text-green-700" onClick={() => handleComplete(appointment)}>
-                                                    <CheckCircle2 className="h-5 w-5" />
-                                                </Button>
+                                                <TooltipProvider>
+                                                  <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                      <div>
+                                                        <Button
+                                                          variant="ghost"
+                                                          size="icon"
+                                                          className="p-0 h-auto text-green-600 hover:text-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                          onClick={() => handleComplete(appointment)}
+                                                          disabled={!isDoctorInConsultation}
+                                                        >
+                                                          <CheckCircle2 className="h-5 w-5" />
+                                                        </Button>
+                                                      </div>
+                                                    </TooltipTrigger>
+                                                    {!isDoctorInConsultation && (
+                                                      <TooltipContent>
+                                                        <p>Doctor is not in consultation.</p>
+                                                      </TooltipContent>
+                                                    )}
+                                                  </Tooltip>
+                                                </TooltipProvider>
                                             )}
                                             {index === 0 && activeTab === 'upcoming' && (
-                                                <Button variant="ghost" size="icon" className="p-0 h-auto text-yellow-600 hover:text-yellow-700" onClick={() => setAppointmentToSkip(appointment)}>
-                                                    <SkipForward className="h-5 w-5" />
-                                                </Button>
+                                              <TooltipProvider>
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <div>
+                                                      <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="p-0 h-auto text-yellow-600 hover:text-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        onClick={() => setAppointmentToSkip(appointment)}
+                                                        disabled={!isDoctorInConsultation}
+                                                      >
+                                                        <SkipForward className="h-5 w-5" />
+                                                      </Button>
+                                                    </div>
+                                                  </TooltipTrigger>
+                                                  {!isDoctorInConsultation && (
+                                                    <TooltipContent>
+                                                      <p>Doctor is not in consultation.</p>
+                                                    </TooltipContent>
+                                                  )}
+                                                </Tooltip>
+                                              </TooltipProvider>
                                             )}
                                         </div>
                                     )}
