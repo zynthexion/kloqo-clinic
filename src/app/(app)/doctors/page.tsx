@@ -28,7 +28,7 @@ import { doc, updateDoc, collection, getDocs, setDoc, getDoc, query, where, writ
 import { db, storage } from "@/lib/firebase";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import type { Doctor, Appointment, LeaveSlot, Department, TimeSlot } from "@/lib/types";
-import { format, parse, isSameDay, getDay, parse as parseDateFns, addMinutes, isBefore, isWithinInterval, differenceInMinutes, isPast, parseISO } from "date-fns";
+import { format, parse, isSameDay, getDay, addMinutes, isBefore, isWithinInterval, differenceInMinutes, isPast, parseISO, startOfDay } from "date-fns";
 import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon, PlusCircle, DollarSign, Printer, FileDown, ChevronUp, ChevronDown, Minus, Trophy, Repeat, CalendarCheck, Upload, Trash2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -326,7 +326,7 @@ export default function DoctorsPage() {
 
   useEffect(() => {
     if (selectedDoctor && leaveCalDate) {
-        const dateStr = format(leaveCalDate, 'd MMMM yyyy');
+        const dateStr = format(leaveCalDate, "d MMMM yyyy");
         const appointmentsOnDate = appointments.filter(apt => apt.doctor === selectedDoctor.name && apt.date === dateStr);
         const fetchedBookedSlots = appointmentsOnDate.map(d => parseTimeUtil(d.time, leaveCalDate).getTime());
         setAllBookedSlots(fetchedBookedSlots);
@@ -355,8 +355,8 @@ export default function DoctorsPage() {
         timeSlots: s.timeSlots.map(ts => {
           try {
             // If already in HH:mm, this will work. If in hh:mm a, it will convert.
-            const parsedFrom = parseDateFns(ts.from, 'hh:mm a', new Date());
-            const parsedTo = parseDateFns(ts.to, 'hh:mm a', new Date());
+            const parsedFrom = parse(ts.from, 'hh:mm a', new Date());
+            const parsedTo = parse(ts.to, 'hh:mm a', new Date());
             
             return {
               from: !isNaN(parsedFrom.valueOf()) ? format(parsedFrom, 'HH:mm') : ts.from,
@@ -620,8 +620,8 @@ export default function DoctorsPage() {
         const newAvailabilitySlots = validSlots.map(s => ({
           ...s,
           timeSlots: s.timeSlots.map(ts => ({
-            from: format(parseDateFns(ts.from, "HH:mm", new Date()), "hh:mm a"),
-            to: format(parseDateFns(ts.to, "HH:mm", new Date()), "hh:mm a")
+            from: format(parse(ts.from, "HH:mm", new Date()), "hh:mm a"),
+            to: format(parse(ts.to, "HH:mm", new Date()), "hh:mm a")
           }))
         }));
 
@@ -638,7 +638,7 @@ export default function DoctorsPage() {
 
                 for (const leaveDay of existingLeaveSlots) {
                     if (!leaveDay.date || !Array.isArray(leaveDay.slots)) continue;
-                    const leaveDate = parseDateFns(leaveDay.date, "yyyy-MM-dd", new Date());
+                    const leaveDate = parse(leaveDay.date, "yyyy-MM-dd", new Date());
                     if (isNaN(leaveDate.getTime())) continue;
 
                     const dayName = format(leaveDate, 'EEEE');
@@ -650,13 +650,13 @@ export default function DoctorsPage() {
 
                     const validLeaveSubSlots: TimeSlot[] = [];
                     for (const leaveSubSlot of leaveDay.slots) {
-                        const leaveStart = parseDateFns(leaveSubSlot.from, "hh:mm a", new Date());
-                        const leaveEnd = parseDateFns(leaveSubSlot.to, "hh:mm a", new Date());
+                        const leaveStart = parse(leaveSubSlot.from, "hh:mm a", new Date());
+                        const leaveEnd = parse(leaveSubSlot.to, "hh:mm a", new Date());
                         if (isNaN(leaveStart.getTime()) || isNaN(leaveEnd.getTime())) continue;
 
                         const isContained = availabilityForDay.timeSlots.some(availableSlot => {
-                            const availableStart = parseDateFns(availableSlot.from, "hh:mm a", new Date());
-                            const availableEnd = parseDateFns(availableSlot.to, "hh:mm a", new Date());
+                            const availableStart = parse(availableSlot.from, "hh:mm a", new Date());
+                            const availableEnd = parse(availableSlot.to, "hh:mm a", new Date());
                             return isWithinInterval({ start: leaveStart, end: leaveEnd }, { start: availableStart, end: availableEnd });
                         });
 
@@ -713,7 +713,7 @@ export default function DoctorsPage() {
         for (const leaveDay of existingLeaveSlots) {
             if (!leaveDay.date || !Array.isArray(leaveDay.slots)) continue;
 
-            const leaveDate = parseDateFns(leaveDay.date, 'yyyy-MM-dd', new Date());
+            const leaveDate = parse(leaveDay.date, 'yyyy-MM-dd', new Date());
             if (isNaN(leaveDate.getTime())) continue;
 
             const dayName = format(leaveDate, 'EEEE');
@@ -857,26 +857,19 @@ export default function DoctorsPage() {
     if (!todayAvailability) return false;
 
     return todayAvailability.timeSlots.some(slot => {
-        const startTime = parseDateFns(slot.from, 'hh:mm a', now);
-        const endTime = parseDateFns(slot.to, 'hh:mm a', now);
+        const startTime = parse(slot.from, 'hh:mm a', now);
+        const endTime = parse(slot.to, 'hh:mm a', now);
         return now >= startTime && now <= endTime;
     });
   }, [selectedDoctor]);
 
-  const dailyLeaveSlots = useMemo((): TimeSlot[] => {
-    if (!selectedDoctor?.leaveSlots || !leaveCalDate) return [];
-  
+  const dailyLeaveSlots = useMemo((): LeaveSlot | null => {
+    if (!selectedDoctor?.leaveSlots || !leaveCalDate) return null;
     const dateStrToMatch = format(leaveCalDate, 'yyyy-MM-dd');
-  
-    const leavesForDate = selectedDoctor.leaveSlots.find(
-        (leave) => leave.date === dateStrToMatch
+    const leaveDay = selectedDoctor.leaveSlots.find(
+      (leave) => typeof leave === 'object' && leave.date === dateStrToMatch
     );
-    
-    if (leavesForDate && leavesForDate.slots) {
-      return leavesForDate.slots;
-    }
-    
-    return [];
+    return leaveDay || null;
   }, [selectedDoctor?.leaveSlots, leaveCalDate]);
 
   const allTimeSlotsForDay = useMemo((): Date[] => {
@@ -913,13 +906,7 @@ export default function DoctorsPage() {
   }, [startSlot, endSlot, selectedDoctor]);
 
   const handleSlotClick = (slot: Date) => {
-    const isOnLeave = dailyLeaveSlots.some(leaveSlot => {
-      const leaveStart = parseTimeUtil(leaveSlot.from, leaveCalDate);
-      const leaveEnd = parseTimeUtil(leaveSlot.to, leaveCalDate);
-      return slot >= leaveStart && slot < leaveEnd;
-    });
-
-    if (isOnLeave) return;
+    if (dailyLeaveSlots) return; // Don't allow new selection if break exists
 
     if (!startSlot || endSlot) {
         setStartSlot(slot);
@@ -970,16 +957,11 @@ export default function DoctorsPage() {
         const doctorRef = doc(db, 'doctors', selectedDoctor.id);
         const leaveDateStr = format(leaveCalDate, 'yyyy-MM-dd');
         
-        const otherLeaveSlots = (selectedDoctor.leaveSlots || []).filter(ls => {
-          if (typeof ls === 'string') return true; // Keep old format for now
-          return ls.date !== leaveDateStr
-        });
-        const existingSlotsForDate = (selectedDoctor.leaveSlots || []).find(ls => typeof ls === 'object' && ls.date === leaveDateStr)?.slots || [];
-
-        const newLeaveSlot = { from: format(newBreakStart, 'hh:mm a'), to: format(newBreakEnd, 'hh:mm a') };
-        const updatedSlotsForDate = [...existingSlotsForDate, newLeaveSlot].sort((a, b) => a.from.localeCompare(b.from));
-
-        const updatedLeaveSlots = [...otherLeaveSlots, {date: leaveDateStr, slots: updatedSlotsForDate}];
+        const newLeaveSlot: LeaveSlot = {
+            date: leaveDateStr,
+            slots: [{ from: format(newBreakStart, 'hh:mm a'), to: format(newBreakEnd, 'hh:mm a') }]
+        };
+        const updatedLeaveSlots = [...(selectedDoctor.leaveSlots || []), newLeaveSlot];
 
         batch.update(doctorRef, { leaveSlots: updatedLeaveSlots });
         
@@ -1001,18 +983,18 @@ export default function DoctorsPage() {
   };
 
   const handleCancelBreak = async () => {
-    if (!selectedDoctor || !leaveCalDate || dailyLeaveSlots.length === 0) {
+    if (!selectedDoctor || !leaveCalDate || !dailyLeaveSlots) {
+        toast({ variant: 'destructive', title: 'Error', description: 'No break found to cancel.' });
         return;
     }
+    
     setIsSubmittingBreak(true);
     try {
         const batch = writeBatch(db);
-        const totalDuration = dailyLeaveSlots.reduce((acc, breakSlot) => {
-            const start = parseTimeUtil(breakSlot.from, leaveCalDate);
-            const end = parseTimeUtil(breakSlot.to, leaveCalDate);
-            return acc + (differenceInMinutes(end, start) + 1);
-        }, 0);
-        const lastBreakEnd = parseTimeUtil(dailyLeaveSlots[dailyLeaveSlots.length - 1].to, leaveCalDate);
+
+        const breakStart = parseTimeUtil(dailyLeaveSlots.slots[0].from, leaveCalDate);
+        const breakEnd = parseTimeUtil(dailyLeaveSlots.slots[0].to, leaveCalDate);
+        const breakDuration = differenceInMinutes(breakEnd, breakStart);
 
         const dateStr = format(leaveCalDate, 'd MMMM yyyy');
         const appointmentsQuery = query(collection(db, "appointments"), 
@@ -1020,6 +1002,7 @@ export default function DoctorsPage() {
             where("clinicId", "==", selectedDoctor.clinicId),
             where("date", "==", dateStr)
         );
+        
         const snapshot = await getDocs(appointmentsQuery);
         const appointmentsToUpdate: {id: string, newTime: Date}[] = [];
         
@@ -1027,8 +1010,8 @@ export default function DoctorsPage() {
             const appt = docSnap.data() as Appointment;
             if (!appt.time) return;
             const apptTime = parseTimeUtil(appt.time, leaveCalDate);
-            if (apptTime > lastBreakEnd) {
-                 appointmentsToUpdate.push({ id: docSnap.id, newTime: addMinutes(apptTime, -totalDuration) });
+            if (apptTime > breakEnd) {
+                 appointmentsToUpdate.push({ id: docSnap.id, newTime: addMinutes(apptTime, -breakDuration) });
             }
         });
         
@@ -1042,7 +1025,7 @@ export default function DoctorsPage() {
         
         const updatedLeaveSlots = (selectedDoctor.leaveSlots || []).filter(ls => {
             if (typeof ls === 'object' && ls.date === leaveDateStr) {
-                return false; // Remove the entire entry for this date
+                return false;
             }
             return true;
         });
@@ -1475,7 +1458,7 @@ export default function DoctorsPage() {
                                         <Calendar
                                             mode="single"
                                             selected={leaveCalDate}
-                                            onSelect={(d) => d && setLeaveCalDate(d)}
+                                            onSelect={(d) => { if (d) { setLeaveCalDate(d); setStartSlot(null); setEndSlot(null); } }}
                                             disabled={(date) => isPast(date) && !isSameDay(date, new Date()) || !selectedDoctor.availabilitySlots?.some(s => s.day === format(date, 'EEEE'))}
                                             initialFocus
                                         />
@@ -1489,7 +1472,7 @@ export default function DoctorsPage() {
                                         <div className="grid grid-cols-3 gap-2">
                                             {allTimeSlotsForDay.map((slot) => {
                                                 const isSelected = (startSlot && slot >= startSlot && endSlot && slot <= endSlot) || (startSlot?.getTime() === slot.getTime() && !endSlot);
-                                                const isOnLeave = dailyLeaveSlots.some(leaveSlot => {
+                                                const isOnLeave = dailyLeaveSlots?.slots.some(leaveSlot => {
                                                   const leaveStart = parseTimeUtil(leaveSlot.from, leaveCalDate);
                                                   const leaveEnd = parseTimeUtil(leaveSlot.to, leaveCalDate);
                                                   return slot >= leaveStart && slot < leaveEnd;
@@ -1516,8 +1499,8 @@ export default function DoctorsPage() {
                                          {allTimeSlotsForDay.length === 0 && <p className="text-sm text-muted-foreground text-center pt-4">No slots available.</p>}
                                     </div>
                                      <div className="text-center mt-4 mb-2 text-sm text-muted-foreground">
-                                        {dailyLeaveSlots.length > 0 ? (
-                                            `Break: ${dailyLeaveSlots[0].from} - ${dailyLeaveSlots[dailyLeaveSlots.length - 1].to}`
+                                        {dailyLeaveSlots ? (
+                                            `Break: ${dailyLeaveSlots.slots[0].from} to ${dailyLeaveSlots.slots[0].to}`
                                         ) : startSlot && !endSlot ? (
                                             "Select an end time for the break."
                                         ) : startSlot && endSlot ? (
@@ -1526,7 +1509,7 @@ export default function DoctorsPage() {
                                         "Select a start and end time for the break."
                                         )}
                                       </div>
-                                    {dailyLeaveSlots.length > 0 ? (
+                                    {dailyLeaveSlots ? (
                                         <Button className="w-full" variant="secondary" disabled={isSubmittingBreak} onClick={handleCancelBreak}>
                                             {isSubmittingBreak ? <Loader2 className="animate-spin" /> : 'Cancel This Break'}
                                         </Button>
@@ -1664,7 +1647,7 @@ export default function DoctorsPage() {
                                                             if (!ts.from || !ts.to) return null;
                                                             return (
                                                                 <Badge key={i} variant="secondary" className="font-normal">
-                                                                {format(parseDateFns(ts.from, "HH:mm", new Date()), 'p')} - {format(parseDateFns(ts.to, "HH:mm", new Date()), 'p')}
+                                                                {format(parse(ts.from, "HH:mm", new Date()), 'p')} - {format(parse(ts.to, "HH:mm", new Date()), 'p')}
                                                                 </Badge>
                                                             );
                                                         })}
@@ -1698,8 +1681,8 @@ export default function DoctorsPage() {
                                                 <div className="flex flex-wrap gap-2 items-center mt-2">
                                                     {slot.timeSlots.map((ts, i) => {
                                                         if (!ts.from || !ts.to) return null;
-                                                        const fromTime = parseDateFns(ts.from, 'hh:mm a', new Date());
-                                                        const toTime = parseDateFns(ts.to, 'hh:mm a', new Date());
+                                                        const fromTime = parse(ts.from, 'hh:mm a', new Date());
+                                                        const toTime = parse(ts.to, 'hh:mm a', new Date());
                                                         
                                                         return (
                                                             <Badge key={i} variant="outline" className="text-sm group relative pr-7">
@@ -1795,6 +1778,7 @@ export default function DoctorsPage() {
     
 
     
+
 
 
 
