@@ -28,7 +28,7 @@ import { doc, updateDoc, collection, getDocs, setDoc, getDoc, query, where, writ
 import { db, storage } from "@/lib/firebase";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import type { Doctor, Appointment, LeaveSlot, Department, TimeSlot } from "@/lib/types";
-import { format, parse, isSameDay, getDay, addMinutes, isBefore, isWithinInterval, differenceInMinutes, isPast, parseISO, startOfDay } from "date-fns";
+import { format, parse, isSameDay, getDay, addMinutes, isWithinInterval, differenceInMinutes, isPast, parseISO, startOfDay, isToday } from "date-fns";
 import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon, PlusCircle, DollarSign, Printer, FileDown, ChevronUp, ChevronDown, Minus, Trophy, Repeat, CalendarCheck, Upload, Trash2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -61,7 +61,6 @@ import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/firebase";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import imageCompression from 'browser-image-compression';
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
 
@@ -872,21 +871,36 @@ export default function DoctorsPage() {
     setIsAddDoctorOpen(true);
   };
   
-  const isDoctorCurrentlyAvailable = useMemo(() => {
-    if (!selectedDoctor?.availabilitySlots) return false;
+const getAutomatedConsultationStatus = useMemo(() => {
+    if (!selectedDoctor?.availabilitySlots) return 'Out';
     
     const now = new Date();
     const currentDayName = format(now, 'EEEE');
     
     const todayAvailability = selectedDoctor.availabilitySlots.find(slot => slot.day === currentDayName);
-    if (!todayAvailability) return false;
+    if (!todayAvailability) return 'Out';
 
-    return todayAvailability.timeSlots.some(slot => {
-        const startTime = parse(slot.from, 'hh:mm a', now);
-        const endTime = parse(slot.to, 'hh:mm a', now);
-        return now >= startTime && now <= endTime;
+    const isWithinWorkingHours = todayAvailability.timeSlots.some(slot => {
+        const startTime = parseTimeUtil(slot.from, now);
+        const endTime = parseTimeUtil(slot.to, now);
+        return isWithinInterval(now, { start: startTime, end: endTime });
     });
-  }, [selectedDoctor]);
+
+    if (!isWithinWorkingHours) return 'Out';
+
+    const todayLeaveSlots = (selectedDoctor.leaveSlots || [])
+      .map(leave => (typeof leave === 'string' ? parseISO(leave) : new Date(NaN)))
+      .filter(date => !isNaN(date.getTime()) && isToday(date));
+
+    const isOnBreak = todayLeaveSlots.some(leaveSlot => {
+      const breakStart = leaveSlot;
+      const breakEnd = addMinutes(leaveSlot, selectedDoctor.averageConsultingTime || 15);
+      return isWithinInterval(now, { start: breakStart, end: breakEnd });
+    });
+
+    return isOnBreak ? 'Out' : 'In';
+}, [selectedDoctor]);
+
 
   const dailyLeaveSlots = useMemo((): { start: Date; end: Date }[] => {
     if (!selectedDoctor?.leaveSlots) return [];
@@ -901,10 +915,9 @@ export default function DoctorsPage() {
             return null;
           }
         }
-        // Handle other possible legacy formats if necessary
         return null;
       })
-      .filter((date): date is Date => date !== null && format(date, 'yyyy-MM-dd') === format(leaveCalDate, 'yyyy-MM-dd'));
+      .filter((date): date is Date => date !== null && isSameDay(date, leaveCalDate));
   
     if (slotsForDate.length === 0) return [];
   
@@ -918,10 +931,8 @@ export default function DoctorsPage() {
       if (!currentBreak) {
         currentBreak = { start: slot, end: addMinutes(slot, consultationTime) };
       } else if (slot.getTime() === currentBreak.end.getTime()) {
-        // This slot is contiguous with the current break
         currentBreak.end = addMinutes(slot, consultationTime);
       } else {
-        // This slot starts a new break
         combinedBreaks.push(currentBreak);
         currentBreak = { start: slot, end: addMinutes(slot, consultationTime) };
       }
@@ -1321,16 +1332,16 @@ export default function DoctorsPage() {
                         </div>
                     )}
                     <div className="flex-grow"></div>
-                    <div className="flex items-center space-x-2 bg-primary p-2 rounded-md">
-                      <Switch
-                        id="status-switch"
-                        checked={selectedDoctor.consultationStatus === 'In'}
-                        onCheckedChange={(checked) => handleStatusChange(checked ? 'In' : 'Out')}
-                        disabled={isPending || !isDoctorCurrentlyAvailable}
-                        className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500"
-                      />
-                      <Label htmlFor="status-switch" className="font-semibold text-white">
-                        {selectedDoctor.consultationStatus === 'In' ? 'In' : 'Out'}
+                     <div className={cn(
+                        "flex items-center space-x-2 p-2 rounded-md",
+                        getAutomatedConsultationStatus === 'In' ? 'bg-green-500' : 'bg-red-500'
+                    )}>
+                      <div className="relative flex h-3 w-3">
+                          {getAutomatedConsultationStatus === 'In' && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>}
+                          <span className={cn("relative inline-flex rounded-full h-3 w-3 bg-white")}></span>
+                      </div>
+                      <Label className="font-semibold text-white">
+                        {getAutomatedConsultationStatus}
                       </Label>
                    </div>
                 </div>
@@ -1527,7 +1538,7 @@ export default function DoctorsPage() {
                                         <div className="grid grid-cols-3 gap-2">
                                             {allTimeSlotsForDay.map((slot) => {
                                                 const isSelected = (startSlot && slot >= startSlot && endSlot && slot <= endSlot) || (startSlot?.getTime() === slot.getTime() && !endSlot);
-                                                const isOnLeave = dailyLeaveSlots.some(breakPeriod => slot >= breakPeriod.start && slot < breakPeriod.end);
+                                                const isOnLeave = dailyLeaveSlots.some(breakPeriod => isWithinInterval(slot, { start: breakPeriod.start, end: breakPeriod.end }));
                                                 const isBooked = allBookedSlots.includes(slot.getTime());
 
                                                 return (
