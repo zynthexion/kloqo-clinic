@@ -1817,7 +1817,7 @@ export default function AppointmentsPage() {
                                 <TableRow
                                   key={appointment.id}
                                   className={cn(
-                                    appointment.isSkipped && "bg-red-200 dark:bg-red-900/60"
+                                    appointment.isSkipped && "bg-red-200/50 dark:bg-red-900/60"
                                   )}
                                 >
                                   <TableCell className="font-medium">{appointment.patientName}</TableCell>
@@ -1828,7 +1828,7 @@ export default function AppointmentsPage() {
                                       <Badge variant="success">Completed</Badge>
                                     ) : (
                                         <div className="flex justify-end gap-2">
-                                            {!appointment.isSkipped && (
+                                            {index === 0 && !appointment.isSkipped && (
                                                 <Button variant="ghost" size="icon" className="p-0 h-auto text-green-600 hover:text-green-700" onClick={() => handleComplete(appointment)}>
                                                     <CheckCircle2 className="h-5 w-5" />
                                                 </Button>
@@ -1890,3 +1890,4 @@ export default function AppointmentsPage() {
   );
 }
 
+    
