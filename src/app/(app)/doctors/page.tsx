@@ -61,7 +61,7 @@ import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/firebase";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import imageCompression from 'browser-image-compression';
-import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
 
@@ -185,7 +185,7 @@ export default function DoctorsPage() {
   const [clinicDepartments, setClinicDepartments] = useState<Department[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [leaveCalDate, setLeaveCalDate] = useState<Date>(new Date());
-  const [clinicDetails, setClinicDetails] = useState<any>(null);
+  const [clinicDetails, setClinicDetails] = useState<any | null>(null);
   
   const [isEditingTime, setIsEditingTime] = useState(false);
   const [newAvgTime, setNewAvgTime] = useState<number | string>("");
@@ -864,12 +864,12 @@ export default function DoctorsPage() {
   }, [selectedDoctor]);
 
   // Break Scheduling Logic
-  const dailyLeaveSlots = useMemo(() => {
-    if (!selectedDoctor?.leaveSlots || !leaveCalDate) return [];
-    return selectedDoctor.leaveSlots
-        .filter(leave => isSameDay(parseISO(leave.date), leaveCalDate))
-        .flatMap(leave => leave.slots);
-  }, [selectedDoctor, leaveCalDate]);
+  const dailyLeaveSlots = useMemo((): TimeSlot[] => {
+      if (!selectedDoctor?.leaveSlots || !leaveCalDate) return [];
+      const dateStr = format(leaveCalDate, 'yyyy-MM-dd');
+      const leaveDay = selectedDoctor.leaveSlots.find(ls => ls.date === dateStr);
+      return leaveDay ? leaveDay.slots : [];
+  }, [selectedDoctor?.leaveSlots, leaveCalDate]);
 
   const allTimeSlotsForDay = useMemo((): Date[] => {
     if (!selectedDoctor || !leaveCalDate) return [];
@@ -905,7 +905,12 @@ export default function DoctorsPage() {
   }, [startSlot, endSlot, selectedDoctor]);
 
   const handleSlotClick = (slot: Date) => {
-    const isOnLeave = dailyLeaveSlots.some(leaveSlot => parseTimeUtil(leaveSlot.from, leaveCalDate).getTime() === slot.getTime());
+    const isOnLeave = dailyLeaveSlots.some(leaveSlot => {
+      const leaveStart = parseTimeUtil(leaveSlot.from, leaveCalDate);
+      const leaveEnd = parseTimeUtil(leaveSlot.to, leaveCalDate);
+      return slot >= leaveStart && slot < leaveEnd;
+    });
+
     if (isOnLeave) return;
 
     if (!startSlot || endSlot) {
@@ -927,7 +932,9 @@ export default function DoctorsPage() {
     setIsSubmittingBreak(true);
     try {
         const batch = writeBatch(db);
-        const breakDuration = differenceInMinutes(endSlot, startSlot) + (selectedDoctor.averageConsultingTime || 15);
+        const newBreakStart = startSlot;
+        const newBreakEnd = addMinutes(endSlot, (selectedDoctor.averageConsultingTime || 15) - 1);
+        const breakDuration = differenceInMinutes(newBreakEnd, newBreakStart) + 1;
         const dateStr = format(leaveCalDate, 'd MMMM yyyy');
         
         const appointmentsQuery = query(collection(db, "appointments"), 
@@ -942,7 +949,7 @@ export default function DoctorsPage() {
             const appt = docSnap.data() as Appointment;
             if (!appt.time) return;
             const apptTime = parseTimeUtil(appt.time, leaveCalDate);
-            if (apptTime >= startSlot) {
+            if (apptTime >= newBreakStart) {
                 appointmentsToUpdate.push({ id: docSnap.id, newTime: addMinutes(apptTime, breakDuration) });
             }
         });
@@ -953,13 +960,15 @@ export default function DoctorsPage() {
         }
 
         const doctorRef = doc(db, 'doctors', selectedDoctor.id);
-        const newLeaveSlotsForDate: TimeSlot[] = slotsInSelection.map(slot => ({
-            from: format(slot, 'hh:mm a'),
-            to: format(addMinutes(slot, (selectedDoctor.averageConsultingTime || 15) -1), 'hh:mm a')
-        }));
+        const leaveDateStr = format(leaveCalDate, 'yyyy-MM-dd');
+        
+        const otherLeaveSlots = (selectedDoctor.leaveSlots || []).filter(ls => ls.date !== leaveDateStr);
+        const existingSlotsForDate = (selectedDoctor.leaveSlots || []).find(ls => ls.date === leaveDateStr)?.slots || [];
 
-        const otherLeaveSlots = (selectedDoctor.leaveSlots || []).filter(ls => ls.date !== format(leaveCalDate, 'yyyy-MM-dd'));
-        const updatedLeaveSlots = [...otherLeaveSlots, {date: format(leaveCalDate, 'yyyy-MM-dd'), slots: newLeaveSlotsForDate}];
+        const newLeaveSlot = { from: format(newBreakStart, 'hh:mm a'), to: format(newBreakEnd, 'hh:mm a') };
+        const updatedSlotsForDate = [...existingSlotsForDate, newLeaveSlot].sort((a, b) => a.from.localeCompare(b.from));
+
+        const updatedLeaveSlots = [...otherLeaveSlots, {date: leaveDateStr, slots: updatedSlotsForDate}];
 
         batch.update(doctorRef, { leaveSlots: updatedLeaveSlots });
         
@@ -980,15 +989,15 @@ export default function DoctorsPage() {
     }
   };
 
-  const handleCancelBreak = async () => {
-    if (!selectedDoctor || !leaveCalDate || dailyLeaveSlots.length === 0) {
+  const handleCancelBreak = async (breakToCancel: TimeSlot) => {
+    if (!selectedDoctor || !leaveCalDate || !breakToCancel) {
         return;
     }
     setIsSubmittingBreak(true);
     try {
         const batch = writeBatch(db);
-        const breakStart = parseTimeUtil(dailyLeaveSlots[0].from, leaveCalDate);
-        const breakEnd = parseTimeUtil(dailyLeaveSlots[dailyLeaveSlots.length - 1].to, leaveCalDate);
+        const breakStart = parseTimeUtil(breakToCancel.from, leaveCalDate);
+        const breakEnd = parseTimeUtil(breakToCancel.to, leaveCalDate);
         const breakDuration = differenceInMinutes(breakEnd, breakStart) + 1; // Simplified
 
         const dateStr = format(leaveCalDate, 'd MMMM yyyy');
@@ -1015,7 +1024,16 @@ export default function DoctorsPage() {
         }
 
         const doctorRef = doc(db, 'doctors', selectedDoctor.id);
-        const updatedLeaveSlots = (selectedDoctor.leaveSlots || []).filter(ls => ls.date !== format(leaveCalDate, 'yyyy-MM-dd'));
+        const leaveDateStr = format(leaveCalDate, 'yyyy-MM-dd');
+        
+        const updatedLeaveSlots = (selectedDoctor.leaveSlots || []).map(ls => {
+            if (ls.date === leaveDateStr) {
+                const newSlots = ls.slots.filter(s => s.from !== breakToCancel.from || s.to !== breakToCancel.to);
+                return newSlots.length > 0 ? { ...ls, slots: newSlots } : null;
+            }
+            return ls;
+        }).filter(Boolean) as LeaveSlot[];
+
 
         batch.update(doctorRef, { leaveSlots: updatedLeaveSlots });
         
@@ -1446,7 +1464,7 @@ export default function DoctorsPage() {
                                             mode="single"
                                             selected={leaveCalDate}
                                             onSelect={(d) => d && setLeaveCalDate(d)}
-                                            disabled={(date) => date < new Date() || !selectedDoctor.availabilitySlots?.some(s => s.day === format(date, 'EEEE'))}
+                                            disabled={(date) => isPast(date) && !isSameDay(date, new Date()) || !selectedDoctor.availabilitySlots?.some(s => s.day === format(date, 'EEEE'))}
                                             initialFocus
                                         />
                                     </PopoverContent>
@@ -1459,7 +1477,11 @@ export default function DoctorsPage() {
                                         <div className="grid grid-cols-3 gap-2">
                                             {allTimeSlotsForDay.map((slot) => {
                                                 const isSelected = (startSlot && slot >= startSlot && endSlot && slot <= endSlot) || (startSlot?.getTime() === slot.getTime() && !endSlot);
-                                                const isOnLeave = dailyLeaveSlots.some(leaveSlot => parseTimeUtil(leaveSlot.from, leaveCalDate).getTime() <= slot.getTime() && parseTimeUtil(leaveSlot.to, leaveCalDate).getTime() >= slot.getTime());
+                                                const isOnLeave = dailyLeaveSlots.some(leaveSlot => {
+                                                  const leaveStart = parseTimeUtil(leaveSlot.from, leaveCalDate);
+                                                  const leaveEnd = parseTimeUtil(leaveSlot.to, leaveCalDate);
+                                                  return slot >= leaveStart && slot < leaveEnd;
+                                                });
                                                 const isBooked = allBookedSlots.includes(slot.getTime());
 
                                                 return (
@@ -1482,21 +1504,22 @@ export default function DoctorsPage() {
                                          {allTimeSlotsForDay.length === 0 && <p className="text-sm text-muted-foreground text-center pt-4">No slots available.</p>}
                                     </div>
                                      <div className="text-center mt-4 mb-2 text-sm text-muted-foreground">
-                                        {dailyLeaveSlots.length > 0 ? (
-                                            `Break from ${dailyLeaveSlots[0].from} to ${dailyLeaveSlots[dailyLeaveSlots.length - 1].to}`
-                                        ) : startSlot && !endSlot ? (
-                                            "Select an end time for the break."
-                                        ) : startSlot && endSlot ? (
-                                            `New break: ${format(startSlot, 'hh:mm a')} to ${format(addMinutes(endSlot, (selectedDoctor.averageConsultingTime || 15) -1), 'hh:mm a')}`
-                                        ) : (
-                                        "Select a start and end time for the break."
-                                        )}
+                                      {dailyLeaveSlots.length > 0 ? (
+                                          dailyLeaveSlots.map((breakSlot, index) => (
+                                              <div key={index} className="flex items-center justify-center gap-2">
+                                                  <span>Break: {breakSlot.from} - {breakSlot.to}</span>
+                                                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleCancelBreak(breakSlot)} disabled={isSubmittingBreak}><Trash2 className="h-4 w-4 text-destructive"/></Button>
+                                              </div>
+                                          ))
+                                      ) : startSlot && !endSlot ? (
+                                          "Select an end time for the break."
+                                      ) : startSlot && endSlot ? (
+                                          `New break: ${format(startSlot, 'hh:mm a')} to ${format(addMinutes(endSlot, (selectedDoctor.averageConsultingTime || 15) -1), 'hh:mm a')}`
+                                      ) : (
+                                      "Select a start and end time for the break."
+                                      )}
                                     </div>
-                                    {dailyLeaveSlots.length > 0 ? (
-                                        <Button className="w-full" variant="secondary" disabled={isSubmittingBreak} onClick={handleCancelBreak}>
-                                            {isSubmittingBreak ? <Loader2 className="animate-spin" /> : 'Cancel This Break'}
-                                        </Button>
-                                    ) : (
+                                    {dailyLeaveSlots.length === 0 && (
                                         <Button className="w-full" variant="destructive" disabled={!startSlot || !endSlot || isSubmittingBreak} onClick={handleConfirmBreak}>
                                             {isSubmittingBreak ? <Loader2 className="animate-spin" /> : 'Confirm Break'}
                                         </Button>
@@ -1761,6 +1784,8 @@ export default function DoctorsPage() {
     
 
     
+
+
 
 
 
