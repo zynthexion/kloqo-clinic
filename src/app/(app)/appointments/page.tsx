@@ -1901,5 +1901,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
-    
