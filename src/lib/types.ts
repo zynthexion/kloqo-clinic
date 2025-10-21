@@ -71,6 +71,7 @@ export type Appointment = {
   place?: string;
   isSkipped?: boolean;
   slotIndex?: number;
+  sessionIndex?: number;
 };
 
 export type Patient = {
@@ -145,5 +146,6 @@ export type User = {
     designation?: 'Doctor' | 'Owner';
     onboarded?: boolean;
 }
+
 
 

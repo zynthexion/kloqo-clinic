@@ -646,20 +646,25 @@ export default function AppointmentsPage() {
           const appointmentTimeStr = format(parseDateFns(values.time, "HH:mm", new Date()), "hh:mm a");
 
           let slotIndex = -1;
+          let sessionIndex = -1;
           const dayOfWeek = daysOfWeek[getDay(values.date)];
           const availabilityForDay = selectedDoctor.availabilitySlots?.find(s => s.day === dayOfWeek);
+
           if (availabilityForDay) {
-            let currentIndex = 0;
-            for (const session of availabilityForDay.timeSlots) {
+            for (let i = 0; i < availabilityForDay.timeSlots.length; i++) {
+              const session = availabilityForDay.timeSlots[i];
               let currentTime = parseDateFns(session.from, 'hh:mm a', values.date);
               const endTime = parseDateFns(session.to, 'hh:mm a', values.date);
+              let currentSlotInSession = 0;
+
               while (isBefore(currentTime, endTime)) {
                 if (format(currentTime, "hh:mm a") === appointmentTimeStr) {
-                  slotIndex = currentIndex;
+                  slotIndex = currentSlotInSession;
+                  sessionIndex = i;
                   break;
                 }
                 currentTime = addMinutes(currentTime, selectedDoctor.averageConsultingTime || 15);
-                currentIndex++;
+                currentSlotInSession++;
               }
               if (slotIndex !== -1) break;
             }
@@ -683,7 +688,8 @@ export default function AppointmentsPage() {
             numericToken: tokenData.numericToken,
             bookedVia: values.bookedVia,
             place: values.place,
-            slotIndex: slotIndex
+            slotIndex: slotIndex,
+            sessionIndex: sessionIndex,
           };
 
           const appointmentRef = doc(db, 'appointments', appointmentId);
@@ -974,6 +980,7 @@ export default function AppointmentsPage() {
 
     const formattedDate = format(selectedDate, "d MMMM yyyy");
     const otherAppointments = appointments.filter(apt => !(isEditing && apt.id === editingAppointment?.id));
+    
     const bookedSlotsForDay = otherAppointments
       .filter(apt => apt.doctor === selectedDoctor.name && apt.date === formattedDate)
       .map(apt => apt.time);
@@ -1809,12 +1816,7 @@ export default function AppointmentsPage() {
       )}
       <Dialog open={isTokenModalOpen} onOpenChange={setIsTokenModalOpen}>
         <DialogContent className="sm:max-w-xs w-[90%] text-center p-6 sm:p-8">
-            <DialogHeader className="text-center space-y-2">
-                <div className="flex justify-center">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-                        <CheckCircle2 className="h-8 w-8 text-green-600" />
-                    </div>
-                </div>
+            <DialogHeader>
                 <DialogTitle className="text-xl font-bold">Walk-in Token Generated!</DialogTitle>
                 <DialogDescription>Please wait for your turn. You can monitor the live queue.</DialogDescription>
             </DialogHeader>
