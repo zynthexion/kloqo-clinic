@@ -865,32 +865,39 @@ export default function DoctorsPage() {
 
   const dailyLeaveSlots = useMemo((): TimeSlot[] => {
     if (!selectedDoctor?.leaveSlots || !leaveCalDate) return [];
-  
-    const dateStr = format(leaveCalDate, 'yyyy-MM-dd');
-    
-    // This is the defensive part. It handles both old and new data structures.
-    for (const leave of selectedDoctor.leaveSlots) {
-        // Handle new structure: object with date and slots
-        if (typeof leave === 'object' && leave !== null && 'date' in leave && leave.date === dateStr) {
-            return leave.slots || [];
-        }
-        // Handle old structure: array of ISO strings
+
+    const dateStrToMatch = format(leaveCalDate, 'yyyy-MM-dd');
+
+    // Handle new structure: array of LeaveSlot objects
+    const leavesForDate = selectedDoctor.leaveSlots.find(
+        (leave) => leave.date === dateStrToMatch
+    );
+    if (leavesForDate && leavesForDate.slots) {
+        return leavesForDate.slots;
+    }
+
+    // Handle old structure: array of ISO strings
+    const oldFormatLeaves: TimeSlot[] = [];
+    selectedDoctor.leaveSlots.forEach(leave => {
         if (typeof leave === 'string') {
             try {
                 const parsedDate = parseISO(leave);
-                if (format(parsedDate, 'yyyy-MM-dd') === dateStr) {
-                    // This indicates old data format, which we can't fully represent as TimeSlot[],
-                    // but we can at least find if there's *any* leave on this day.
-                    // For UI display, we'll need to reconstruct a minimal TimeSlot.
-                    console.warn("Detected old leave slot format. Partial display only.");
-                    return [{ from: format(parsedDate, 'hh:mm a'), to: format(addMinutes(parsedDate, selectedDoctor.averageConsultingTime || 15), 'hh:mm a')}];
+                if (format(parsedDate, 'yyyy-MM-dd') === dateStrToMatch) {
+                    oldFormatLeaves.push({
+                        from: format(parsedDate, 'hh:mm a'),
+                        to: format(addMinutes(parsedDate, selectedDoctor.averageConsultingTime || 15), 'hh:mm a')
+                    });
                 }
             } catch (e) {
                 console.error("Could not parse old leave slot string:", leave, e);
             }
         }
+    });
+
+    if (oldFormatLeaves.length > 0) {
+        return oldFormatLeaves;
     }
-  
+    
     return [];
   }, [selectedDoctor?.leaveSlots, leaveCalDate, selectedDoctor?.averageConsultingTime]);
 
@@ -1814,6 +1821,7 @@ export default function DoctorsPage() {
     
 
     
+
 
 
 
