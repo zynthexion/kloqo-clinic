@@ -1213,7 +1213,18 @@ export default function AppointmentsPage() {
   }, [appointments, drawerSearchTerm, activeTab, drawerDateRange, selectedDrawerDoctor]);
 
   const today = format(new Date(), "d MMMM yyyy");
-  const todaysAppointments = filteredAppointments.filter(apt => apt.date === today);
+  
+  const todaysAppointments = useMemo(() => {
+    return filteredAppointments
+      .filter(apt => apt.date === today)
+      .sort((a, b) => {
+        // Prioritize non-skipped appointments
+        if (a.isSkipped && !b.isSkipped) return 1;
+        if (!a.isSkipped && b.isSkipped) return -1;
+        // Then sort by numeric token
+        return a.numericToken - b.numericToken;
+      });
+  }, [filteredAppointments, today]);
 
   const isNewPatient = patientSearchTerm.length >= 10 && !selectedPatient;
   const isKloqoMember = primaryPatient && !primaryPatient.clinicIds?.includes(clinicId!);
@@ -1802,11 +1813,11 @@ export default function AppointmentsPage() {
                           <TableBody>
                             {todaysAppointments
                               .filter(apt => activeTab === 'upcoming' ? (apt.status === 'Confirmed' || apt.status === 'Pending') : apt.status === 'Completed')
-                              .map((appointment) => (
+                              .map((appointment, index) => (
                                 <TableRow
                                   key={appointment.id}
                                   className={cn(
-                                    appointment.isSkipped ? "bg-red-200 dark:bg-red-900/60" : isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30"
+                                    appointment.isSkipped && "bg-red-200 dark:bg-red-900/60"
                                   )}
                                 >
                                   <TableCell className="font-medium">{appointment.patientName}</TableCell>
@@ -1822,9 +1833,11 @@ export default function AppointmentsPage() {
                                                     <CheckCircle2 className="h-5 w-5" />
                                                 </Button>
                                             )}
-                                            <Button variant="ghost" size="icon" className="p-0 h-auto text-yellow-600 hover:text-yellow-700" onClick={() => handleSkip(appointment)}>
-                                                <SkipForward className="h-5 w-5" />
-                                            </Button>
+                                            {index === 0 && activeTab === 'upcoming' && (
+                                                <Button variant="ghost" size="icon" className="p-0 h-auto text-yellow-600 hover:text-yellow-700" onClick={() => handleSkip(appointment)}>
+                                                    <SkipForward className="h-5 w-5" />
+                                                </Button>
+                                            )}
                                         </div>
                                     )}
                                   </TableCell>
@@ -1876,3 +1889,4 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
