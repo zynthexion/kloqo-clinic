@@ -894,10 +894,11 @@ export default function DoctorsPage() {
     if (!startSlot || !endSlot || !selectedDoctor) return [];
     const slots: Date[] = [];
     let currentTime = new Date(startSlot);
+    const consultationTime = selectedDoctor.averageConsultingTime || 15;
     
     while (currentTime <= endSlot) {
         slots.push(new Date(currentTime));
-        currentTime = addMinutes(currentTime, doctor.averageConsultingTime || 15);
+        currentTime = addMinutes(currentTime, consultationTime);
     }
     return slots;
   }, [startSlot, endSlot, selectedDoctor]);
