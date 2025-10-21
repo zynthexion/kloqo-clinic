@@ -19,7 +19,7 @@ import type { Appointment, Doctor, Patient, User } from "@/lib/types";
 import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
-import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes, isAfter } from "date-fns";
+import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes, isAfter, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
   Form,
@@ -1116,16 +1116,16 @@ export default function AppointmentsPage() {
     }
   
     if (isToday(date) && appointmentType === 'Advanced Booking') {
-      const firstAvailableSlot = selectedDoctor.availabilitySlots
-        ?.find(s => s.day === format(date, 'EEEE'))
-        ?.timeSlots[0];
-  
-      if (firstAvailableSlot) {
-        const firstSlotTime = parseTime(firstAvailableSlot.from, date);
-        if (isAfter(new Date(), subMinutes(firstSlotTime, 30))) {
-          return true;
-        }
-      }
+        const todaysSlots = selectedDoctor.availabilitySlots?.find(s => s.day === format(date, 'EEEE'))?.timeSlots;
+        if (!todaysSlots) return true;
+
+        // Check if ALL sessions for today are past the booking cutoff.
+        const allSessionsUnbookable = todaysSlots.every(session => {
+            const sessionStartTime = parseTime(session.from, date);
+            return isAfter(new Date(), subMinutes(sessionStartTime, 30));
+        });
+        
+        return allSessionsUnbookable;
     }
   
     return false;
@@ -1837,3 +1837,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+```
