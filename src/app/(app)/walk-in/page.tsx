@@ -40,7 +40,7 @@ const formSchema = z.object({
 });
 
 // Define a type for the unsaved appointment data
-type UnsavedAppointment = Omit<Appointment, 'id' | 'docId'> & { createdAt: any };
+type UnsavedAppointment = Omit<Appointment, 'id'> & { createdAt: any };
 
 function WalkInRegistrationContent() {
   const router = useRouter();
@@ -120,7 +120,7 @@ function WalkInRegistrationContent() {
 
         const primaryDoc = primarySnapshot.docs[0];
         const primaryPatient = { id: primaryDoc.id, ...primaryDoc.data() } as Patient;
-        primaryPatient.isKloqoMember = primaryPatient.clinicIds?.includes(clinicId);
+        primaryPatient.clinicIds = primaryPatient.clinicIds || [];
 
         let allRelatedPatients: Patient[] = [primaryPatient];
 
@@ -129,7 +129,7 @@ function WalkInRegistrationContent() {
             const relatedSnapshot = await getDocs(relatedPatientsQuery);
             const relatedPatients = relatedSnapshot.docs.map(doc => {
                 const data = { id: doc.id, ...doc.data()} as Patient;
-                data.isKloqoMember = data.clinicIds?.includes(clinicId);
+                data.clinicIds = data.clinicIds || [];
                 return data;
             });
             allRelatedPatients = [...allRelatedPatients, ...relatedPatients];
@@ -235,7 +235,7 @@ function WalkInRegistrationContent() {
         const walkInTokenAllotment = clinicData?.walkInTokenAllotment || 5;
 
 
-        const { estimatedTime, patientsAhead, numericToken } = await calculateWalkInDetails(doctor, walkInTokenAllotment);
+        const { estimatedTime, patientsAhead, numericToken, slotIndex } = await calculateWalkInDetails(doctor, walkInTokenAllotment);
         
         const fullPhoneNumber = `+91${values.phone}`;
         const patientId = await managePatient({
@@ -257,11 +257,11 @@ function WalkInRegistrationContent() {
             age: values.age,
             place: values.place,
             sex: values.sex,
-            phone: fullPhoneNumber,
+            communicationPhone: fullPhoneNumber,
             patientId,
             doctor: doctor.name,
             department: doctor.department,
-            bookedVia: 'walk-in',
+            bookedVia: 'Walk-in',
             date: format(new Date(), "d MMMM yyyy"),
             time: format(estimatedTime, "hh:mm a"),
             status: 'Pending',
@@ -270,6 +270,7 @@ function WalkInRegistrationContent() {
             clinicId,
             treatment: "General Consultation",
             createdAt: serverTimestamp(),
+            slotIndex,
         };
 
         setAppointmentToSave(newAppointmentData);
@@ -296,7 +297,8 @@ function WalkInRegistrationContent() {
 
     try {
         const appointmentsCollection = collection(db, 'appointments');
-        await addDoc(appointmentsCollection, appointmentToSave).catch(async (serverError) => {
+        const newDocRef = doc(appointmentsCollection);
+        await setDoc(newDocRef, {...appointmentToSave, id: newDocRef.id}).catch(async (serverError) => {
             const permissionError = new FirestorePermissionError({
             path: 'appointments',
             operation: 'create',
@@ -539,7 +541,6 @@ function WalkInRegistrationContent() {
     </AppFrameLayout>
   );
 }
-
 export default function WalkInRegistrationPage() {
   return (
     <Suspense fallback={<div>Loading...</div>}>
@@ -547,5 +548,3 @@ export default function WalkInRegistrationPage() {
     </Suspense>
   );
 }
-
-    
