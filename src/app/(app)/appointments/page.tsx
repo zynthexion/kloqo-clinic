@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useCallback, useTransition } from "react";
@@ -40,7 +41,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck, UserPlus, Users, Plus, X, Clock, Calendar as CalendarLucide, CheckCircle2, Info, Send, MessageSquare, Smartphone } from "lucide-react";
+import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck, UserPlus, Users, Plus, X, Clock, Calendar as CalendarLucide, CheckCircle2, Info, Send, MessageSquare, Smartphone, SkipForward } from "lucide-react";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
@@ -1815,40 +1816,16 @@ export default function AppointmentsPage() {
                                     {activeTab === 'completed' ? (
                                       <Badge variant="success">Completed</Badge>
                                     ) : (
-                                      <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                          <Button variant="ghost" size="icon" className="p-0 h-auto">
-                                            <MoreHorizontal className="h-5 w-5" />
-                                          </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                          {appointment.isSkipped ? (
-                                            <>
-                                              <DropdownMenuItem onClick={() => handleComplete(appointment)}>
-                                                Completed
-                                              </DropdownMenuItem>
-                                              <DropdownMenuItem onClick={() => setEditingAppointment(appointment)}>
-                                                Reschedule
-                                              </DropdownMenuItem>
-                                            </>
-                                          ) : (
-                                            <>
-                                              <DropdownMenuItem onClick={() => handleComplete(appointment)}>
-                                                Completed
-                                              </DropdownMenuItem>
-                                              <DropdownMenuItem onClick={() => setEditingAppointment(appointment)}>
-                                                Reschedule
-                                              </DropdownMenuItem>
-                                              <DropdownMenuItem onClick={() => handleSkip(appointment)}>
-                                                Skip
-                                              </DropdownMenuItem>
-                                              <DropdownMenuItem onClick={() => handleCancel(appointment)} className="text-red-600">
-                                                Cancel
-                                              </DropdownMenuItem>
-                                            </>
-                                          )}
-                                        </DropdownMenuContent>
-                                      </DropdownMenu>
+                                        <div className="flex justify-end gap-2">
+                                            {!appointment.isSkipped && (
+                                                <Button variant="ghost" size="icon" className="p-0 h-auto text-green-600 hover:text-green-700" onClick={() => handleComplete(appointment)}>
+                                                    <CheckCircle2 className="h-5 w-5" />
+                                                </Button>
+                                            )}
+                                            <Button variant="ghost" size="icon" className="p-0 h-auto text-yellow-600 hover:text-yellow-700" onClick={() => handleSkip(appointment)}>
+                                                <SkipForward className="h-5 w-5" />
+                                            </Button>
+                                        </div>
                                     )}
                                   </TableCell>
                                 </TableRow>
@@ -1899,5 +1876,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
-    
