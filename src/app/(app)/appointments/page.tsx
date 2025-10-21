@@ -612,11 +612,16 @@ export default function AppointmentsPage() {
         console.error("Error calculating walk-in details:", err);
         setWalkInEstimate(null);
         setIsCalculatingEstimate(false);
+        toast({
+          variant: "destructive",
+          title: "Walk-in Unavailable",
+          description: err.message || "Could not calculate walk-in estimate.",
+        });
       });
     } else {
       setWalkInEstimate(null);
     }
-  }, [appointmentType, selectedDoctor, isWalkInAvailable, clinicDetails]);
+  }, [appointmentType, selectedDoctor, isWalkInAvailable, clinicDetails, toast]);
 
   async function onSubmit(values: AppointmentFormValues) {
     if (!auth.currentUser || !clinicId || !selectedDoctor) {
