@@ -334,10 +334,10 @@ export default function AppointmentsPage() {
   
     startTransition(async () => {
       try {
+        const { getDocs, query, collection, where, limit } = await import('firebase/firestore');
         const fullPhoneNumber = `+91${phone}`;
         const patientsRef = collection(db, 'patients');
         
-        const { getDocs, query, collection, where, limit } = await import('firebase/firestore');
         const primaryQuery = query(patientsRef, where('phone', '==', fullPhoneNumber), limit(1));
         const primarySnapshot = await getDocs(primaryQuery);
 
@@ -840,11 +840,11 @@ export default function AppointmentsPage() {
   }
 
  const handleSendLink = async () => {
-    const fullPhoneNumber = `+91${patientSearchTerm}`;
     if (!patientSearchTerm || !clinicId || patientSearchTerm.length !== 10) {
         toast({ variant: "destructive", title: "Invalid Phone Number", description: "Please enter a 10-digit phone number to send a link." });
         return;
     }
+    const fullPhoneNumber = `+91${patientSearchTerm}`;
 
     setIsSendingLink(true);
     try {
@@ -1040,7 +1040,7 @@ export default function AppointmentsPage() {
       patientName: relative.name,
       age: relative.age,
       sex: capitalizedSex as "Male" | "Female" | "Other",
-      phone: primaryPatient?.phone?.replace('+91', '') || '', // Use primary patient's phone
+      phone: primaryPatient?.communicationPhone?.replace('+91', '') || '',
       place: relative.place || "",
     });
     toast({ title: `Selected Relative: ${relative.name}`, description: "You are now booking an appointment for the selected relative." });
