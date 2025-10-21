@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useEffect, useMemo, useTransition, useCallback } from "react";
@@ -863,13 +862,12 @@ export default function DoctorsPage() {
     });
   }, [selectedDoctor]);
 
-  const dailyLeaveSlots = useMemo((): LeaveSlot | null => {
-    if (!selectedDoctor?.leaveSlots || !leaveCalDate) return null;
+  const dailyLeaveSlots = useMemo((): LeaveSlot[] => {
+    if (!selectedDoctor?.leaveSlots) return [];
     const dateStrToMatch = format(leaveCalDate, 'yyyy-MM-dd');
-    const leaveDay = selectedDoctor.leaveSlots.find(
-      (leave) => typeof leave === 'object' && leave.date === dateStrToMatch
+    return selectedDoctor.leaveSlots.filter(
+        (leave) => typeof leave === 'object' && leave !== null && leave.date === dateStrToMatch
     );
-    return leaveDay || null;
   }, [selectedDoctor?.leaveSlots, leaveCalDate]);
 
   const allTimeSlotsForDay = useMemo((): Date[] => {
@@ -896,17 +894,16 @@ export default function DoctorsPage() {
     if (!startSlot || !endSlot || !selectedDoctor) return [];
     const slots: Date[] = [];
     let currentTime = new Date(startSlot);
-    const consultationTime = selectedDoctor.averageConsultingTime || 15;
     
     while (currentTime <= endSlot) {
         slots.push(new Date(currentTime));
-        currentTime = addMinutes(currentTime, consultationTime);
+        currentTime = addMinutes(currentTime, doctor.averageConsultingTime || 15);
     }
     return slots;
   }, [startSlot, endSlot, selectedDoctor]);
 
   const handleSlotClick = (slot: Date) => {
-    if (dailyLeaveSlots) return; // Don't allow new selection if break exists
+    if (dailyLeaveSlots.length > 0) return; // Don't allow new selection if break exists
 
     if (!startSlot || endSlot) {
         setStartSlot(slot);
@@ -927,8 +924,9 @@ export default function DoctorsPage() {
     setIsSubmittingBreak(true);
     try {
         const batch = writeBatch(db);
+        const consultationTime = selectedDoctor.averageConsultingTime || 15;
         const newBreakStart = startSlot;
-        const newBreakEnd = addMinutes(endSlot, (selectedDoctor.averageConsultingTime || 15) - 1);
+        const newBreakEnd = addMinutes(endSlot, consultationTime - 1);
         const breakDuration = differenceInMinutes(newBreakEnd, newBreakStart) + 1;
         const dateStr = format(leaveCalDate, 'd MMMM yyyy');
         
@@ -983,7 +981,7 @@ export default function DoctorsPage() {
   };
 
   const handleCancelBreak = async () => {
-    if (!selectedDoctor || !leaveCalDate || !dailyLeaveSlots) {
+    if (!selectedDoctor || !leaveCalDate || dailyLeaveSlots.length === 0) {
         toast({ variant: 'destructive', title: 'Error', description: 'No break found to cancel.' });
         return;
     }
@@ -991,10 +989,15 @@ export default function DoctorsPage() {
     setIsSubmittingBreak(true);
     try {
         const batch = writeBatch(db);
+        const consultationTime = selectedDoctor.averageConsultingTime || 15;
+        
+        // Calculate total break duration from all break segments for the day
+        const totalBreakDuration = dailyLeaveSlots.reduce((total, leave) => {
+            const breakStart = parseTimeUtil(leave.slots[0].from, leaveCalDate);
+            const breakEnd = parseTimeUtil(leave.slots[0].to, leaveCalDate);
+            return total + differenceInMinutes(breakEnd, breakStart) + 1;
+        }, 0);
 
-        const breakStart = parseTimeUtil(dailyLeaveSlots.slots[0].from, leaveCalDate);
-        const breakEnd = parseTimeUtil(dailyLeaveSlots.slots[0].to, leaveCalDate);
-        const breakDuration = differenceInMinutes(breakEnd, breakStart);
 
         const dateStr = format(leaveCalDate, 'd MMMM yyyy');
         const appointmentsQuery = query(collection(db, "appointments"), 
@@ -1010,8 +1013,9 @@ export default function DoctorsPage() {
             const appt = docSnap.data() as Appointment;
             if (!appt.time) return;
             const apptTime = parseTimeUtil(appt.time, leaveCalDate);
-            if (apptTime > breakEnd) {
-                 appointmentsToUpdate.push({ id: docSnap.id, newTime: addMinutes(apptTime, -breakDuration) });
+            // If appointment is after the start of the first break
+             if (dailyLeaveSlots.some(leave => apptTime > parseTimeUtil(leave.slots[0].from, leaveCalDate))) {
+                 appointmentsToUpdate.push({ id: docSnap.id, newTime: addMinutes(apptTime, -totalBreakDuration) });
             }
         });
         
@@ -1024,10 +1028,10 @@ export default function DoctorsPage() {
         const leaveDateStr = format(leaveCalDate, 'yyyy-MM-dd');
         
         const updatedLeaveSlots = (selectedDoctor.leaveSlots || []).filter(ls => {
-            if (typeof ls === 'object' && ls.date === leaveDateStr) {
-                return false;
+            if (typeof ls === 'object' && ls.date !== leaveDateStr) {
+                return true;
             }
-            return true;
+            return false;
         });
 
         batch.update(doctorRef, { leaveSlots: updatedLeaveSlots });
@@ -1472,11 +1476,7 @@ export default function DoctorsPage() {
                                         <div className="grid grid-cols-3 gap-2">
                                             {allTimeSlotsForDay.map((slot) => {
                                                 const isSelected = (startSlot && slot >= startSlot && endSlot && slot <= endSlot) || (startSlot?.getTime() === slot.getTime() && !endSlot);
-                                                const isOnLeave = dailyLeaveSlots?.slots.some(leaveSlot => {
-                                                  const leaveStart = parseTimeUtil(leaveSlot.from, leaveCalDate);
-                                                  const leaveEnd = parseTimeUtil(leaveSlot.to, leaveCalDate);
-                                                  return slot >= leaveStart && slot < leaveEnd;
-                                                });
+                                                const isOnLeave = dailyLeaveSlots.length > 0;
                                                 const isBooked = allBookedSlots.includes(slot.getTime());
 
                                                 return (
@@ -1485,7 +1485,11 @@ export default function DoctorsPage() {
                                                         variant={isSelected ? 'default' : 'outline'}
                                                         className={cn("h-auto py-2 flex-col", 
                                                             isSelected && 'bg-destructive/80 hover:bg-destructive text-white',
-                                                            isOnLeave && 'bg-red-200 text-red-800 border-red-300 cursor-not-allowed',
+                                                            isOnLeave && dailyLeaveSlots.some(ls => ls.slots.some(s => {
+                                                                const leaveStart = parseTimeUtil(s.from, leaveCalDate);
+                                                                const leaveEnd = parseTimeUtil(s.to, leaveCalDate);
+                                                                return slot >= leaveStart && slot < leaveEnd;
+                                                            })) && 'bg-red-200 text-red-800 border-red-300 cursor-not-allowed',
                                                             !isSelected && !isOnLeave && 'hover:bg-accent'
                                                         )}
                                                         onClick={() => handleSlotClick(slot)}
@@ -1499,8 +1503,10 @@ export default function DoctorsPage() {
                                          {allTimeSlotsForDay.length === 0 && <p className="text-sm text-muted-foreground text-center pt-4">No slots available.</p>}
                                     </div>
                                      <div className="text-center mt-4 mb-2 text-sm text-muted-foreground">
-                                        {dailyLeaveSlots ? (
-                                            `Break: ${dailyLeaveSlots.slots[0].from} to ${dailyLeaveSlots.slots[0].to}`
+                                        {dailyLeaveSlots.length > 0 ? (
+                                            dailyLeaveSlots.map((leave, index) => (
+                                              <p key={index}>Break: {leave.slots[0].from} - {leave.slots[0].to}</p>
+                                            ))
                                         ) : startSlot && !endSlot ? (
                                             "Select an end time for the break."
                                         ) : startSlot && endSlot ? (
@@ -1509,7 +1515,7 @@ export default function DoctorsPage() {
                                         "Select a start and end time for the break."
                                         )}
                                       </div>
-                                    {dailyLeaveSlots ? (
+                                    {dailyLeaveSlots.length > 0 ? (
                                         <Button className="w-full" variant="secondary" disabled={isSubmittingBreak} onClick={handleCancelBreak}>
                                             {isSubmittingBreak ? <Loader2 className="animate-spin" /> : 'Cancel This Break'}
                                         </Button>
@@ -1789,3 +1795,6 @@ export default function DoctorsPage() {
 
 
 
+
+
+    
