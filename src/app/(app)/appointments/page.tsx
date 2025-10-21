@@ -633,15 +633,14 @@ export default function AppointmentsPage() {
         let patientForAppointmentId: string;
         let patientForAppointmentName: string;
         
-        const patientPhoneNumber = `+91${values.phone}`;
-        const communicationPhone = primaryPatient?.phone || patientPhoneNumber;
+        const communicationPhone = `+91${form.getValues('phone')}`;
         
         const patientDataToUpdate = {
           name: values.patientName,
           age: values.age,
           sex: values.sex,
           place: values.place,
-          phone: values.phone ? patientPhoneNumber : "",
+          phone: values.phone ? `+91${values.phone}` : "",
           communicationPhone: communicationPhone,
         };
 
@@ -663,6 +662,7 @@ export default function AppointmentsPage() {
         } else {
           // Creating a new user and patient
           const usersRef = collection(db, 'users');
+          const patientPhoneNumber = `+91${values.phone}`;
           const userQuery = query(usersRef, where('phone', '==', patientPhoneNumber));
           const userSnapshot = await getDocs(userQuery);
 
@@ -1040,7 +1040,7 @@ export default function AppointmentsPage() {
       patientName: relative.name,
       age: relative.age,
       sex: capitalizedSex as "Male" | "Female" | "Other",
-      phone: primaryPatient?.communicationPhone?.replace('+91', '') || '',
+      phone: (relative.communicationPhone || primaryPatient?.communicationPhone)?.replace('+91', ''),
       place: relative.place || "",
     });
     toast({ title: `Selected Relative: ${relative.name}`, description: "You are now booking an appointment for the selected relative." });
@@ -1901,3 +1901,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
