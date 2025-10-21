@@ -633,12 +633,14 @@ export default function DoctorsPage() {
         startTransition(async () => {
             const doctorRef = doc(db, "doctors", selectedDoctor.id);
             try {
-                const existingLeaveSlots = selectedDoctor.leaveSlots || [];
+                const existingLeaveSlots: LeaveSlot[] = selectedDoctor.leaveSlots || [];
                 const cleanedLeaveSlots: LeaveSlot[] = [];
 
                 for (const leaveDay of existingLeaveSlots) {
-                    if (!leaveDay.date) continue;
+                    if (!leaveDay.date || !Array.isArray(leaveDay.slots)) continue;
                     const leaveDate = parseDateFns(leaveDay.date, "yyyy-MM-dd", new Date());
+                    if (isNaN(leaveDate.getTime())) continue;
+
                     const dayName = format(leaveDate, 'EEEE');
                     const availabilityForDay = newAvailabilitySlots.find(s => s.day === dayName);
 
@@ -650,6 +652,7 @@ export default function DoctorsPage() {
                     for (const leaveSubSlot of leaveDay.slots) {
                         const leaveStart = parseDateFns(leaveSubSlot.from, "hh:mm a", new Date());
                         const leaveEnd = parseDateFns(leaveSubSlot.to, "hh:mm a", new Date());
+                        if (isNaN(leaveStart.getTime()) || isNaN(leaveEnd.getTime())) continue;
 
                         const isContained = availabilityForDay.timeSlots.some(availableSlot => {
                             const availableStart = parseDateFns(availableSlot.from, "hh:mm a", new Date());
@@ -704,14 +707,16 @@ export default function DoctorsPage() {
             return slot;
         }).filter(slot => slot.timeSlots.length > 0);
 
-        const existingLeaveSlots = selectedDoctor.leaveSlots || [];
+        const existingLeaveSlots: LeaveSlot[] = selectedDoctor.leaveSlots || [];
         const cleanedLeaveSlots: LeaveSlot[] = [];
 
         for (const leaveDay of existingLeaveSlots) {
-            if (!leaveDay.date) continue;
-            const leaveDate = parseDateFns(leaveDay.date, "yyyy-MM-dd", new Date());
-            const dayName = format(leaveDate, 'EEEE');
+            if (!leaveDay.date || !Array.isArray(leaveDay.slots)) continue;
 
+            const leaveDate = parseDateFns(leaveDay.date, 'yyyy-MM-dd', new Date());
+            if (isNaN(leaveDate.getTime())) continue;
+
+            const dayName = format(leaveDate, 'EEEE');
             if (dayName !== day) {
                 cleanedLeaveSlots.push(leaveDay);
                 continue;
@@ -871,8 +876,9 @@ export default function DoctorsPage() {
   }, [selectedDoctor?.availabilitySlots]);
 
   const leaveDates = useMemo(() => {
-      return (selectedDoctor?.leaveSlots || [])
-          .filter(ls => ls && ls.slots && ls.slots.length > 0)
+      if (!selectedDoctor?.leaveSlots) return [];
+      return selectedDoctor.leaveSlots
+          .filter(ls => ls?.date && Array.isArray(ls.slots) && ls.slots.length > 0)
           .map(ls => parse(ls.date, 'yyyy-MM-dd', new Date()));
   }, [selectedDoctor?.leaveSlots]);
 
@@ -1618,5 +1624,6 @@ export default function DoctorsPage() {
     
 
     
+
 
 

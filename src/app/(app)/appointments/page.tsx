@@ -73,7 +73,6 @@ const formSchema = z.object({
   sex: z.enum(["Male", "Female", "Other"]),
   phone: z.string(),
   age: z.coerce.number({
-    required_error: "Age is required.",
     invalid_type_error: "Age must be a number."
   }).min(0, "Age cannot be negative.").optional(),
   doctor: z.string().min(1, { message: "Please select a doctor." }),
@@ -335,8 +334,8 @@ export default function AppointmentsPage() {
     startTransition(async () => {
       try {
         const { getDocs, query, collection, where, limit } = await import('firebase/firestore');
-        const fullPhoneNumber = `+91${phone}`;
         const patientsRef = collection(db, 'patients');
+        const fullPhoneNumber = `+91${phone}`;
         
         const primaryQuery = query(patientsRef, where('phone', '==', fullPhoneNumber), limit(1));
         const primarySnapshot = await getDocs(primaryQuery);
@@ -1073,8 +1072,8 @@ export default function AppointmentsPage() {
   const leaveDates = useMemo(() => {
     if (!selectedDoctor?.leaveSlots) return [];
     return selectedDoctor.leaveSlots
-      .filter(leaveSlot => leaveSlot && leaveSlot.date && leaveSlot.slots?.length > 0)
-      .map(ls => parse(ls.date, 'yyyy-MM-dd', new Date()));
+        .filter(ls => ls?.date && Array.isArray(ls.slots) && ls.slots.length > 0)
+        .map(ls => parse(ls.date, 'yyyy-MM-dd', new Date()));
   }, [selectedDoctor?.leaveSlots]);
 
   const sessionSlots = useMemo(() => {

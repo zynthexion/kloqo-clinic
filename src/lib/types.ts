@@ -85,7 +85,7 @@ export type Patient = {
   email?: string;
   place?: string;
   totalAppointments: number;
-  visitHistory?: string[]; // Changed from Visit[] to string[]
+  visitHistory?: string[];
   createdAt: any; // Can be Date or Firestore Timestamp
   updatedAt: any; // Can be Date or Firestore Timestamp
   relatedPatientIds?: string[];
