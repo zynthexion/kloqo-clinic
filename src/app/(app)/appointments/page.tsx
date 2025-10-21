@@ -1809,25 +1809,25 @@ export default function AppointmentsPage() {
       )}
       <Dialog open={isTokenModalOpen} onOpenChange={setIsTokenModalOpen}>
         <DialogContent className="sm:max-w-xs w-[90%] text-center p-6 sm:p-8">
-          <DialogClose asChild>
-            <Button variant="ghost" size="icon" className="absolute top-4 right-4 h-6 w-6 text-muted-foreground">
-              <X className="h-4 w-4" />
-              <span className="sr-only">Close</span>
-            </Button>
-          </DialogClose>
-          <div className="flex flex-col items-center space-y-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-              <CheckCircle2 className="h-8 w-8 text-green-600" />
+            <DialogHeader className="text-center space-y-2">
+                <div className="flex justify-center">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+                        <CheckCircle2 className="h-8 w-8 text-green-600" />
+                    </div>
+                </div>
+                <DialogTitle className="text-xl font-bold">Walk-in Token Generated!</DialogTitle>
+                <DialogDescription>Please wait for your turn. You can monitor the live queue.</DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+                <p className="text-sm text-muted-foreground">Your Token Number</p>
+                <p className="text-5xl font-bold text-primary">{generatedToken}</p>
             </div>
-            <div className="space-y-1">
-              <h2 className="text-xl font-bold">Walk-in Token Generated!</h2>
-              <p className="text-muted-foreground text-sm">Please wait for your turn. You can monitor the live queue.</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Your Token Number</p>
-              <p className="text-5xl font-bold text-primary">{generatedToken}</p>
-            </div>
-          </div>
+            <DialogClose asChild>
+                <Button variant="ghost" size="icon" className="absolute top-4 right-4 h-6 w-6 text-muted-foreground">
+                    <X className="h-4 w-4" />
+                    <span className="sr-only">Close</span>
+                </Button>
+            </DialogClose>
         </DialogContent>
       </Dialog>
       <AlertDialog open={!!appointmentToSkip} onOpenChange={(open) => !open && setAppointmentToSkip(null)}>
