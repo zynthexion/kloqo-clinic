@@ -40,13 +40,12 @@ export async function calculateWalkInDetails(
   if (!todaysAvailability || !todaysAvailability.timeSlots?.length)
     throw new Error('Doctor not available today');
 
-  const slotDuration = doctor.averageConsultingTime || 15; // Default to 15 if not set
+  const slotDuration = doctor.averageConsultingTime || 15;
   const allSlots = generateTimeSlots(todaysAvailability.timeSlots, now, slotDuration);
   if (allSlots.length === 0) {
     throw new Error('Doctor has no available time slots today');
   }
 
-  // Determine availability start & end times
   const availabilityStart = allSlots[0];
   const availabilityEnd = addMinutes(allSlots[allSlots.length - 1], slotDuration);
 
@@ -54,11 +53,9 @@ export async function calculateWalkInDetails(
   const walkInOpenTime = addMinutes(availabilityStart, -30);
   const walkInCloseTime = addMinutes(availabilityEnd, -30);
 
-  // Check if walk-in is allowed
   if (isBefore(now, walkInOpenTime)) {
     throw new Error(`Walk-in booking opens at ${format(walkInOpenTime, 'hh:mm a')}`);
   }
-
   if (isAfter(now, walkInCloseTime)) {
     throw new Error('Walk-in booking for today is closed');
   }
@@ -86,42 +83,44 @@ export async function calculateWalkInDetails(
   
   const occupiedSlots = new Set(advancedAppointments.map(a => a.slotIndex).filter(idx => idx !== undefined));
 
+  // Step 4: Determine starting slot for the new walk-in
+  let targetSlotIndex: number;
 
-  // Step 4: Find last advanced and last walk-in
-  const lastAdvancedSlotIndex =
-    advancedAppointments.length > 0
+  if (walkIns.length === 0) {
+    // First walk-in of the day
+    const currentSlotIndex = findCurrentSlotIndex(allSlots, now);
+    const lastAdvancedSlotIndex = advancedAppointments.length > 0
       ? Math.max(...advancedAppointments.map(a => a.slotIndex ?? -1))
       : -1;
-
-  const lastWalkIn = walkIns.length > 0 ? walkIns[walkIns.length - 1] : null;
-
-  // Step 5: Determine new walk-in slot
-  let startingSlotIndex: number;
-
-  if (!lastWalkIn) {
-    // First walk-in of the day
-    const baseIndex = Math.max(findCurrentSlotIndex(allSlots, now), lastAdvancedSlotIndex);
-    startingSlotIndex = baseIndex + walkInTokenAllotment;
-  } else {
-    // Subsequent walk-ins
-    const lastWalkInSlot = lastWalkIn.slotIndex ?? findSlotIndexByToken(allSlots, lastWalkIn.numericToken);
     
-    if (lastWalkInSlot > lastAdvancedSlotIndex) {
-      // After last advanced appointment, place consecutively
-      startingSlotIndex = lastWalkInSlot + 1;
+    // Start calculating from whichever is later: the current time or the last booked slot.
+    const baseSlotIndex = Math.max(currentSlotIndex, lastAdvancedSlotIndex);
+    targetSlotIndex = baseSlotIndex + walkInTokenAllotment;
+
+  } else {
+    // There are existing walk-ins
+    const lastWalkIn = walkIns[walkIns.length - 1];
+    const lastWalkInSlotIndex = lastWalkIn.slotIndex ?? findSlotIndexByToken(allSlots, lastWalkIn.numericToken);
+    const lastAdvancedSlotIndex = advancedAppointments.length > 0
+        ? Math.max(...advancedAppointments.map(a => a.slotIndex ?? -1))
+        : -1;
+
+    if (lastWalkInSlotIndex > lastAdvancedSlotIndex) {
+      // If the last walk-in is already past all advanced bookings, schedule consecutively.
+      targetSlotIndex = lastWalkInSlotIndex + 1;
     } else {
-      // Before last advanced appointment, space it out
-      startingSlotIndex = lastWalkInSlot + walkInTokenAllotment;
+      // Otherwise, space it out.
+      targetSlotIndex = lastWalkInSlotIndex + walkInTokenAllotment;
     }
   }
 
-  // Step 6: Find the next available (non-advanced) slot starting from the target index
-  let finalSlotIndex = startingSlotIndex;
+  // Step 5: Find the next available slot, avoiding collisions with advanced bookings
+  let finalSlotIndex = targetSlotIndex;
   while (occupiedSlots.has(finalSlotIndex)) {
     finalSlotIndex++;
   }
 
-  // Step 7: Calculate estimated time, handling overflow
+  // Step 6: Calculate estimated time, handling overflow
   let estimatedTime: Date;
   if (finalSlotIndex >= allSlots.length) {
     const lastSlotTime = allSlots[allSlots.length - 1];
@@ -130,29 +129,23 @@ export async function calculateWalkInDetails(
   } else {
     estimatedTime = allSlots[finalSlotIndex];
   }
-  
-  // If calculated time is in the past, find the next available future slot
+
+  // Ensure estimated time is not in the past
   if (isBefore(estimatedTime, now)) {
-      let nextAvailableIndex = findCurrentSlotIndex(allSlots, now);
-      while(occupiedSlots.has(nextAvailableIndex)) {
-          nextAvailableIndex++;
-      }
-      finalSlotIndex = nextAvailableIndex;
-      if (finalSlotIndex >= allSlots.length) {
-          const lastSlotTime = allSlots[allSlots.length - 1];
-          const overflowSlots = finalSlotIndex - (allSlots.length - 1);
-          estimatedTime = addMinutes(lastSlotTime, overflowSlots * slotDuration);
-      } else {
-          estimatedTime = allSlots[finalSlotIndex];
-      }
+    const currentSlotIndex = findCurrentSlotIndex(allSlots, now);
+    let nextAvailableIndex = currentSlotIndex;
+    while(occupiedSlots.has(nextAvailableIndex)) {
+        nextAvailableIndex++;
+    }
+    finalSlotIndex = nextAvailableIndex;
+    estimatedTime = allSlots[finalSlotIndex] || addMinutes(allSlots[allSlots.length - 1], (finalSlotIndex - allSlots.length + 1) * slotDuration);
   }
 
-
-  // Step 8: Generate new numeric token
+  // Step 7: Generate new numeric token
   const newNumericToken =
     appointments.length > 0 ? Math.max(...appointments.map(a => a.numericToken)) + 1 : 1;
 
-  // Step 9: Calculate queue position
+  // Step 8: Calculate queue position accurately
   const patientsAhead = appointments.filter(a => {
       const aptTime = parse(a.time, 'hh:mm a', now);
       return isAfter(aptTime, now) && isBefore(aptTime, estimatedTime);
@@ -185,7 +178,7 @@ function generateTimeSlots(timeSlots: TimeSlot[], referenceDate: Date, slotDurat
 }
 
 /**
- * Finds the index of the next available slot
+ * Finds the index of the current or next slot
  */
 function findCurrentSlotIndex(slots: Date[], now: Date): number {
   for (let i = 0; i < slots.length; i++) {
