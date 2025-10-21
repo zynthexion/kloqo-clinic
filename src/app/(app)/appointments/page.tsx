@@ -66,6 +66,7 @@ import { FirestorePermissionError } from "@/firebase/errors";
 import { errorEmitter } from "@/firebase/error-emitter";
 import Link from "next/link";
 import { Label } from "@/components/ui/label";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -300,6 +301,7 @@ export default function AppointmentsPage() {
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
   const [walkInEstimate, setWalkInEstimate] = useState<WalkInEstimate>(null);
   const [isCalculatingEstimate, setIsCalculatingEstimate] = useState(false);
+  const [appointmentToSkip, setAppointmentToSkip] = useState<Appointment | null>(null);
   
   const [linkChannel, setLinkChannel] = useState<'sms' | 'whatsapp'>('sms');
 
@@ -1834,7 +1836,7 @@ export default function AppointmentsPage() {
                                                 </Button>
                                             )}
                                             {index === 0 && activeTab === 'upcoming' && (
-                                                <Button variant="ghost" size="icon" className="p-0 h-auto text-yellow-600 hover:text-yellow-700" onClick={() => handleSkip(appointment)}>
+                                                <Button variant="ghost" size="icon" className="p-0 h-auto text-yellow-600 hover:text-yellow-700" onClick={() => setAppointmentToSkip(appointment)}>
                                                     <SkipForward className="h-5 w-5" />
                                                 </Button>
                                             )}
@@ -1885,9 +1887,31 @@ export default function AppointmentsPage() {
           </div>
         </DialogContent>
       </Dialog>
+      <AlertDialog open={!!appointmentToSkip} onOpenChange={(open) => !open && setAppointmentToSkip(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure you want to skip this appointment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will move the appointment for "{appointmentToSkip?.patientName}" to the end of the queue.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setAppointmentToSkip(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-yellow-500 hover:bg-yellow-600"
+              onClick={() => {
+                if (appointmentToSkip) {
+                  handleSkip(appointmentToSkip);
+                }
+                setAppointmentToSkip(null);
+              }}
+            >
+              Confirm Skip
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <WeeklyDoctorAvailability />
     </>
   );
 }
-
-    
