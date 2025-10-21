@@ -862,50 +862,24 @@ export default function DoctorsPage() {
     });
   }, [selectedDoctor]);
 
- const dailyLeaveSlots = useMemo((): number[] => {
+  const dailyLeaveSlots = useMemo((): number[] => {
     if (!selectedDoctor?.leaveSlots) return [];
-    
-    // This function now handles both string arrays and object arrays for backward compatibility.
-    const leavesForDate = selectedDoctor.leaveSlots.filter(leave => {
-        if (typeof leave === 'string') {
-            try {
-                const leaveDate = parseISO(leave);
-                return format(leaveDate, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
-            } catch {
-                return false;
+    return selectedDoctor.leaveSlots
+        .map(leave => {
+            if (typeof leave === 'string') {
+                return parseISO(leave);
             }
-        }
-        if (typeof leave === 'object' && leave.date) {
-            return leave.date === format(selectedDate, 'yyyy-MM-dd');
-        }
-        return false;
-    });
-
-    if (leavesForDate.length === 0) return [];
-    
-    if (typeof leavesForDate[0] === 'string') {
-        return (leavesForDate as string[]).map(leave => parseISO(leave).getTime());
-    }
-
-    if (typeof leavesForDate[0] === 'object') {
-        const timeSlotsToParse = (leavesForDate as LeaveSlot[]).flatMap(l => l.slots);
-        const allSlots: Date[] = [];
-        const consultationTime = selectedDoctor.averageConsultingTime || 15;
-
-        timeSlotsToParse.forEach(timeSlot => {
-            let currentTime = parseTimeUtil(timeSlot.from, selectedDate);
-            const endTime = parseTimeUtil(timeSlot.to, selectedDate);
-            while (currentTime < endTime) {
-                allSlots.push(new Date(currentTime));
-                currentTime = addMinutes(currentTime, consultationTime);
+            if (leave && typeof (leave as any).toDate === 'function') {
+                return (leave as any).toDate();
             }
-        });
-        return allSlots.map(d => d.getTime());
-    }
-
-    return [];
-
-  }, [selectedDoctor?.leaveSlots, selectedDate]);
+            if (leave instanceof Date) {
+                return leave;
+            }
+            return new Date(NaN);
+        })
+        .filter(date => !isNaN(date.getTime()) && format(date, 'yyyy-MM-dd') === format(leaveCalDate, 'yyyy-MM-dd'))
+        .map(date => date.getTime());
+}, [selectedDoctor?.leaveSlots, leaveCalDate]);
 
   const allTimeSlotsForDay = useMemo((): Date[] => {
     if (!selectedDoctor || !leaveCalDate) return [];
@@ -963,9 +937,7 @@ export default function DoctorsPage() {
     try {
         const batch = writeBatch(db);
         const consultationTime = selectedDoctor.averageConsultingTime || 15;
-        const newBreakStart = startSlot;
-        const newBreakEnd = addMinutes(endSlot, consultationTime - 1);
-        const breakDuration = differenceInMinutes(newBreakEnd, newBreakStart) + 1;
+        const breakDuration = differenceInMinutes(endSlot, startSlot) + consultationTime;
         const dateStr = format(leaveCalDate, 'd MMMM yyyy');
         
         const appointmentsQuery = query(collection(db, "appointments"), 
@@ -980,7 +952,7 @@ export default function DoctorsPage() {
             const appt = docSnap.data() as Appointment;
             if (!appt.time) return;
             const apptTime = parseTimeUtil(appt.time, leaveCalDate);
-            if (apptTime >= newBreakStart) {
+            if (apptTime >= startSlot) {
                 appointmentsToUpdate.push({ id: docSnap.id, newTime: addMinutes(apptTime, breakDuration) });
             }
         });
@@ -1831,5 +1803,7 @@ export default function DoctorsPage() {
 
     
 
+
+    
 
     
