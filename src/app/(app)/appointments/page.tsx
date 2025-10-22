@@ -41,7 +41,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck, UserPlus, Users, Plus, X, Clock, Calendar as CalendarLucide, CheckCircle2, Info, Send, MessageSquare, Smartphone, SkipForward, Hourglass } from "lucide-react";
+import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck, UserPlus, Users, Plus, X, Clock, Calendar as CalendarLucide, CheckCircle2, Info, Send, MessageSquare, Smartphone, SkipForward, Hourglass, Repeat } from "lucide-react";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
@@ -861,6 +861,66 @@ export default function AppointmentsPage() {
       } catch (error) {
         console.error("Error skipping appointment:", error);
         toast({ variant: "destructive", title: "Error", description: "Failed to skip appointment." });
+      }
+    });
+  };
+
+  const handleRejoinQueue = (appointment: Appointment) => {
+    startTransition(async () => {
+      if (!clinicId || !selectedDoctor) return;
+  
+      const recurrence = clinicDetails?.skippedTokenRecurrence || 3;
+      const avgConsultingTime = selectedDoctor.averageConsultingTime || 15;
+  
+      // Get today's active appointments for the same doctor, sorted by time
+      const today = new Date();
+      const todayStr = format(today, 'd MMMM yyyy');
+      const activeAppointments = appointments
+        .filter(a =>
+          a.doctor === appointment.doctor &&
+          a.date === todayStr &&
+          (a.status === 'Pending' || a.status === 'Confirmed')
+        )
+        .sort((a, b) => parseTime(a.time, today).getTime() - parseTime(b.time, today).getTime());
+  
+      if (activeAppointments.length === 0) {
+        // No active queue, just set their time to now + a small delay
+        const newTime = format(addMinutes(new Date(), 5), 'hh:mm a');
+        await updateDoc(doc(db, 'appointments', appointment.id), { time: newTime, status: 'Confirmed' });
+        toast({ title: 'Re-joined Queue', description: `${appointment.patientName} is now next.` });
+        return;
+      }
+  
+      const insertionIndex = Math.min(recurrence, activeAppointments.length);
+      const lastPatientBeforeInsertion = activeAppointments[insertionIndex - 1];
+      const newTimeForSkipped = addMinutes(parseTime(lastPatientBeforeInsertion.time, today), avgConsultingTime);
+      
+      const batch = writeBatch(db);
+  
+      // Update the skipped appointment
+      const skippedRef = doc(db, 'appointments', appointment.id);
+      batch.update(skippedRef, {
+        status: 'Confirmed',
+        time: format(newTimeForSkipped, 'hh:mm a'),
+      });
+  
+      // Ripple update for subsequent appointments
+      for (let i = insertionIndex; i < activeAppointments.length; i++) {
+        const aptToShift = activeAppointments[i];
+        const newTime = addMinutes(parseTime(aptToShift.time, today), avgConsultingTime);
+        const aptRef = doc(db, 'appointments', aptToShift.id);
+        batch.update(aptRef, { time: format(newTime, 'hh:mm a') });
+      }
+  
+      try {
+        await batch.commit();
+        toast({
+          title: "Patient Re-joined Queue",
+          description: `${appointment.patientName} has been added back to the queue. Subsequent appointments have been rescheduled.`
+        });
+      } catch (error) {
+        console.error("Error re-joining queue:", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not re-join the patient to the queue." });
       }
     });
   };
@@ -1752,7 +1812,26 @@ export default function AppointmentsPage() {
                                   <TableCell>{appointment.time}</TableCell>
                                   <TableCell className="text-right">
                                     {activeTab === 'skipped' ? (
-                                      <Badge variant="destructive">Skipped</Badge>
+                                      <div className="flex justify-end gap-2">
+                                        <Badge variant="destructive">Skipped</Badge>
+                                        <TooltipProvider>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="p-0 h-auto text-blue-600 hover:text-blue-700"
+                                                onClick={() => handleRejoinQueue(appointment)}
+                                              >
+                                                <Repeat className="h-5 w-5" />
+                                              </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <p>Re-Join Queue</p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        </TooltipProvider>
+                                      </div>
                                     ) : (
                                         <div className="flex justify-end gap-2">
                                             {index === 0 && appointment.status !== 'Skipped' && (
