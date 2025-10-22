@@ -1156,10 +1156,11 @@ export default function AppointmentsPage() {
   const isBookingButtonDisabled = useMemo(() => {
     if (isPending) return true;
     if (appointmentType === 'Walk-in') {
-        if (!form.getValues('patientName')) return true; // Ensure basic patient details are there
+        // For walk-in, basic patient details are enough. `form.formState.isValid` might be too strict.
+        if (!form.getValues('patientName')) return true;
         return !walkInEstimate || isCalculatingEstimate;
     }
-    // For advanced booking
+    // For advanced booking, rely on the form's complete validity state
     return !form.formState.isValid;
 }, [isPending, appointmentType, walkInEstimate, isCalculatingEstimate, form.formState.isValid, form.getValues('patientName')]);
 
@@ -1209,7 +1210,9 @@ export default function AppointmentsPage() {
                                     <div className="p-4 text-center text-sm text-muted-foreground">Searching...</div>
                                 ) : (patientSearchResults.length > 0 ? (
                                 <CommandGroup>
-                                  {patientSearchResults.map((patient) => (
+                                  {patientSearchResults.map((patient) => {
+                                    const isClinicPatient = patient.clinicIds?.includes(clinicId!);
+                                    return (
                                       <CommandItem
                                         key={patient.id}
                                         value={patient.phone}
@@ -1220,19 +1223,19 @@ export default function AppointmentsPage() {
                                           {patient.name || "Unnamed Patient"}
                                           <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
                                         </div>
-                                        <Badge variant={patient.isKloqoMember ? "secondary" : "outline"} className={cn(
-                                          patient.isKloqoMember ? "text-blue-600 border-blue-500" : "text-amber-600 border-amber-500"
+                                        <Badge variant={isClinicPatient ? "secondary" : "outline"} className={cn(
+                                          isClinicPatient ? "text-blue-600 border-blue-500" : "text-amber-600 border-amber-500"
                                         )}>
-                                          {patient.isKloqoMember ? (
+                                          {isClinicPatient ? (
                                             <UserCheck className="mr-1.5 h-3 w-3" />
                                           ) : (
                                             <Crown className="mr-1.5 h-3 w-3" />
                                           )}
-                                          {patient.isKloqoMember ? "Existing Patient" : "Kloqo Member"}
+                                          {isClinicPatient ? "Existing Patient" : "Kloqo Member"}
                                         </Badge>
                                       </CommandItem>
                                     )
-                                  )}
+                                  })}
                                 </CommandGroup>
                                 ) : (
                                    patientSearchTerm.length >= 5 && <CommandEmpty>No patient found.</CommandEmpty>
@@ -1315,7 +1318,11 @@ export default function AppointmentsPage() {
                                         {relatives.length > 0 ? (
                                           <ScrollArea className="h-40">
                                             {relatives.map((relative) => (
-                                              <div key={relative.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted">
+                                              <div 
+                                                key={relative.id} 
+                                                className="flex items-center justify-between p-2 rounded-md hover:bg-muted cursor-pointer"
+                                                onClick={() => handleRelativeSelect(relative)}
+                                              >
                                                 <div className="flex items-center gap-3">
                                                   <Avatar className="h-8 w-8">
                                                     <AvatarFallback>{relative.name.charAt(0)}</AvatarFallback>
@@ -1325,7 +1332,6 @@ export default function AppointmentsPage() {
                                                     <p className="text-xs text-muted-foreground">{relative.sex}, {relative.age} years</p>
                                                   </div>
                                                 </div>
-                                                <Button variant="outline" size="sm" onClick={() => handleRelativeSelect(relative)}>Book</Button>
                                               </div>
                                             ))}
                                           </ScrollArea>
