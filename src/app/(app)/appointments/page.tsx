@@ -1648,7 +1648,7 @@ export default function AppointmentsPage() {
                         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                           <TabsList className="grid w-full grid-cols-2">
                             <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
-                            <TabsTrigger value="completed">Completed</TabsTrigger>
+                            <TabsTrigger value="skipped">Skipped</TabsTrigger>
                           </TabsList>
                         </Tabs>
                       </>
@@ -1732,12 +1732,12 @@ export default function AppointmentsPage() {
                               <TableHead>Patient</TableHead>
                               <TableHead>Token</TableHead>
                               <TableHead>Time</TableHead>
-                              <TableHead className="text-right">{activeTab === 'completed' ? 'Status' : 'Actions'}</TableHead>
+                              <TableHead className="text-right">{activeTab === 'skipped' ? 'Status' : 'Actions'}</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {todaysAppointments
-                              .filter(apt => activeTab === 'upcoming' ? (apt.status === 'Confirmed' || apt.status === 'Pending' || apt.status === 'Skipped') : apt.status === 'Completed')
+                              .filter(apt => activeTab === 'upcoming' ? (apt.status === 'Confirmed' || apt.status === 'Pending') : apt.status === 'Skipped')
                               .map((appointment, index) => (
                                 <TableRow
                                   key={appointment.id}
@@ -1749,8 +1749,8 @@ export default function AppointmentsPage() {
                                   <TableCell>{appointment.tokenNumber}</TableCell>
                                   <TableCell>{appointment.time}</TableCell>
                                   <TableCell className="text-right">
-                                    {activeTab === 'completed' ? (
-                                      <Badge variant="success">Completed</Badge>
+                                    {activeTab === 'skipped' ? (
+                                      <Badge variant="destructive">Skipped</Badge>
                                     ) : (
                                         <div className="flex justify-end gap-2">
                                             {index === 0 && appointment.status !== 'Skipped' && (
@@ -1874,4 +1874,3 @@ export default function AppointmentsPage() {
   );
 }
 
-    
