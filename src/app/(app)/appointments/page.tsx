@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useCallback, useTransition } from "react";
@@ -53,7 +54,7 @@ import {
 } from "@/components/ui/table";
 import WeeklyDoctorAvailability from "@/components/dashboard/weekly-doctor-availability";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/firebase";
@@ -1206,34 +1207,34 @@ export default function AppointmentsPage() {
                                 {(isPending ? (
                                     <div className="p-4 text-center text-sm text-muted-foreground">Searching...</div>
                                 ) : patientSearchResults.length > 0 ? (
-                                <CommandGroup>
-                                  {patientSearchResults.map((patient) => {
-                                    const isClinicPatient = patient.clinicIds?.includes(clinicId!);
-                                    return (
-                                      <CommandItem
-                                        key={patient.id}
-                                        value={patient.phone}
-                                        onSelect={() => handlePatientSelect(patient)}
-                                        className="flex justify-between items-center"
-                                      >
-                                        <div>
-                                          {patient.name || "Unnamed Patient"}
-                                          <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
-                                        </div>
-                                        <Badge variant={isClinicPatient ? "secondary" : "outline"} className={cn(
-                                          isClinicPatient ? "text-blue-600 border-blue-500" : "text-amber-600 border-amber-500"
-                                        )}>
-                                          {isClinicPatient ? (
-                                            <UserCheck className="mr-1.5 h-3 w-3" />
-                                          ) : (
-                                            <Crown className="mr-1.5 h-3 w-3" />
-                                          )}
-                                          {isClinicPatient ? "Existing Patient" : "Kloqo Member"}
-                                        </Badge>
-                                      </CommandItem>
-                                    )
-                                  })}
-                                </CommandGroup>
+                                  <CommandGroup>
+                                    {patientSearchResults.map((patient) => {
+                                      const isClinicPatient = patient.clinicIds?.includes(clinicId!);
+                                      return (
+                                        <CommandItem
+                                          key={patient.id}
+                                          value={patient.phone}
+                                          onSelect={() => handlePatientSelect(patient)}
+                                          className="flex justify-between items-center"
+                                        >
+                                          <div>
+                                            {patient.name || "Unnamed Patient"}
+                                            <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
+                                          </div>
+                                          <Badge variant={isClinicPatient ? "secondary" : "outline"} className={cn(
+                                            isClinicPatient ? "text-blue-600 border-blue-500" : "text-amber-600 border-amber-500"
+                                          )}>
+                                            {isClinicPatient ? (
+                                              <UserCheck className="mr-1.5 h-3 w-3" />
+                                            ) : (
+                                              <Crown className="mr-1.5 h-3 w-3" />
+                                            )}
+                                            {isClinicPatient ? "Existing Patient" : "Kloqo Member"}
+                                          </Badge>
+                                        </CommandItem>
+                                      )
+                                    })}
+                                  </CommandGroup>
                                 ) : (
                                    patientSearchTerm.length >= 5 && <CommandEmpty>No patient found.</CommandEmpty>
                                 ))}
@@ -1314,21 +1315,19 @@ export default function AppointmentsPage() {
                                       <CardContent className="space-y-3">
                                         {relatives.length > 0 ? (
                                           <ScrollArea className="h-40">
-                                            <div className="space-y-2">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                                               {relatives.map((relative) => (
                                                 <div
                                                   key={relative.id}
-                                                  className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 cursor-pointer"
+                                                  className="flex flex-col items-center justify-center p-3 rounded-lg border bg-card hover:bg-muted/50 cursor-pointer text-center"
                                                   onClick={() => handleRelativeSelect(relative)}
                                                 >
-                                                  <div className="flex items-center gap-3">
-                                                    <Avatar className="h-8 w-8">
-                                                      <AvatarFallback>{relative.name.charAt(0)}</AvatarFallback>
-                                                    </Avatar>
-                                                    <div>
-                                                      <p className="text-sm font-medium">{relative.name}</p>
-                                                      <p className="text-xs text-muted-foreground">{relative.sex}, {relative.age} years</p>
-                                                    </div>
+                                                  <Avatar className="h-10 w-10 mb-2">
+                                                    <AvatarFallback>{relative.name.charAt(0)}</AvatarFallback>
+                                                  </Avatar>
+                                                  <div>
+                                                    <p className="text-sm font-medium">{relative.name}</p>
+                                                    <p className="text-xs text-muted-foreground">{relative.sex}, {relative.age} years</p>
                                                   </div>
                                                 </div>
                                               ))}
