@@ -69,6 +69,7 @@ import { Label } from "@/components/ui/label";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { calculateWalkInDetails } from '@/lib/appointment-service';
+import { useDoctorStatusUpdater } from "@/hooks/useDoctorStatusUpdater";
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -122,6 +123,7 @@ function parseAppointmentDateTime(dateStr: string, timeStr: string): Date {
 
 
 export default function AppointmentsPage() {
+  useDoctorStatusUpdater();
   const auth = useAuth();
   const searchParams = useSearchParams();
 
@@ -1854,4 +1856,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
