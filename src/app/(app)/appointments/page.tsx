@@ -16,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Appointment, Doctor, Patient, User } from "@/lib/types";
-import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc, orderBy } from "firebase/firestore";
+import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc, orderBy, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes, isAfter, startOfDay, addHours } from "date-fns";
@@ -232,59 +232,78 @@ export default function AppointmentsPage() {
 
 
   useEffect(() => {
-    const fetchInitialData = async () => {
-      if (!auth.currentUser) {
-        setLoading(false);
-        return;
-      }
-      try {
-        setLoading(true);
-        const userDoc = await getFirestoreDoc(doc(db, "users", auth.currentUser.uid));
-        const userClinicId = userDoc.data()?.clinicId;
-        if (!userClinicId) {
-          toast({ variant: "destructive", title: "Error", description: "No clinic associated with this user." });
-          setLoading(false);
-          return;
-        }
-        setClinicId(userClinicId);
+    if (!auth.currentUser) {
+      setLoading(false);
+      return;
+    }
 
-        const clinicDoc = await getFirestoreDoc(doc(db, 'clinics', userClinicId));
-        if (clinicDoc.exists()) {
-          setClinicDetails(clinicDoc.data());
+    const fetchClinicInfo = async () => {
+        try {
+            const userDoc = await getFirestoreDoc(doc(db, "users", auth.currentUser!.uid));
+            const userClinicId = userDoc.data()?.clinicId;
+            
+            if (!userClinicId) {
+                toast({ variant: "destructive", title: "Error", description: "No clinic associated with this user." });
+                setLoading(false);
+                return null;
+            }
+            
+            setClinicId(userClinicId);
+            
+            const clinicDoc = await getFirestoreDoc(doc(db, 'clinics', userClinicId));
+            if (clinicDoc.exists()) {
+                setClinicDetails(clinicDoc.data());
+            }
+            return userClinicId;
+        } catch (error) {
+            console.error("Error fetching clinic info:", error);
+            toast({ variant: "destructive", title: "Error", description: "Failed to load clinic details." });
+            setLoading(false);
+            return null;
         }
-
-        const appointmentsQuery = query(collection(db, "appointments"), where("clinicId", "==", userClinicId));
-        const appointmentsSnapshot = await getDocs(appointmentsQuery);
-        const appointmentsList = appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
-        setAppointments(appointmentsList);
-
-        const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", userClinicId));
-        const doctorsSnapshot = await getDocs(doctorsQuery);
-        const doctorsList = doctorsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
-        setDoctors(doctorsList);
-
-        if (doctorsList.length > 0 && !form.getValues('doctor')) {
-          const firstDoctor = doctorsList[0];
-          form.setValue("doctor", firstDoctor.id, { shouldValidate: true });
-          form.setValue("department", firstDoctor.department || "", { shouldValidate: true });
-        }
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        if (!(error instanceof FirestorePermissionError)) {
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: "Failed to load initial data. Please refresh the page.",
-          });
-        }
-      } finally {
-        setLoading(false);
-      }
     };
 
-    if (auth.currentUser) {
-      fetchInitialData();
-    }
+    fetchClinicInfo().then(fetchedClinicId => {
+        if (!fetchedClinicId) return;
+
+        setLoading(true);
+
+        const appointmentsQuery = query(collection(db, "appointments"), where("clinicId", "==", fetchedClinicId));
+        const appointmentsUnsubscribe = onSnapshot(appointmentsQuery, (snapshot) => {
+            const appointmentsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
+            setAppointments(appointmentsList);
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching appointments:", error);
+            if (!(error instanceof FirestorePermissionError)) {
+                toast({ variant: "destructive", title: "Error", description: "Failed to load appointments." });
+            }
+            setLoading(false);
+        });
+
+        const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", fetchedClinicId));
+        const doctorsUnsubscribe = onSnapshot(doctorsQuery, (snapshot) => {
+            const doctorsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
+            setDoctors(doctorsList);
+            if (doctorsList.length > 0 && !form.getValues('doctor')) {
+                const firstDoctor = doctorsList[0];
+                form.setValue("doctor", firstDoctor.id, { shouldValidate: true });
+                form.setValue("department", firstDoctor.department || "", { shouldValidate: true });
+            }
+        }, (error) => {
+            console.error("Error fetching doctors:", error);
+             if (!(error instanceof FirestorePermissionError)) {
+                toast({ variant: "destructive", title: "Error", description: "Failed to load doctors." });
+            }
+        });
+
+        // Cleanup function
+        return () => {
+            appointmentsUnsubscribe();
+            doctorsUnsubscribe();
+        };
+    });
+
   }, [auth.currentUser, toast, form]);
   
   useEffect(() => {
@@ -1854,3 +1873,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
