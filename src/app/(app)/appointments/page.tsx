@@ -19,7 +19,7 @@ import type { Appointment, Doctor, Patient, User } from "@/lib/types";
 import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
-import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes, isAfter, startOfDay } from "date-fns";
+import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes, isAfter, startOfDay, addHours } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
   Form,
@@ -294,6 +294,19 @@ export default function AppointmentsPage() {
         const batch = writeBatch(db);
         let batchHasWrites = false;
 
+        // Logic to update skipped appointments to "No-show" after 5 hours
+        const skippedAppointments = appointments.filter(apt => apt.status === 'Skipped');
+        for (const skippedApt of skippedAppointments) {
+            const appointmentDateTime = parseAppointmentDateTime(skippedApt.date, skippedApt.time);
+            const fiveHoursLater = addHours(appointmentDateTime, 5);
+            if (isAfter(now, fiveHoursLater)) {
+                const aptRef = doc(db, 'appointments', skippedApt.id);
+                batch.update(aptRef, { status: 'No-show' });
+                batchHasWrites = true;
+            }
+        }
+        
+        // Logic to update doctor's consultation status to "Out"
         for (const doctor of doctors) {
             if (doctor.consultationStatus !== 'Out' && doctor.availabilitySlots) {
                 const todaysSessions = doctor.availabilitySlots.find(s => s.day === todayStr)?.timeSlots;
@@ -315,19 +328,6 @@ export default function AppointmentsPage() {
                             const doctorRef = doc(db, 'doctors', doctor.id);
                             batch.update(doctorRef, { consultationStatus: 'Out' });
                             batchHasWrites = true;
-
-                            const skippedToUpdate = appointments.filter(apt =>
-                                apt.doctor === doctor.name &&
-                                apt.status === 'Skipped' &&
-                                isSameDay(parse(apt.date, 'd MMMM yyyy', now), now) &&
-                                isAfter(parse(apt.time, 'hh:mm a', now), sessionStartTime) &&
-                                isBefore(parse(apt.time, 'hh:mm a', now), sessionEndTime)
-                            );
-
-                            for (const skippedApt of skippedToUpdate) {
-                                const aptRef = doc(db, 'appointments', skippedApt.id);
-                                batch.update(aptRef, { status: 'No-show' });
-                            }
                         }
                     }
                 }
@@ -1235,9 +1235,7 @@ export default function AppointmentsPage() {
                                     <div className="p-4 text-center text-sm text-muted-foreground">Searching...</div>
                                 ) : patientSearchResults.length > 0 ? (
                                 <CommandGroup>
-                                  {patientSearchResults.map((patient) => {
-                                    const isClinicPatient = patient.clinicIds?.includes(clinicId!);
-                                    return (
+                                  {patientSearchResults.map((patient) => (
                                       <CommandItem
                                         key={patient.id}
                                         value={patient.phone}
@@ -1248,19 +1246,19 @@ export default function AppointmentsPage() {
                                           {patient.name || "Unnamed Patient"}
                                           <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
                                         </div>
-                                        <Badge variant={isClinicPatient ? "secondary" : "outline"} className={cn(
-                                          isClinicPatient ? "text-blue-600 border-blue-500" : "text-amber-600 border-amber-500"
+                                        <Badge variant={patient.isKloqoMember ? "secondary" : "outline"} className={cn(
+                                          patient.isKloqoMember ? "text-blue-600 border-blue-500" : "text-amber-600 border-amber-500"
                                         )}>
-                                          {isClinicPatient ? (
+                                          {patient.isKloqoMember ? (
                                             <UserCheck className="mr-1.5 h-3 w-3" />
                                           ) : (
                                             <Crown className="mr-1.5 h-3 w-3" />
                                           )}
-                                          {isClinicPatient ? "Existing Patient" : "Kloqo Member"}
+                                          {patient.isKloqoMember ? "Existing Patient" : "Kloqo Member"}
                                         </Badge>
                                       </CommandItem>
-                                    );
-                                  })}
+                                    )
+                                  )}
                                 </CommandGroup>
                                 ) : (
                                    patientSearchTerm.length >= 5 && <CommandEmpty>No patient found.</CommandEmpty>
@@ -1479,7 +1477,7 @@ export default function AppointmentsPage() {
                                                       <p className="font-bold text-lg">{walkInEstimate.patientsAhead} ahead</p>
                                                   </div>
                                                   <div>
-                                                      <p className="text-xs text-muted-foreground">Delay</p>
+                                                      <p className="text-xs text-muted-foreground">Current Delay</p>
                                                       <p className="font-bold text-lg">{walkInEstimate.delayMinutes || 0} min</p>
                                                   </div>
                                                 </div>
