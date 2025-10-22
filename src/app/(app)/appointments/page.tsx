@@ -1256,7 +1256,7 @@ export default function AppointmentsPage() {
                             </RadioGroup>
                             <Button type="button" onClick={handleSendLink} disabled={isSendingLink || patientSearchTerm.length < 10}>
                                 {isSendingLink ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <LinkIcon className="mr-2 h-4 w-4" />}
-                                Send
+                                Send Link
                             </Button>
                           </div>
                         </div>
