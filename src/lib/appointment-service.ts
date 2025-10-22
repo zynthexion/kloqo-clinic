@@ -146,7 +146,15 @@ export async function calculateWalkInDetails(
     } else {
       referenceSlotIndex = findCurrentSlotIndex(allSlots, now);
     }
-    targetSlotIndex = referenceSlotIndex + walkInTokenAllotment;
+    
+    // NEW LOGIC: If no advanced bookings are ahead, take the next slot. Otherwise, space it out.
+    const upcomingAdvancedBookings = advancedAppointments.filter(apt => (apt.slotIndex ?? -1) >= referenceSlotIndex);
+    if (upcomingAdvancedBookings.length === 0) {
+        targetSlotIndex = referenceSlotIndex;
+    } else {
+        targetSlotIndex = referenceSlotIndex + walkInTokenAllotment;
+    }
+
   } else {
     // Case B: Previous walk-ins exist
     const lastWalkInSlotIndex = lastWalkIn.slotIndex ?? 0;
