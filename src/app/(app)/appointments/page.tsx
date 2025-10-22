@@ -106,6 +106,7 @@ type WalkInEstimate = {
   patientsAhead: number;
   numericToken: number;
   slotIndex: number;
+  sessionIndex: number;
   delayMinutes?: number;
 } | null;
 
@@ -630,6 +631,7 @@ export default function AppointmentsPage() {
             tokenNumber: `W${String(walkInEstimate.numericToken).padStart(3, '0')}`,
             numericToken: walkInEstimate.numericToken,
             slotIndex: walkInEstimate.slotIndex,
+            sessionIndex: walkInEstimate.sessionIndex,
             treatment: "General Consultation",
             createdAt: serverTimestamp(),
           };
@@ -1466,7 +1468,7 @@ export default function AppointmentsPage() {
                                                 <div className="grid grid-cols-2 gap-2 text-center">
                                                   <div>
                                                       <p className="text-xs text-muted-foreground">Est. Time</p>
-                                                      <p className="font-bold text-lg">~{format(addMinutes(walkInEstimate.estimatedTime, walkInEstimate.delayMinutes || 0), 'hh:mm a')}</p>
+                                                      <p className="font-bold text-lg">~{format(walkInEstimate.estimatedTime, 'hh:mm a')}</p>
                                                   </div>
                                                   <div>
                                                       <p className="text-xs text-muted-foreground">Queue</p>

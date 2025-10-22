@@ -78,6 +78,7 @@ export async function calculateWalkInDetails(
   patientsAhead: number;
   numericToken: number;
   slotIndex: number;
+  sessionIndex: number;
 }> {
   const now = new Date();
   const todayDate = format(now, 'd MMMM yyyy');
@@ -105,7 +106,7 @@ export async function calculateWalkInDetails(
   }
 
   // Step 2: Generate Time Slots (these represent the doctor's available consultation slots)
-  const allSlots = generateTimeSlots(todaysAvailability.timeSlots, now, slotDuration);
+  const allSlots = generateTimeSlotsWithSession(todaysAvailability.timeSlots, now, slotDuration);
   if (allSlots.length === 0) {
       throw new Error('No consultation slots could be generated for today.');
   }
@@ -144,7 +145,7 @@ export async function calculateWalkInDetails(
     if (isBefore(now, availabilityStart)) {
       referenceSlotIndex = 0; // Start from first slot
     } else {
-      referenceSlotIndex = findCurrentSlotIndex(allSlots, now);
+      referenceSlotIndex = findCurrentSlotIndex(allSlots.map(s => s.time), now);
     }
     
     const upcomingAdvancedBookings = advancedAppointments.filter(apt => (apt.slotIndex ?? -1) >= referenceSlotIndex);
@@ -166,29 +167,36 @@ export async function calculateWalkInDetails(
 
   // The final slot index is the calculated target. We do not check for collisions.
   const finalSlotIndex = targetSlotIndex;
+  
+  let finalSessionIndex = -1;
 
   // Step 5: Calculate estimated time based on final slot index
   let estimatedTime: Date;
   if (finalSlotIndex >= allSlots.length) {
     // Extend beyond doctor's scheduled hours
-    const lastSlotTime = allSlots[allSlots.length - 1];
+    const lastSlot = allSlots[allSlots.length - 1];
     const slotsToAdd = finalSlotIndex - (allSlots.length - 1);
-    estimatedTime = addMinutes(lastSlotTime, slotsToAdd * slotDuration);
+    estimatedTime = addMinutes(lastSlot.time, slotsToAdd * slotDuration);
+    finalSessionIndex = lastSlot.sessionIndex; // Assign to the last available session
   } else {
-    estimatedTime = allSlots[finalSlotIndex];
+    const targetSlot = allSlots[finalSlotIndex];
+    estimatedTime = targetSlot.time;
+    finalSessionIndex = targetSlot.sessionIndex;
   }
 
   // Step 6: Ensure estimated time is not in the past
   if (isBefore(estimatedTime, now)) {
     const occupiedSlots = new Set(advancedAppointments.map(a => a.slotIndex).filter(i => i !== undefined));
-    let nextAvailableSlotIndex = findCurrentSlotIndex(allSlots, now);
+    let nextAvailableSlotIndex = findCurrentSlotIndex(allSlots.map(s=>s.time), now);
     while (occupiedSlots.has(nextAvailableSlotIndex)) {
         nextAvailableSlotIndex++;
     }
     if (nextAvailableSlotIndex < allSlots.length) {
-        estimatedTime = allSlots[nextAvailableSlotIndex];
+        estimatedTime = allSlots[nextAvailableSlotIndex].time;
+        finalSessionIndex = allSlots[nextAvailableSlotIndex].sessionIndex;
     } else {
         estimatedTime = now; // Fallback if all slots are booked/past
+        finalSessionIndex = allSlots.length > 0 ? allSlots[allSlots.length - 1].sessionIndex : 0;
     }
   }
 
@@ -210,24 +218,25 @@ export async function calculateWalkInDetails(
     patientsAhead,
     numericToken: newNumericToken,
     slotIndex: finalSlotIndex,
+    sessionIndex: finalSessionIndex,
   };
 }
 
 
 /**
- * Generates all time slots for the given time ranges
+ * Generates all time slots for the given time ranges with session index
  */
-function generateTimeSlots(timeSlots: TimeSlot[], referenceDate: Date, slotDuration: number): Date[] {
-  const slots: Date[] = [];
-  for (const slot of timeSlots) {
+function generateTimeSlotsWithSession(timeSlots: TimeSlot[], referenceDate: Date, slotDuration: number): { time: Date, sessionIndex: number }[] {
+  const slots: { time: Date, sessionIndex: number }[] = [];
+  timeSlots.forEach((slot, sessionIndex) => {
     const startTime = parseTimeString(slot.from, referenceDate);
     const endTime = parseTimeString(slot.to, referenceDate);
     let current = startTime;
     while (isBefore(current, endTime)) {
-      slots.push(current);
+      slots.push({ time: current, sessionIndex });
       current = addMinutes(current, slotDuration);
     }
-  }
+  });
   return slots;
 }
 
