@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useCallback, useTransition } from "react";
@@ -1167,7 +1166,7 @@ export default function AppointmentsPage() {
     <>
       <div className="flex-1 overflow-auto">
         <main className="p-6">
-          <div className={cn("grid gap-6 transition-all duration-300 ease-in-out", isDrawerExpanded ? "grid-cols-1 md:grid-cols-[3fr_auto_9fr]" : "grid-cols-1 md:grid-cols-[9fr_auto_3fr]")}>
+          <div className={cn("grid gap-6 transition-all duration-300 ease-in-out", isDrawerExpanded ? "grid-cols-1 md:grid-cols-[2fr_auto_10fr]" : "grid-cols-1 md:grid-cols-[8fr_auto_4fr]")}>
             <main>
               <Card>
                 <CardHeader>
@@ -1563,8 +1562,8 @@ export default function AppointmentsPage() {
                 {isDrawerExpanded ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
               </Button>
             </div>
-            <div className="h-full w-full">
-              <div className={cn("h-full w-full", isDrawerExpanded ? "p-0" : "p-4")}>
+            <div className={cn("h-full", isDrawerExpanded ? "w-full" : "w-auto")}>
+              <div className={cn("h-full w-full", isDrawerExpanded ? "p-0" : "")}>
                 <Card className="h-full rounded-2xl">
                   <CardHeader className={cn("border-b", isDrawerExpanded ? "p-4" : "p-4 space-y-3")}>
                     {isDrawerExpanded ? (
@@ -1861,3 +1860,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
