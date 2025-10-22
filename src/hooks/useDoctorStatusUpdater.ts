@@ -65,4 +65,6 @@ export function useDoctorStatusUpdater() {
     updateStatuses();
     const intervalId = setInterval(updateStatuses, 60000); // Check every minute
 
-    return () => clearInterval
+    return () => clearInterval(intervalId);
+  }, [currentUser]);
+}
