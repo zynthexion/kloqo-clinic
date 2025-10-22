@@ -106,6 +106,7 @@ type WalkInEstimate = {
   patientsAhead: number;
   numericToken: number;
   slotIndex: number;
+  delayMinutes?: number;
 } | null;
 
 /**
@@ -287,63 +288,70 @@ export default function AppointmentsPage() {
   }, [auth.currentUser, toast, form]);
   
   useEffect(() => {
-    // This interval will check for skipped appointments that need to be marked as No-show
-    const interval = setInterval(() => {
-      const now = new Date();
-      const todayStr = format(now, 'EEEE');
-  
-      const appointmentsToUpdate = appointments.filter(apt => {
-        if (apt.status !== 'Skipped') return false;
-  
-        const doctor = doctors.find(d => d.name === apt.doctor);
-        if (!doctor || !doctor.availabilitySlots) return false;
-  
-        const session = doctor.availabilitySlots.find(s => s.day === todayStr)?.timeSlots[apt.sessionIndex ?? -1];
-        if (!session) return false;
-  
-        const sessionEndTime = parse(session.to, 'hh:mm a', new Date());
-        return isAfter(now, sessionEndTime);
-      });
-  
-      if (appointmentsToUpdate.length > 0) {
-        startTransition(async () => {
-          const batch = writeBatch(db);
-          appointmentsToUpdate.forEach(appointment => {
-            const appointmentRef = doc(db, "appointments", appointment.id);
-            batch.update(appointmentRef, { status: "No-show" });
-          });
-  
-          try {
-            await batch.commit();
-            
-            setAppointments(prev => prev.map(apt => {
-              if (appointmentsToUpdate.some(ns => ns.id === apt.id)) {
-                return { ...apt, status: 'No-show' };
-              }
-              return apt;
-            }));
-  
-            toast({
-              title: "Appointments Updated",
-              description: `${appointmentsToUpdate.length} skipped appointment(s) have been marked as 'No-show'.`,
-            });
-  
-          } catch (error) {
-            console.error("Error batch updating no-show appointments:", error);
-            if (!(error instanceof FirestorePermissionError)) {
-              toast({
-                variant: "destructive",
-                title: "Update Failed",
-                description: "Could not update statuses for skipped appointments.",
-              });
+    const interval = setInterval(async () => {
+        const now = new Date();
+        const todayStr = format(now, 'EEEE');
+        const batch = writeBatch(db);
+        let batchHasWrites = false;
+
+        for (const doctor of doctors) {
+            if (doctor.consultationStatus !== 'Out' && doctor.availabilitySlots) {
+                const todaysSessions = doctor.availabilitySlots.find(s => s.day === todayStr)?.timeSlots;
+                if (!todaysSessions) continue;
+
+                for (const session of todaysSessions) {
+                    const sessionEndTime = parse(session.to, 'hh:mm a', now);
+                    if (isAfter(now, sessionEndTime)) {
+                        const sessionStartTime = parse(session.from, 'hh:mm a', now);
+                        const pendingInSession = appointments.some(apt =>
+                            apt.doctor === doctor.name &&
+                            (apt.status === 'Pending' || apt.status === 'Confirmed') &&
+                            isSameDay(parse(apt.date, 'd MMMM yyyy', now), now) &&
+                            isAfter(parse(apt.time, 'hh:mm a', now), sessionStartTime) &&
+                            isBefore(parse(apt.time, 'hh:mm a', now), sessionEndTime)
+                        );
+
+                        if (!pendingInSession) {
+                            const doctorRef = doc(db, 'doctors', doctor.id);
+                            batch.update(doctorRef, { consultationStatus: 'Out' });
+                            batchHasWrites = true;
+
+                            const skippedToUpdate = appointments.filter(apt =>
+                                apt.doctor === doctor.name &&
+                                apt.status === 'Skipped' &&
+                                isSameDay(parse(apt.date, 'd MMMM yyyy', now), now) &&
+                                isAfter(parse(apt.time, 'hh:mm a', now), sessionStartTime) &&
+                                isBefore(parse(apt.time, 'hh:mm a', now), sessionEndTime)
+                            );
+
+                            for (const skippedApt of skippedToUpdate) {
+                                const aptRef = doc(db, 'appointments', skippedApt.id);
+                                batch.update(aptRef, { status: 'No-show' });
+                            }
+                        }
+                    }
+                }
             }
-          }
-        });
-      }
+        }
+
+        if (batchHasWrites) {
+            try {
+                await batch.commit();
+                // Optionally re-fetch data or update state to reflect changes
+                // For simplicity, we can rely on the next fetch or a manual refresh.
+                toast({
+                    title: 'Status Updated',
+                    description: 'Doctor statuses and skipped appointments have been automatically updated.'
+                });
+            } catch (e) {
+                console.error("Error in automatic status update batch:", e);
+            }
+        }
+
     }, 60000); // Check every minute
-  
+
     return () => clearInterval(interval);
-  }, [appointments, doctors, toast]);
+  }, [doctors, appointments, toast]);
 
 
   const resetForm = useCallback(() => {
@@ -1461,15 +1469,19 @@ export default function AppointmentsPage() {
                                             {isCalculatingEstimate ? (
                                                 <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Calculating wait time...</div>
                                             ) : (
-                                                <div className="flex items-center justify-around text-center">
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground">Est. Time</p>
-                                                        <p className="font-bold text-lg">~{format(walkInEstimate.estimatedTime, 'hh:mm a')}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground">Queue</p>
-                                                        <p className="font-bold text-lg">{walkInEstimate.patientsAhead} ahead</p>
-                                                    </div>
+                                                <div className="grid grid-cols-3 gap-2 text-center">
+                                                  <div>
+                                                      <p className="text-xs text-muted-foreground">Est. Time</p>
+                                                      <p className="font-bold text-lg">~{format(addMinutes(walkInEstimate.estimatedTime, walkInEstimate.delayMinutes || 0), 'hh:mm a')}</p>
+                                                  </div>
+                                                  <div>
+                                                      <p className="text-xs text-muted-foreground">Queue</p>
+                                                      <p className="font-bold text-lg">{walkInEstimate.patientsAhead} ahead</p>
+                                                  </div>
+                                                  <div>
+                                                      <p className="text-xs text-muted-foreground">Delay</p>
+                                                      <p className="font-bold text-lg">{walkInEstimate.delayMinutes || 0} min</p>
+                                                  </div>
                                                 </div>
                                             )}
                                         </CardContent>
