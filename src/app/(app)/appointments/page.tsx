@@ -1156,11 +1156,9 @@ export default function AppointmentsPage() {
   const isBookingButtonDisabled = useMemo(() => {
     if (isPending) return true;
     if (appointmentType === 'Walk-in') {
-        // For walk-in, basic patient details are enough. `form.formState.isValid` might be too strict.
         if (!form.getValues('patientName')) return true;
         return !walkInEstimate || isCalculatingEstimate;
     }
-    // For advanced booking, rely on the form's complete validity state
     return !form.formState.isValid;
 }, [isPending, appointmentType, walkInEstimate, isCalculatingEstimate, form.formState.isValid, form.getValues('patientName')]);
 
@@ -1206,9 +1204,9 @@ export default function AppointmentsPage() {
                         <PopoverContent onOpenAutoFocus={(e) => e.preventDefault()} className="w-[--radix-popover-trigger-width] p-0" align="start">
                             <Command>
                             <CommandList>
-                                {isPending ? (
+                                {(isPending ? (
                                     <div className="p-4 text-center text-sm text-muted-foreground">Searching...</div>
-                                ) : (patientSearchResults.length > 0 ? (
+                                ) : patientSearchResults.length > 0 ? (
                                 <CommandGroup>
                                   {patientSearchResults.map((patient) => {
                                     const isClinicPatient = patient.clinicIds?.includes(clinicId!);
@@ -1317,23 +1315,25 @@ export default function AppointmentsPage() {
                                       <CardContent className="space-y-3">
                                         {relatives.length > 0 ? (
                                           <ScrollArea className="h-40">
-                                            {relatives.map((relative) => (
-                                              <div 
-                                                key={relative.id} 
-                                                className="flex items-center justify-between p-2 rounded-md hover:bg-muted cursor-pointer"
-                                                onClick={() => handleRelativeSelect(relative)}
-                                              >
-                                                <div className="flex items-center gap-3">
-                                                  <Avatar className="h-8 w-8">
-                                                    <AvatarFallback>{relative.name.charAt(0)}</AvatarFallback>
-                                                  </Avatar>
-                                                  <div>
-                                                    <p className="text-sm font-medium">{relative.name}</p>
-                                                    <p className="text-xs text-muted-foreground">{relative.sex}, {relative.age} years</p>
+                                            <div className="space-y-2">
+                                              {relatives.map((relative) => (
+                                                <div
+                                                  key={relative.id}
+                                                  className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 cursor-pointer"
+                                                  onClick={() => handleRelativeSelect(relative)}
+                                                >
+                                                  <div className="flex items-center gap-3">
+                                                    <Avatar className="h-8 w-8">
+                                                      <AvatarFallback>{relative.name.charAt(0)}</AvatarFallback>
+                                                    </Avatar>
+                                                    <div>
+                                                      <p className="text-sm font-medium">{relative.name}</p>
+                                                      <p className="text-xs text-muted-foreground">{relative.sex}, {relative.age} years</p>
+                                                    </div>
                                                   </div>
                                                 </div>
-                                              </div>
-                                            ))}
+                                              ))}
+                                            </div>
                                           </ScrollArea>
                                         ) : (
                                           <div className="text-center py-4 space-y-2">
