@@ -10,10 +10,7 @@ export type AvailabilitySlot = {
   timeSlots: TimeSlot[];
 };
 
-export type LeaveSlot = {
-    date: string; // "yyyy-MM-dd"
-    slots: TimeSlot[];
-}
+
 
 export type BookedSlot = {
     date: string;
@@ -38,7 +35,7 @@ export type Doctor = {
   bio?: string;
   averageConsultingTime?: number;
   availabilitySlots?: AvailabilitySlot[];
-  leaveSlots?: (LeaveSlot | string)[];
+  leaveSlots?: any[];
   degrees?: string[];
   experience?: number;
   rating?: number;
@@ -72,6 +69,7 @@ export type Appointment = {
   isSkipped?: boolean;
   slotIndex?: number;
   sessionIndex?: number;
+  createdAt?: any;
 };
 
 export type Patient = {
@@ -146,6 +144,7 @@ export type User = {
     designation?: 'Doctor' | 'Owner';
     onboarded?: boolean;
 }
+
 
 
 

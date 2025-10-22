@@ -61,7 +61,7 @@ import { useAuth } from "@/firebase";
 import { useSearchParams } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AddRelativeDialog } from "@/components/patients/add-relative-dialog";
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FirestorePermissionError } from "@/firebase/errors";
 import { errorEmitter } from "@/firebase/error-emitter";
 import Link from "next/link";
@@ -627,6 +627,7 @@ export default function AppointmentsPage() {
             numericToken: walkInEstimate.numericToken,
             slotIndex: walkInEstimate.slotIndex,
             treatment: "General Consultation",
+            createdAt: serverTimestamp(),
           };
           const appointmentRef = doc(collection(db, 'appointments'));
           await setDoc(appointmentRef, { ...appointmentData, id: appointmentRef.id });
@@ -690,6 +691,7 @@ export default function AppointmentsPage() {
             place: values.place,
             slotIndex: slotIndex,
             sessionIndex: sessionIndex,
+            createdAt: isEditing ? editingAppointment.createdAt : serverTimestamp(),
           };
 
           const appointmentRef = doc(db, 'appointments', appointmentId);
