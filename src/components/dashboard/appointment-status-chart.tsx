@@ -10,11 +10,8 @@ import type { Appointment, Doctor } from "@/lib/types";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import type { DateRange } from "react-day-picker";
-import { isWithinInterval, parse, isPast, isFuture, startOfDay } from "date-fns";
+import { isWithinInterval, parse, isFuture, startOfDay, isToday } from "date-fns";
 import { Skeleton } from "../ui/skeleton";
-import { Button } from "../ui/button";
-import { Loader2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
 
 const COLORS = {
   completed: "hsl(var(--chart-2))",
@@ -42,8 +39,6 @@ export default function AppointmentStatusChart({ dateRange, doctorId }: Appointm
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isUpdating, startTransition] = useTransition();
-  const { toast } = useToast();
 
   const fetchAppointments = async () => {
     if (!auth.currentUser) return;
@@ -77,8 +72,8 @@ export default function AppointmentStatusChart({ dateRange, doctorId }: Appointm
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.currentUser]);
 
-  const { chartData, noShowAppointments } = useMemo(() => {
-    if (!dateRange?.from) return { chartData: [], noShowAppointments: [] };
+  const { chartData } = useMemo(() => {
+    if (!dateRange?.from) return { chartData: [] };
 
     let filteredAppointments = appointments;
 
@@ -102,53 +97,21 @@ export default function AppointmentStatusChart({ dateRange, doctorId }: Appointm
     });
 
     const completed = rangeAppointments.filter(apt => apt.status === 'Completed').length;
-    const upcoming = rangeAppointments.filter(apt => (apt.status === 'Confirmed' || apt.status === 'Pending') && isFuture(parse(apt.date, 'd MMMM yyyy', new Date()))).length;
+    const upcoming = rangeAppointments.filter(apt => (apt.status === 'Confirmed' || apt.status === 'Pending') && (isFuture(parse(apt.date, 'd MMMM yyyy', new Date())) || isToday(parse(apt.date, 'd MMMM yyyy', new Date())))).length;
     const cancelled = rangeAppointments.filter(apt => apt.status === 'Cancelled').length;
+    const noShow = rangeAppointments.filter(apt => apt.status === 'No-show' || apt.status === 'Skipped').length;
     
-    const noShow = rangeAppointments.filter(apt => apt.status === 'No-show').length;
-    
-    const pendingPastAppointments = rangeAppointments.filter(apt => apt.status === 'Pending' && isPast(parse(`${apt.date} ${apt.time}`, 'd MMMM yyyy hh:mm a', new Date())));
-
     const data = [
       { name: "completed", value: completed },
       { name: "upcoming", value: upcoming },
       { name: "cancelled", value: cancelled },
-      { name: "No-show", value: noShow + pendingPastAppointments.length },
+      { name: "No-show", value: noShow },
     ].filter(item => item.value > 0);
     
-    return { chartData: data, noShowAppointments: pendingPastAppointments };
+    return { chartData: data };
 
   }, [appointments, dateRange, doctorId, doctors]);
   
-  const handleUpdateNoShows = () => {
-    if (noShowAppointments.length === 0) return;
-
-    startTransition(async () => {
-        const batch = writeBatch(db);
-        noShowAppointments.forEach(appointment => {
-            const appointmentRef = doc(db, "appointments", appointment.id);
-            batch.update(appointmentRef, { status: "No-show" });
-        });
-
-        try {
-            await batch.commit();
-            toast({
-                title: "Appointments Updated",
-                description: `${noShowAppointments.length} appointment(s) have been marked as 'No-show'.`
-            });
-            // Re-fetch data to update the UI
-            fetchAppointments();
-        } catch (error) {
-            console.error("Error updating appointments:", error);
-            toast({
-                variant: "destructive",
-                title: "Update Failed",
-                description: "Could not update appointment statuses. Please try again."
-            })
-        }
-    });
-  }
-
   if (loading) {
     return (
         <Card className="h-full flex flex-col">
@@ -215,18 +178,6 @@ export default function AppointmentStatusChart({ dateRange, doctorId }: Appointm
                     </div>
                 ))}
             </div>
-            {noShowAppointments.length > 0 && (
-                <Button
-                    variant="destructive"
-                    size="sm"
-                    className="w-full mt-2"
-                    onClick={handleUpdateNoShows}
-                    disabled={isUpdating}
-                >
-                    {isUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Mark {noShowAppointments.length} No-Shows
-                </Button>
-            )}
         </CardFooter>
       )}
     </Card>

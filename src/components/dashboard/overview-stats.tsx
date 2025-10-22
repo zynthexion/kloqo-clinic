@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -14,7 +15,7 @@ import {
     CheckCircle,
     CalendarClock,
 } from "lucide-react";
-import { isFuture, parse, isPast, isWithinInterval, subDays, differenceInDays, startOfDay } from "date-fns";
+import { isFuture, parse, isPast, isWithinInterval, subDays, differenceInDays, startOfDay, isToday } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { cn } from "@/lib/utils";
 
@@ -102,7 +103,7 @@ export default function OverviewStats({ dateRange, doctorId }: OverviewStatsProp
 
             const uniquePatients = new Set(periodAppointments.map(apt => apt.patientId));
             
-            const completedAppointments = periodAppointments.filter(apt => apt.status === 'Completed' || (apt.status === 'Confirmed' && isPast(parse(apt.date, 'd MMMM yyyy', new Date())))).length;
+            const completedAppointments = periodAppointments.filter(apt => apt.status === 'Completed').length;
             const cancelledAppointments = periodAppointments.filter(apt => apt.status === 'Cancelled').length;
             
             return {
@@ -124,7 +125,8 @@ export default function OverviewStats({ dateRange, doctorId }: OverviewStatsProp
         
         const upcomingAppointments = allAppointments.filter(apt => {
             try {
-                return (apt.status === 'Confirmed' || apt.status === 'Pending') && isFuture(parse(apt.date, 'd MMMM yyyy', new Date()));
+                const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
+                return (apt.status === 'Confirmed' || apt.status === 'Pending') && (isFuture(aptDate) || isToday(aptDate));
             } catch { return false; }
         }).length;
 

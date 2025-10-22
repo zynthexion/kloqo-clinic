@@ -287,51 +287,64 @@ export default function AppointmentsPage() {
   }, [auth.currentUser, toast, form]);
   
   useEffect(() => {
-    // Only run this logic once when the component has loaded appointments
-    if (appointments.length > 0) {
-      const noShowAppointments = appointments.filter(apt => 
-        apt.status === 'Pending' && isPast(parseAppointmentDateTime(apt.date, apt.time))
-      );
-
-      if (noShowAppointments.length > 0) {
+    // This interval will check for skipped appointments that need to be marked as No-show
+    const interval = setInterval(() => {
+      const now = new Date();
+      const todayStr = format(now, 'EEEE');
+  
+      const appointmentsToUpdate = appointments.filter(apt => {
+        if (apt.status !== 'Skipped') return false;
+  
+        const doctor = doctors.find(d => d.name === apt.doctor);
+        if (!doctor || !doctor.availabilitySlots) return false;
+  
+        const session = doctor.availabilitySlots.find(s => s.day === todayStr)?.timeSlots[apt.sessionIndex ?? -1];
+        if (!session) return false;
+  
+        const sessionEndTime = parse(session.to, 'hh:mm a', new Date());
+        return isAfter(now, sessionEndTime);
+      });
+  
+      if (appointmentsToUpdate.length > 0) {
         startTransition(async () => {
           const batch = writeBatch(db);
-          noShowAppointments.forEach(appointment => {
+          appointmentsToUpdate.forEach(appointment => {
             const appointmentRef = doc(db, "appointments", appointment.id);
             batch.update(appointmentRef, { status: "No-show" });
           });
-
+  
           try {
             await batch.commit();
             
-            // Update local state to reflect the change immediately
             setAppointments(prev => prev.map(apt => {
-              if (noShowAppointments.some(ns => ns.id === apt.id)) {
+              if (appointmentsToUpdate.some(ns => ns.id === apt.id)) {
                 return { ...apt, status: 'No-show' };
               }
               return apt;
             }));
-
+  
             toast({
               title: "Appointments Updated",
-              description: `${noShowAppointments.length} pending appointment(s) have been marked as 'No-show'.`,
+              description: `${appointmentsToUpdate.length} skipped appointment(s) have been marked as 'No-show'.`,
             });
-
+  
           } catch (error) {
             console.error("Error batch updating no-show appointments:", error);
             if (!(error instanceof FirestorePermissionError)) {
               toast({
                 variant: "destructive",
                 title: "Update Failed",
-                description: "Could not update appointment statuses for no-shows.",
+                description: "Could not update statuses for skipped appointments.",
               });
             }
           }
         });
       }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading]); // Rerunning only when loading state changes from true to false
+    }, 60000); // Check every minute
+  
+    return () => clearInterval(interval);
+  }, [appointments, doctors, toast]);
+
 
   const resetForm = useCallback(() => {
     setEditingAppointment(null);
