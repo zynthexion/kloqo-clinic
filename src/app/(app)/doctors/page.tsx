@@ -845,50 +845,6 @@ export default function DoctorsPage() {
     setEditingDoctor(null);
     setIsAddDoctorOpen(true);
   };
-  
-const getAutomatedConsultationStatus = useMemo(() => {
-    if (!selectedDoctor?.availabilitySlots) return 'Out';
-    
-    const now = new Date();
-    const currentDayName = format(now, 'EEEE');
-    
-    const todayAvailability = selectedDoctor.availabilitySlots.find(slot => slot.day === currentDayName);
-    if (!todayAvailability) return 'Out';
-
-    const isWithinWorkingHours = todayAvailability.timeSlots.some(slot => {
-        const startTime = parseTimeUtil(slot.from, now);
-        const endTime = parseTimeUtil(slot.to, now);
-        return isWithinInterval(now, { start: startTime, end: endTime });
-    });
-
-    if (!isWithinWorkingHours) return 'Out';
-
-    const todayLeaveSlots = (selectedDoctor.leaveSlots || [])
-        .map(leave => {
-            if (typeof leave === 'string') {
-                try { return parseISO(leave); } catch { return new Date(NaN); }
-            }
-            if (leave && leave.date && leave.slots) { // This handles the object format but we only need to check for today
-                if (isToday(parse(leave.date, 'yyyy-MM-dd', new Date()))) {
-                    // Placeholder: This part needs more complex logic if you want to check specific leave time slots within the object
-                    // For now, we assume if an object exists for today, the whole day might be affected in some way.
-                    // A better approach would be to process these objects into a unified format.
-                    // Let's just check the string format for now as per the latest changes.
-                }
-            }
-            return new Date(NaN);
-        })
-        .filter(date => !isNaN(date.getTime()) && isToday(date));
-
-    const isOnBreak = todayLeaveSlots.some(leaveSlot => {
-      const breakStart = leaveSlot;
-      const breakEnd = addMinutes(leaveSlot, selectedDoctor.averageConsultingTime || 15);
-      return isWithinInterval(now, { start: breakStart, end: breakEnd });
-    });
-
-    return isOnBreak ? 'Out' : 'In';
-}, [selectedDoctor]);
-
 
   const dailyLeaveSlots = useMemo(() => {
     if (!selectedDoctor?.leaveSlots) return [];
@@ -1347,14 +1303,14 @@ const getAutomatedConsultationStatus = useMemo(() => {
                     <div className="flex-grow"></div>
                      <div className={cn(
                         "flex items-center space-x-2 p-2 rounded-md",
-                        getAutomatedConsultationStatus === 'In' ? 'bg-green-500' : 'bg-red-500'
+                        selectedDoctor.consultationStatus === 'In' ? 'bg-green-500' : 'bg-red-500'
                     )}>
                       <div className="relative flex h-3 w-3">
-                          {getAutomatedConsultationStatus === 'In' && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>}
+                          {selectedDoctor.consultationStatus === 'In' && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>}
                           <span className={cn("relative inline-flex rounded-full h-3 w-3 bg-white")}></span>
                       </div>
                       <Label className="font-semibold text-white">
-                        {getAutomatedConsultationStatus}
+                        {selectedDoctor.consultationStatus || 'Out'}
                       </Label>
                    </div>
                 </div>
