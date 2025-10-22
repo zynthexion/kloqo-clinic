@@ -69,7 +69,6 @@ import { Label } from "@/components/ui/label";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { calculateWalkInDetails } from '@/lib/appointment-service';
-import { useDoctorStatusUpdater } from "@/hooks/useDoctorStatusUpdater";
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -123,7 +122,6 @@ function parseAppointmentDateTime(dateStr: string, timeStr: string): Date {
 
 
 export default function AppointmentsPage() {
-  useDoctorStatusUpdater();
   const auth = useAuth();
   const searchParams = useSearchParams();
 
@@ -1158,11 +1156,12 @@ export default function AppointmentsPage() {
   const isBookingButtonDisabled = useMemo(() => {
     if (isPending) return true;
     if (appointmentType === 'Walk-in') {
-      return !walkInEstimate || isCalculatingEstimate;
+        if (!form.getValues('patientName')) return true; // Ensure basic patient details are there
+        return !walkInEstimate || isCalculatingEstimate;
     }
     // For advanced booking
     return !form.formState.isValid;
-  }, [isPending, appointmentType, walkInEstimate, isCalculatingEstimate, form.formState.isValid]);
+}, [isPending, appointmentType, walkInEstimate, isCalculatingEstimate, form.formState.isValid, form.getValues('patientName')]);
 
 
   return (
@@ -1208,7 +1207,7 @@ export default function AppointmentsPage() {
                             <CommandList>
                                 {isPending ? (
                                     <div className="p-4 text-center text-sm text-muted-foreground">Searching...</div>
-                                ) : patientSearchResults.length > 0 ? (
+                                ) : (patientSearchResults.length > 0 ? (
                                 <CommandGroup>
                                   {patientSearchResults.map((patient) => (
                                       <CommandItem
@@ -1237,7 +1236,7 @@ export default function AppointmentsPage() {
                                 </CommandGroup>
                                 ) : (
                                    patientSearchTerm.length >= 5 && <CommandEmpty>No patient found.</CommandEmpty>
-                                )}
+                                ))}
                               </CommandList>
                             </Command>
                           </PopoverContent>
