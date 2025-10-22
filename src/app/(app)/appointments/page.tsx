@@ -41,7 +41,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck, UserPlus, Users, Plus, X, Clock, Calendar as CalendarLucide, CheckCircle2, Info, Send, MessageSquare, Smartphone, SkipForward } from "lucide-react";
+import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck, UserPlus, Users, Plus, X, Clock, Calendar as CalendarLucide, CheckCircle2, Info, Send, MessageSquare, Smartphone, SkipForward, Hourglass } from "lucide-react";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
@@ -290,11 +290,9 @@ export default function AppointmentsPage() {
   useEffect(() => {
     const interval = setInterval(async () => {
         const now = new Date();
-        const todayStr = format(now, 'EEEE');
         const batch = writeBatch(db);
         let batchHasWrites = false;
 
-        // Logic to update skipped appointments to "No-show" after 5 hours
         const skippedAppointments = appointments.filter(apt => apt.status === 'Skipped');
         for (const skippedApt of skippedAppointments) {
             const appointmentDateTime = parseAppointmentDateTime(skippedApt.date, skippedApt.time);
@@ -306,43 +304,9 @@ export default function AppointmentsPage() {
             }
         }
         
-        // Logic to update doctor's consultation status to "Out"
-        for (const doctor of doctors) {
-            if (doctor.consultationStatus !== 'Out' && doctor.availabilitySlots) {
-                const todaysSessions = doctor.availabilitySlots.find(s => s.day === todayStr)?.timeSlots;
-                if (!todaysSessions) continue;
-
-                for (const session of todaysSessions) {
-                    const sessionEndTime = parse(session.to, 'hh:mm a', now);
-                    if (isAfter(now, sessionEndTime)) {
-                        const sessionStartTime = parse(session.from, 'hh:mm a', now);
-                        const pendingInSession = appointments.some(apt =>
-                            apt.doctor === doctor.name &&
-                            (apt.status === 'Pending' || apt.status === 'Confirmed') &&
-                            isSameDay(parse(apt.date, 'd MMMM yyyy', now), now) &&
-                            isAfter(parse(apt.time, 'hh:mm a', now), sessionStartTime) &&
-                            isBefore(parse(apt.time, 'hh:mm a', now), sessionEndTime)
-                        );
-
-                        if (!pendingInSession) {
-                            const doctorRef = doc(db, 'doctors', doctor.id);
-                            batch.update(doctorRef, { consultationStatus: 'Out' });
-                            batchHasWrites = true;
-                        }
-                    }
-                }
-            }
-        }
-
         if (batchHasWrites) {
             try {
                 await batch.commit();
-                // Optionally re-fetch data or update state to reflect changes
-                // For simplicity, we can rely on the next fetch or a manual refresh.
-                toast({
-                    title: 'Status Updated',
-                    description: 'Doctor statuses and skipped appointments have been automatically updated.'
-                });
             } catch (e) {
                 console.error("Error in automatic status update batch:", e);
             }
@@ -351,7 +315,7 @@ export default function AppointmentsPage() {
     }, 60000); // Check every minute
 
     return () => clearInterval(interval);
-  }, [doctors, appointments, toast]);
+  }, [appointments]);
 
 
   const resetForm = useCallback(() => {
@@ -1189,6 +1153,15 @@ export default function AppointmentsPage() {
   
   const isDoctorInConsultation = firstUpcomingDoctor?.consultationStatus === 'In';
 
+  const isBookingButtonDisabled = useMemo(() => {
+    if (isPending) return true;
+    if (appointmentType === 'Walk-in') {
+      return !walkInEstimate || isCalculatingEstimate;
+    }
+    // For advanced booking
+    return !form.formState.isValid;
+  }, [isPending, appointmentType, walkInEstimate, isCalculatingEstimate, form.formState.isValid]);
+
 
   return (
     <>
@@ -1556,11 +1529,7 @@ export default function AppointmentsPage() {
                               {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
                               <Button
                                 type="submit"
-                                disabled={
-                                    isPending ||
-                                    (appointmentType === 'Walk-in' && (!walkInEstimate || isCalculatingEstimate)) ||
-                                    !form.formState.isValid
-                                }
+                                disabled={isBookingButtonDisabled}
                                >
                                 {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                 {isEditing ? "Save Changes" : "Book Appointment"}
