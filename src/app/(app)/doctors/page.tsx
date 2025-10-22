@@ -1094,6 +1094,12 @@ export default function DoctorsPage() {
     }
   };
 
+  const todaysAppointmentsCount = useMemo(() => {
+    if (!selectedDoctor) return 0;
+    const todayStr = format(new Date(), 'd MMMM yyyy');
+    return appointments.filter(apt => apt.doctor === selectedDoctor.name && apt.date === todayStr).length;
+  }, [appointments, selectedDoctor]);
+
 
   return (
     <>
@@ -1433,7 +1439,7 @@ export default function DoctorsPage() {
                             <CalendarDays className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent className="flex items-center justify-center">
-                            <div className="text-2xl font-bold">{selectedDoctor.todaysAppointments || 0}</div>
+                            <div className="text-2xl font-bold">{todaysAppointmentsCount}</div>
                         </CardContent>
                     </Card>
                   </div>
