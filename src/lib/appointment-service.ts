@@ -147,14 +147,13 @@ export async function calculateWalkInDetails(
       referenceSlotIndex = findCurrentSlotIndex(allSlots, now);
     }
     
-    // NEW LOGIC: If no advanced bookings are ahead, take the next slot. Otherwise, space it out.
     const upcomingAdvancedBookings = advancedAppointments.filter(apt => (apt.slotIndex ?? -1) >= referenceSlotIndex);
-    if (upcomingAdvancedBookings.length === 0) {
-        targetSlotIndex = referenceSlotIndex;
-    } else {
-        targetSlotIndex = referenceSlotIndex + walkInTokenAllotment;
-    }
 
+    if (upcomingAdvancedBookings.length === 0) {
+      targetSlotIndex = referenceSlotIndex;
+    } else {
+      targetSlotIndex = referenceSlotIndex + walkInTokenAllotment;
+    }
   } else {
     // Case B: Previous walk-ins exist
     const lastWalkInSlotIndex = lastWalkIn.slotIndex ?? 0;
@@ -181,7 +180,16 @@ export async function calculateWalkInDetails(
 
   // Step 6: Ensure estimated time is not in the past
   if (isBefore(estimatedTime, now)) {
-    estimatedTime = now;
+    const occupiedSlots = new Set(advancedAppointments.map(a => a.slotIndex).filter(i => i !== undefined));
+    let nextAvailableSlotIndex = findCurrentSlotIndex(allSlots, now);
+    while (occupiedSlots.has(nextAvailableSlotIndex)) {
+        nextAvailableSlotIndex++;
+    }
+    if (nextAvailableSlotIndex < allSlots.length) {
+        estimatedTime = allSlots[nextAvailableSlotIndex];
+    } else {
+        estimatedTime = now; // Fallback if all slots are booked/past
+    }
   }
 
   // Step 7: Generate numeric token (sequential across all appointments)
