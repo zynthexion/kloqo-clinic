@@ -314,7 +314,7 @@ export default function AppointmentsPage() {
 
     }, 60000); // Check every minute
 
-    return () => clearInterval(intervalId);
+    return () => clearInterval(interval);
   }, [appointments]);
 
 
@@ -1854,4 +1854,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
