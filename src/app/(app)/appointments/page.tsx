@@ -61,7 +61,7 @@ import { useAuth } from "@/firebase";
 import { useSearchParams } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AddRelativeDialog } from "@/components/patients/add-relative-dialog";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
 import { FirestorePermissionError } from "@/firebase/errors";
 import { errorEmitter } from "@/firebase/error-emitter";
 import Link from "next/link";
@@ -1863,4 +1863,3 @@ export default function AppointmentsPage() {
   );
 }
 
-    
