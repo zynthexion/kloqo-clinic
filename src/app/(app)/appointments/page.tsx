@@ -314,7 +314,7 @@ export default function AppointmentsPage() {
 
     }, 60000); // Check every minute
 
-    return () => clearInterval(interval);
+    return () => clearInterval(intervalId);
   }, [appointments]);
 
 
@@ -1156,11 +1156,10 @@ export default function AppointmentsPage() {
   const isBookingButtonDisabled = useMemo(() => {
     if (isPending) return true;
     if (appointmentType === 'Walk-in') {
-        if (!form.getValues('patientName')) return true;
-        return !walkInEstimate || isCalculatingEstimate;
+        return !form.getValues('patientName') || !walkInEstimate || isCalculatingEstimate;
     }
     return !form.formState.isValid;
-}, [isPending, appointmentType, walkInEstimate, isCalculatingEstimate, form.formState.isValid, form.getValues('patientName')]);
+  }, [isPending, appointmentType, walkInEstimate, isCalculatingEstimate, form.formState.isValid, form.getValues('patientName')]);
 
 
   return (
@@ -1445,7 +1444,7 @@ export default function AppointmentsPage() {
                                             {isCalculatingEstimate ? (
                                                 <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Calculating wait time...</div>
                                             ) : (
-                                                <div className="grid grid-cols-3 gap-2 text-center">
+                                                <div className="grid grid-cols-2 gap-2 text-center">
                                                   <div>
                                                       <p className="text-xs text-muted-foreground">Est. Time</p>
                                                       <p className="font-bold text-lg">~{format(addMinutes(walkInEstimate.estimatedTime, walkInEstimate.delayMinutes || 0), 'hh:mm a')}</p>
@@ -1453,10 +1452,6 @@ export default function AppointmentsPage() {
                                                   <div>
                                                       <p className="text-xs text-muted-foreground">Queue</p>
                                                       <p className="font-bold text-lg">{walkInEstimate.patientsAhead} ahead</p>
-                                                  </div>
-                                                  <div>
-                                                      <p className="text-xs text-muted-foreground">Current Delay</p>
-                                                      <p className="font-bold text-lg">{walkInEstimate.delayMinutes || 0} min</p>
                                                   </div>
                                                 </div>
                                             )}
@@ -1860,4 +1855,3 @@ export default function AppointmentsPage() {
   );
 }
 
-    
