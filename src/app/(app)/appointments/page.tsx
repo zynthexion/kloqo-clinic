@@ -1815,21 +1815,23 @@ export default function AppointmentsPage() {
         />
       )}
       <Dialog open={isTokenModalOpen} onOpenChange={setIsTokenModalOpen}>
-        <DialogContent className="sm:max-w-xs w-[90%] text-center p-6 sm:p-8">
-            <DialogHeader>
-                <DialogTitle className="text-xl font-bold">Walk-in Token Generated!</DialogTitle>
-                <DialogDescription>Please wait for your turn. You can monitor the live queue.</DialogDescription>
-            </DialogHeader>
-            <div className="py-4">
-                <p className="text-sm text-muted-foreground">Your Token Number</p>
-                <p className="text-5xl font-bold text-primary">{generatedToken}</p>
-            </div>
-            <DialogClose asChild>
-                <Button variant="ghost" size="icon" className="absolute top-4 right-4 h-6 w-6 text-muted-foreground">
-                    <X className="h-4 w-4" />
-                    <span className="sr-only">Close</span>
-                </Button>
-            </DialogClose>
+        <DialogContent className="sm:max-w-xs w-[90%]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-center">Walk-in Token Generated!</DialogTitle>
+            <DialogDescription className="text-center">
+              Please wait for your turn. You can monitor the live queue.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 text-center">
+              <p className="text-sm text-muted-foreground">Your Token Number</p>
+              <p className="text-5xl font-bold text-primary">{generatedToken}</p>
+          </div>
+          <DialogClose asChild>
+              <Button variant="ghost" size="icon" className="absolute top-4 right-4 h-6 w-6 text-muted-foreground">
+                  <X className="h-4 w-4" />
+                  <span className="sr-only">Close</span>
+              </Button>
+          </DialogClose>
         </DialogContent>
       </Dialog>
       <AlertDialog open={!!appointmentToSkip} onOpenChange={(open) => !open && setAppointmentToSkip(null)}>
@@ -1860,3 +1862,5 @@ export default function AppointmentsPage() {
     </>
   );
 }
+
+    
