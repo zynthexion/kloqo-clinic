@@ -90,18 +90,14 @@ function DashboardPageContent() {
               initialDateRange={dateRange}
            />
            <div className="flex items-center gap-2">
-              <div onClick={handlePrint}>
-                <Button variant="outline" size="icon" disabled={isPrinting}>
-                    <Printer className="h-4 w-4" />
-                    <span className="sr-only">Print</span>
-                </Button>
-              </div>
-              <div onClick={handleDownloadPdf}>
-                <Button variant="outline" size="icon" disabled={isPrinting}>
-                    {isPrinting ? <Loader2 className="h-4 w-4 animate-spin"/> : <FileDown className="h-4 w-4" />}
-                    <span className="sr-only">Download PDF</span>
-                </Button>
-              </div>
+              <Button variant="outline" size="icon" disabled={isPrinting} onClick={handlePrint}>
+                  <Printer className="h-4 w-4" />
+                  <span className="sr-only">Print</span>
+              </Button>
+              <Button variant="outline" size="icon" disabled={isPrinting} onClick={handleDownloadPdf}>
+                  {isPrinting ? <Loader2 className="h-4 w-4 animate-spin"/> : <FileDown className="h-4 w-4" />}
+                  <span className="sr-only">Download PDF</span>
+              </Button>
            </div>
         </div>
       </header>
