@@ -103,13 +103,52 @@ export default function OverviewStats({ dateRange, doctorId }: OverviewStatsProp
 
             const uniquePatients = new Set(periodAppointments.map(apt => apt.patientId));
             
-            const completedAppointments = periodAppointments.filter(apt => apt.status === 'Completed').length;
+            const completedAppointments = periodAppointments.filter(apt => apt.status === 'Completed');
             const cancelledAppointments = periodAppointments.filter(apt => apt.status === 'Cancelled').length;
+
+            let totalRevenue = 0;
+            const completedByPatientAndDoctor: Record<string, Appointment[]> = {};
+
+            // Group completed appointments by patient and doctor
+            completedAppointments.forEach(apt => {
+              const key = `${apt.patientId}-${apt.doctor}`;
+              if (!completedByPatientAndDoctor[key]) {
+                completedByPatientAndDoctor[key] = [];
+              }
+              completedByPatientAndDoctor[key].push(apt);
+            });
+            
+            for (const key in completedByPatientAndDoctor) {
+                const appointments = completedByPatientAndDoctor[key].sort((a,b) => parse(a.date, 'd MMMM yyyy', new Date()).getTime() - parse(b.date, 'd MMMM yyyy', new Date()).getTime());
+                const doctor = allDoctors.find(d => d.name === appointments[0].doctor);
+                const freeFollowUpDays = doctor?.freeFollowUpDays ?? 0;
+                const consultationFee = doctor?.consultationFee ?? 0;
+
+                for (let i = 0; i < appointments.length; i++) {
+                    const currentApt = appointments[i];
+                    const previousApt = i > 0 ? appointments[i-1] : null;
+
+                    let isFree = false;
+                    if (previousApt && freeFollowUpDays > 0) {
+                        const daysBetween = differenceInDays(
+                            parse(currentApt.date, 'd MMMM yyyy', new Date()),
+                            parse(previousApt.date, 'd MMMM yyyy', new Date())
+                        );
+                        if(daysBetween <= freeFollowUpDays) {
+                            isFree = true;
+                        }
+                    }
+                    if (!isFree) {
+                        totalRevenue += consultationFee;
+                    }
+                }
+            }
             
             return {
                 totalPatients: uniquePatients.size,
-                completedAppointments,
+                completedAppointments: completedAppointments.length,
                 cancelledAppointments,
+                totalRevenue,
             };
         };
 
@@ -118,6 +157,7 @@ export default function OverviewStats({ dateRange, doctorId }: OverviewStatsProp
 
         const calculateChange = (current: number, previous: number) => {
             if (previous === 0) return current > 0 ? "+100%" : "0%";
+            if (current === previous) return "0%";
             const change = ((current - previous) / previous) * 100;
             if (change > 0) return `+${change.toFixed(0)}%`;
             return `${change.toFixed(0)}%`;
@@ -129,6 +169,8 @@ export default function OverviewStats({ dateRange, doctorId }: OverviewStatsProp
                 return (apt.status === 'Confirmed' || apt.status === 'Pending') && (isFuture(aptDate) || isToday(aptDate));
             } catch { return false; }
         }).length;
+        
+        const revenueChange = calculateChange(currentStats.totalRevenue, previousStats.totalRevenue);
 
         const allStats: Stat[] = [
           { 
@@ -164,10 +206,10 @@ export default function OverviewStats({ dateRange, doctorId }: OverviewStatsProp
           },
           { 
               title: "Total Revenue", 
-              value: "₹12,450", 
+              value: `₹${currentStats.totalRevenue.toLocaleString()}`, 
               icon: "Total Revenue",
-              change: "+5.2%",
-              changeType: "increase"
+              change: revenueChange,
+              changeType: currentStats.totalRevenue >= previousStats.totalRevenue ? 'increase' : 'decrease'
           },
         ];
 
