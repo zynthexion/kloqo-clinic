@@ -7,6 +7,7 @@ import { Suspense, useEffect } from 'react';
 import { useAuth } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
+import { useAppointmentStatusUpdater } from '@/hooks/useAppointmentStatusUpdater';
 
 export default function AppLayout({
   children,
@@ -15,6 +16,9 @@ export default function AppLayout({
 }>) {
   const { currentUser, loading } = useAuth();
   const router = useRouter();
+
+  // Custom hook to handle automatic status updates
+  useAppointmentStatusUpdater();
 
   useEffect(() => {
     if (!loading && !currentUser) {

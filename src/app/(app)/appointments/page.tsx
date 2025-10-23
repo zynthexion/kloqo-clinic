@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useCallback, useTransition } from "react";
@@ -306,47 +305,6 @@ export default function AppointmentsPage() {
     });
 
   }, [auth.currentUser, toast, form]);
-  
-  useEffect(() => {
-    const interval = setInterval(async () => {
-        const now = new Date();
-        const batch = writeBatch(db);
-        let batchHasWrites = false;
-
-        const appointmentsToCheck = appointments.filter(apt => apt.status === 'Confirmed' || apt.status === 'Skipped');
-        
-        for (const apt of appointmentsToCheck) {
-            try {
-                const appointmentDateTime = parseAppointmentDateTime(apt.date, apt.time);
-                const fiveHoursLater = addHours(appointmentDateTime, 5);
-                
-                if (isAfter(now, fiveHoursLater)) {
-                    const aptRef = doc(db, 'appointments', apt.id);
-                    batch.update(aptRef, { status: 'No-show' });
-                    batchHasWrites = true;
-                }
-            } catch (e) {
-                // Ignore parsing errors for potentially malformed old data
-                continue;
-            }
-        }
-        
-        if (batchHasWrites) {
-            try {
-                await batch.commit();
-                toast({
-                    title: "Appointment Statuses Updated",
-                    description: "Some old appointments were marked as No-show."
-                });
-            } catch (e) {
-                console.error("Error in automatic status update batch:", e);
-            }
-        }
-
-    }, 300000); // Check every 5 minutes
-
-    return () => clearInterval(interval);
-  }, [appointments, toast]);
 
 
   const resetForm = useCallback(() => {
@@ -1990,4 +1948,3 @@ export default function AppointmentsPage() {
     </>
   );
 }
-
