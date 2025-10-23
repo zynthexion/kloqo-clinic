@@ -15,30 +15,140 @@ import {
     ResponsiveContainer, 
     Legend 
 } from 'recharts';
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useAuth } from "@/firebase";
+import type { Appointment, Doctor } from "@/lib/types";
+import {
+  format,
+  eachDayOfInterval,
+  eachMonthOfInterval,
+  isWithinInterval,
+  parse,
+  differenceInDays,
+  startOfDay,
+  startOfMonth,
+  endOfMonth,
+} from "date-fns";
+
 
 type ChartProps = {
   dateRange: DateRange | undefined;
 };
 
-const DUMMY_DATA = [
-    { month: "Jan", patients: 120, appointments: 98, revenue: 14700 },
-    { month: "Feb", patients: 140, appointments: 120, revenue: 18000 },
-    { month: "Mar", patients: 160, appointments: 135, revenue: 20250 },
-    { month: "Apr", patients: 150, appointments: 140, revenue: 21000 },
-    { month: "May", patients: 180, appointments: 160, revenue: 24000 },
-    { month: "Jun", patients: 170, appointments: 155, revenue: 23250 },
-    { month: "Jul", patients: 190, appointments: 170, revenue: 25500 },
-    { month: "Aug", patients: 210, appointments: 180, revenue: 27000 },
-    { month: "Sep", patients: 200, appointments: 175, revenue: 26250 },
-    { month: "Oct", patients: 220, appointments: 190, revenue: 28500 },
-    { month: "Nov", patients: 230, appointments: 200, revenue: 30000 },
-    { month: "Dec", patients: 250, appointments: 210, revenue: 31500 },
-];
-
 
 export default function PatientsVsAppointmentsChart({ dateRange }: ChartProps) {
-  const [loading, setLoading] = useState(false); // No longer loading data
-  const chartData = DUMMY_DATA;
+  const auth = useAuth();
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!auth.currentUser) {
+      setLoading(false);
+      return;
+    }
+
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const userDocRef = collection(db, "users");
+        const userQuery = query(userDocRef, where("uid", "==", auth.currentUser!.uid));
+        const userSnapshot = await getDocs(userQuery);
+        if (userSnapshot.empty) {
+          setLoading(false);
+          return;
+        }
+        const clinicId = userSnapshot.docs[0].data().clinicId;
+        if (!clinicId) {
+          setLoading(false);
+          return;
+        }
+
+        const appointmentsQuery = query(collection(db, "appointments"), where("clinicId", "==", clinicId));
+        const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
+
+        const [appointmentsSnapshot, doctorsSnapshot] = await Promise.all([
+          getDocs(appointmentsQuery),
+          getDocs(doctorsQuery),
+        ]);
+
+        setAppointments(appointmentsSnapshot.docs.map(doc => doc.data() as Appointment));
+        setDoctors(doctorsSnapshot.docs.map(doc => doc.data() as Doctor));
+      } catch (error) {
+        console.error("Error fetching chart data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [auth.currentUser]);
+
+  const chartData = useMemo(() => {
+    if (!dateRange?.from || !dateRange?.to || appointments.length === 0) return [];
+
+    const from = startOfDay(dateRange.from);
+    const to = startOfDay(dateRange.to);
+    const dayCount = differenceInDays(to, from);
+
+    const isMonthlyView = dayCount > 60;
+    
+    if (isMonthlyView) {
+      const months = eachMonthOfInterval({ start: from, end: to });
+      return months.map(monthStart => {
+        const monthEnd = endOfMonth(monthStart);
+        const monthAppointments = appointments.filter(apt => {
+          try {
+            return isWithinInterval(parse(apt.date, 'd MMMM yyyy', new Date()), { start: monthStart, end: monthEnd });
+          } catch { return false; }
+        });
+        
+        const patients = new Set(monthAppointments.map(a => a.patientId)).size;
+        const totalAppointments = monthAppointments.length;
+        
+        const completed = monthAppointments.filter(apt => apt.status === 'Completed');
+        let revenue = 0;
+        completed.forEach(apt => {
+            const doctor = doctors.find(d => d.name === apt.doctor);
+            if(doctor) revenue += doctor.consultationFee || 0;
+        });
+
+        return {
+          month: format(monthStart, 'MMM yyyy'),
+          patients,
+          appointments: totalAppointments,
+          revenue,
+        };
+      });
+    } else {
+      const days = eachDayOfInterval({ start: from, end: to });
+      return days.map(day => {
+        const dayAppointments = appointments.filter(apt => {
+          try {
+            return isWithinInterval(parse(apt.date, 'd MMMM yyyy', new Date()), { start: day, end: day });
+          } catch { return false; }
+        });
+
+        const patients = new Set(dayAppointments.map(a => a.patientId)).size;
+        const totalAppointments = dayAppointments.length;
+        const completed = dayAppointments.filter(apt => apt.status === 'Completed');
+        let revenue = 0;
+        completed.forEach(apt => {
+            const doctor = doctors.find(d => d.name === apt.doctor);
+            if(doctor) revenue += doctor.consultationFee || 0;
+        });
+
+        return {
+          month: format(day, 'MMM d'),
+          patients,
+          appointments: totalAppointments,
+          revenue,
+        };
+      });
+    }
+
+  }, [dateRange, appointments, doctors]);
   
   if (loading) {
     return (
@@ -97,7 +207,7 @@ export default function PatientsVsAppointmentsChart({ dateRange }: ChartProps) {
               />
               <Area type="monotone" dataKey="patients" stroke="hsl(var(--chart-1))" fill="url(#colorPatients)" strokeWidth={2} name="Patients" />
               <Area type="monotone" dataKey="appointments" stroke="hsl(var(--chart-2))" fill="url(#colorAppointments)" strokeWidth={2} name="Appointments" />
-              <Area type="monotone" dataKey="revenue" stroke="hsl(var(--chart-3))" fill="url(#colorRevenue)" strokeWidth={2} name="Revenue ($)" />
+              <Area type="monotone" dataKey="revenue" stroke="hsl(var(--chart-3))" fill="url(#colorRevenue)" strokeWidth={2} name="Revenue (₹)" />
             </AreaChart>
           </ResponsiveContainer>
         ) : (
