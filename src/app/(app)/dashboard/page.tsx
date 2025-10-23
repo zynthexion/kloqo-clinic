@@ -4,7 +4,6 @@
 import { useState, Suspense } from "react";
 import { format } from "date-fns";
 import OverviewStats from "@/components/dashboard/overview-stats";
-import RecentActivity from "@/components/dashboard/recent-activity";
 import DoctorAvailability from "@/components/dashboard/doctor-availability";
 import TodaysAppointments from "@/components/dashboard/todays-appointments";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -18,6 +17,7 @@ import AppointmentStatusChart from "@/components/dashboard/appointment-status-ch
 import PatientsVsAppointmentsChart from "@/components/dashboard/patients-vs-appointments-chart";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import PeakHoursChart from "@/components/dashboard/peak-hours-chart";
 
 
 function DashboardHeader({
@@ -97,7 +97,7 @@ function DashboardPageContent() {
           </div>
            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
              <div className="lg:col-span-1">
-                <RecentActivity />
+                <PeakHoursChart dateRange={dateRange} />
             </div>
             <div className="lg:col-span-1">
                 <TodaysAppointments selectedDate={selectedDate} />
