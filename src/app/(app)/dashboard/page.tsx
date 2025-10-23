@@ -25,9 +25,9 @@ import { useSearchParams } from "next/navigation";
 // A new component that correctly forwards the ref for printing.
 const PrintableContent = forwardRef<HTMLDivElement, { children: React.ReactNode }>(({ children }, ref) => {
   return (
-    <main ref={ref} className="flex-1 p-6 bg-background">
+    <div ref={ref} className="flex-1 p-6 bg-background">
       {children}
-    </main>
+    </div>
   );
 });
 PrintableContent.displayName = 'PrintableContent';
@@ -90,14 +90,18 @@ function DashboardPageContent() {
               initialDateRange={dateRange}
            />
            <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" onClick={handlePrint} disabled={isPrinting}>
-                  <Printer className="h-4 w-4" />
-                  <span className="sr-only">Print</span>
-              </Button>
-              <Button variant="outline" size="icon" onClick={handleDownloadPdf} disabled={isPrinting}>
-                  {isPrinting ? <Loader2 className="h-4 w-4 animate-spin"/> : <FileDown className="h-4 w-4" />}
-                  <span className="sr-only">Download PDF</span>
-              </Button>
+              <div onClick={handlePrint}>
+                <Button variant="outline" size="icon" disabled={isPrinting}>
+                    <Printer className="h-4 w-4" />
+                    <span className="sr-only">Print</span>
+                </Button>
+              </div>
+              <div onClick={handleDownloadPdf}>
+                <Button variant="outline" size="icon" disabled={isPrinting}>
+                    {isPrinting ? <Loader2 className="h-4 w-4 animate-spin"/> : <FileDown className="h-4 w-4" />}
+                    <span className="sr-only">Download PDF</span>
+                </Button>
+              </div>
            </div>
         </div>
       </header>
