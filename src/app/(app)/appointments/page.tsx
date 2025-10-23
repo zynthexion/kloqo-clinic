@@ -599,6 +599,31 @@ export default function AppointmentsPage() {
           patientForAppointmentName = values.patientName;
         }
 
+        if (!isEditing) {
+            const appointmentDateStr = appointmentType === 'Walk-in' 
+                ? format(new Date(), "d MMMM yyyy")
+                : format(values.date!, "d MMMM yyyy");
+
+            const duplicateCheckQuery = query(
+                collection(db, "appointments"),
+                where("patientId", "==", patientForAppointmentId),
+                where("doctor", "==", selectedDoctor.name),
+                where("date", "==", appointmentDateStr),
+                where("status", "in", ["Pending", "Confirmed", "Completed", "Skipped"])
+            );
+
+            const duplicateSnapshot = await getDocs(duplicateCheckQuery);
+            if (!duplicateSnapshot.empty) {
+                toast({
+                    variant: "destructive",
+                    title: "Duplicate Booking",
+                    description: "This patient already has an appointment with this doctor today.",
+                });
+                return;
+            }
+        }
+
+
         await batch.commit().catch(e => {
           const permissionError = new FirestorePermissionError({
             path: 'batch write', operation: 'write', requestResourceData: values
