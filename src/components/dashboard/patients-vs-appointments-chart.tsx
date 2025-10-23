@@ -15,10 +15,10 @@ import {
     ResponsiveContainer, 
     Legend 
 } from 'recharts';
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where, documentId } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/firebase";
-import type { Appointment, Doctor } from "@/lib/types";
+import type { Appointment, Doctor, Patient } from "@/lib/types";
 import {
   format,
   eachDayOfInterval,
@@ -40,6 +40,7 @@ type ChartProps = {
 export default function PatientsVsAppointmentsChart({ dateRange }: ChartProps) {
   const auth = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -67,14 +68,17 @@ export default function PatientsVsAppointmentsChart({ dateRange }: ChartProps) {
 
         const appointmentsQuery = query(collection(db, "appointments"), where("clinicId", "==", clinicId));
         const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
+        const patientsQuery = query(collection(db, "patients"), where("clinicIds", "array-contains", clinicId));
 
-        const [appointmentsSnapshot, doctorsSnapshot] = await Promise.all([
+        const [appointmentsSnapshot, doctorsSnapshot, patientsSnapshot] = await Promise.all([
           getDocs(appointmentsQuery),
           getDocs(doctorsQuery),
+          getDocs(patientsQuery),
         ]);
 
-        setAppointments(appointmentsSnapshot.docs.map(doc => doc.data() as Appointment));
+        setAppointments(appointmentsSnapshot.docs.map(doc => ({id: doc.id, ...doc.data() } as Appointment)));
         setDoctors(doctorsSnapshot.docs.map(doc => doc.data() as Doctor));
+        setPatients(patientsSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()} as Patient)));
       } catch (error) {
         console.error("Error fetching chart data:", error);
       } finally {
@@ -86,7 +90,7 @@ export default function PatientsVsAppointmentsChart({ dateRange }: ChartProps) {
   }, [auth.currentUser]);
 
   const chartData = useMemo(() => {
-    if (!dateRange?.from || !dateRange?.to || appointments.length === 0) return [];
+    if (!dateRange?.from || !dateRange?.to || appointments.length === 0 || patients.length === 0) return [];
 
     const from = startOfDay(dateRange.from);
     const to = startOfDay(dateRange.to);
@@ -94,20 +98,38 @@ export default function PatientsVsAppointmentsChart({ dateRange }: ChartProps) {
 
     const isMonthlyView = dayCount > 60;
     
-    if (isMonthlyView) {
-      const months = eachMonthOfInterval({ start: from, end: to });
-      return months.map(monthStart => {
-        const monthEnd = endOfMonth(monthStart);
-        const monthAppointments = appointments.filter(apt => {
+    // Create a map of patientId to their first appointment date
+    const patientFirstVisitMap = new Map<string, Date>();
+    
+    // Sort all appointments once to find the first visit date efficiently
+    const allSortedAppointments = [...appointments].sort((a,b) => parse(a.date, 'd MMMM yyyy', new Date()).getTime() - parse(b.date, 'd MMMM yyyy', new Date()).getTime());
+
+    for (const appt of allSortedAppointments) {
+        if (!patientFirstVisitMap.has(appt.patientId)) {
+            patientFirstVisitMap.set(appt.patientId, parse(appt.date, 'd MMMM yyyy', new Date()));
+        }
+    }
+
+    const processPeriod = (startDate: Date, endDate: Date) => {
+        const periodAppointments = appointments.filter(apt => {
           try {
-            return isWithinInterval(parse(apt.date, 'd MMMM yyyy', new Date()), { start: monthStart, end: monthEnd });
+            return isWithinInterval(parse(apt.date, 'd MMMM yyyy', new Date()), { start: startDate, end: endDate });
           } catch { return false; }
         });
+
+        const newPatients = new Set<string>();
+        const returningPatients = new Set<string>();
+
+        for (const appt of periodAppointments) {
+            const firstVisitDate = patientFirstVisitMap.get(appt.patientId);
+            if (firstVisitDate && isWithinInterval(firstVisitDate, { start: startDate, end: endDate })) {
+                newPatients.add(appt.patientId);
+            } else {
+                returningPatients.add(appt.patientId);
+            }
+        }
         
-        const patients = new Set(monthAppointments.map(a => a.patientId)).size;
-        const totalAppointments = monthAppointments.length;
-        
-        const completed = monthAppointments.filter(apt => apt.status === 'Completed');
+        const completed = periodAppointments.filter(apt => apt.status === 'Completed');
         let revenue = 0;
         completed.forEach(apt => {
             const doctor = doctors.find(d => d.name === apt.doctor);
@@ -115,40 +137,34 @@ export default function PatientsVsAppointmentsChart({ dateRange }: ChartProps) {
         });
 
         return {
-          month: format(monthStart, 'MMM yyyy'),
-          patients,
-          appointments: totalAppointments,
+          newPatients: newPatients.size,
+          returningPatients: returningPatients.size,
           revenue,
+        };
+    }
+
+    if (isMonthlyView) {
+      const months = eachMonthOfInterval({ start: from, end: to });
+      return months.map(monthStart => {
+        const monthEnd = endOfMonth(monthStart);
+        const stats = processPeriod(monthStart, monthEnd);
+        return {
+          month: format(monthStart, 'MMM yyyy'),
+          ...stats,
         };
       });
     } else {
       const days = eachDayOfInterval({ start: from, end: to });
       return days.map(day => {
-        const dayAppointments = appointments.filter(apt => {
-          try {
-            return isWithinInterval(parse(apt.date, 'd MMMM yyyy', new Date()), { start: day, end: day });
-          } catch { return false; }
-        });
-
-        const patients = new Set(dayAppointments.map(a => a.patientId)).size;
-        const totalAppointments = dayAppointments.length;
-        const completed = dayAppointments.filter(apt => apt.status === 'Completed');
-        let revenue = 0;
-        completed.forEach(apt => {
-            const doctor = doctors.find(d => d.name === apt.doctor);
-            if(doctor) revenue += doctor.consultationFee || 0;
-        });
-
+        const stats = processPeriod(day, day);
         return {
           month: format(day, 'MMM d'),
-          patients,
-          appointments: totalAppointments,
-          revenue,
+          ...stats,
         };
       });
     }
 
-  }, [dateRange, appointments, doctors]);
+  }, [dateRange, appointments, patients, doctors]);
   
   if (loading) {
     return (
@@ -168,18 +184,18 @@ export default function PatientsVsAppointmentsChart({ dateRange }: ChartProps) {
     <Card className="h-full flex flex-col">
       <CardHeader>
         <CardTitle>Analytics Overview</CardTitle>
-        <CardDescription>Patients, appointments, and revenue over time.</CardDescription>
+        <CardDescription>Patient visits and revenue over time.</CardDescription>
       </CardHeader>
       <CardContent className="flex-grow flex items-center justify-center pr-6">
         {chartData.length > 0 ? (
           <ResponsiveContainer width="100%" height={250}>
             <AreaChart data={chartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
               <defs>
-                <linearGradient id="colorPatients" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id="colorNewPatients" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.8}/>
                   <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0}/>
                 </linearGradient>
-                <linearGradient id="colorAppointments" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id="colorReturningPatients" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.8}/>
                   <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0}/>
                 </linearGradient>
@@ -205,8 +221,8 @@ export default function PatientsVsAppointmentsChart({ dateRange }: ChartProps) {
                 iconSize={8}
                 wrapperStyle={{ top: -10, right: 0 }}
               />
-              <Area type="monotone" dataKey="patients" stroke="hsl(var(--chart-1))" fill="url(#colorPatients)" strokeWidth={2} name="Patients" />
-              <Area type="monotone" dataKey="appointments" stroke="hsl(var(--chart-2))" fill="url(#colorAppointments)" strokeWidth={2} name="Appointments" />
+              <Area type="monotone" dataKey="newPatients" stroke="hsl(var(--chart-1))" fill="url(#colorNewPatients)" strokeWidth={2} name="New Patients" />
+              <Area type="monotone" dataKey="returningPatients" stroke="hsl(var(--chart-2))" fill="url(#colorReturningPatients)" strokeWidth={2} name="Returning Patients" />
               <Area type="monotone" dataKey="revenue" stroke="hsl(var(--chart-3))" fill="url(#colorRevenue)" strokeWidth={2} name="Revenue (₹)" />
             </AreaChart>
           </ResponsiveContainer>
