@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { collection, doc, getDoc, writeBatch, where, query, onSnapshot } from 'firebase/firestore';
+import { collection, doc, getDoc, writeBatch, where, query, onSnapshot, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/firebase';
 import type { Appointment } from '@/lib/types';
