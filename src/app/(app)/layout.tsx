@@ -8,12 +8,9 @@ import { useAuth } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 import { useAppointmentStatusUpdater } from '@/hooks/useAppointmentStatusUpdater';
+import { AuthProvider } from './auth-provider';
 
-export default function AppLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+function AppContent({ children }: { children: React.ReactNode }) {
   const { currentUser, loading } = useAuth();
   const router = useRouter();
 
@@ -45,5 +42,18 @@ export default function AppLayout({
             </div>
           </div>
       </Suspense>
-  )
+  );
+}
+
+
+export default function AppLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <AuthProvider>
+      <AppContent>{children}</AppContent>
+    </AuthProvider>
+  );
 }
