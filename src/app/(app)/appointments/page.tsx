@@ -313,29 +313,40 @@ export default function AppointmentsPage() {
         const batch = writeBatch(db);
         let batchHasWrites = false;
 
-        const skippedAppointments = appointments.filter(apt => apt.status === 'Skipped');
-        for (const skippedApt of skippedAppointments) {
-            const appointmentDateTime = parseAppointmentDateTime(skippedApt.date, skippedApt.time);
-            const fiveHoursLater = addHours(appointmentDateTime, 5);
-            if (isAfter(now, fiveHoursLater)) {
-                const aptRef = doc(db, 'appointments', skippedApt.id);
-                batch.update(aptRef, { status: 'No-show' });
-                batchHasWrites = true;
+        const appointmentsToCheck = appointments.filter(apt => apt.status === 'Confirmed' || apt.status === 'Skipped');
+        
+        for (const apt of appointmentsToCheck) {
+            try {
+                const appointmentDateTime = parseAppointmentDateTime(apt.date, apt.time);
+                const fiveHoursLater = addHours(appointmentDateTime, 5);
+                
+                if (isAfter(now, fiveHoursLater)) {
+                    const aptRef = doc(db, 'appointments', apt.id);
+                    batch.update(aptRef, { status: 'No-show' });
+                    batchHasWrites = true;
+                }
+            } catch (e) {
+                // Ignore parsing errors for potentially malformed old data
+                continue;
             }
         }
         
         if (batchHasWrites) {
             try {
                 await batch.commit();
+                toast({
+                    title: "Appointment Statuses Updated",
+                    description: "Some old appointments were marked as No-show."
+                });
             } catch (e) {
                 console.error("Error in automatic status update batch:", e);
             }
         }
 
-    }, 60000); // Check every minute
+    }, 300000); // Check every 5 minutes
 
     return () => clearInterval(interval);
-  }, [appointments]);
+  }, [appointments, toast]);
 
 
   const resetForm = useCallback(() => {
