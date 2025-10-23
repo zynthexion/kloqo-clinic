@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, Suspense, useRef } from "react";
+import { useState, Suspense, useRef, forwardRef } from "react";
 import { format } from "date-fns";
 import { useReactToPrint } from "react-to-print";
 import jsPDF from "jspdf";
@@ -20,6 +20,17 @@ import AppointmentStatusChart from "@/components/dashboard/appointment-status-ch
 import PatientsVsAppointmentsChart from "@/components/dashboard/patients-vs-appointments-chart";
 import PeakHoursChart from "@/components/dashboard/peak-hours-chart";
 import { useSearchParams } from "next/navigation";
+
+
+// A new component that correctly forwards the ref for printing.
+const PrintableContent = forwardRef<HTMLDivElement, { children: React.ReactNode }>(({ children }, ref) => {
+  return (
+    <main ref={ref} className="flex-1 p-6 bg-background">
+      {children}
+    </main>
+  );
+});
+PrintableContent.displayName = 'PrintableContent';
 
 
 function DashboardPageContent() {
@@ -91,7 +102,7 @@ function DashboardPageContent() {
         </div>
       </header>
 
-      <main ref={contentToPrintRef} className="flex-1 p-6 bg-background">
+      <PrintableContent ref={contentToPrintRef}>
         <div className="space-y-6">
           <OverviewStats dateRange={dateRange} />
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -126,7 +137,7 @@ function DashboardPageContent() {
             </div>
           </div>
         </div>
-      </main>
+      </PrintableContent>
     </>
   );
 }
