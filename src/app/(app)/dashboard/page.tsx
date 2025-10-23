@@ -1,8 +1,11 @@
 
 'use client';
 
-import { useState, Suspense } from "react";
+import { useState, Suspense, useRef } from "react";
 import { format } from "date-fns";
+import { useReactToPrint } from "react-to-print";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 import OverviewStats from "@/components/dashboard/overview-stats";
 import DoctorAvailability from "@/components/dashboard/doctor-availability";
 import TodaysAppointments from "@/components/dashboard/todays-appointments";
@@ -12,45 +15,11 @@ import { DateRangePicker } from "@/components/ui/date-range-picker";
 import type { DateRange } from "react-day-picker";
 import { subDays } from 'date-fns';
 import { Button } from "@/components/ui/button";
-import { Printer, FileDown } from "lucide-react";
+import { Printer, FileDown, Loader2 } from "lucide-react";
 import AppointmentStatusChart from "@/components/dashboard/appointment-status-chart";
 import PatientsVsAppointmentsChart from "@/components/dashboard/patients-vs-appointments-chart";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import PeakHoursChart from "@/components/dashboard/peak-hours-chart";
-
-
-function DashboardHeader({
-  dateRange,
-  onDateChange,
-}: {
-  dateRange: DateRange | undefined;
-  onDateChange: (dateRange: DateRange | undefined) => void;
-}) {
-  return (
-    <header className="flex items-center justify-between gap-4 px-6 border-b py-6">
-      <div>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-      </div>
-      <div className="flex items-center gap-4">
-         <DateRangePicker 
-            onDateChange={onDateChange}
-            initialDateRange={dateRange}
-         />
-         <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon">
-                <Printer className="h-4 w-4" />
-                <span className="sr-only">Print</span>
-            </Button>
-            <Button variant="outline" size="icon">
-                <FileDown className="h-4 w-4" />
-                <span className="sr-only">Download PDF</span>
-            </Button>
-         </div>
-      </div>
-    </header>
-  );
-}
+import { useSearchParams } from "next/navigation";
 
 
 function DashboardPageContent() {
@@ -59,6 +28,38 @@ function DashboardPageContent() {
     to: new Date(),
   });
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [isPrinting, setIsPrinting] = useState(false);
+  
+  const contentToPrintRef = useRef<HTMLDivElement>(null);
+
+  const handlePrint = useReactToPrint({
+    content: () => contentToPrintRef.current,
+  });
+
+  const handleDownloadPdf = async () => {
+    const content = contentToPrintRef.current;
+    if (!content) return;
+
+    setIsPrinting(true);
+    try {
+      const canvas = await html2canvas(content, { scale: 2 });
+      const imgData = canvas.toDataURL('image/png');
+      
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'px',
+        format: [canvas.width, canvas.height]
+      });
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+      pdf.save(`dashboard-report-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+    } finally {
+      setIsPrinting(false);
+    }
+  };
   
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {
@@ -68,11 +69,29 @@ function DashboardPageContent() {
 
   return (
     <>
-      <DashboardHeader
-        dateRange={dateRange}
-        onDateChange={setDateRange}
-      />
-      <main className="flex-1 p-6 bg-background">
+      <header className="flex items-center justify-between gap-4 px-6 border-b py-6">
+        <div>
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+        </div>
+        <div className="flex items-center gap-4">
+           <DateRangePicker 
+              onDateChange={setDateRange}
+              initialDateRange={dateRange}
+           />
+           <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" onClick={handlePrint} disabled={isPrinting}>
+                  <Printer className="h-4 w-4" />
+                  <span className="sr-only">Print</span>
+              </Button>
+              <Button variant="outline" size="icon" onClick={handleDownloadPdf} disabled={isPrinting}>
+                  {isPrinting ? <Loader2 className="h-4 w-4 animate-spin"/> : <FileDown className="h-4 w-4" />}
+                  <span className="sr-only">Download PDF</span>
+              </Button>
+           </div>
+        </div>
+      </header>
+
+      <main ref={contentToPrintRef} className="flex-1 p-6 bg-background">
         <div className="space-y-6">
           <OverviewStats dateRange={dateRange} />
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
