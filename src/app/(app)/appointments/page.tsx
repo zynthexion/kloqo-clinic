@@ -1436,18 +1436,6 @@ export default function AppointmentsPage() {
                       {(selectedPatient || isNewPatient || isEditing) && (
                         <>
                           <div className="pt-4 border-t">
-                             <div className="flex justify-center mb-4">
-                                <RadioGroup onValueChange={(value) => form.setValue('bookedVia', value as any)} value={form.watch('bookedVia')} className="flex items-center space-x-4 rounded-full p-1 bg-muted">
-                                    <Label htmlFor="advanced-booking" className={cn("px-4 py-1.5 rounded-full cursor-pointer transition-colors", form.watch('bookedVia') === 'Advanced Booking' ? "bg-background shadow-sm" : "")}>
-                                        <RadioGroupItem value="Advanced Booking" id="advanced-booking" className="sr-only" />
-                                        Advanced Booking
-                                    </Label>
-                                    <Label htmlFor="walk-in" className={cn("px-4 py-1.5 rounded-full cursor-pointer transition-colors", form.watch('bookedVia') === 'Walk-in' ? "bg-background shadow-sm" : "")}>
-                                        <RadioGroupItem value="Walk-in" id="walk-in" className="sr-only" />
-                                        Walk-in
-                                    </Label>
-                                </RadioGroup>
-                            </div>
                             {primaryPatient && !isEditing && (
                               <div className="mb-4">
                                 <Tabs value={bookingFor} onValueChange={(value) => {
@@ -1633,6 +1621,31 @@ export default function AppointmentsPage() {
                               </div>
                               <div className="space-y-4 md:col-span-1">
                                 <h3 className="text-lg font-medium border-b pb-2">Doctor & Time</h3>
+                                
+                                {/* Appointment Type Selection */}
+                                <div className="space-y-2">
+                                  <Label className="text-sm font-medium">Appointment Type</Label>
+                                  <RadioGroup onValueChange={(value) => form.setValue('bookedVia', value as any)} value={form.watch('bookedVia')} className="flex items-center space-x-2">
+                                    <Label htmlFor="advanced-booking" className={cn(
+                                      "flex-1 px-4 py-3 rounded-md cursor-pointer transition-all duration-200 border-2 text-center font-medium flex items-center justify-center min-h-[4rem]",
+                                      form.watch('bookedVia') === 'Advanced Booking' 
+                                        ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950/20 dark:text-blue-300" 
+                                        : "border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-gray-600 dark:hover:bg-gray-700"
+                                    )}>
+                                      <RadioGroupItem value="Advanced Booking" id="advanced-booking" className="sr-only" />
+                                      Advanced Booking
+                                    </Label>
+                                    <Label htmlFor="walk-in" className={cn(
+                                      "flex-1 px-4 py-3 rounded-md cursor-pointer transition-all duration-200 border-2 text-center font-medium flex items-center justify-center min-h-[4rem]",
+                                      form.watch('bookedVia') === 'Walk-in' 
+                                        ? "border-green-500 bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-300" 
+                                        : "border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-gray-600 dark:hover:bg-gray-700"
+                                    )}>
+                                      <RadioGroupItem value="Walk-in" id="walk-in" className="sr-only" />
+                                      Walk-in
+                                    </Label>
+                                  </RadioGroup>
+                                </div>
                                 <FormField control={form.control} name="doctor" render={({ field }) => (
                                   <FormItem>
                                     <FormLabel>Doctor</FormLabel>
