@@ -1300,6 +1300,7 @@ export default function AppointmentsPage() {
                                     placeholder="Start typing 10-digit phone number..."
                                     value={patientSearchTerm}
                                     onChange={handlePatientSearchChange}
+                                    onFocus={() => setIsDrawerExpanded(false)}
                                     className="pl-8"
                                     maxLength={10}
                                     />
@@ -1350,25 +1351,86 @@ export default function AppointmentsPage() {
                             </Command>
                           </PopoverContent>
                         </Popover>
-                         <div className="border p-4 rounded-lg space-y-4">
-                          <div className="flex justify-between items-center">
-                            <Label>Send Patient Booking Link</Label>
-                             <RadioGroup value={linkChannel} onValueChange={(v) => setLinkChannel(v as any)} className="flex items-center space-x-2">
-                                <Label htmlFor="sms-channel" className="flex items-center gap-2 cursor-pointer">
-                                  <RadioGroupItem value="sms" id="sms-channel" />
-                                  <MessageSquare className="h-5 w-5" /> SMS
-                                </Label>
-                                <Label htmlFor="whatsapp-channel" className="flex items-center gap-2 cursor-pointer">
-                                  <RadioGroupItem value="whatsapp" id="whatsapp-channel" />
-                                  <Smartphone className="h-5 w-5" /> WhatsApp
-                                </Label>
-                            </RadioGroup>
-                            <Button type="button" onClick={handleSendLink} disabled={isSendingLink || patientSearchTerm.length < 10}>
-                                {isSendingLink ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <LinkIcon className="mr-2 h-4 w-4" />}
-                                Send Link
-                            </Button>
+                         {!isDrawerExpanded && (
+                           <div className="border p-4 rounded-lg space-y-4">
+                            <div className="flex justify-between items-center">
+                              <Label>Send Patient Booking Link</Label>
+                              <Button type="button" onClick={handleSendLink} disabled={isSendingLink || patientSearchTerm.length < 10}>
+                                  {isSendingLink ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <LinkIcon className="mr-2 h-4 w-4" />}
+                                  Send Link
+                              </Button>
+                            </div>
+                            
+                            {/* Channel Selection Cards */}
+                            <div className="grid grid-cols-2 gap-3">
+                              <div
+                                className={cn(
+                                  "p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 hover:shadow-md",
+                                  linkChannel === 'sms' 
+                                    ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20" 
+                                    : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                                )}
+                                onClick={() => setLinkChannel('sms')}
+                              >
+                                <div className="flex items-center space-x-3">
+                                  <div className={cn(
+                                    "w-5 h-5 rounded-full border-2 flex items-center justify-center",
+                                    linkChannel === 'sms' 
+                                      ? "border-blue-500 bg-blue-500" 
+                                      : "border-gray-300 dark:border-gray-600"
+                                  )}>
+                                    {linkChannel === 'sms' && (
+                                      <div className="w-2 h-2 rounded-full bg-white" />
+                                    )}
+                                  </div>
+                                  <MessageSquare className={cn(
+                                    "h-5 w-5",
+                                    linkChannel === 'sms' ? "text-blue-600" : "text-gray-500"
+                                  )} />
+                                  <span className={cn(
+                                    "font-medium",
+                                    linkChannel === 'sms' ? "text-blue-700 dark:text-blue-300" : "text-gray-700 dark:text-gray-300"
+                                  )}>
+                                    SMS
+                                  </span>
+                                </div>
+                              </div>
+                              
+                              <div
+                                className={cn(
+                                  "p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 hover:shadow-md",
+                                  linkChannel === 'whatsapp' 
+                                    ? "border-green-500 bg-green-50 dark:bg-green-950/20" 
+                                    : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                                )}
+                                onClick={() => setLinkChannel('whatsapp')}
+                              >
+                                <div className="flex items-center space-x-3">
+                                  <div className={cn(
+                                    "w-5 h-5 rounded-full border-2 flex items-center justify-center",
+                                    linkChannel === 'whatsapp' 
+                                      ? "border-green-500 bg-green-500" 
+                                      : "border-gray-300 dark:border-gray-600"
+                                  )}>
+                                    {linkChannel === 'whatsapp' && (
+                                      <div className="w-2 h-2 rounded-full bg-white" />
+                                    )}
+                                  </div>
+                                  <Smartphone className={cn(
+                                    "h-5 w-5",
+                                    linkChannel === 'whatsapp' ? "text-green-600" : "text-gray-500"
+                                  )} />
+                                  <span className={cn(
+                                    "font-medium",
+                                    linkChannel === 'whatsapp' ? "text-green-700 dark:text-green-300" : "text-gray-700 dark:text-gray-300"
+                                  )}>
+                                    WhatsApp
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                        </div>
+                         )}
                       </div>
                       
                       {(selectedPatient || isNewPatient || isEditing) && (
