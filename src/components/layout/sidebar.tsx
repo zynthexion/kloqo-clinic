@@ -57,6 +57,7 @@ export function Sidebar() {
   const { currentUser } = useAuth();
   const [userProfile, setUserProfile] = useState<User | null>(null);
   const [clinicName, setClinicName] = useState<string | null>(null);
+  const [clinicLogoUrl, setClinicLogoUrl] = useState<string | null>(null);
 
   const isOnboarding = pathname === "/onboarding";
 
@@ -74,7 +75,9 @@ export function Sidebar() {
             const clinicDocRef = doc(db, 'clinics', userData.clinicId);
             const clinicDoc = await getDoc(clinicDocRef);
             if (clinicDoc.exists()) {
-              setClinicName(clinicDoc.data().name);
+              const clinicData = clinicDoc.data();
+              setClinicName(clinicData.name);
+              setClinicLogoUrl(clinicData.logoUrl || null);
             }
           }
         }
@@ -165,7 +168,7 @@ export function Sidebar() {
               <Button variant="ghost" className="w-full justify-start h-auto p-2 hover:bg-sidebar-accent/50">
                   <div className="flex items-center gap-3">
                     <Avatar className="h-9 w-9">
-                      <AvatarImage src={currentUser?.photoURL || undefined} alt={clinicName || ""} />
+                      <AvatarImage src={clinicLogoUrl || undefined} alt={clinicName || ""} />
                       <AvatarFallback>{clinicName?.charAt(0) || 'C'}</AvatarFallback>
                     </Avatar>
                     <div className="text-left opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100 whitespace-nowrap overflow-hidden flex items-center">

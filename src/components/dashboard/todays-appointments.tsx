@@ -69,7 +69,7 @@ export default function TodaysAppointments({ selectedDate }: { selectedDate: Dat
             return timeA - timeB;
         });
 
-        setAppointments(sortedAppts);
+        setAppointments(sortedAppts.slice(0, 3));
       } catch (error) {
         console.error("Error fetching today's appointments:", error);
       } finally {
@@ -83,7 +83,7 @@ export default function TodaysAppointments({ selectedDate }: { selectedDate: Dat
     <Card className="h-full flex flex-col bg-[#bcddef]/30">
       <CardHeader>
         <CardTitle>Appointments for {format(selectedDate, "MMMM d")}</CardTitle>
-        <CardDescription>A list of appointments for the selected day.</CardDescription>
+        <CardDescription>First 3 appointments for the selected day.</CardDescription>
       </CardHeader>
       <CardContent className="flex-grow overflow-hidden">
         <ScrollArea className="h-full">
@@ -98,7 +98,7 @@ export default function TodaysAppointments({ selectedDate }: { selectedDate: Dat
             </TableHeader>
             <TableBody>
               {loading ? (
-                Array.from({ length: 5 }).map((_, i) => (
+                Array.from({ length: 3 }).map((_, i) => (
                   <TableRow key={i}>
                     <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-16" /></TableCell>

@@ -467,7 +467,7 @@ export default function AppointmentsPage() {
         
         const patientDataToUpdate = {
           name: values.patientName,
-          age: values.age,
+            age: values.age || 0,
           sex: values.sex,
           place: values.place,
           phone: values.phone ? `+91${values.phone}` : "",
@@ -595,7 +595,7 @@ export default function AppointmentsPage() {
 
         await batch.commit().catch(e => {
           const permissionError = new FirestorePermissionError({
-            path: 'batch write', operation: 'write', requestResourceData: values
+            path: 'batch write', operation: 'create', requestResourceData: values
           });
           errorEmitter.emit('permission-error', permissionError);
           throw permissionError;
@@ -617,7 +617,7 @@ export default function AppointmentsPage() {
             sex: values.sex,
             patientId: patientForAppointmentId,
             patientName: values.patientName,
-            age: values.age!,
+            age: values.age || 0,
             communicationPhone: communicationPhone,
             place: values.place,
             status: 'Pending',
@@ -678,7 +678,7 @@ export default function AppointmentsPage() {
             patientName: patientForAppointmentName,
             sex: values.sex,
             communicationPhone: communicationPhone,
-            age: values.age!,
+            age: values.age || 0,
             doctor: selectedDoctor.name,
             date: appointmentDateStr,
             time: appointmentTimeStr,
@@ -745,60 +745,94 @@ export default function AppointmentsPage() {
             throw serverError;
         });
 
-
+        // Check if user already exists
         if (!userSnapshot.empty) {
-            toast({
-                variant: "destructive",
-                title: "User Already Exists",
-                description: `A user with the phone number ${fullPhoneNumber} is already registered.`
-            });
-            setIsSendingLink(false);
-            return;
-        }
+            // User exists, just send the link
+            console.log("User already exists, sending booking link");
+        } else {
+            // User doesn't exist, create new user and patient records
+            const batch = writeBatch(db);
+            const newUserRef = doc(collection(db, 'users'));
+            const newPatientRef = doc(collection(db, 'patients'));
 
-        const batch = writeBatch(db);
-        const newUserRef = doc(collection(db, 'users'));
-        const newPatientRef = doc(collection(db, 'patients'));
+            const newUserData: Pick<User, 'uid' | 'phone' | 'role' | 'patientId'> = {
+                uid: newUserRef.id,
+                phone: fullPhoneNumber,
+                role: 'patient',
+                patientId: newPatientRef.id,
+            };
+            batch.set(newUserRef, newUserData);
 
-        const newUserData: Pick<User, 'uid' | 'phone' | 'role' | 'patientId'> = {
-            uid: newUserRef.id,
-            phone: fullPhoneNumber,
-            role: 'patient',
-            patientId: newPatientRef.id,
-        };
-        batch.set(newUserRef, newUserData);
+            const newPatientData: Partial<Patient> = {
+                id: newPatientRef.id,
+                primaryUserId: newUserRef.id,
+                phone: fullPhoneNumber,
+                name: "",
+                age: 0,
+                sex: "",
+                place: "",
+                relatedPatientIds: [],
+                visitHistory: [],
+                totalAppointments: 0,
+                clinicIds: [clinicId],
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+            };
+            batch.set(newPatientRef, newPatientData as Patient);
 
-        const newPatientData: Partial<Patient> = {
-            id: newPatientRef.id,
-            primaryUserId: newUserRef.id,
-            phone: fullPhoneNumber,
-            name: "",
-            age: 0,
-            sex: "",
-            place: "",
-            relatedPatientIds: [],
-            visitHistory: [],
-            totalAppointments: 0,
-            clinicIds: [clinicId],
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-        };
-        batch.set(newPatientRef, newPatientData as Patient);
-
-        await batch.commit().catch(async (serverError) => {
+            await batch.commit().catch(async (serverError) => {
             const permissionError = new FirestorePermissionError({
                 path: 'users or patients',
-                operation: 'write',
+                operation: 'create',
                 requestResourceData: { user: newUserData, patient: newPatientData }
             });
-            errorEmitter.emit('permission-error', permissionError);
-            throw serverError;
-        });
+                errorEmitter.emit('permission-error', permissionError);
+                throw serverError;
+            });
+        }
 
-        toast({
-            title: "Link Sent (Simulated)",
-            description: `A registration link has been sent to ${fullPhoneNumber}. New user and patient records created.`
-        });
+        // Send SMS with booking link
+        const message = `Visit this link to book appointment: www.app.kloqo.com`;
+        
+        try {
+            const response = await fetch('/api/send-sms', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    to: fullPhoneNumber,
+                    message: message,
+                    channel: linkChannel
+                }),
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                const isNewUser = userSnapshot.empty;
+                toast({
+                    title: "Link Sent Successfully",
+                    description: `A booking link has been sent to ${fullPhoneNumber}.${isNewUser ? ' New user and patient records created.' : ''}`
+                });
+            } else {
+                toast({
+                    variant: "destructive",
+                    title: "Failed to Send Link",
+                    description: result.error || "Could not send the booking link."
+                });
+            }
+        } catch (smsError) {
+            console.error("Error sending SMS:", smsError);
+            const isNewUser = userSnapshot.empty;
+            toast({
+                title: isNewUser ? "Records Created" : "SMS Failed",
+                description: isNewUser 
+                    ? `User and patient records created, but failed to send SMS to ${fullPhoneNumber}.`
+                    : `Failed to send SMS to ${fullPhoneNumber}.`
+            });
+        }
+
         setPatientSearchTerm(''); 
 
     } catch (error: any) {
@@ -816,7 +850,7 @@ export default function AppointmentsPage() {
       try {
         const appointmentRef = doc(db, "appointments", appointment.id);
         await updateDoc(appointmentRef, { status: 'Cancelled' });
-        setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Cancelled' } : a));
+        setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Cancelled' as const } : a));
         toast({ title: "Appointment Cancelled" });
       } catch (error) {
         console.error("Error cancelling appointment:", error);
@@ -830,7 +864,7 @@ export default function AppointmentsPage() {
       try {
         const appointmentRef = doc(db, "appointments", appointment.id);
         await updateDoc(appointmentRef, { status: 'Completed' });
-        setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Completed' } : a));
+        setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Completed' as const } : a));
         toast({ title: "Appointment Marked as Completed" });
       } catch (error) {
         console.error("Error completing appointment:", error);
@@ -845,11 +879,11 @@ export default function AppointmentsPage() {
         const appointmentRef = doc(db, "appointments", appointment.id);
         await updateDoc(appointmentRef, { status: 'Skipped' });
         setAppointments(prev => {
-          const updated = prev.map(a => a.id === appointment.id ? { ...a, status: 'Skipped' } : a);
+          const updated = prev.map(a => a.id === appointment.id ? { ...a, status: 'Skipped' as const } : a);
           return [
             ...updated.filter(a => a.status !== 'Skipped'),
             ...updated.filter(a => a.status === 'Skipped'),
-          ];
+          ] as Appointment[];
         });
         toast({ title: "Appointment Skipped" });
       } catch (error) {
@@ -1062,7 +1096,7 @@ export default function AppointmentsPage() {
 
         if (bookedSlotsForDay.includes(slotTime)) {
           status = 'booked';
-        } else if (leaveTimeSlots.some(leaveSlot => {
+        } else if (leaveTimeSlots.some((leaveSlot: any) => {
           const leaveStart = parseDateFns(leaveSlot.from, 'hh:mm a', selectedDate);
           const leaveEnd = parseDateFns(leaveSlot.to, 'hh:mm a', selectedDate);
           return currentTime >= leaveStart && currentTime < leaveEnd;
@@ -1107,7 +1141,7 @@ export default function AppointmentsPage() {
         }
         if (leave.date && isSameDay(parse(leave.date, "yyyy-MM-dd", new Date()), aptDate)) {
             const aptTime = parseDateFns(appointment.time, "hh:mm a", new Date(0));
-            return leave.slots.some(leaveSlot => {
+            return leave.slots.some((leaveSlot: any) => {
                 const leaveStart = parseDateFns(leaveSlot.from, "hh:mm a", new Date(0));
                 const leaveEnd = parseDateFns(leaveSlot.to, "hh:mm a", new Date(0));
                 return aptTime >= leaveStart && aptTime < leaveEnd;

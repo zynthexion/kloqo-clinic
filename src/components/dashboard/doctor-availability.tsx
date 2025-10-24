@@ -145,8 +145,8 @@ export default function DoctorAvailability({ selectedDate }: DoctorAvailabilityP
                                )}
                             </div>
                             <div className="flex items-center gap-2 mt-3">
-                               <Badge variant={doctor.availability === 'Available' ? 'success' : 'destructive'} className="text-xs">
-                                  {doctor.availability}
+                               <Badge variant={doctor.consultationStatus === 'In' ? 'success' : 'destructive'} className="text-xs">
+                                  {doctor.consultationStatus || 'Out'}
                                 </Badge>
                                {tendsToRunLate && (
                                   <Badge variant="warning" className="text-xs">

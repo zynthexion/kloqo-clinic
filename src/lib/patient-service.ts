@@ -1,6 +1,6 @@
 
 import { db } from './firebase';
-import { collection, query, where, getDocs, doc, setDoc, updateDoc, writeBatch, arrayUnion, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, setDoc, updateDoc, writeBatch, arrayUnion, serverTimestamp, getDoc } from 'firebase/firestore';
 import type { Patient, User } from './types';
 
 interface ManagePatientParams {
@@ -62,37 +62,92 @@ export async function managePatient({
     }
   } else {
     // --- NEW USER ---
-    const newUserRef = doc(collection(db, 'users'));
-    const newPatientRef = doc(collection(db, 'patients'));
-    
-    patientIdForAppointment = newPatientRef.id;
+    if (bookingFor === 'new_related') {
+      // This is a new relative patient - we need to find the primary patient
+      // The bookingUserId should contain the primary patient's ID
+      const primaryPatientRef = doc(db, 'patients', bookingUserId);
+      const primaryPatientSnap = await getDoc(primaryPatientRef);
+      
+      if (!primaryPatientSnap.exists()) {
+        throw new Error('Primary patient not found for adding a relative.');
+      }
+      
+      const primaryPatientData = primaryPatientSnap.data() as Patient;
+      const newRelativePatientRef = doc(collection(db, 'patients'));
+      
+      patientIdForAppointment = newRelativePatientRef.id;
 
-    const newUserData: User = {
-      uid: newUserRef.id,
-      phone,
-      role: 'patient',
-      patientId: newPatientRef.id,
-    };
+      const newRelativeData: Patient = {
+        id: newRelativePatientRef.id,
+        primaryUserId: primaryPatientData.primaryUserId, // Link to the same primary user
+        name,
+        age,
+        place,
+        sex,
+        phone,
+        communicationPhone: phone || primaryPatientData.communicationPhone,
+        totalAppointments: 0,
+        visitHistory: [],
+        relatedPatientIds: [bookingUserId], // Link to the primary patient
+        clinicIds: primaryPatientData.clinicIds || [clinicId],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      
+      // Create a new user for this relative if they have a phone number
+      if (phone) {
+        const newUserRef = doc(collection(db, 'users'));
+        const newUserData: User = {
+          uid: newUserRef.id,
+          phone,
+          role: 'patient',
+          patientId: newRelativePatientRef.id,
+        };
+        batch.set(newUserRef, newUserData);
+      }
+      
+      batch.set(newRelativePatientRef, newRelativeData);
+      
+      // Update the primary patient to include this relative
+      batch.update(primaryPatientRef, {
+        relatedPatientIds: arrayUnion(newRelativePatientRef.id),
+        updatedAt: serverTimestamp(),
+      });
+      
+    } else {
+      // This is a completely new patient (not a relative)
+      const newUserRef = doc(collection(db, 'users'));
+      const newPatientRef = doc(collection(db, 'patients'));
+      
+      patientIdForAppointment = newPatientRef.id;
 
-    const newPatientData: Patient = {
-      id: newPatientRef.id,
-      primaryUserId: newUserRef.id,
-      name,
-      age,
-      place,
-      sex,
-      phone,
-      communicationPhone: phone,
-      totalAppointments: 0,
-      visitHistory: [],
-      relatedPatientIds: [],
-      clinicIds: [clinicId],
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
-    
-    batch.set(newUserRef, newUserData);
-    batch.set(newPatientRef, newPatientData);
+      const newUserData: User = {
+        uid: newUserRef.id,
+        phone,
+        role: 'patient',
+        patientId: newPatientRef.id,
+      };
+
+      const newPatientData: Patient = {
+        id: newPatientRef.id,
+        primaryUserId: newUserRef.id,
+        name,
+        age,
+        place,
+        sex,
+        phone,
+        communicationPhone: phone,
+        totalAppointments: 0,
+        visitHistory: [],
+        relatedPatientIds: [],
+        clinicIds: [clinicId],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      
+      batch.set(newUserRef, newUserData);
+      batch.set(newPatientRef, newPatientData);
+    }
   }
 
   await batch.commit();

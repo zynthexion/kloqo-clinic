@@ -12,12 +12,6 @@ export type AvailabilitySlot = {
 
 
 
-export type BookedSlot = {
-    date: string;
-    time: string;
-    tokenNumber: string;
-};
-
 export type Doctor = {
   id: string;
   clinicId: string;
@@ -41,7 +35,6 @@ export type Doctor = {
   rating?: number;
   reviews?: number;
   consultationFee?: number;
-  bookedSlots?: BookedSlot[];
   freeFollowUpDays?: number;
   advanceBookingDays?: number;
   registrationNumber?: string;
@@ -64,7 +57,7 @@ export type Appointment = {
   treatment: string;
   tokenNumber: string;
   numericToken: number;
-  bookedVia: 'Advanced Booking' | 'Walk-in';
+  bookedVia: 'Advanced Booking' | 'Walk-in' | 'Online';
   place?: string;
   isSkipped?: boolean;
   slotIndex?: number;
@@ -88,6 +81,7 @@ export type Patient = {
   createdAt: any; // Can be Date or Firestore Timestamp
   updatedAt: any; // Can be Date or Firestore Timestamp
   relatedPatientIds?: string[];
+  isKloqoMember?: boolean;
 };
 
 export type NewRelative = Omit<Patient, 'id' | 'clinicIds' | 'visitHistory' | 'totalAppointments' | 'createdAt' | 'updatedAt' | 'relatedPatientIds'> & { phone?: string };
