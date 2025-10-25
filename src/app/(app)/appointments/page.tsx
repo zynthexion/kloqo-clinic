@@ -137,6 +137,7 @@ export default function AppointmentsPage() {
   const [isPatientPopoverOpen, setIsPatientPopoverOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [primaryPatient, setPrimaryPatient] = useState<Patient | null>(null);
+  const [hasSelectedOption, setHasSelectedOption] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [isSendingLink, setIsSendingLink] = useState(false);
   const [drawerSearchTerm, setDrawerSearchTerm] = useState("");
@@ -314,6 +315,7 @@ export default function AppointmentsPage() {
     setPrimaryPatient(null);
     setRelatives([]);
     setBookingFor('member');
+    setHasSelectedOption(false);
     form.reset({
       patientName: "",
       phone: "",
@@ -983,6 +985,7 @@ export default function AppointmentsPage() {
     setPrimaryPatient(patient);
     setBookingFor('member');
     setRelatives([]);
+    setHasSelectedOption(true);
 
     const capitalizedSex = patient.sex ? (patient.sex.charAt(0).toUpperCase() + patient.sex.slice(1).toLowerCase()) : "Male";
 
@@ -1012,6 +1015,7 @@ export default function AppointmentsPage() {
   const handleRelativeSelect = (relative: Patient) => {
     setBookingFor('relative');
     setSelectedPatient(relative);
+    setHasSelectedOption(true);
     const capitalizedSex = relative.sex ? (relative.sex.charAt(0).toUpperCase() + relative.sex.slice(1).toLowerCase()) : "Male";
     form.reset({
       ...form.getValues(),
@@ -1315,15 +1319,20 @@ export default function AppointmentsPage() {
                             <CommandList>
                                 {(isPending ? (
                                     <div className="p-4 text-center text-sm text-muted-foreground">Searching...</div>
-                                ) : patientSearchResults.length > 0 ? (
+                                ) : patientSearchTerm.length >= 5 ? (
                                   <CommandGroup>
+                                    {/* Show existing patients if found */}
                                     {patientSearchResults.map((patient) => {
                                       const isClinicPatient = patient.clinicIds?.includes(clinicId!);
                                       return (
                                         <CommandItem
                                           key={patient.id}
                                           value={patient.phone}
-                                          onSelect={() => handlePatientSelect(patient)}
+                                          onSelect={() => {
+                                            handlePatientSelect(patient);
+                                            setHasSelectedOption(true);
+                                            setIsPatientPopoverOpen(false);
+                                          }}
                                           className="flex justify-between items-center"
                                         >
                                           <div>
@@ -1343,6 +1352,34 @@ export default function AppointmentsPage() {
                                         </CommandItem>
                                       )
                                     })}
+                                    
+                                    {/* Always show "Add as new patient" option */}
+                                    <CommandItem
+                                      value="add-new-patient"
+                                      onSelect={() => {
+                                        setSelectedPatient(null);
+                                        setPrimaryPatient(null);
+                                        setHasSelectedOption(true);
+                                        setIsPatientPopoverOpen(false);
+                                        form.reset({
+                                          ...form.getValues(),
+                                          patientName: "",
+                                          age: undefined,
+                                          sex: "Male",
+                                          phone: patientSearchTerm,
+                                          place: "",
+                                          doctor: doctors.length > 0 ? doctors[0].id : "",
+                                          department: doctors.length > 0 ? doctors[0].department || "" : "",
+                                          date: undefined,
+                                          time: undefined,
+                                          bookedVia: "Advanced Booking",
+                                        });
+                                      }}
+                                      className="flex items-center space-x-2 py-2 text-blue-600 hover:text-blue-700 border-t"
+                                    >
+                                      <Plus className="h-4 w-4" />
+                                      <span>Add as new patient</span>
+                                    </CommandItem>
                                   </CommandGroup>
                                 ) : (
                                    patientSearchTerm.length >= 5 && <CommandEmpty>No patient found.</CommandEmpty>
@@ -1433,7 +1470,7 @@ export default function AppointmentsPage() {
                          )}
                       </div>
                       
-                      {(selectedPatient || isNewPatient || isEditing) && (
+                      {(selectedPatient || hasSelectedOption || isEditing) && (
                         <>
                           <div className="pt-4 border-t">
                             {primaryPatient && !isEditing && (
@@ -1454,9 +1491,19 @@ export default function AppointmentsPage() {
                                     });
                                   }
                                 }}>
-                                  <TabsList className="grid w-full grid-cols-2">
-                                    <TabsTrigger value="member">For Member</TabsTrigger>
-                                    <TabsTrigger value="relative">For a Relative</TabsTrigger>
+                                  <TabsList className="grid w-full grid-cols-2 bg-muted/30">
+                                    <TabsTrigger 
+                                      value="member" 
+                                      className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary data-[state=active]:border-primary/30 data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:bg-primary/10 transition-all duration-200"
+                                    >
+                                      For Member
+                                    </TabsTrigger>
+                                    <TabsTrigger 
+                                      value="relative"
+                                      className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary data-[state=active]:border-primary/30 data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:bg-primary/10 transition-all duration-200"
+                                    >
+                                      For a Relative
+                                    </TabsTrigger>
                                   </TabsList>
                                   <TabsContent value="member" className="mt-4">
                                     <div className="text-sm p-4 bg-muted/50 rounded-lg">
