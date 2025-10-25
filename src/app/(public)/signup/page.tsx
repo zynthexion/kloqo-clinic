@@ -64,6 +64,7 @@ const signupSchema = z.object({
   longitude: z.coerce.number().min(-180, "Invalid longitude").max(180, "Invalid longitude"),
   skippedTokenRecurrence: z.coerce.number().min(2, "Value must be at least 2."),
   walkInTokenAllotment: z.coerce.number().min(2, "Value must be at least 2."),
+  walkInCapacityThreshold: z.coerce.number().min(0.5, "Threshold must be at least 50%").max(1.0, "Threshold cannot exceed 100%"),
 
   // Step 2
   ownerName: z.string()
@@ -133,6 +134,7 @@ const defaultFormData: SignUpFormData = {
   longitude: 0,
   skippedTokenRecurrence: 3,
   walkInTokenAllotment: 5,
+  walkInCapacityThreshold: 0.75,
   
   ownerName: "",
   designation: 'Doctor',

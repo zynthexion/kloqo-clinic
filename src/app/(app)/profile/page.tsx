@@ -28,8 +28,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { collection, getDocs, setDoc, doc, query, where, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { MobileApp, User, Appointment, TimeSlot } from "@/lib/types";
-import { Eye, EyeOff, UserCircle, KeyRound, Edit, Save, X, Building, Loader2, Clock, PlusCircle, Trash2 } from "lucide-react";
+import type { User, Appointment, TimeSlot } from "@/lib/types";
+import { UserCircle, Edit, Save, X, Building, Loader2, Clock, PlusCircle, Trash2 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/firebase";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -40,11 +40,6 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-const mobileAppFormSchema = z.object({
-  username: z.string().min(2, "Username must be at least 2 characters."),
-  password: z.string().min(6, "Password must be at least 6 characters."),
-});
-type MobileAppFormValues = z.infer<typeof mobileAppFormSchema>;
 
 const passwordFormSchema = z.object({
     currentPassword: z.string().min(1, "Please enter your current password."),
@@ -67,8 +62,19 @@ const clinicFormSchema = z.object({
     type: z.enum(['Single Doctor', 'Multi-Doctor']),
     numDoctors: z.coerce.number().min(1),
     clinicRegNumber: z.string().optional(),
-    address: z.string().min(10, "Address is required."),
+    addressLine1: z.string().min(1, "Address Line 1 is required."),
+    addressLine2: z.string().optional(),
+    city: z.string().min(1, "City is required."),
+    district: z.string().optional(),
+    state: z.string().min(1, "State is required."),
+    pincode: z.string().min(1, "Pincode is required."),
     mapsLink: z.string().url().optional().or(z.literal('')),
+}).refine((data) => {
+    // This will be validated in the component with currentDoctorCount
+    return true;
+}, {
+    message: "Number of doctors cannot be less than current doctor count.",
+    path: ["numDoctors"],
 });
 type ClinicFormValues = z.infer<typeof clinicFormSchema>;
 
@@ -94,26 +100,36 @@ export default function ProfilePage() {
   const [activeView, setActiveView] = useState("profile");
   const [isPending, startTransition] = useTransition();
   const [loading, setLoading] = useState(true);
-  const [credentials, setCredentials] = useState<MobileApp | null>(null);
   const [userProfile, setUserProfile] = useState<User | null>(null);
   const [clinicDetails, setClinicDetails] = useState<any | null>(null);
   const [currentDoctorCount, setCurrentDoctorCount] = useState(0);
+  const [formKey, setFormKey] = useState(0);
   
   const [showPassword, setShowPassword] = useState(false);
-  const [showSavedPassword, setShowSavedPassword] = useState(false);
-  const [isEditingMobile, setIsEditingMobile] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isEditingClinic, setIsEditingClinic] = useState(false);
   const [isEditingHours, setIsEditingHours] = useState(false);
   
   const { toast } = useToast();
 
-  const mobileAppForm = useForm<MobileAppFormValues>({ resolver: zodResolver(mobileAppFormSchema), defaultValues: { username: "", password: "" } });
   const passwordForm = useForm<PasswordFormValues>({ resolver: zodResolver(passwordFormSchema), defaultValues: { currentPassword: "", newPassword: "", confirmPassword: "" } });
   const profileForm = useForm<ProfileFormValues>({ resolver: zodResolver(profileFormSchema), defaultValues: { name: "", phone: "" } });
   const clinicForm = useForm<ClinicFormValues>({ 
       resolver: zodResolver(clinicFormSchema), 
-      defaultValues: { name: "", type: "Single Doctor", numDoctors: 1, clinicRegNumber: "", address: "", mapsLink: "" } 
+      defaultValues: { 
+        name: "", 
+        type: "Single Doctor", 
+        numDoctors: 1, 
+        clinicRegNumber: "", 
+        addressLine1: "", 
+        addressLine2: "", 
+        city: "", 
+        district: "", 
+        state: "", 
+        pincode: "", 
+        mapsLink: "" 
+      },
+      mode: "onChange"
   });
   const hoursForm = useForm<OperatingHoursFormValues>({
     resolver: zodResolver(operatingHoursFormSchema),
@@ -154,15 +170,7 @@ export default function ProfilePage() {
               const clinicData = clinicDocSnap.data();
               setClinicDetails(clinicData);
 
-              const clinicResetData = {
-                name: clinicData.name,
-                type: clinicData.type,
-                numDoctors: clinicData.numDoctors,
-                clinicRegNumber: clinicData.clinicRegNumber || '',
-                address: clinicData.address,
-                mapsLink: clinicData.mapsLink || '',
-              };
-              clinicForm.reset(clinicResetData);
+              // Form reset will be handled by the separate useEffect
 
               const hoursResetData = {
                 hours: clinicData.operatingHours,
@@ -171,22 +179,10 @@ export default function ProfilePage() {
               
               const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
               const doctorsSnapshot = await getDocs(doctorsQuery);
-              setCurrentDoctorCount(doctorsSnapshot.size);
+              const doctorCount = doctorsSnapshot.size;
+              setCurrentDoctorCount(doctorCount);
             }
 
-            const credsQuery = query(collection(db, "mobile-app"), where("clinicId", "==", clinicId));
-            const credsSnapshot = await getDocs(credsQuery);
-            if (!credsSnapshot.empty) {
-              const credsData = credsSnapshot.docs[0].data() as MobileApp;
-              setCredentials({ ...credsData, id: credsSnapshot.docs[0].id });
-              
-              const mobileResetData = { username: credsData.username, password: "" };
-              mobileAppForm.reset(mobileResetData);
-
-              setIsEditingMobile(false);
-            } else {
-              setIsEditingMobile(true);
-            }
           }
         }
       } catch (error) {
@@ -196,35 +192,34 @@ export default function ProfilePage() {
       }
     };
     fetchUserData();
-  }, [auth.currentUser, profileForm, clinicForm, hoursForm, mobileAppForm]);
+  }, [auth.currentUser, profileForm, clinicForm, hoursForm]);
 
-
-  const onMobileAppSubmit = async (values: MobileAppFormValues) => {
-    if (!userProfile?.clinicId) {
-        toast({ variant: "destructive", title: "Error", description: "No clinic associated with this user."});
-        return;
+  // Separate effect to handle clinic form reset when clinicDetails changes
+  useEffect(() => {
+    if (clinicDetails && clinicForm) {
+      const clinicResetData = {
+        name: clinicDetails.name || '',
+        type: clinicDetails.type || 'Single Doctor',
+        numDoctors: clinicDetails.numDoctors || 1,
+        clinicRegNumber: clinicDetails.clinicRegNumber || '',
+        addressLine1: clinicDetails.addressDetails?.line1 || '',
+        addressLine2: clinicDetails.addressDetails?.line2 || '',
+        city: clinicDetails.addressDetails?.city || '',
+        district: clinicDetails.addressDetails?.district || '',
+        state: clinicDetails.addressDetails?.state || '',
+        pincode: clinicDetails.addressDetails?.pincode || '',
+        mapsLink: clinicDetails.mapsLink || '',
+      };
+      
+      // Use setTimeout to ensure the form reset happens after the component is fully rendered
+      setTimeout(() => {
+        clinicForm.reset(clinicResetData);
+        setFormKey(prev => prev + 1); // Force re-render
+      }, 100);
     }
-    
-    startTransition(async () => {
-        try {
-          const docId = credentials?.id || `creds-${userProfile.clinicId}`;
-          const docRef = doc(db, "mobile-app", docId);
-          
-          const dataToSave: MobileApp = { id: docId, clinicId: userProfile.clinicId, username: values.username, password: values.password };
-    
-          await setDoc(docRef, dataToSave, { merge: true });
-    
-          setCredentials(dataToSave);
-          mobileAppForm.reset({ username: values.username, password: "" });
-          setIsEditingMobile(false);
-          setShowSavedPassword(false);
-          toast({ title: "Credentials Saved", description: "Mobile app credentials have been updated successfully." });
-        } catch (error) {
-          console.error("Error saving credentials:", error);
-          toast({ variant: "destructive", title: "Error", description: "Failed to save credentials. Please try again." });
-        }
-    });
-  };
+  }, [clinicDetails, clinicForm]);
+
+
 
   const onPasswordSubmit = async (values: PasswordFormValues) => {
     if (!auth.currentUser || !auth.currentUser.email) return;
@@ -270,6 +265,36 @@ export default function ProfilePage() {
   const onClinicSubmit = async (values: ClinicFormValues) => {
     if (!userProfile?.clinicId) return;
 
+    // Validate clinic type change
+    if (values.type === 'Single Doctor' && currentDoctorCount > 1) {
+        toast({ 
+            variant: "destructive", 
+            title: "Cannot Switch to Single Doctor", 
+            description: `You have ${currentDoctorCount} doctors registered. Remove doctors first or keep as Multi-Doctor clinic.` 
+        });
+        return;
+    }
+
+    // Validate that numDoctors is not less than current doctor count
+    if (values.numDoctors < currentDoctorCount) {
+        toast({ 
+            variant: "destructive", 
+            title: "Invalid Doctor Limit", 
+            description: `Cannot set doctor limit to ${values.numDoctors}. You currently have ${currentDoctorCount} doctors. Please increase the limit or remove some doctors first.` 
+        });
+        return;
+    }
+
+    // Validate minimum limit for Multi-Doctor clinic
+    if (values.type === 'Multi-Doctor' && values.numDoctors < 2) {
+        toast({ 
+            variant: "destructive", 
+            title: "Invalid Doctor Limit", 
+            description: `Multi-Doctor clinic must have at least 2 doctor slots. Current limit: ${values.numDoctors}` 
+        });
+        return;
+    }
+
     startTransition(async () => {
         const clinicRef = doc(db, 'clinics', userProfile.clinicId!);
         try {
@@ -278,10 +303,17 @@ export default function ProfilePage() {
                 type: values.type,
                 numDoctors: values.numDoctors,
                 clinicRegNumber: values.clinicRegNumber,
-                address: values.address,
+                addressDetails: {
+                    line1: values.addressLine1,
+                    line2: values.addressLine2,
+                    city: values.city,
+                    district: values.district,
+                    state: values.state,
+                    pincode: values.pincode,
+                },
                 mapsLink: values.mapsLink,
             });
-            setClinicDetails(prev => prev ? {...prev, ...values} : null);
+            setClinicDetails((prev: any) => prev ? {...prev, ...values} : null);
             toast({ title: "Clinic Details Updated", description: "Your clinic's information has been changed successfully." });
             setIsEditingClinic(false);
         } catch (error) {
@@ -298,7 +330,7 @@ export default function ProfilePage() {
         const clinicRef = doc(db, 'clinics', userProfile.clinicId!);
         try {
             await updateDoc(clinicRef, { operatingHours: values.hours });
-            setClinicDetails(prev => (prev ? { ...prev, operatingHours: values.hours } : null));
+            setClinicDetails((prev: any) => (prev ? { ...prev, operatingHours: values.hours } : null));
             toast({ title: "Operating Hours Updated", description: "Clinic operating hours have been saved." });
             setIsEditingHours(false);
         } catch (error) {
@@ -308,16 +340,20 @@ export default function ProfilePage() {
     });
   };
 
-  const handleCancelMobile = () => { if (credentials) { mobileAppForm.reset({ username: credentials.username, password: "" }); setIsEditingMobile(false); } }
   const handleCancelProfile = () => { if (userProfile) { profileForm.reset({ name: userProfile.name, phone: userProfile.phone.replace('+91','') }); } setIsEditingProfile(false); }
   const handleCancelClinic = () => { 
     if (clinicDetails) { 
         clinicForm.reset({ 
-            name: clinicDetails.name,
-            type: clinicDetails.type,
-            numDoctors: clinicDetails.numDoctors,
+            name: clinicDetails.name || '',
+            type: clinicDetails.type || 'Single Doctor',
+            numDoctors: clinicDetails.numDoctors || 1,
             clinicRegNumber: clinicDetails.clinicRegNumber || '',
-            address: clinicDetails.address,
+            addressLine1: clinicDetails.addressDetails?.line1 || '',
+            addressLine2: clinicDetails.addressDetails?.line2 || '',
+            city: clinicDetails.addressDetails?.city || '',
+            district: clinicDetails.addressDetails?.district || '',
+            state: clinicDetails.addressDetails?.state || '',
+            pincode: clinicDetails.addressDetails?.pincode || '',
             mapsLink: clinicDetails.mapsLink || '',
         }); 
     } 
@@ -438,52 +474,163 @@ export default function ProfilePage() {
                             </div>
                             <CardDescription>General information about your clinic.</CardDescription>
                         </CardHeader>
-                        <Form {...clinicForm}>
+                        <Form {...clinicForm} key={`clinic-form-${formKey}`}>
                             <form onSubmit={clinicForm.handleSubmit(onClinicSubmit)}>
                                 <CardContent className="space-y-4">
                                     <FormField control={clinicForm.control} name="name" render={({ field }) => (
-                                        <FormItem><FormLabel>Clinic Name</FormLabel><FormControl><Input {...field} value={field.value || ''} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
+                                        <FormItem><FormLabel>Clinic Name</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} placeholder="Enter clinic name" value={field.value || ''} /></FormControl><FormMessage /></FormItem>
                                     )}/>
-                                    <FormField control={clinicForm.control} name="type" render={({ field }) => (
-                                        <FormItem><FormLabel>Clinic Type</FormLabel>
-                                        <Select onValueChange={field.onChange} value={field.value} disabled={!isEditingClinic || isPending || currentDoctorCount > 1}>
-                                            <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                    <FormField control={clinicForm.control} name="type" render={({ field }) => {
+                                      const handleTypeChange = (value: string) => {
+                                        field.onChange(value);
+                                        // If switching to Single Doctor, set numDoctors to 1
+                                        if (value === 'Single Doctor') {
+                                          clinicForm.setValue('numDoctors', 1);
+                                        }
+                                        // If switching to Multi-Doctor and current limit is 1, set it to 2
+                                        else if (value === 'Multi-Doctor' && clinicForm.getValues('numDoctors') < 2) {
+                                          clinicForm.setValue('numDoctors', Math.max(2, currentDoctorCount));
+                                        }
+                                      };
+                                      
+                                      return (
+                                        <FormItem>
+                                          <FormLabel>Clinic Type</FormLabel>
+                                          <Select 
+                                            onValueChange={handleTypeChange} 
+                                            value={field.value} 
+                                            disabled={!isEditingClinic || isPending}
+                                          >
+                                            <FormControl>
+                                              <SelectTrigger>
+                                                <SelectValue />
+                                              </SelectTrigger>
+                                            </FormControl>
                                             <SelectContent>
-                                                <SelectItem value="Single Doctor">Single Doctor</SelectItem>
+                                              <SelectItem 
+                                                value="Single Doctor" 
+                                                disabled={currentDoctorCount > 1}
+                                              >
+                                                Single Doctor
+                                                {currentDoctorCount > 1 && " (Not available - Multiple doctors exist)"}
+                                              </SelectItem>
                                                 <SelectItem value="Multi-Doctor">Multi-Doctor</SelectItem>
                                             </SelectContent>
                                         </Select>
-                                        {currentDoctorCount > 1 && <FormDescription className="text-xs">Cannot change to Single Doctor with multiple doctors registered.</FormDescription>}
-                                        <FormMessage /></FormItem>
-                                    )}/>
+                                          {currentDoctorCount > 1 && field.value === 'Multi-Doctor' && (
+                                            <FormDescription className="text-xs text-amber-600">
+                                              Cannot switch to Single Doctor with {currentDoctorCount} doctors registered. Remove doctors first or keep as Multi-Doctor.
+                                            </FormDescription>
+                                          )}
+                                          <FormMessage />
+                                        </FormItem>
+                                      );
+                                    }}/>
                                     <FormField
                                       control={clinicForm.control}
                                       name="numDoctors"
-                                      render={({ field }) => (
+                                      render={({ field }) => {
+                                        const currentLimit = clinicForm.watch('numDoctors') || clinicDetails?.numDoctors || 0;
+                                        const isAtLimit = currentDoctorCount >= currentLimit;
+                                        const minValue = isMultiDoctorClinic ? Math.max(2, currentDoctorCount) : 1;
+                                        const isSingleDoctor = clinicForm.watch('type') === 'Single Doctor';
+                                        
+                                        return (
                                           <FormItem>
                                             <FormLabel>Number of Doctors Limit</FormLabel>
                                             <FormControl>
                                               <Input
                                                 type="number"
                                                 {...field}
-                                                onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)}
-                                                disabled={!isEditingClinic || !isMultiDoctorClinic || isPending}
-                                                min={currentDoctorCount}
+                                                onChange={e => {
+                                                  if (isSingleDoctor) return; // Don't allow changes for Single Doctor
+                                                  const value = parseInt(e.target.value, 10) || 0;
+                                                  const validValue = Math.max(minValue, value);
+                                                  field.onChange(validValue);
+                                                }}
+                                                disabled={!isEditingClinic || isSingleDoctor || isPending}
+                                                min={minValue}
+                                                className={isAtLimit ? "border-red-500" : ""}
+                                                placeholder={isMultiDoctorClinic ? "2" : "1"}
+                                                value={isSingleDoctor ? 1 : field.value}
                                               />
                                             </FormControl>
                                             <FormDescription className="text-xs">
-                                              Currently using {currentDoctorCount} of {clinicDetails?.numDoctors || 0} available slots.
+                                              Currently using {currentDoctorCount} of {currentLimit} available slots.
+                                              {isSingleDoctor && (
+                                                <span className="text-gray-600"> Single Doctor clinic is limited to 1 doctor.</span>
+                                              )}
+                                              {isMultiDoctorClinic && (
+                                                <span className="text-blue-600"> Minimum limit for Multi-Doctor clinic is 2.</span>
+                                              )}
+                                              {isAtLimit && !isSingleDoctor && (
+                                                <span className="text-red-600 font-medium"> - Limit reached! Increase the limit to add more doctors.</span>
+                                              )}
                                             </FormDescription>
                                             <FormMessage />
                                           </FormItem>
-                                      )}
+                                        );
+                                      }}
                                     />
                                     <FormField control={clinicForm.control} name="clinicRegNumber" render={({ field }) => (
                                         <FormItem><FormLabel>Clinic Registration Number</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
                                     )}/>
-                                    <FormField control={clinicForm.control} name="address" render={({ field }) => (
-                                        <FormItem><FormLabel>Address</FormLabel><FormControl><Textarea {...field} value={field.value || ''} disabled={!isEditingClinic || isPending} /></FormControl><FormMessage /></FormItem>
-                                    )}/>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      <FormField control={clinicForm.control} name="addressLine1" render={({ field }) => (
+                                        <FormItem className="md:col-span-2">
+                                          <FormLabel>Address Line 1 <span className="text-destructive">*</span></FormLabel>
+                                          <FormControl>
+                                            <Input placeholder="Building Name, Street Name" {...field} disabled={!isEditingClinic || isPending} />
+                                          </FormControl>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}/>
+                                      <FormField control={clinicForm.control} name="addressLine2" render={({ field }) => (
+                                        <FormItem className="md:col-span-2">
+                                          <FormLabel>Address Line 2 (Optional)</FormLabel>
+                                          <FormControl>
+                                            <Input placeholder="Landmark, Area" {...field} disabled={!isEditingClinic || isPending} />
+                                          </FormControl>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}/>
+                                      <FormField control={clinicForm.control} name="city" render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel>City / Town <span className="text-destructive">*</span></FormLabel>
+                                          <FormControl>
+                                            <Input placeholder="e.g., Kochi" {...field} disabled={!isEditingClinic || isPending} />
+                                          </FormControl>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}/>
+                                      <FormField control={clinicForm.control} name="district" render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel>District (Optional)</FormLabel>
+                                          <FormControl>
+                                            <Input placeholder="e.g., Ernakulam" {...field} disabled={!isEditingClinic || isPending} />
+                                          </FormControl>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}/>
+                                      <FormField control={clinicForm.control} name="state" render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel>State <span className="text-destructive">*</span></FormLabel>
+                                          <FormControl>
+                                            <Input placeholder="e.g., Kerala" {...field} disabled={!isEditingClinic || isPending} />
+                                          </FormControl>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}/>
+                                      <FormField control={clinicForm.control} name="pincode" render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel>Pincode <span className="text-destructive">*</span></FormLabel>
+                                          <FormControl>
+                                            <Input placeholder="e.g., 682016" {...field} disabled={!isEditingClinic || isPending} />
+                                          </FormControl>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}/>
+                                    </div>
                                     <FormField control={clinicForm.control} name="mapsLink" render={({ field }) => (
                                         <FormItem><FormLabel>Google Maps Link</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
                                     )}/>
@@ -599,75 +746,6 @@ export default function ProfilePage() {
                       )}
                     </form>
                   </Form>
-                  </>
-                )}
-              </Card>
-            );
-          case 'mobile':
-               return (
-                  <Card>
-                      {loading ? (
-                          <CardHeader><CardTitle>Loading...</CardTitle></CardHeader>
-                      ) : isEditingMobile || !credentials ? (
-                          <>
-                          <CardHeader>
-                          <CardTitle>{credentials ? "Update Mobile App Login" : "Set Mobile App Login"}</CardTitle>
-                          <CardDescription>Set or update the username and password for the mobile token management app.</CardDescription>
-                          </CardHeader>
-                          <Form {...mobileAppForm}>
-                          <form onSubmit={mobileAppForm.handleSubmit(onMobileAppSubmit)}>
-                              <CardContent className="space-y-4">
-                              <FormField control={mobileAppForm.control} name="username" render={({ field }) => (
-                                  <FormItem><FormLabel>Username</FormLabel><FormControl><Input placeholder="mobile-user" {...field} disabled={isPending} /></FormControl><FormMessage /></FormItem>
-                              )}/>
-                              <FormField control={mobileAppForm.control} name="password" render={({ field }) => (
-                                  <FormItem>
-                                      <FormLabel>{credentials ? "New Password" : "Password"}</FormLabel>
-                                      <div className="relative">
-                                      <FormControl>
-                                          <Input type={showPassword ? "text" : "password"} placeholder="••••••••" {...field} className="pr-10" disabled={isPending}/>
-                                      </FormControl>
-                                      <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground" onClick={() => setShowPassword(!showPassword)}>
-                                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                      </Button>
-                                      </div>
-                                      <FormMessage />
-                                  </FormItem>
-                              )}/>
-                              </CardContent>
-                              <CardFooter className="flex justify-end gap-2">
-                              {credentials && <Button type="button" variant="outline" onClick={handleCancelMobile} disabled={isPending}>Cancel</Button>}
-                              <Button type="submit" disabled={isPending}>
-                                  {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : "Save Credentials"}
-                              </Button>
-                              </CardFooter>
-                          </form>
-                          </Form>
-                          </>
-                      ) : (
-                          <>
-                          <CardHeader>
-                              <CardTitle>Mobile App Credentials</CardTitle>
-                              <CardDescription>This is the login information for the mobile token management app.</CardDescription>
-                          </CardHeader>
-                          <CardContent className="space-y-4">
-                              <div className="flex items-center gap-4 rounded-lg border p-4 bg-muted/40">
-                                  <UserCircle className="h-10 w-10 text-muted-foreground" />
-                                  <div><p className="text-sm text-muted-foreground">Username</p><p className="text-lg font-semibold">{credentials.username}</p></div>
-                              </div>
-                              <div className="flex items-center gap-4 rounded-lg border p-4 bg-muted/40">
-                                  <KeyRound className="h-10 w-10 text-muted-foreground" />
-                                  <div><p className="text-sm text-muted-foreground">Password</p><p className="text-lg font-semibold">{showSavedPassword ? credentials.password : "••••••••"}</p></div>
-                              </div>
-                              <CardDescription className="text-xs text-center">The password shown is the last one saved to the database.</CardDescription>
-                          </CardContent>
-                          <CardFooter className="flex justify-end gap-2">
-                              <Button variant="secondary" onClick={() => setShowSavedPassword(prev => !prev)}>
-                                  {showSavedPassword ? <EyeOff className="mr-2"/> : <Eye className="mr-2"/>}
-                                  {showSavedPassword ? 'Hide' : 'Reveal'} Password
-                              </Button>
-                              <Button onClick={() => setIsEditingMobile(true)}>Update Credentials</Button>
-                          </CardFooter>
                           </>
                       )}
                   </Card>
@@ -698,10 +776,6 @@ export default function ProfilePage() {
                             <Button variant={activeView === 'hours' ? 'secondary' : 'ghost'} className="w-full justify-start" onClick={() => setActiveView('hours')}>
                                 <Clock className="mr-2 h-4 w-4"/>
                                 Operating Hours
-                            </Button>
-                            <Button variant={activeView === 'mobile' ? 'secondary' : 'ghost'} className="w-full justify-start" onClick={() => setActiveView('mobile')}>
-                                <KeyRound className="mr-2 h-4 w-4"/>
-                                Mobile App
                             </Button>
                         </nav>
                     </CardContent>

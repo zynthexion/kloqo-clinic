@@ -75,7 +75,8 @@ export async function generateNextToken(
  */
 export async function calculateWalkInDetails(
   doctor: Doctor,
-  walkInTokenAllotment: number = 5
+  walkInTokenAllotment: number = 5,
+  walkInCapacityThreshold: number = 0.75
 ): Promise<{
   estimatedTime: Date;
   patientsAhead: number;
@@ -128,6 +129,14 @@ export async function calculateWalkInDetails(
   // Separate advanced and walk-in appointments
   const advancedAppointments = appointments.filter(a => a.bookedVia !== 'Walk-in');
   const walkInAppointments = appointments.filter(a => a.bookedVia === 'Walk-in');
+
+  // Step 3.5: Check walk-in capacity based on advanced appointment density
+  const totalAvailableSlots = allSlots.length;
+  const advancedAppointmentCount = advancedAppointments.length;
+  const advancedAppointmentDensity = advancedAppointmentCount / totalAvailableSlots;
+  
+  // Note: We don't block walk-ins based on density anymore
+  // Instead, we'll check if the calculated time goes beyond consultation hours
 
   // Find the last advanced appointment slot
   const lastAdvancedSlotIndex = advancedAppointments.length > 0
@@ -253,7 +262,22 @@ export async function calculateWalkInDetails(
     finalSessionIndex = lastSlot.sessionIndex;
   }
 
-  // Step 8: Generate numeric token (sequential across all appointments)
+  // Step 8: Check if walk-in time goes beyond consultation hours
+  const consultationEndTime = parseTimeString(
+    todaysAvailability.timeSlots[todaysAvailability.timeSlots.length - 1].to,
+    now
+  );
+  
+  // Add buffer time (e.g., 30 minutes) beyond consultation end
+  const maxAllowedTime = addMinutes(consultationEndTime, 30);
+  
+  if (isAfter(actualSlotTime, maxAllowedTime)) {
+    const consultationEndFormatted = format(consultationEndTime, 'hh:mm a');
+    const actualTimeFormatted = format(actualSlotTime, 'hh:mm a');
+    throw new Error(`Walk-ins cannot be accommodated today. The estimated consultation time (${actualTimeFormatted}) would extend beyond the doctor's consultation hours (ends at ${consultationEndFormatted}). Please book an advanced appointment for tomorrow or try again earlier in the day.`);
+  }
+
+  // Step 9: Generate numeric token (sequential across all appointments)
   const numericTokens = appointments.map(a => a.numericToken);
   const newNumericToken = numericTokens.length > 0 ? Math.max(...numericTokens) + 1 : 1;
 

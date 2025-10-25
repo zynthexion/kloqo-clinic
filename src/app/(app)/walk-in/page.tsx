@@ -233,9 +233,9 @@ function WalkInRegistrationContent() {
         const clinicSnap = await getDoc(clinicDocRef);
         const clinicData = clinicSnap.data();
         const walkInTokenAllotment = clinicData?.walkInTokenAllotment || 5;
+        const walkInCapacityThreshold = clinicData?.walkInCapacityThreshold || 0.75;
 
-
-        const { estimatedTime, patientsAhead, numericToken, slotIndex } = await calculateWalkInDetails(doctor, walkInTokenAllotment);
+        const { estimatedTime, patientsAhead, numericToken, slotIndex } = await calculateWalkInDetails(doctor, walkInTokenAllotment, walkInCapacityThreshold);
         
         const fullPhoneNumber = `+91${values.phone}`;
         const patientId = await managePatient({

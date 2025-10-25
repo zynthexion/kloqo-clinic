@@ -224,6 +224,32 @@ export function Step1ClinicProfile() {
             </FormItem>
           )}
         />
+        <FormField
+          control={control}
+          name="walkInCapacityThreshold"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Walk-in Capacity Threshold (%)</FormLabel>
+              <FormControl>
+                <Input 
+                  type="number" 
+                  min="50" 
+                  max="100" 
+                  step="5"
+                  placeholder="e.g., 75" 
+                  {...field} 
+                  value={field.value ? Math.round(field.value * 100) : ''} 
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value, 10);
+                    field.onChange(value ? value / 100 : 0.75);
+                  }}
+                />
+              </FormControl>
+              <p className="text-xs text-muted-foreground">Suspend walk-ins when advanced appointments reach this percentage of total slots</p>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
         <div className="md:col-span-2">
             <Button type="button" variant={latitude !== 0 ? "secondary" : "outline"} onClick={handleDetectLocation} className="w-full" disabled={isDetecting}>
                 {isDetecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (latitude !== 0 ? <CheckCircle className="mr-2 h-4 w-4" /> : <MapPin className="mr-2 h-4 w-4" />)}

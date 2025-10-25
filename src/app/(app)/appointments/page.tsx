@@ -19,6 +19,7 @@ import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreD
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes, isAfter, startOfDay, addHours } from "date-fns";
+import { updateAppointmentAndDoctorStatuses } from "@/lib/status-update-service";
 import { cn } from "@/lib/utils";
 import {
   Form,
@@ -264,15 +265,41 @@ export default function AppointmentsPage() {
         }
     };
 
-    fetchClinicInfo().then(fetchedClinicId => {
+    fetchClinicInfo().then(async (fetchedClinicId) => {
         if (!fetchedClinicId) return;
+
+        // Update appointment and doctor statuses on page refresh
+        try {
+            console.log('Starting status update for clinic:', fetchedClinicId);
+            console.log('Current time:', new Date().toISOString());
+            console.log('Current day:', format(new Date(), 'EEEE'));
+            console.log('Current time formatted:', format(new Date(), 'HH:mm'));
+            await updateAppointmentAndDoctorStatuses(fetchedClinicId);
+            console.log('Status update completed successfully');
+        } catch (error) {
+            console.error('Error updating statuses on page refresh:', error);
+            // Don't show error toast as this is a background operation
+        }
 
         setLoading(true);
 
         const appointmentsQuery = query(collection(db, "appointments"), where("clinicId", "==", fetchedClinicId));
         const appointmentsUnsubscribe = onSnapshot(appointmentsQuery, (snapshot) => {
             const appointmentsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
-            setAppointments(appointmentsList);
+            
+            // Deduplicate appointments by id
+            const uniqueAppointments = appointmentsList.reduce((acc, current) => {
+                const existingIndex = acc.findIndex(item => item.id === current.id);
+                if (existingIndex === -1) {
+                    acc.push(current);
+                } else {
+                    // If duplicate found, keep the latest one
+                    acc[existingIndex] = current;
+                }
+                return acc;
+            }, [] as Appointment[]);
+            
+            setAppointments(uniqueAppointments);
             setLoading(false);
         }, (error) => {
             console.error("Error fetching appointments:", error);
@@ -1222,7 +1249,21 @@ export default function AppointmentsPage() {
   
     const parseTimeForSort = (timeStr: string) => parse(timeStr, "hh:mm a", new Date()).getTime();
   
-    notSkipped.sort((a, b) => parseTimeForSort(a.time) - parseTimeForSort(b.time));
+    // Sort by time first, then by appointment type (A before W)
+    notSkipped.sort((a, b) => {
+      const timeA = parseTimeForSort(a.time);
+      const timeB = parseTimeForSort(b.time);
+      
+      // If times are different, sort by time
+      if (timeA !== timeB) {
+        return timeA - timeB;
+      }
+      
+      // If times are the same, sort by appointment type (A before W)
+      const typeA = a.bookedVia === 'Advanced Booking' ? 0 : 1;
+      const typeB = b.bookedVia === 'Advanced Booking' ? 0 : 1;
+      return typeA - typeB;
+    });
   
     return [...notSkipped, ...skipped];
   }, [filteredAppointments, today]);
@@ -1836,6 +1877,24 @@ export default function AppointmentsPage() {
                           <span className="ml-2 text-xs text-muted-foreground">
                             {selectedDrawerDoctor && selectedDrawerDoctor !== 'all' ? `Doctor: ${selectedDrawerDoctor}` : 'All Doctors'}
                           </span>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={async () => {
+                              console.log('Manual status update triggered');
+                              if (clinicId) {
+                                try {
+                                  await updateAppointmentAndDoctorStatuses(clinicId);
+                                  console.log('Manual status update completed');
+                                } catch (error) {
+                                  console.error('Manual status update failed:', error);
+                                }
+                              }
+                            }}
+                            className="ml-2"
+                          >
+                            Update Status
+                          </Button>
                           <Button variant="outline" size="icon">
                             <Printer className="h-4 w-4" />
                           </Button>
@@ -1893,8 +1952,8 @@ export default function AppointmentsPage() {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {filteredAppointments.map((appointment) => (
-                              <TableRow key={appointment.id} className={cn(
+                            {filteredAppointments.map((appointment, index) => (
+                              <TableRow key={`${appointment.id}-${index}`} className={cn(
                                 isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30",
                                 appointment.status === 'Skipped' && "bg-orange-100 dark:bg-orange-900/30"
                               )}>
@@ -1952,7 +2011,7 @@ export default function AppointmentsPage() {
                               .filter(apt => activeTab === 'upcoming' ? (apt.status === 'Confirmed' || apt.status === 'Pending') : apt.status === 'Skipped')
                               .map((appointment, index) => (
                                 <TableRow
-                                  key={appointment.id}
+                                  key={`${appointment.id}-${index}`}
                                   className={cn(
                                     appointment.status === 'Skipped' && "bg-red-200/50 dark:bg-red-900/60"
                                   )}
