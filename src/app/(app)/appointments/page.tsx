@@ -833,7 +833,10 @@ export default function AppointmentsPage() {
         }
 
         // Send SMS with booking link
-        const message = `Visit this link to book appointment: www.app.kloqo.com`;
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.kloqo.com';
+        const clinicName = clinicDetails?.name || 'the clinic';
+        const bookingLink = `${baseUrl}/clinics/${clinicId}`;
+        const message = `Your request for appointment is received in '${clinicName}'. Use this link to complete the booking: ${bookingLink}`;
         
         try {
             const response = await fetch('/api/send-sms', {
