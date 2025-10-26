@@ -137,10 +137,13 @@ export async function managePatient({
         sex,
         phone,
         communicationPhone: phone,
+        email: '',
         totalAppointments: 0,
         visitHistory: [],
         relatedPatientIds: [],
         clinicIds: [clinicId],
+        isPrimary: true,
+        isKloqoMember: false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
