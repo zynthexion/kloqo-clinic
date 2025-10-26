@@ -522,7 +522,11 @@ export default function AppointmentsPage() {
           // Creating a new user and patient
           const usersRef = collection(db, 'users');
           const patientPhoneNumber = `+91${values.phone}`;
-          const userQuery = query(usersRef, where('phone', '==', patientPhoneNumber));
+          const userQuery = query(
+              usersRef, 
+              where('phone', '==', patientPhoneNumber),
+              where('role', '==', 'patient')
+          );
           const userSnapshot = await getDocs(userQuery);
 
           let userId: string;
@@ -763,7 +767,11 @@ export default function AppointmentsPage() {
     setIsSendingLink(true);
     try {
         const usersRef = collection(db, 'users');
-        const userQuery = query(usersRef, where('phone', '==', fullPhoneNumber));
+        const userQuery = query(
+            usersRef, 
+            where('phone', '==', fullPhoneNumber),
+            where('role', '==', 'patient')
+        );
         
         const userSnapshot = await getDocs(userQuery).catch(async (serverError) => {
             const permissionError = new FirestorePermissionError({
@@ -796,6 +804,7 @@ export default function AppointmentsPage() {
                 id: newPatientRef.id,
                 primaryUserId: newUserRef.id,
                 phone: fullPhoneNumber,
+                communicationPhone: fullPhoneNumber,
                 name: "",
                 age: 0,
                 sex: "",
