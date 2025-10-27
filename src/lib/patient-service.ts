@@ -84,7 +84,7 @@ export async function managePatient({
         age,
         place,
         sex,
-        phone,
+        phone: phone || '', // Explicitly set to empty string if no phone
         communicationPhone: phone || primaryPatientData.communicationPhone,
         totalAppointments: 0,
         visitHistory: [],

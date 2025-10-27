@@ -997,7 +997,47 @@ export default function DoctorsPage() {
         
         await batch.commit();
 
-        toast({ title: 'Break Scheduled', description: 'Appointments have been rescheduled.'});
+        // Send notifications to affected patients
+        if (appointmentsToUpdate.length > 0) {
+            try {
+                const { sendBreakUpdateNotification } = await import('@/lib/notification-service');
+                
+                // Get clinic name
+                const clinicDoc = await getDoc(doc(db, 'clinics', selectedDoctor.clinicId));
+                const clinicData = clinicDoc.data();
+                const clinicName = clinicData?.name || 'The clinic';
+                
+                // Get original appointment data
+                const originalAppointments = snapshot.docs.map(docSnap => ({
+                    id: docSnap.id,
+                    ...docSnap.data() as Appointment
+                }));
+                
+                // Send notification for each affected appointment
+                for (const apptData of originalAppointments) {
+                    const updatedAppt = appointmentsToUpdate.find(a => a.id === apptData.id);
+                    if (!updatedAppt) continue;
+                    
+                    await sendBreakUpdateNotification({
+                        firestore: db,
+                        patientId: apptData.patientId,
+                        appointmentId: apptData.id,
+                        doctorName: apptData.doctor,
+                        clinicName: clinicName,
+                        oldTime: apptData.time,
+                        newTime: format(updatedAppt.newTime, 'hh:mm a'),
+                        reason: 'Doctor on break',
+                    });
+                }
+                
+                console.log(`Notifications sent to ${appointmentsToUpdate.length} patients`);
+            } catch (notifError) {
+                console.error('Failed to send notifications:', notifError);
+                // Don't fail the break scheduling if notifications fail
+            }
+        }
+
+        toast({ title: 'Break Scheduled', description: `Appointments have been rescheduled.${appointmentsToUpdate.length > 0 ? ` ${appointmentsToUpdate.length} patient(s) notified.` : ''}`});
         const updatedDoctor = {...selectedDoctor, leaveSlots: updatedLeaveSlots };
         setSelectedDoctor(updatedDoctor);
         setDoctors(prev => prev.map(d => d.id === updatedDoctor.id ? updatedDoctor : d));

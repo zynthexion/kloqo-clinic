@@ -69,6 +69,7 @@ import { Label } from "@/components/ui/label";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { calculateWalkInDetails } from '@/lib/appointment-service';
+import { sendAppointmentCancelledNotification, sendTokenCalledNotification, sendAppointmentBookedByStaffNotification } from '@/lib/notification-service';
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -644,6 +645,7 @@ export default function AppointmentsPage() {
           const appointmentData: Omit<Appointment, 'id'> = {
             bookedVia: appointmentType,
             clinicId: selectedDoctor.clinicId,
+            doctorId: selectedDoctor.id, // Add doctorId
             date: format(date, "d MMMM yyyy"),
             department: selectedDoctor.department,
             doctor: selectedDoctor.name,
@@ -712,6 +714,7 @@ export default function AppointmentsPage() {
             sex: values.sex,
             communicationPhone: communicationPhone,
             age: values.age || 0,
+            doctorId: selectedDoctor.id, // Add doctorId
             doctor: selectedDoctor.name,
             date: appointmentDateStr,
             time: appointmentTimeStr,
@@ -737,6 +740,29 @@ export default function AppointmentsPage() {
               totalAppointments: increment(1),
               updatedAt: serverTimestamp(),
             });
+          }
+
+          // Send notification for new appointments
+          if (!isEditing) {
+            console.log('🎯 DEBUG: Sending notification for new appointment');
+            try {
+              const clinicName = `The clinic`; // You can fetch from clinic doc if needed
+              
+              await sendAppointmentBookedByStaffNotification({
+                firestore: db,
+                patientId: patientForAppointmentId,
+                appointmentId: appointmentId,
+                doctorName: appointmentData.doctor,
+                clinicName: clinicName,
+                date: appointmentData.date,
+                time: appointmentData.time,
+                tokenNumber: appointmentData.tokenNumber,
+                bookedBy: 'admin',
+              });
+              console.log('🎯 DEBUG: Notification sent to patient');
+            } catch (notifError) {
+              console.error('🎯 DEBUG: Failed to send notification:', notifError);
+            }
           }
 
           if (isEditing) {
@@ -895,6 +921,28 @@ export default function AppointmentsPage() {
         const appointmentRef = doc(db, "appointments", appointment.id);
         await updateDoc(appointmentRef, { status: 'Cancelled' });
         setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Cancelled' as const } : a));
+        
+        // Send cancellation notification
+        try {
+            const clinicDoc = await getFirestoreDoc(doc(db, 'clinics', appointment.clinicId));
+            const clinicName = clinicDoc.data()?.name || 'The clinic';
+            
+            await sendAppointmentCancelledNotification({
+                firestore: db,
+                patientId: appointment.patientId,
+                appointmentId: appointment.id,
+                doctorName: appointment.doctor,
+                clinicName,
+                date: appointment.date,
+                time: appointment.time,
+                cancelledBy: 'clinic',
+            });
+            console.log('Appointment cancelled notification sent');
+        } catch (notifError) {
+            console.error('Failed to send cancellation notification:', notifError);
+            // Don't fail the cancellation if notification fails
+        }
+        
         toast({ title: "Appointment Cancelled" });
       } catch (error) {
         console.error("Error cancelling appointment:", error);
@@ -909,6 +957,26 @@ export default function AppointmentsPage() {
         const appointmentRef = doc(db, "appointments", appointment.id);
         await updateDoc(appointmentRef, { status: 'Completed' });
         setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Completed' as const } : a));
+        
+        // Send token called notification
+        try {
+            const clinicDoc = await getFirestoreDoc(doc(db, 'clinics', appointment.clinicId));
+            const clinicName = clinicDoc.data()?.name || 'The clinic';
+            
+            await sendTokenCalledNotification({
+                firestore: db,
+                patientId: appointment.patientId,
+                appointmentId: appointment.id,
+                clinicName,
+                tokenNumber: appointment.tokenNumber,
+                doctorName: appointment.doctor,
+            });
+            console.log('Token called notification sent');
+        } catch (notifError) {
+            console.error('Failed to send token called notification:', notifError);
+            // Don't fail the completion if notification fails
+        }
+        
         toast({ title: "Appointment Marked as Completed" });
       } catch (error) {
         console.error("Error completing appointment:", error);

@@ -259,6 +259,7 @@ function WalkInRegistrationContent() {
             sex: values.sex,
             communicationPhone: fullPhoneNumber,
             patientId,
+            doctorId: doctor.id, // Add doctorId
             doctor: doctor.name,
             department: doctor.department,
             bookedVia: 'Walk-in',
@@ -290,15 +291,22 @@ function WalkInRegistrationContent() {
   }
 
   const handleProceedToToken = async () => {
+    console.log('🎯 DEBUG: handleProceedToToken called');
+    console.log('🎯 DEBUG: appointmentToSave:', appointmentToSave);
+    
     if (!appointmentToSave) {
+        console.error('🎯 DEBUG: No appointment data to save');
         toast({ variant: 'destructive', title: 'Error', description: 'No appointment data to save.'});
         return;
     }
 
     try {
+        console.log('🎯 DEBUG: Creating appointment document');
         const appointmentsCollection = collection(db, 'appointments');
         const newDocRef = doc(appointmentsCollection);
+        
         await setDoc(newDocRef, {...appointmentToSave, id: newDocRef.id}).catch(async (serverError) => {
+            console.error('🎯 DEBUG: Failed to save appointment');
             const permissionError = new FirestorePermissionError({
             path: 'appointments',
             operation: 'create',
@@ -307,6 +315,43 @@ function WalkInRegistrationContent() {
             errorEmitter.emit('permission-error', permissionError);
             throw serverError;
         });
+        console.log('🎯 DEBUG: Appointment saved successfully:', newDocRef.id);
+
+        // Send notification to patient
+        console.log('🎯 DEBUG: Starting notification process');
+        try {
+            const { sendAppointmentBookedByStaffNotification } = await import('@/lib/notification-service');
+            
+            // Get patientId from appointmentToSave
+            const patientId = appointmentToSave.patientId;
+            console.log('🎯 DEBUG: Patient ID:', patientId);
+            
+            // Get clinic name
+            const clinicDoc = await getDoc(doc(db, 'clinics', clinicId));
+            const clinicData = clinicDoc.data();
+            const clinicName = clinicData?.name || 'The clinic';
+            console.log('🎯 DEBUG: Clinic name:', clinicName);
+            
+            await sendAppointmentBookedByStaffNotification({
+                firestore: db,
+                patientId,
+                appointmentId: newDocRef.id,
+                doctorName: appointmentToSave.doctor,
+                clinicName: clinicName,
+                date: appointmentToSave.date,
+                time: appointmentToSave.time,
+                tokenNumber: appointmentToSave.tokenNumber,
+                bookedBy: 'admin',
+            });
+            console.log('🎯 DEBUG: Notification sent to patient');
+        } catch (notifError) {
+            console.error('🎯 DEBUG: Failed to send notification:', notifError);
+            if (notifError instanceof Error) {
+                console.error('🎯 DEBUG: Error message:', notifError.message);
+                console.error('🎯 DEBUG: Error stack:', notifError.stack);
+            }
+            // Don't fail the appointment creation if notification fails
+        }
 
         setIsEstimateModalOpen(false);
         setIsTokenModalOpen(true);

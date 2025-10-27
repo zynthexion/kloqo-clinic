@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from './(app)/auth-provider';
 
 export const metadata: Metadata = {
-  title: 'Kloqo',
+  title: 'Kloqo Clinic',
   description: 'AI-powered medical dashboard.',
 };
 
