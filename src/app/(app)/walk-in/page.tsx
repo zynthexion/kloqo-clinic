@@ -294,18 +294,36 @@ function WalkInRegistrationContent() {
     console.log('🎯 DEBUG: handleProceedToToken called');
     console.log('🎯 DEBUG: appointmentToSave:', appointmentToSave);
     
-    if (!appointmentToSave) {
-        console.error('🎯 DEBUG: No appointment data to save');
+    if (!appointmentToSave || !doctor) {
+        console.error('🎯 DEBUG: No appointment data to save or doctor not available');
         toast({ variant: 'destructive', title: 'Error', description: 'No appointment data to save.'});
         return;
     }
 
     try {
+        // IMPORTANT: Recalculate token from current database state to avoid duplicates
+        const clinicDocRef = doc(db, 'clinics', clinicId);
+        const clinicSnap = await getDoc(clinicDocRef);
+        const clinicData = clinicSnap.data();
+        const walkInTokenAllotment = clinicData?.walkInTokenAllotment || 5;
+        const walkInCapacityThreshold = clinicData?.walkInCapacityThreshold || 0.75;
+
+        const recalculatedDetails = await calculateWalkInDetails(doctor, walkInTokenAllotment, walkInCapacityThreshold);
+        
+        // Update appointment data with recalculated values
+        const updatedAppointmentData = {
+            ...appointmentToSave,
+            time: format(recalculatedDetails.estimatedTime, "hh:mm a"),
+            tokenNumber: `W${String(recalculatedDetails.numericToken).padStart(3, '0')}`,
+            numericToken: recalculatedDetails.numericToken,
+            slotIndex: recalculatedDetails.slotIndex,
+        };
+        
         console.log('🎯 DEBUG: Creating appointment document');
         const appointmentsCollection = collection(db, 'appointments');
         const newDocRef = doc(appointmentsCollection);
         
-        await setDoc(newDocRef, {...appointmentToSave, id: newDocRef.id}).catch(async (serverError) => {
+        await setDoc(newDocRef, {...updatedAppointmentData, id: newDocRef.id}).catch(async (serverError) => {
             console.error('🎯 DEBUG: Failed to save appointment');
             const permissionError = new FirestorePermissionError({
             path: 'appointments',
@@ -336,11 +354,11 @@ function WalkInRegistrationContent() {
                 firestore: db,
                 patientId,
                 appointmentId: newDocRef.id,
-                doctorName: appointmentToSave.doctor,
+                doctorName: updatedAppointmentData.doctor,
                 clinicName: clinicName,
-                date: appointmentToSave.date,
-                time: appointmentToSave.time,
-                tokenNumber: appointmentToSave.tokenNumber,
+                date: updatedAppointmentData.date,
+                time: updatedAppointmentData.time,
+                tokenNumber: updatedAppointmentData.tokenNumber,
                 bookedBy: 'admin',
             });
             console.log('🎯 DEBUG: Notification sent to patient');
