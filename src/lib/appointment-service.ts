@@ -1,5 +1,5 @@
 
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, runTransaction } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   format,
@@ -32,27 +32,31 @@ export async function generateNextToken(
   type: 'A' | 'W'
 ): Promise<string> {
   const dateStr = format(date, "d MMMM yyyy");
-  const appointmentsRef = collection(db, 'appointments');
-  const q = query(
-    appointmentsRef,
-    where('clinicId', '==', clinicId),
-    where('doctor', '==', doctorName),
-    where('date', '==', dateStr)
-  );
+  
+  // Use transaction to ensure atomic token generation
+  return await runTransaction(db, async (transaction) => {
+    const appointmentsRef = collection(db, 'appointments');
+    const q = query(
+      appointmentsRef,
+      where('clinicId', '==', clinicId),
+      where('doctor', '==', doctorName),
+      where('date', '==', dateStr)
+    );
 
-  const querySnapshot = await getDocs(q);
-  const tokenNumbers = querySnapshot.docs.map(doc => {
-    const token = doc.data().tokenNumber;
-    if (typeof token === 'string' && (token.startsWith('A') || token.startsWith('W'))) {
-      return parseInt(token.substring(1), 10);
-    }
-    return 0;
-  }).filter(num => !isNaN(num) && num > 0);
+    const querySnapshot = await getDocs(q);
+    const tokenNumbers = querySnapshot.docs.map(doc => {
+      const token = doc.data().tokenNumber;
+      if (typeof token === 'string' && (token.startsWith('A') || token.startsWith('W'))) {
+        return parseInt(token.substring(1), 10);
+      }
+      return 0;
+    }).filter(num => !isNaN(num) && num > 0);
 
-  const lastToken = tokenNumbers.length > 0 ? Math.max(...tokenNumbers) : 0;
-  const nextTokenNum = lastToken + 1;
+    const lastToken = tokenNumbers.length > 0 ? Math.max(...tokenNumbers) : 0;
+    const nextTokenNum = lastToken + 1;
 
-  return `${type}${String(nextTokenNum).padStart(3, '0')}`;
+    return `${type}${String(nextTokenNum).padStart(3, '0')}`;
+  });
 }
 
 
