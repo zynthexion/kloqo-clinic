@@ -63,6 +63,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import imageCompression from 'browser-image-compression';
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
+import { ReviewsSection } from "@/components/reviews-section";
 
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -1822,15 +1823,7 @@ export default function DoctorsPage() {
                     </div>
                 </TabsContent>
                 <TabsContent value="reviews" className="mt-4">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Patient Reviews</CardTitle>
-                            <CardDescription>What patients are saying about Dr. {selectedDoctor.name}.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-muted-foreground">Review functionality coming soon.</p>
-                        </CardContent>
-                    </Card>
+                    <ReviewsSection reviews={selectedDoctor.reviewList || []} />
                 </TabsContent>
             </Tabs>
             </>

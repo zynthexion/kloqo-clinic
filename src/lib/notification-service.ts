@@ -116,18 +116,19 @@ export async function sendAppointmentBookedByStaffNotification(params: {
   patientId: string;
   appointmentId: string;
   doctorName: string;
+  clinicName: string;
   date: string;
   time: string;
   tokenNumber: string;
   bookedBy: 'nurse' | 'admin';
 }): Promise<boolean> {
-  const { firestore, patientId, appointmentId, doctorName, date, time, tokenNumber, bookedBy } = params;
+  const { firestore, patientId, appointmentId, doctorName, clinicName, date, time, tokenNumber, bookedBy } = params;
 
   return sendNotificationToPatient({
     firestore,
     patientId,
     title: 'Appointment Booked',
-    body: `${bookedBy === 'nurse' ? 'Nurse' : 'Clinic staff'} has booked an appointment with Dr. ${doctorName} on ${date} at ${time}. Token: ${tokenNumber}`,
+    body: `${params.clinicName} has booked an appointment with Dr. ${doctorName} on ${date} at ${time}. Token: ${tokenNumber}`,
     data: {
       type: 'appointment_confirmed',
       appointmentId,
@@ -136,6 +137,7 @@ export async function sendAppointmentBookedByStaffNotification(params: {
       time,
       tokenNumber,
       bookedBy,
+      url: '/appointments', // Click will open appointments page
     },
   });
 }

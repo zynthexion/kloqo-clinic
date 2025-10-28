@@ -38,6 +38,20 @@ export type Doctor = {
   freeFollowUpDays?: number;
   advanceBookingDays?: number;
   registrationNumber?: string;
+  reviewList?: Review[];
+};
+
+export type Review = {
+  id: string;
+  appointmentId: string;
+  doctorId: string;
+  doctorName: string;
+  patientId: string;
+  patientName: string;
+  rating: number;
+  feedback: string;
+  createdAt: any;
+  clinicId: string;
 };
 
 export type Appointment = {
@@ -63,6 +77,8 @@ export type Appointment = {
   slotIndex?: number;
   sessionIndex?: number;
   createdAt?: any;
+  reviewed?: boolean;
+  reviewId?: string;
 };
 
 export type Patient = {
