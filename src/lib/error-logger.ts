@@ -116,6 +116,23 @@ function determineSeverity(error: Error): ErrorSeverity {
   return 'low';
 }
 
+/**
+ * Helper function to remove undefined values from objects
+ */
+function removeUndefined(obj: any): any {
+  if (obj === null || obj === undefined) return null;
+  if (typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(removeUndefined);
+  
+  const cleaned: any = {};
+  for (const key in obj) {
+    if (obj[key] !== undefined) {
+      cleaned[key] = removeUndefined(obj[key]);
+    }
+  }
+  return cleaned;
+}
+
 export async function logError(
   error: Error | string,
   firestore: Firestore = db,
@@ -126,34 +143,47 @@ export async function logError(
       ? new Error(error) 
       : error;
 
+    const errorData: any = {
+      name: errorObj.name || 'Error',
+      message: errorObj.message || String(error),
+    };
+    
+    // Only include stack and code if they exist and are not undefined
+    if (errorObj.stack) {
+      errorData.stack = errorObj.stack;
+    }
+    if ((errorObj as any).code) {
+      errorData.code = (errorObj as any).code;
+    }
+
     const errorLog: ErrorLog = {
-      error: {
-        name: errorObj.name || 'Error',
-        message: errorObj.message || String(error),
-        stack: errorObj.stack,
-        code: (errorObj as any).code,
-      },
+      error: errorData,
       severity: determineSeverity(errorObj),
       context: {
-        ...context,
-        deviceInfo: getDeviceInfo(),
-        page: context.page || getCurrentPage(),
-        appVersion: process.env.NEXT_PUBLIC_APP_VERSION || '1.0.0',
+        ...removeUndefined({
+          ...context,
+          deviceInfo: getDeviceInfo(),
+          page: context.page || getCurrentPage(),
+          appVersion: process.env.NEXT_PUBLIC_APP_VERSION || '1.0.0',
+        }),
       },
       timestamp: serverTimestamp(),
       appName: 'clinic-admin',
       sessionId: getSessionId(),
     };
 
+    // Clean all undefined values from the error log before saving
+    const cleanedErrorLog = removeUndefined(errorLog);
+
     if (isOnline && firestore) {
       try {
-        await addDoc(collection(firestore, 'error_logs'), errorLog);
+        await addDoc(collection(firestore, 'error_logs'), cleanedErrorLog);
       } catch (firestoreError) {
         console.error('Failed to log error to Firestore:', firestoreError);
-        errorQueue.push(errorLog);
+        errorQueue.push(cleanedErrorLog);
       }
     } else {
-      errorQueue.push(errorLog);
+      errorQueue.push(cleanedErrorLog);
     }
   } catch (loggingError) {
     console.error('Failed to log error:', loggingError);
@@ -169,7 +199,8 @@ async function flushErrorQueue(firestore?: Firestore): Promise<void> {
 
   for (const errorLog of errorsToFlush) {
     try {
-      await addDoc(collection(firestore, 'error_logs'), errorLog);
+      const cleanedErrorLog = removeUndefined(errorLog);
+      await addDoc(collection(firestore, 'error_logs'), cleanedErrorLog);
     } catch (error) {
       errorQueue.push(errorLog);
     }
