@@ -27,7 +27,7 @@ import { cn } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { managePatient } from '@/lib/patient-service';
-import { calculateWalkInDetails } from '@/lib/appointment-service';
+import { calculateWalkInDetails, generateNextToken } from '@/lib/appointment-service';
 import PatientSearchResults from '@/components/clinic/patient-search-results';
 import { Suspense } from 'react';
 
@@ -250,7 +250,9 @@ function WalkInRegistrationContent() {
             bookingFor: selectedPatientId ? 'self' : 'new_related',
         });
 
-        const tokenNumber = `W${String(numericToken).padStart(3, '0')}`;
+        // Use generateNextToken service for walk-ins to ensure sequential numbering
+        const tokenNumber = await generateNextToken(clinicId, doctor.name, new Date(), 'W');
+        const numericTokenFromService = parseInt(tokenNumber.substring(1), 10);
       
         const newAppointmentData: UnsavedAppointment = {
             patientName: values.patientName,
@@ -267,7 +269,7 @@ function WalkInRegistrationContent() {
             time: format(estimatedTime, "hh:mm a"),
             status: 'Pending',
             tokenNumber,
-            numericToken: numericToken,
+            numericToken: numericTokenFromService,
             clinicId,
             treatment: "General Consultation",
             createdAt: serverTimestamp(),
@@ -310,12 +312,16 @@ function WalkInRegistrationContent() {
 
         const recalculatedDetails = await calculateWalkInDetails(doctor, walkInTokenAllotment, walkInCapacityThreshold);
         
+        // Use generateNextToken service to ensure sequential numbering and prevent duplicates
+        const walkInTokenNumber = await generateNextToken(clinicId, doctor.name, new Date(), 'W');
+        const walkInNumericToken = parseInt(walkInTokenNumber.substring(1), 10);
+        
         // Update appointment data with recalculated values
         const updatedAppointmentData = {
             ...appointmentToSave,
             time: format(recalculatedDetails.estimatedTime, "hh:mm a"),
-            tokenNumber: `W${String(recalculatedDetails.numericToken).padStart(3, '0')}`,
-            numericToken: recalculatedDetails.numericToken,
+            tokenNumber: walkInTokenNumber,
+            numericToken: walkInNumericToken,
             slotIndex: recalculatedDetails.slotIndex,
         };
         

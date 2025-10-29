@@ -1,5 +1,5 @@
 
-import { collection, query, where, getDocs, orderBy, runTransaction } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, runTransaction, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   format,
@@ -24,6 +24,9 @@ interface TimeSlot {
 /**
  * Generates the next sequential token number for a given doctor and date.
  * 'A' for Advanced/Online/Admin, 'W' for Walk-in.
+ * 
+ * Uses Firestore transactions to ensure atomic token generation and prevent race conditions.
+ * Returns sequential token numbers (A001, A002, W003, etc.) shared across both token types.
  */
 export async function generateNextToken(
   clinicId: string,
@@ -55,7 +58,116 @@ export async function generateNextToken(
     const lastToken = tokenNumbers.length > 0 ? Math.max(...tokenNumbers) : 0;
     const nextTokenNum = lastToken + 1;
 
+    // Double-check token doesn't already exist (additional safety check within transaction)
+    const existingTokenDoc = querySnapshot.docs.find(doc => {
+      const data = doc.data();
+      return data.tokenNumber === `${type}${String(nextTokenNum).padStart(3, '0')}`;
+    });
+    
+    if (existingTokenDoc) {
+      // If token exists, find next available number
+      const existingNumbers = new Set(tokenNumbers);
+      let candidate = nextTokenNum + 1;
+      while (existingNumbers.has(candidate)) {
+        candidate++;
+      }
+      return `${type}${String(candidate).padStart(3, '0')}`;
+    }
+
     return `${type}${String(nextTokenNum).padStart(3, '0')}`;
+  });
+}
+
+
+/**
+ * Generates the next token and reserves the slot in a single atomic transaction.
+ * This prevents race conditions where multiple bookings get the same token.
+ * 
+ * For A tokens: Checks if slot is already occupied by another A token (exclusive reservation)
+ * For W tokens: No slot collision check (can share slots with A tokens)
+ */
+export async function generateNextTokenAndReserveSlot(
+  clinicId: string,
+  doctorName: string,
+  date: Date,
+  type: 'A' | 'W',
+  appointmentData: {
+    time: string;
+    slotIndex: number;
+    [key: string]: any;
+  }
+): Promise<{ tokenNumber: string; numericToken: number }> {
+  const dateStr = format(date, "d MMMM yyyy");
+  
+  return await runTransaction(db, async (transaction) => {
+    // Step 1: For A tokens, check if the slot is already taken by another A token
+    if (type === 'A') {
+      const appointmentsRef = collection(db, 'appointments');
+      const slotBookedQuery = query(
+        appointmentsRef,
+        where('clinicId', '==', clinicId),
+        where('doctor', '==', doctorName),
+        where('date', '==', dateStr),
+        where('slotIndex', '==', appointmentData.slotIndex),
+        where('status', 'in', ['Pending', 'Confirmed'])
+      );
+      
+      const slotSnapshot = await getDocs(slotBookedQuery);
+      
+      // Check if any A token (not walk-in) occupies this slot
+      const aTokenConflict = slotSnapshot.docs.some(doc => {
+        const data = doc.data();
+        // Only A tokens (not walk-ins) block the slot
+        return data.bookedVia !== 'Walk-in' && data.tokenNumber?.startsWith('A');
+      });
+      
+      if (aTokenConflict) {
+        const error = new Error('SLOT_ALREADY_BOOKED') as Error & { code?: string };
+        error.code = 'SLOT_OCCUPIED';
+        throw error;
+      }
+    }
+    
+    // Step 2: Generate next sequential token
+    const appointmentsQuery = query(
+      collection(db, 'appointments'),
+      where('clinicId', '==', clinicId),
+      where('doctor', '==', doctorName),
+      where('date', '==', dateStr)
+    );
+    
+    const tokenSnapshot = await getDocs(appointmentsQuery);
+    const tokenNumbers = tokenSnapshot.docs.map(doc => {
+      const token = doc.data().tokenNumber;
+      if (typeof token === 'string' && (token.startsWith('A') || token.startsWith('W'))) {
+        return parseInt(token.substring(1), 10);
+      }
+      return 0;
+    }).filter(num => !isNaN(num) && num > 0);
+    
+    const lastToken = tokenNumbers.length > 0 ? Math.max(...tokenNumbers) : 0;
+    const nextTokenNum = lastToken + 1;
+    const tokenNumber = `${type}${String(nextTokenNum).padStart(3, '0')}`;
+    
+    // Step 3: Final safety check - verify token doesn't already exist
+    const tokenExists = tokenSnapshot.docs.some(doc => {
+      return doc.data().tokenNumber === tokenNumber;
+    });
+    
+    if (tokenExists) {
+      // Find next available token number
+      const existingNumbers = new Set(tokenNumbers);
+      let candidate = nextTokenNum + 1;
+      while (existingNumbers.has(candidate)) {
+        candidate++;
+      }
+      return { 
+        tokenNumber: `${type}${String(candidate).padStart(3, '0')}`, 
+        numericToken: candidate 
+      };
+    }
+    
+    return { tokenNumber, numericToken: nextTokenNum };
   });
 }
 

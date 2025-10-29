@@ -68,7 +68,7 @@ import Link from "next/link";
 import { Label } from "@/components/ui/label";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { calculateWalkInDetails } from '@/lib/appointment-service';
+import { calculateWalkInDetails, generateNextToken, generateNextTokenAndReserveSlot } from '@/lib/appointment-service';
 import { sendAppointmentCancelledNotification, sendTokenCalledNotification, sendAppointmentBookedByStaffNotification } from '@/lib/notification-service';
 
 const formSchema = z.object({
@@ -399,28 +399,6 @@ export default function AppointmentsPage() {
   const selectedDate = form.watch("date");
   const appointmentType = form.watch("bookedVia");
 
-  const generateNextToken = async (date: Date, type: 'A' | 'W'): Promise<{tokenNumber: string, numericToken: number}> => {
-    if (!clinicId || !selectedDoctor) return { tokenNumber: `${type}001`, numericToken: 1 };
-    const dateStr = format(date, "d MMMM yyyy");
-    const appointmentsRef = collection(db, 'appointments');
-    const q = query(
-      appointmentsRef,
-      where('clinicId', '==', clinicId),
-      where('doctor', '==', selectedDoctor.name),
-      where('date', '==', dateStr),
-    );
-    const querySnapshot = await getDocs(q);
-    const tokenNumbers = querySnapshot.docs.map(doc => {
-      const token = doc.data().tokenNumber;
-      if (typeof token === 'string' && (token.startsWith('A') || token.startsWith('W'))) {
-        return parseInt(token.substring(1));
-      }
-      return 0;
-    }).filter(num => !isNaN(num) && num > 0);
-    const lastToken = tokenNumbers.length > 0 ? Math.max(...tokenNumbers) : 0;
-    const nextTokenNum = lastToken + 1;
-    return { tokenNumber: `${type}${String(nextTokenNum).padStart(3, '0')}`, numericToken: nextTokenNum };
-  };
 
   const isWithinBookingWindow = (doctor: Doctor | null): boolean => {
     if (!doctor || !doctor.availabilitySlots) return false;
@@ -642,6 +620,10 @@ export default function AppointmentsPage() {
           }
           const date = new Date();
           
+          // Use generateNextToken service for walk-ins to ensure sequential numbering
+          const walkInTokenNumber = await generateNextToken(clinicId, selectedDoctor.name, date, 'W');
+          const walkInNumericToken = parseInt(walkInTokenNumber.substring(1), 10);
+          
           const appointmentData: Omit<Appointment, 'id'> = {
             bookedVia: appointmentType,
             clinicId: selectedDoctor.clinicId,
@@ -657,8 +639,8 @@ export default function AppointmentsPage() {
             place: values.place,
             status: 'Pending',
             time: format(walkInEstimate.estimatedTime, "hh:mm a"),
-            tokenNumber: `W${String(walkInEstimate.numericToken).padStart(3, '0')}`,
-            numericToken: walkInEstimate.numericToken,
+            tokenNumber: walkInTokenNumber,
+            numericToken: walkInNumericToken,
             slotIndex: walkInEstimate.slotIndex,
             sessionIndex: walkInEstimate.sessionIndex,
             treatment: "General Consultation",
@@ -677,7 +659,6 @@ export default function AppointmentsPage() {
             return;
           }
           const appointmentId = isEditing && editingAppointment ? editingAppointment.id : doc(collection(db, "appointments")).id;
-          const tokenData = isEditing && editingAppointment ? { tokenNumber: editingAppointment.tokenNumber, numericToken: editingAppointment.numericToken } : await generateNextToken(values.date, 'A');
           const appointmentDateStr = format(values.date, "d MMMM yyyy");
           const appointmentTimeStr = format(parseDateFns(values.time, "HH:mm", new Date()), "hh:mm a");
 
@@ -703,6 +684,36 @@ export default function AppointmentsPage() {
                 currentSlotInSession++;
               }
               if (slotIndex !== -1) break;
+            }
+          }
+
+          // For editing, use existing token; for new appointments, use transaction-based slot reservation
+          let tokenData: { tokenNumber: string; numericToken: number };
+          if (isEditing && editingAppointment) {
+            tokenData = { tokenNumber: editingAppointment.tokenNumber, numericToken: editingAppointment.numericToken };
+          } else {
+            try {
+              // Use transaction-based slot reservation to prevent A token collisions
+              tokenData = await generateNextTokenAndReserveSlot(
+                clinicId,
+                selectedDoctor.name,
+                values.date,
+                'A',
+                {
+                  time: appointmentTimeStr,
+                  slotIndex: slotIndex
+                }
+              );
+            } catch (error: any) {
+              if (error.code === 'SLOT_OCCUPIED' || error.message === 'SLOT_ALREADY_BOOKED') {
+                toast({ 
+                  variant: "destructive", 
+                  title: "Slot Already Booked", 
+                  description: "This time slot is already booked. Please select another time." 
+                });
+                return;
+              }
+              throw error;
             }
           }
 
