@@ -10,7 +10,7 @@ const currentYear = today.getFullYear();
 const currentMonth = today.getMonth();
 const currentDay = today.getDate();
 
-// Helper to format date as "dd MMMM yyyy"
+// Helper to format date as "d MMMM yyyy"
 const formatDate = (day: number) => {
     const date = new Date(currentYear, currentMonth, day);
     return format(date, 'd MMMM yyyy');

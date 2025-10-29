@@ -15,10 +15,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Appointment, Doctor, Patient, User } from "@/lib/types";
-import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc, orderBy, onSnapshot } from "firebase/firestore";
+import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc, orderBy, limit, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
-import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes, isAfter, startOfDay, addHours } from "date-fns";
+import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes, isAfter, startOfDay, addHours, subDays } from "date-fns";
 import { updateAppointmentAndDoctorStatuses } from "@/lib/status-update-service";
 import { cn } from "@/lib/utils";
 import {
@@ -284,9 +284,40 @@ export default function AppointmentsPage() {
 
         setLoading(true);
 
-        const appointmentsQuery = query(collection(db, "appointments"), where("clinicId", "==", fetchedClinicId));
+        // Optimize: Limit to last 2000 appointments to prevent excessive data load
+        // Client-side filtering will further refine by date range
+        const minDate = subDays(new Date(), 90);
+        const currentYear = new Date().getFullYear();
+        
+        // Query with limit to prevent fetching too many documents
+        // We fetch 2000 most recent appointments as a reasonable limit
+        // Note: If you need more, consider pagination or date-based queries
+        const appointmentsQuery = query(
+            collection(db, "appointments"), 
+            where("clinicId", "==", fetchedClinicId),
+            limit(2000) // Safety limit: fetch max 2000 appointments
+        );
+        
         const appointmentsUnsubscribe = onSnapshot(appointmentsQuery, (snapshot) => {
-            const appointmentsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
+            let appointmentsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
+            
+            // Client-side filter: Prioritize appointments from last 90 days or current year
+            // This ensures we show recent and upcoming appointments while limiting data
+            const filteredAppointments = appointmentsList.filter(apt => {
+                try {
+                    const aptDate = parse(apt.date, "d MMMM yyyy", new Date());
+                    // Keep if within last 90 days OR from current/future year (for upcoming appointments)
+                    const isRecent = aptDate >= minDate;
+                    const isCurrentOrFutureYear = aptDate.getFullYear() >= currentYear;
+                    return isRecent || isCurrentOrFutureYear;
+                } catch {
+                    // If date parsing fails, include it (safer than excluding valid data)
+                    return true;
+                }
+            });
+            
+            // If after filtering we still have too many, limit to 2000
+            appointmentsList = filteredAppointments.slice(0, 2000);
             
             // Deduplicate appointments by id
             const uniqueAppointments = appointmentsList.reduce((acc, current) => {

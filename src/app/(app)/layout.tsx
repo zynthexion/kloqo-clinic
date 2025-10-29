@@ -9,6 +9,8 @@ import { useRouter } from 'next/navigation';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 import { useAppointmentStatusUpdater } from '@/hooks/useAppointmentStatusUpdater';
 import { AuthProvider } from './auth-provider';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { GlobalErrorHandler } from '@/components/GlobalErrorHandler';
 
 function AppContent({ children }: { children: React.ReactNode }) {
   const { currentUser, loading } = useAuth();
@@ -33,14 +35,17 @@ function AppContent({ children }: { children: React.ReactNode }) {
 
   return (
       <Suspense fallback={<div className="flex h-screen w-full items-center justify-center"><p>Loading...</p></div>}>
-          <div className="flex h-full">
-            <OnboardingCheck />
-            <FirebaseErrorListener />
-            <Sidebar />
-            <div className="flex-1 flex flex-col h-full overflow-y-auto">
-              {children}
+          <ErrorBoundary>
+            <div className="flex h-full">
+              <OnboardingCheck />
+              <FirebaseErrorListener />
+              <GlobalErrorHandler />
+              <Sidebar />
+              <div className="flex-1 flex flex-col h-full overflow-y-auto">
+                {children}
+              </div>
             </div>
-          </div>
+          </ErrorBoundary>
       </Suspense>
   );
 }
