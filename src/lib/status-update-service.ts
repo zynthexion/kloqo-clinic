@@ -336,10 +336,11 @@ export async function updateSingleAppointmentStatus(
 ): Promise<void> {
   try {
     const appointmentRef = doc(db, 'appointments', appointmentId);
-    await updateDoc(appointmentRef, { 
-      status,
-      updatedAt: new Date()
-    });
+    const updateFields: any = { status, updatedAt: new Date() };
+    if (status === 'Completed') {
+      updateFields.completedAt = new Date();
+    }
+    await updateDoc(appointmentRef, updateFields);
     console.log(`Updated appointment ${appointmentId} to ${status}`);
   } catch (error) {
     console.error('Error updating appointment status:', error);

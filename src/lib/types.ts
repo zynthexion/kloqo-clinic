@@ -39,6 +39,8 @@ export type Doctor = {
   advanceBookingDays?: number;
   registrationNumber?: string;
   reviewList?: Review[];
+  actualAverageConsultationTime?: number;
+  actualAverageConsultationTimeUpdatedAt?: any;
 };
 
 export type Review = {
@@ -79,6 +81,7 @@ export type Appointment = {
   createdAt?: any;
   reviewed?: boolean;
   reviewId?: string;
+  completedAt?: any;
 };
 
 export type Patient = {

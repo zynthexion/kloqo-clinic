@@ -33,11 +33,30 @@ export function OnboardingCheck() {
 
             if (clinicDoc.exists()) {
               const clinicData = clinicDoc.data();
-              // Redirect to onboarding if the clinic's status is "Pending"
-              if (clinicData.onboardingStatus === "Pending") {
-                router.push('/onboarding');
+              
+              // First check registration status
+              const registrationStatus = clinicData.registrationStatus;
+              
+              if (registrationStatus === 'Pending') {
+                // Redirect to registration status page
+                router.push('/registration-status');
+                return;
               }
-              // If "Completed", do nothing and let the user access the app.
+              
+              if (registrationStatus === 'Rejected') {
+                // Redirect to registration status page
+                router.push('/registration-status');
+                return;
+              }
+              
+              // Only check onboarding status if registration is approved (or not set for backward compatibility)
+              if (registrationStatus === 'Approved' || !registrationStatus) {
+                // Redirect to onboarding if the clinic's onboarding status is "Pending"
+                if (clinicData.onboardingStatus === "Pending") {
+                  router.push('/onboarding');
+                }
+                // If "Completed", do nothing and let the user access the app.
+              }
             } else {
               // Clinic document doesn't exist, something is wrong, go to onboarding.
               router.push('/onboarding');

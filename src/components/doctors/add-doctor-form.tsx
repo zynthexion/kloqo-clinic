@@ -457,6 +457,21 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
 
         await setDoc(doc(db, "doctors", docId), doctorToSave, { merge: true });
 
+        // Update currentDoctorCount in clinic document if this is a new doctor
+        if (!isEditMode) {
+          try {
+            const clinicRef = doc(db, "clinics", clinicId);
+            const clinicDoc = await getDoc(clinicRef);
+            const currentCount = clinicDoc.data()?.currentDoctorCount || 0;
+            await updateDoc(clinicRef, {
+              currentDoctorCount: currentCount + 1
+            });
+          } catch (error) {
+            console.error("Error updating currentDoctorCount:", error);
+            // Don't fail the doctor save if this update fails
+          }
+        }
+
         onSave(doctorToSave);
         setIsOpen(false);
         form.reset();

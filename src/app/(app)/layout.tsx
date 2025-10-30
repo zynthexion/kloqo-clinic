@@ -8,6 +8,7 @@ import { useAuth } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 import { useAppointmentStatusUpdater } from '@/hooks/useAppointmentStatusUpdater';
+import { useDoctorStatusUpdater } from '@/hooks/useDoctorStatusUpdater';
 import { AuthProvider } from './auth-provider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { GlobalErrorHandler } from '@/components/GlobalErrorHandler';
@@ -16,8 +17,9 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const { currentUser, loading } = useAuth();
   const router = useRouter();
 
-  // Custom hook to handle automatic status updates
-  useAppointmentStatusUpdater();
+  // Custom hooks to handle automatic status updates
+  useAppointmentStatusUpdater(); // Updates appointment statuses and sets doctors to 'Out'
+  useDoctorStatusUpdater(); // Updates doctor consultation status based on availability (bidirectional)
 
   useEffect(() => {
     if (!loading && !currentUser) {

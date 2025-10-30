@@ -1,5 +1,5 @@
 
-import { collection, query, where, getDocs, orderBy, runTransaction, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, runTransaction, doc, increment, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   format,
@@ -25,7 +25,8 @@ interface TimeSlot {
  * Generates the next sequential token number for a given doctor and date.
  * 'A' for Advanced/Online/Admin, 'W' for Walk-in.
  * 
- * Uses Firestore transactions to ensure atomic token generation and prevent race conditions.
+ * Uses an atomic counter document to ensure thread-safe token generation, preventing
+ * race conditions when multiple users book concurrently.
  * Returns sequential token numbers (A001, A002, W003, etc.) shared across both token types.
  */
 export async function generateNextToken(
@@ -35,45 +36,56 @@ export async function generateNextToken(
   type: 'A' | 'W'
 ): Promise<string> {
   const dateStr = format(date, "d MMMM yyyy");
+  const counterDocId = `${clinicId}_${doctorName}_${dateStr}`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+  const counterRef = doc(db, 'token-counters', counterDocId);
   
-  // Use transaction to ensure atomic token generation
+  // Use transaction with atomic increment to ensure concurrent requests get unique sequential numbers
   return await runTransaction(db, async (transaction) => {
-    const appointmentsRef = collection(db, 'appointments');
-    const q = query(
-      appointmentsRef,
-      where('clinicId', '==', clinicId),
-      where('doctor', '==', doctorName),
-      where('date', '==', dateStr)
-    );
-
-    const querySnapshot = await getDocs(q);
-    const tokenNumbers = querySnapshot.docs.map(doc => {
-      const token = doc.data().tokenNumber;
-      if (typeof token === 'string' && (token.startsWith('A') || token.startsWith('W'))) {
-        return parseInt(token.substring(1), 10);
-      }
-      return 0;
-    }).filter(num => !isNaN(num) && num > 0);
-
-    const lastToken = tokenNumbers.length > 0 ? Math.max(...tokenNumbers) : 0;
-    const nextTokenNum = lastToken + 1;
-
-    // Double-check token doesn't already exist (additional safety check within transaction)
-    const existingTokenDoc = querySnapshot.docs.find(doc => {
-      const data = doc.data();
-      return data.tokenNumber === `${type}${String(nextTokenNum).padStart(3, '0')}`;
-    });
+    const counterDoc = await transaction.get(counterRef);
     
-    if (existingTokenDoc) {
-      // If token exists, find next available number
-      const existingNumbers = new Set(tokenNumbers);
-      let candidate = nextTokenNum + 1;
-      while (existingNumbers.has(candidate)) {
-        candidate++;
-      }
-      return `${type}${String(candidate).padStart(3, '0')}`;
+    let nextTokenNum: number;
+    
+    if (counterDoc.exists()) {
+      // Counter exists, increment atomically
+      const currentCount = counterDoc.data().count || 0;
+      transaction.update(counterRef, {
+        count: increment(1),
+        lastUpdated: serverTimestamp()
+      });
+      nextTokenNum = currentCount + 1;
+    } else {
+      // Counter doesn't exist, initialize it and check existing appointments
+      // This handles the migration case where counters don't exist yet
+      const appointmentsRef = collection(db, 'appointments');
+      const q = query(
+        appointmentsRef,
+        where('clinicId', '==', clinicId),
+        where('doctor', '==', doctorName),
+        where('date', '==', dateStr)
+      );
+      const querySnapshot = await getDocs(q);
+      const tokenNumbers = querySnapshot.docs.map(doc => {
+        const token = doc.data().tokenNumber;
+        if (typeof token === 'string' && (token.startsWith('A') || token.startsWith('W'))) {
+          return parseInt(token.substring(1), 10);
+        }
+        return 0;
+      }).filter(num => !isNaN(num) && num > 0);
+      
+      const maxExistingToken = tokenNumbers.length > 0 ? Math.max(...tokenNumbers) : 0;
+      nextTokenNum = maxExistingToken + 1;
+      
+      // Create counter starting from next number
+      transaction.set(counterRef, {
+        count: nextTokenNum,
+        clinicId,
+        doctorName,
+        date: dateStr,
+        lastUpdated: serverTimestamp(),
+        createdAt: serverTimestamp()
+      });
     }
-
+    
     return `${type}${String(nextTokenNum).padStart(3, '0')}`;
   });
 }
@@ -98,6 +110,8 @@ export async function generateNextTokenAndReserveSlot(
   }
 ): Promise<{ tokenNumber: string; numericToken: number }> {
   const dateStr = format(date, "d MMMM yyyy");
+  const counterDocId = `${clinicId}_${doctorName}_${dateStr}`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+  const counterRef = doc(db, 'token-counters', counterDocId);
   
   return await runTransaction(db, async (transaction) => {
     // Step 1: For A tokens, check if the slot is already taken by another A token
@@ -128,46 +142,55 @@ export async function generateNextTokenAndReserveSlot(
       }
     }
     
-    // Step 2: Generate next sequential token
-    const appointmentsQuery = query(
-      collection(db, 'appointments'),
-      where('clinicId', '==', clinicId),
-      where('doctor', '==', doctorName),
-      where('date', '==', dateStr)
-    );
+    // Step 2: Generate next sequential token using atomic counter
+    const counterDoc = await transaction.get(counterRef);
     
-    const tokenSnapshot = await getDocs(appointmentsQuery);
-    const tokenNumbers = tokenSnapshot.docs.map(doc => {
-      const token = doc.data().tokenNumber;
-      if (typeof token === 'string' && (token.startsWith('A') || token.startsWith('W'))) {
-        return parseInt(token.substring(1), 10);
-      }
-      return 0;
-    }).filter(num => !isNaN(num) && num > 0);
+    let nextTokenNum: number;
     
-    const lastToken = tokenNumbers.length > 0 ? Math.max(...tokenNumbers) : 0;
-    const nextTokenNum = lastToken + 1;
-    const tokenNumber = `${type}${String(nextTokenNum).padStart(3, '0')}`;
-    
-    // Step 3: Final safety check - verify token doesn't already exist
-    const tokenExists = tokenSnapshot.docs.some(doc => {
-      return doc.data().tokenNumber === tokenNumber;
-    });
-    
-    if (tokenExists) {
-      // Find next available token number
-      const existingNumbers = new Set(tokenNumbers);
-      let candidate = nextTokenNum + 1;
-      while (existingNumbers.has(candidate)) {
-        candidate++;
-      }
-      return { 
-        tokenNumber: `${type}${String(candidate).padStart(3, '0')}`, 
-        numericToken: candidate 
-      };
+    if (counterDoc.exists()) {
+      // Counter exists, increment atomically
+      const currentCount = counterDoc.data().count || 0;
+      transaction.update(counterRef, {
+        count: increment(1),
+        lastUpdated: serverTimestamp()
+      });
+      nextTokenNum = currentCount + 1;
+    } else {
+      // Counter doesn't exist, initialize it and check existing appointments
+      const appointmentsQuery = query(
+        collection(db, 'appointments'),
+        where('clinicId', '==', clinicId),
+        where('doctor', '==', doctorName),
+        where('date', '==', dateStr)
+      );
+      const tokenSnapshot = await getDocs(appointmentsQuery);
+      const tokenNumbers = tokenSnapshot.docs.map(doc => {
+        const token = doc.data().tokenNumber;
+        if (typeof token === 'string' && (token.startsWith('A') || token.startsWith('W'))) {
+          return parseInt(token.substring(1), 10);
+        }
+        return 0;
+      }).filter(num => !isNaN(num) && num > 0);
+      
+      const maxExistingToken = tokenNumbers.length > 0 ? Math.max(...tokenNumbers) : 0;
+      nextTokenNum = maxExistingToken + 1;
+      
+      // Create counter starting from next number
+      transaction.set(counterRef, {
+        count: nextTokenNum,
+        clinicId,
+        doctorName,
+        date: dateStr,
+        lastUpdated: serverTimestamp(),
+        createdAt: serverTimestamp()
+      });
     }
     
-    return { tokenNumber, numericToken: nextTokenNum };
+    const tokenNumber = `${type}${String(nextTokenNum).padStart(3, '0')}`;
+    
+    // numericToken should align with position within the day's slots
+    const numericToken = (typeof appointmentData.slotIndex === 'number') ? (appointmentData.slotIndex + 1) : nextTokenNum;
+    return { tokenNumber, numericToken };
   });
 }
 
@@ -394,8 +417,8 @@ export async function calculateWalkInDetails(
   }
 
   // Step 9: Generate numeric token (sequential across all appointments)
-  const numericTokens = appointments.map(a => a.numericToken);
-  const newNumericToken = numericTokens.length > 0 ? Math.max(...numericTokens) + 1 : 1;
+  // numeric token should align with slot order across sessions -> slotIndex + 1
+  const newNumericToken = finalSlotIndex + 1;
 
   return {
     estimatedTime, // For display purposes

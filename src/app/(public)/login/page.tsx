@@ -17,7 +17,8 @@ import { Eye, EyeOff } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import Image from 'next/image';
 
 export default function LoginPage() {
@@ -41,7 +42,47 @@ export default function LoginPage() {
     const password = (event.currentTarget.elements.namedItem('password') as HTMLInputElement).value;
     
     try {
-        await signInWithEmailAndPassword(auth, email, password);
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+        
+        // Check clinic registration status
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+            const userData = userDoc.data();
+            const clinicId = userData.clinicId;
+            
+            if (clinicId) {
+                const clinicDoc = await getDoc(doc(db, 'clinics', clinicId));
+                if (clinicDoc.exists()) {
+                    const clinicData = clinicDoc.data();
+                    const registrationStatus = clinicData.registrationStatus;
+                    
+                    if (registrationStatus === 'Pending') {
+                        // Sign out the user
+                        await auth.signOut();
+                        toast({
+                            variant: "destructive",
+                            title: "Registration Pending",
+                            description: "Your clinic registration is pending approval. Please wait for SuperAdmin approval before logging in.",
+                        });
+                        return;
+                    }
+                    
+                    if (registrationStatus === 'Rejected') {
+                        // Sign out the user
+                        await auth.signOut();
+                        toast({
+                            variant: "destructive",
+                            title: "Registration Rejected",
+                            description: "Your clinic registration has been rejected. Please contact support for more information.",
+                        });
+                        return;
+                    }
+                }
+            }
+        }
+        
+        // Registration is approved or status not set (for backward compatibility)
         toast({ title: "Login Successful", description: "Redirecting to dashboard..." });
         router.push('/dashboard');
     } catch (error: any) {
@@ -49,7 +90,9 @@ export default function LoginPage() {
         toast({
             variant: "destructive",
             title: "Login Failed",
-            description: "Invalid email or password. Please try again.",
+            description: error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password'
+                ? "Invalid email or password. Please try again."
+                : error.message || "An error occurred. Please try again.",
         });
     }
   };
