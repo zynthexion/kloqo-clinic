@@ -286,6 +286,7 @@ export async function calculateWalkInDetails(
   const lastWalkIn = walkInAppointments.length > 0
     ? walkInAppointments[walkInAppointments.length - 1]
     : null;
+  const lastWalkInSlotIndex = lastWalkIn?.slotIndex ?? -1;
 
   // Step 4: Determine target slot for this new walk-in
   let targetSlotIndex: number;
@@ -299,43 +300,64 @@ export async function calculateWalkInDetails(
       referenceSlotIndex = findCurrentSlotIndex(allSlots.map(s => s.time), now);
     }
     
-    // Move forward in time, counting ALL appointments (advanced + existing walk-ins) encountered in the timeline
-    let appointmentsSkipped = 0;
+    // Count forward to find the 5th appointment, then place W token immediately after it
+    let appointmentsCounted = 0;
     let currentSlotIndex = referenceSlotIndex;
+    let fifthAppointmentSlotIndex = -1;
     
-    while (appointmentsSkipped < walkInTokenAllotment && currentSlotIndex < allSlots.length) {
+    while (appointmentsCounted < walkInTokenAllotment && currentSlotIndex < allSlots.length) {
       // Check if this slot has ANY appointment (advanced or walk-in)
       const hasAppointment = appointments.some(apt => apt.slotIndex === currentSlotIndex);
       if (hasAppointment) {
-        appointmentsSkipped++;
+        appointmentsCounted++;
+        if (appointmentsCounted === walkInTokenAllotment) {
+          // Found the 5th appointment - place W token immediately after this slot
+          fifthAppointmentSlotIndex = currentSlotIndex;
+        }
       }
       currentSlotIndex++;
     }
     
-    targetSlotIndex = currentSlotIndex;
+    if (fifthAppointmentSlotIndex >= 0) {
+      // Place W token immediately after the 5th appointment's slot
+      targetSlotIndex = fifthAppointmentSlotIndex + 1;
+    } else {
+      // If we couldn't find 5 appointments, place at current slot index
+      targetSlotIndex = currentSlotIndex;
+    }
     
   } else {
     // Case B: Previous walk-ins exist
-    const lastWalkInSlotIndex = lastWalkIn.slotIndex ?? 0;
-    
     if (lastWalkInSlotIndex > lastAdvancedSlotIndex) {
       // Last walk-in is after last advanced appointment → assign next consecutive slot (no skipping)
       targetSlotIndex = lastWalkInSlotIndex + 1;
     } else {
-      // Start from slot after last walk-in and skip walkInTokenAllotment appointments forward
-      let appointmentsSkipped = 0;
+      // Start from slot after last walk-in and count forward to find the 5th appointment
+      // Place W token immediately after the 5th appointment's slot
+      let appointmentsCounted = 0;
       let currentSlotIndex = lastWalkInSlotIndex + 1;
+      let fifthAppointmentSlotIndex = -1;
       
-      while (appointmentsSkipped < walkInTokenAllotment && currentSlotIndex < allSlots.length) {
+      while (appointmentsCounted < walkInTokenAllotment && currentSlotIndex < allSlots.length) {
         // Check if this slot has ANY appointment (advanced or walk-in)
         const hasAppointment = appointments.some(apt => apt.slotIndex === currentSlotIndex);
         if (hasAppointment) {
-          appointmentsSkipped++;
+          appointmentsCounted++;
+          if (appointmentsCounted === walkInTokenAllotment) {
+            // Found the 5th appointment - place W token immediately after this slot
+            fifthAppointmentSlotIndex = currentSlotIndex;
+          }
         }
         currentSlotIndex++;
       }
       
-      targetSlotIndex = currentSlotIndex;
+      if (fifthAppointmentSlotIndex >= 0) {
+        // Place W token immediately after the 5th appointment's slot
+        targetSlotIndex = fifthAppointmentSlotIndex + 1;
+      } else {
+        // If we couldn't find 5 appointments, place at current slot index
+        targetSlotIndex = currentSlotIndex;
+      }
     }
   }
 
@@ -363,26 +385,53 @@ export async function calculateWalkInDetails(
     estimatedTime = addMinutes(now, patientsAhead * slotDuration);
   }
 
-  // Step 7: Get the actual slot time for placement (simply last appointment + averageConsultationTime)
+  // Step 7: Get the actual slot time for placement
   let actualSlotTime: Date;
   
-  // Find the last appointment (A or W) to calculate actual placement time
-  const allAppointments = [...advancedAppointments, ...walkInAppointments];
-  const lastAppointment = allAppointments.length > 0 
-    ? allAppointments.reduce((latest, apt) => {
-        const aptTime = parseTimeString(apt.time, now);
-        const latestTime = parseTimeString(latest.time, now);
-        return aptTime > latestTime ? apt : latest;
-      })
-    : null;
-  
-  if (lastAppointment) {
-    // Simply place W token after last appointment + averageConsultationTime
-    const lastAppointmentTime = parseTimeString(lastAppointment.time, now);
-    actualSlotTime = addMinutes(lastAppointmentTime, slotDuration);
+  // Try to get the slot time directly from the slot array if available
+  if (finalSlotIndex < allSlots.length) {
+    actualSlotTime = allSlots[finalSlotIndex].time;
   } else {
-    // No appointments yet, start from consultation start time
-    actualSlotTime = availabilityStart;
+    // Slot is beyond scheduled hours - calculate based on appointments
+    const allAppointments = [...advancedAppointments, ...walkInAppointments];
+    
+    // In Case B, if we found the 5th appointment, use its time + slotDuration
+    let referenceAppointment: Appointment | null = null;
+    
+    if (lastWalkIn !== null && lastWalkInSlotIndex >= 0 && lastWalkInSlotIndex <= lastAdvancedSlotIndex) {
+      // Case B: Find the 5th appointment after last walk-in
+      const appointmentsAfterLastWalkIn = allAppointments.filter(apt => 
+        (apt.slotIndex ?? 0) > lastWalkInSlotIndex
+      ).sort((a, b) => (a.slotIndex ?? 0) - (b.slotIndex ?? 0));
+      
+      if (appointmentsAfterLastWalkIn.length >= walkInTokenAllotment) {
+        // Found the 5th appointment
+        referenceAppointment = appointmentsAfterLastWalkIn[walkInTokenAllotment - 1];
+      }
+    }
+    
+    if (referenceAppointment) {
+      // Use 5th appointment's time + slotDuration
+      const fifthAppointmentTime = parseTimeString(referenceAppointment.time, now);
+      actualSlotTime = addMinutes(fifthAppointmentTime, slotDuration);
+    } else {
+      // Fallback: Use last appointment's time + slotDuration
+      const lastAppointment = allAppointments.length > 0 
+        ? allAppointments.reduce((latest, apt) => {
+            const aptTime = parseTimeString(apt.time, now);
+            const latestTime = parseTimeString(latest.time, now);
+            return aptTime > latestTime ? apt : latest;
+          })
+        : null;
+      
+      if (lastAppointment) {
+        const lastAppointmentTime = parseTimeString(lastAppointment.time, now);
+        actualSlotTime = addMinutes(lastAppointmentTime, slotDuration);
+      } else {
+        // No appointments yet, start from consultation start time
+        actualSlotTime = availabilityStart;
+      }
+    }
   }
   
   // Step 8: Find appropriate session index for the actual slot time

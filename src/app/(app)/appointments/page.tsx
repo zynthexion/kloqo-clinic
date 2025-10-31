@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useCallback, useTransition } from "react";
@@ -14,10 +15,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Appointment, Doctor, Patient, User } from "@/lib/types";
-import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc, orderBy, limit, onSnapshot } from "firebase/firestore";
+import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc, orderBy, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
-import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes, isAfter, startOfDay, addHours, subDays } from "date-fns";
+import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes, isAfter, startOfDay, addHours } from "date-fns";
 import { updateAppointmentAndDoctorStatuses } from "@/lib/status-update-service";
 import { cn } from "@/lib/utils";
 import {
@@ -67,7 +68,7 @@ import Link from "next/link";
 import { Label } from "@/components/ui/label";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { calculateWalkInDetails, generateNextToken, generateNextTokenAndReserveSlot } from '@/lib/appointment-service';
+import { calculateWalkInDetails } from '@/lib/appointment-service';
 import { sendAppointmentCancelledNotification, sendTokenCalledNotification, sendAppointmentBookedByStaffNotification } from '@/lib/notification-service';
 
 const formSchema = z.object({
@@ -283,40 +284,9 @@ export default function AppointmentsPage() {
 
         setLoading(true);
 
-        // Optimize: Limit to last 2000 appointments to prevent excessive data load
-        // Client-side filtering will further refine by date range
-        const minDate = subDays(new Date(), 90);
-        const currentYear = new Date().getFullYear();
-        
-        // Query with limit to prevent fetching too many documents
-        // We fetch 2000 most recent appointments as a reasonable limit
-        // Note: If you need more, consider pagination or date-based queries
-        const appointmentsQuery = query(
-            collection(db, "appointments"), 
-            where("clinicId", "==", fetchedClinicId),
-            limit(2000) // Safety limit: fetch max 2000 appointments
-        );
-        
+        const appointmentsQuery = query(collection(db, "appointments"), where("clinicId", "==", fetchedClinicId));
         const appointmentsUnsubscribe = onSnapshot(appointmentsQuery, (snapshot) => {
-            let appointmentsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
-            
-            // Client-side filter: Prioritize appointments from last 90 days or current year
-            // This ensures we show recent and upcoming appointments while limiting data
-            const filteredAppointments = appointmentsList.filter(apt => {
-                try {
-                    const aptDate = parse(apt.date, "d MMMM yyyy", new Date());
-                    // Keep if within last 90 days OR from current/future year (for upcoming appointments)
-                    const isRecent = aptDate >= minDate;
-                    const isCurrentOrFutureYear = aptDate.getFullYear() >= currentYear;
-                    return isRecent || isCurrentOrFutureYear;
-                } catch {
-                    // If date parsing fails, include it (safer than excluding valid data)
-                    return true;
-                }
-            });
-            
-            // If after filtering we still have too many, limit to 2000
-            appointmentsList = filteredAppointments.slice(0, 2000);
+            const appointmentsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
             
             // Deduplicate appointments by id
             const uniqueAppointments = appointmentsList.reduce((acc, current) => {
@@ -429,6 +399,28 @@ export default function AppointmentsPage() {
   const selectedDate = form.watch("date");
   const appointmentType = form.watch("bookedVia");
 
+  const generateNextToken = async (date: Date, type: 'A' | 'W'): Promise<{tokenNumber: string, numericToken: number}> => {
+    if (!clinicId || !selectedDoctor) return { tokenNumber: `${type}001`, numericToken: 1 };
+    const dateStr = format(date, "d MMMM yyyy");
+    const appointmentsRef = collection(db, 'appointments');
+    const q = query(
+      appointmentsRef,
+      where('clinicId', '==', clinicId),
+      where('doctor', '==', selectedDoctor.name),
+      where('date', '==', dateStr),
+    );
+    const querySnapshot = await getDocs(q);
+    const tokenNumbers = querySnapshot.docs.map(doc => {
+      const token = doc.data().tokenNumber;
+      if (typeof token === 'string' && (token.startsWith('A') || token.startsWith('W'))) {
+        return parseInt(token.substring(1));
+      }
+      return 0;
+    }).filter(num => !isNaN(num) && num > 0);
+    const lastToken = tokenNumbers.length > 0 ? Math.max(...tokenNumbers) : 0;
+    const nextTokenNum = lastToken + 1;
+    return { tokenNumber: `${type}${String(nextTokenNum).padStart(3, '0')}`, numericToken: nextTokenNum };
+  };
 
   const isWithinBookingWindow = (doctor: Doctor | null): boolean => {
     if (!doctor || !doctor.availabilitySlots) return false;
@@ -436,12 +428,23 @@ export default function AppointmentsPage() {
     const todayStr = format(now, 'EEEE');
     const todaySlots = doctor.availabilitySlots.find(s => s.day === todayStr);
     if (!todaySlots) return false;
+
+    const getTimeOnDate = (timeStr: string, date: Date) => {
+      const newDate = new Date(date);
+      const [time, modifier] = timeStr.split(' ');
+      let [hours, minutes] = time.split(':').map(Number);
+      if (modifier === 'PM' && hours < 12) hours += 12;
+      if (modifier === 'AM' && hours === 12) hours = 0;
+      newDate.setHours(hours, minutes, 0, 0);
+      return newDate;
+    };
+
     for (const session of todaySlots.timeSlots) {
-      const sessionStart = parseTime(session.from, now);
-      const sessionEnd = parseTime(session.to, now);
-      const walkInWindowStart = subMinutes(sessionStart, 30);
-      const walkInWindowEnd = subMinutes(sessionEnd, 30);
-      if (now >= walkInWindowStart && now <= walkInWindowEnd) return true;
+      const sessionStart = getTimeOnDate(session.from, now);
+      const sessionEnd = getTimeOnDate(session.to, now);
+      const bookingWindowStart = subMinutes(sessionStart, 30);
+      const bookingWindowEnd = subMinutes(sessionEnd, 30);
+      if (now >= bookingWindowStart && now <= bookingWindowEnd) return true;
     }
     return false;
   };
@@ -639,10 +642,6 @@ export default function AppointmentsPage() {
           }
           const date = new Date();
           
-          // Use generateNextToken service for walk-ins to ensure sequential numbering
-          const walkInTokenNumber = await generateNextToken(clinicId, selectedDoctor.name, date, 'W');
-          const walkInNumericToken = parseInt(walkInTokenNumber.substring(1), 10);
-          
           const appointmentData: Omit<Appointment, 'id'> = {
             bookedVia: appointmentType,
             clinicId: selectedDoctor.clinicId,
@@ -658,8 +657,8 @@ export default function AppointmentsPage() {
             place: values.place,
             status: 'Pending',
             time: format(walkInEstimate.estimatedTime, "hh:mm a"),
-            tokenNumber: walkInTokenNumber,
-            numericToken: walkInNumericToken,
+            tokenNumber: `W${String(walkInEstimate.numericToken).padStart(3, '0')}`,
+            numericToken: walkInEstimate.numericToken,
             slotIndex: walkInEstimate.slotIndex,
             sessionIndex: walkInEstimate.sessionIndex,
             treatment: "General Consultation",
@@ -678,6 +677,7 @@ export default function AppointmentsPage() {
             return;
           }
           const appointmentId = isEditing && editingAppointment ? editingAppointment.id : doc(collection(db, "appointments")).id;
+          const tokenData = isEditing && editingAppointment ? { tokenNumber: editingAppointment.tokenNumber, numericToken: editingAppointment.numericToken } : await generateNextToken(values.date, 'A');
           const appointmentDateStr = format(values.date, "d MMMM yyyy");
           const appointmentTimeStr = format(parseDateFns(values.time, "HH:mm", new Date()), "hh:mm a");
 
@@ -703,36 +703,6 @@ export default function AppointmentsPage() {
                 currentSlotInSession++;
               }
               if (slotIndex !== -1) break;
-            }
-          }
-
-          // For editing, use existing token; for new appointments, use transaction-based slot reservation
-          let tokenData: { tokenNumber: string; numericToken: number };
-          if (isEditing && editingAppointment) {
-            tokenData = { tokenNumber: editingAppointment.tokenNumber, numericToken: editingAppointment.numericToken };
-          } else {
-            try {
-              // Use transaction-based slot reservation to prevent A token collisions
-              tokenData = await generateNextTokenAndReserveSlot(
-                clinicId,
-                selectedDoctor.name,
-                values.date,
-                'A',
-                {
-                  time: appointmentTimeStr,
-                  slotIndex: slotIndex
-                }
-              );
-            } catch (error: any) {
-              if (error.code === 'SLOT_OCCUPIED' || error.message === 'SLOT_ALREADY_BOOKED') {
-                toast({ 
-                  variant: "destructive", 
-                  title: "Slot Already Booked", 
-                  description: "This time slot is already booked. Please select another time." 
-                });
-                return;
-              }
-              throw error;
             }
           }
 
@@ -870,6 +840,8 @@ export default function AppointmentsPage() {
                 totalAppointments: 0,
                 visitHistory: [],
                 relatedPatientIds: [],
+                isPrimary: true,
+                isKloqoMember: false,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
             };
@@ -983,7 +955,7 @@ export default function AppointmentsPage() {
     startTransition(async () => {
       try {
         const appointmentRef = doc(db, "appointments", appointment.id);
-        await updateDoc(appointmentRef, { status: 'Completed', completedAt: serverTimestamp() });
+        await updateDoc(appointmentRef, { status: 'Completed' });
         setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Completed' as const } : a));
         
         // Send token called notification
@@ -1136,5 +1108,1141 @@ export default function AppointmentsPage() {
       phone: patient.communicationPhone?.replace('+91', ''),
       place: patient.place || "",
     });
+
+    if (patient.relatedPatientIds && patient.relatedPatientIds.length > 0) {
+      const relativePromises = patient.relatedPatientIds.map(id => getFirestoreDoc(doc(db, 'patients', id)));
+      const relativeDocs = await Promise.all(relativePromises);
+      const fetchedRelatives = relativeDocs
+        .filter(doc => doc.exists())
+        .map(doc => ({ id: doc.id, ...doc.data() } as Patient));
+      setRelatives(fetchedRelatives);
+    }
+
+    setPatientSearchTerm(patient.phone.replace('+91', ''));
+    setIsPatientPopoverOpen(false);
   };
+
+  const handleRelativeSelect = (relative: Patient) => {
+    setBookingFor('relative');
+    setSelectedPatient(relative);
+    setHasSelectedOption(true);
+    const capitalizedSex = relative.sex ? (relative.sex.charAt(0).toUpperCase() + relative.sex.slice(1).toLowerCase()) : "Male";
+    form.reset({
+      ...form.getValues(),
+      patientId: relative.id,
+      patientName: relative.name,
+      age: relative.age,
+      sex: capitalizedSex as "Male" | "Female" | "Other",
+      phone: (relative.communicationPhone || primaryPatient?.communicationPhone)?.replace('+91', ''),
+      place: relative.place || "",
+    });
+    toast({ title: `Selected Relative: ${relative.name}`, description: "You are now booking an appointment for the selected relative." });
+  };
+
+  const handleNewRelativeAdded = (newRelative: Patient) => {
+    setRelatives(prev => [...prev, newRelative]);
+    handleRelativeSelect(newRelative);
+  };
+
+  const handlePatientSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/\D/g, '');
+    if (selectedPatient && value !== selectedPatient.phone.replace('+91', '')) {
+      resetForm();
+    }
+    setPatientSearchTerm(value);
+  };
+
+  const availableDaysOfWeek = useMemo(() => {
+    if (!selectedDoctor?.availabilitySlots) return [];
+    const dayNames = selectedDoctor.availabilitySlots.map(s => s.day);
+    return daysOfWeek.reduce((acc, day, index) => {
+      if (dayNames.includes(day)) {
+        acc.push(index);
+      }
+      return acc;
+    }, [] as number[]);
+  }, [selectedDoctor]);
+
+  const leaveDates = useMemo(() => {
+    if (!selectedDoctor?.leaveSlots) return [];
+    return (selectedDoctor.leaveSlots || [])
+    .map(leave => {
+        if (typeof leave === 'string') {
+            try { return parse(leave, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", new Date()); } catch { return null; }
+        }
+        if (leave && leave.date) {
+            try { return parse(leave.date, 'yyyy-MM-dd', new Date()); } catch { return null; }
+        }
+        return null;
+    })
+    .filter((date): date is Date => date !== null);
+  }, [selectedDoctor?.leaveSlots]);
+
+
+  const sessionSlots = useMemo(() => {
+    if (!selectedDate || !selectedDoctor || !selectedDoctor.averageConsultingTime) {
+        return [];
+    }
+
+    const dayOfWeek = daysOfWeek[getDay(selectedDate)];
+    const availabilityForDay = selectedDoctor.availabilitySlots?.find(s => s.day === dayOfWeek);
+    if (!availabilityForDay) return [];
+
+    const formattedDate = format(selectedDate, "d MMMM yyyy");
+    const otherAppointments = appointments.filter(apt => !(isEditing && apt.id === editingAppointment?.id));
+    
+    const bookedSlotsForDay = otherAppointments
+      .filter(apt => apt.doctor === selectedDoctor.name && apt.date === formattedDate)
+      .map(apt => apt.time);
+    
+    const leaveForDate = selectedDoctor.leaveSlots?.find(ls => typeof ls !== 'string' && ls.date && isSameDay(parse(ls.date, 'yyyy-MM-dd', new Date()), selectedDate));
+    const leaveTimeSlots = leaveForDate && typeof leaveForDate !== 'string' ? leaveForDate.slots : [];
+
+    const sessions = availabilityForDay.timeSlots.map((session, sessionIndex) => {
+      const slots = [];
+      let availableCount = 0;
+      let currentTime = parseDateFns(session.from, 'hh:mm a', selectedDate);
+      const endTime = parseDateFns(session.to, 'hh:mm a', selectedDate);
+
+      while (currentTime < endTime) {
+        const slotTime = format(currentTime, "hh:mm a");
+        let status: 'available' | 'booked' | 'leave' = 'available';
+
+        if (bookedSlotsForDay.includes(slotTime)) {
+          status = 'booked';
+        } else if (leaveTimeSlots.some((leaveSlot: any) => {
+          const leaveStart = parseDateFns(leaveSlot.from, 'hh:mm a', selectedDate);
+          const leaveEnd = parseDateFns(leaveSlot.to, 'hh:mm a', selectedDate);
+          return currentTime >= leaveStart && currentTime < leaveEnd;
+        })) {
+          status = 'leave';
+        }
+
+        if (isToday(selectedDate) && isBefore(currentTime, subMinutes(new Date(), 30))) {
+            status = 'booked'; 
+        }
+
+        if (status === 'available') {
+            if (availableCount < MAX_VISIBLE_SLOTS) {
+                slots.push({ time: slotTime, status });
+                availableCount++;
+            }
+        } else {
+            slots.push({ time: slotTime, status });
+        }
+        
+        currentTime = new Date(currentTime.getTime() + selectedDoctor.averageConsultingTime! * 60000);
+      }
+      
+      const sessionTitle = `Session ${sessionIndex + 1} (${session.from} - ${session.to})`;
+      return { title: sessionTitle, slots };
+    });
+
+    return sessions.filter(s => s.slots.length > 0);
+  }, [selectedDate, selectedDoctor, appointments, isEditing, editingAppointment]);
+
+  const isAppointmentOnLeave = (appointment: Appointment): boolean => {
+      if (!doctors.length || !appointment) return false;
+      const doctorForApt = doctors.find(d => d.name === appointment.doctor);
+      if (!doctorForApt || !doctorForApt.leaveSlots) return false;
+      const aptDate = parse(appointment.date, "d MMMM yyyy", new Date());
+      
+      return (doctorForApt.leaveSlots || []).some(leave => {
+        if (typeof leave === 'string') {
+            const leaveDate = parse(leave, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", new Date());
+            const aptTime = parse(appointment.time, "hh:mm a", aptDate);
+            return leaveDate.getTime() === aptTime.getTime();
+        }
+        if (leave.date && isSameDay(parse(leave.date, "yyyy-MM-dd", new Date()), aptDate)) {
+            const aptTime = parseDateFns(appointment.time, "hh:mm a", new Date(0));
+            return leave.slots.some((leaveSlot: any) => {
+                const leaveStart = parseDateFns(leaveSlot.from, "hh:mm a", new Date(0));
+                const leaveEnd = parseDateFns(leaveSlot.to, "hh:mm a", new Date(0));
+                return aptTime >= leaveStart && aptTime < leaveEnd;
+            });
+        }
+        return false;
+    });
+  };
+
+  const filteredAppointments = useMemo(() => {
+    const searchTermLower = drawerSearchTerm.toLowerCase();
+    let filtered = appointments;
+
+    if (drawerDateRange && (drawerDateRange.from || drawerDateRange.to)) {
+      filtered = filtered.filter(apt => {
+        try {
+          const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
+          const from = drawerDateRange.from ? new Date(drawerDateRange.from.setHours(0, 0, 0, 0)) : null;
+          const to = drawerDateRange.to ? new Date(drawerDateRange.to.setHours(23, 59, 59, 999)) : null;
+          if (from && to) return aptDate >= from && aptDate <= to;
+          if (from) return aptDate >= from;
+          if (to) return aptDate <= to;
+          return true;
+        } catch {
+          return true;
+        }
+      });
+    }
+
+    if (selectedDrawerDoctor && selectedDrawerDoctor !== 'all') {
+      filtered = filtered.filter(apt => apt.doctor === selectedDrawerDoctor);
+    }
+
+    if (searchTermLower) {
+      filtered = filtered.filter(apt =>
+        apt.patientName.toLowerCase().includes(searchTermLower) ||
+        apt.doctor.toLowerCase().includes(searchTermLower) ||
+        apt.department.toLowerCase().includes(searchTermLower)
+      );
+    }
+
+    if (activeTab === 'upcoming') {
+      filtered = filtered.filter(apt => {
+        try {
+          const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
+          return (apt.status === 'Confirmed' || apt.status === 'Pending') && (isFuture(aptDate) || isToday(aptDate));
+        } catch (e) {
+          return false;
+        }
+      });
+    } else if (activeTab === 'completed') {
+      filtered = filtered.filter(apt => apt.status === 'Completed');
+    } else if (activeTab !== 'all') {
+      filtered = filtered.filter(apt => apt.status.toLowerCase() === activeTab);
+    }
+
+    return filtered.sort((a, b) => {
+      try {
+        const dateA = new Date(`${a.date} ${a.time}`).getTime();
+        const dateB = new Date(`${b.date} ${b.time}`).getTime();
+        return dateA - dateB;
+      } catch (e) {
+        return 0;
+      }
+    });
+  }, [appointments, drawerSearchTerm, activeTab, drawerDateRange, selectedDrawerDoctor]);
+
+  const today = format(new Date(), "d MMMM yyyy");
+  
+  const todaysAppointments = useMemo(() => {
+    const filteredForToday = filteredAppointments.filter(apt => apt.date === today);
+    const skipped = filteredForToday.filter(apt => apt.status === 'Skipped');
+    const notSkipped = filteredForToday.filter(apt => apt.status !== 'Skipped');
+  
+    const parseTimeForSort = (timeStr: string) => parse(timeStr, "hh:mm a", new Date()).getTime();
+  
+    // Sort by time first, then by appointment type (A before W)
+    notSkipped.sort((a, b) => {
+      const timeA = parseTimeForSort(a.time);
+      const timeB = parseTimeForSort(b.time);
+      
+      // If times are different, sort by time
+      if (timeA !== timeB) {
+        return timeA - timeB;
+      }
+      
+      // If times are the same, sort by appointment type (A before W)
+      const typeA = a.bookedVia === 'Advanced Booking' ? 0 : 1;
+      const typeB = b.bookedVia === 'Advanced Booking' ? 0 : 1;
+      return typeA - typeB;
+    });
+  
+    return [...notSkipped, ...skipped];
+  }, [filteredAppointments, today]);
+
+  const isNewPatient = patientSearchTerm.length >= 10 && !selectedPatient;
+  const isKloqoMember = primaryPatient && !primaryPatient.clinicIds?.includes(clinicId!);
+  
+  const isDateDisabled = (date: Date) => {
+    if (!selectedDoctor) return true;
+  
+    const isPastDate = isBefore(date, startOfDay(new Date()));
+    const isNotAvailableDay = !availableDaysOfWeek.includes(getDay(date));
+    const isOnLeave = leaveDates.some(leaveDate => isSameDay(date, leaveDate));
+  
+    if (isPastDate || isNotAvailableDay || isOnLeave) {
+      return true;
+    }
+  
+    if (isToday(date) && appointmentType === 'Advanced Booking') {
+        const todaysSlots = selectedDoctor.availabilitySlots?.find(s => s.day === format(date, 'EEEE'))?.timeSlots;
+        if (!todaysSlots) return true;
+
+        // Check if ALL sessions for today are past the booking cutoff.
+        const allSessionsUnbookable = todaysSlots.every(session => {
+            const sessionStartTime = parseTime(session.from, date);
+            return isAfter(new Date(), subMinutes(sessionStartTime, 30));
+        });
+        
+        return allSessionsUnbookable;
+    }
+  
+    return false;
+  };
+  
+  const firstUpcomingDoctor = useMemo(() => {
+    if (todaysAppointments.length === 0) return null;
+    const firstUpcomingAppointment = todaysAppointments.find(apt => apt.status !== 'Skipped' && (apt.status === 'Confirmed' || apt.status === 'Pending'));
+    if (!firstUpcomingAppointment) return null;
+    return doctors.find(d => d.name === firstUpcomingAppointment.doctor) || null;
+  }, [todaysAppointments, doctors]);
+  
+  const isDoctorInConsultation = firstUpcomingDoctor?.consultationStatus === 'In';
+
+  const isBookingButtonDisabled = useMemo(() => {
+    if (isPending) return true;
+    if (appointmentType === 'Walk-in') {
+        return !form.getValues('patientName') || !walkInEstimate || isCalculatingEstimate;
+    }
+    return !form.formState.isValid;
+  }, [isPending, appointmentType, walkInEstimate, isCalculatingEstimate, form.formState.isValid, form.getValues('patientName')]);
+
+
+  return (
+    <>
+      <div className="flex-1 overflow-auto">
+        <main className="p-6">
+          <div className={cn("grid gap-6 transition-all duration-300 ease-in-out", isDrawerExpanded ? "grid-cols-1 md:grid-cols-[2fr_auto_10fr]" : "grid-cols-1 md:grid-cols-[8fr_auto_4fr]")}>
+            <main>
+              <Card>
+                <CardHeader>
+                  <CardTitle>{isEditing ? "Reschedule Appointment" : "Book New Appointment"}</CardTitle>
+                  <CardDescription>
+                    {isEditing ? "Update the details for this appointment." : "Fill in the details below to book a new appointment."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                      <div className="space-y-4">
+                      <Popover open={isPatientPopoverOpen} onOpenChange={setIsPatientPopoverOpen}>
+                        <PopoverTrigger asChild>
+                            <FormItem>
+                            <FormLabel>Search Patient by Phone</FormLabel>
+                                <div className="relative">
+                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                <FormControl>
+                                    <Input
+                                    ref={patientInputRef}
+                                    placeholder="Start typing 10-digit phone number..."
+                                    value={patientSearchTerm}
+                                    onChange={handlePatientSearchChange}
+                                    onFocus={() => setIsDrawerExpanded(false)}
+                                    className="pl-8"
+                                    maxLength={10}
+                                    />
+                                </FormControl>
+                                </div>
+                            <FormMessage />
+                            </FormItem>
+                        </PopoverTrigger>
+
+                        <PopoverContent onOpenAutoFocus={(e) => e.preventDefault()} className="w-[--radix-popover-trigger-width] p-0" align="start">
+                            <Command>
+                            <CommandList>
+                                {(isPending ? (
+                                    <div className="p-4 text-center text-sm text-muted-foreground">Searching...</div>
+                                ) : patientSearchTerm.length >= 5 ? (
+                                  <CommandGroup>
+                                    {/* Show existing patients if found */}
+                                    {patientSearchResults.map((patient) => {
+                                      const isClinicPatient = patient.clinicIds?.includes(clinicId!);
+                                      return (
+                                        <CommandItem
+                                          key={patient.id}
+                                          value={patient.phone}
+                                          onSelect={() => {
+                                            handlePatientSelect(patient);
+                                            setHasSelectedOption(true);
+                                            setIsPatientPopoverOpen(false);
+                                          }}
+                                          className="flex justify-between items-center"
+                                        >
+                                          <div>
+                                            {patient.name || "Unnamed Patient"}
+                                            <span className="text-xs text-muted-foreground ml-2">{patient.phone}</span>
+                                          </div>
+                                          <Badge variant={isClinicPatient ? "secondary" : "outline"} className={cn(
+                                            isClinicPatient ? "text-blue-600 border-blue-500" : "text-amber-600 border-amber-500"
+                                          )}>
+                                            {isClinicPatient ? (
+                                              <UserCheck className="mr-1.5 h-3 w-3" />
+                                            ) : (
+                                              <Crown className="mr-1.5 h-3 w-3" />
+                                            )}
+                                            {isClinicPatient ? "Existing Patient" : "Kloqo Member"}
+                                          </Badge>
+                                        </CommandItem>
+                                      )
+                                    })}
+                                    
+                                    {/* Always show "Add as new patient" option */}
+                                    <CommandItem
+                                      value="add-new-patient"
+                                      onSelect={() => {
+                                        setSelectedPatient(null);
+                                        setPrimaryPatient(null);
+                                        setHasSelectedOption(true);
+                                        setIsPatientPopoverOpen(false);
+                                        form.reset({
+                                          ...form.getValues(),
+                                          patientName: "",
+                                          age: undefined,
+                                          sex: "Male",
+                                          phone: patientSearchTerm,
+                                          place: "",
+                                          doctor: doctors.length > 0 ? doctors[0].id : "",
+                                          department: doctors.length > 0 ? doctors[0].department || "" : "",
+                                          date: undefined,
+                                          time: undefined,
+                                          bookedVia: "Advanced Booking",
+                                        });
+                                      }}
+                                      className="flex items-center space-x-2 py-2 text-blue-600 hover:text-blue-700 border-t"
+                                    >
+                                      <Plus className="h-4 w-4" />
+                                      <span>Add as new patient</span>
+                                    </CommandItem>
+                                  </CommandGroup>
+                                ) : (
+                                   patientSearchTerm.length >= 5 && <CommandEmpty>No patient found.</CommandEmpty>
+                                ))}
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                         {!isDrawerExpanded && (
+                           <div className="border p-4 rounded-lg space-y-4">
+                            <div className="flex justify-between items-center">
+                              <Label>Send Patient Booking Link</Label>
+                              <Button type="button" onClick={handleSendLink} disabled={isSendingLink || patientSearchTerm.length < 10}>
+                                  {isSendingLink ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <LinkIcon className="mr-2 h-4 w-4" />}
+                                  Send Link
+                              </Button>
+                            </div>
+                            
+                            {/* Channel Selection Cards */}
+                            <div className="grid grid-cols-2 gap-3">
+                              <div
+                                className={cn(
+                                  "p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 hover:shadow-md",
+                                  linkChannel === 'sms' 
+                                    ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20" 
+                                    : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                                )}
+                                onClick={() => setLinkChannel('sms')}
+                              >
+                                <div className="flex items-center space-x-3">
+                                  <div className={cn(
+                                    "w-5 h-5 rounded-full border-2 flex items-center justify-center",
+                                    linkChannel === 'sms' 
+                                      ? "border-blue-500 bg-blue-500" 
+                                      : "border-gray-300 dark:border-gray-600"
+                                  )}>
+                                    {linkChannel === 'sms' && (
+                                      <div className="w-2 h-2 rounded-full bg-white" />
+                                    )}
+                                  </div>
+                                  <MessageSquare className={cn(
+                                    "h-5 w-5",
+                                    linkChannel === 'sms' ? "text-blue-600" : "text-gray-500"
+                                  )} />
+                                  <span className={cn(
+                                    "font-medium",
+                                    linkChannel === 'sms' ? "text-blue-700 dark:text-blue-300" : "text-gray-700 dark:text-gray-300"
+                                  )}>
+                                    SMS
+                                  </span>
+                                </div>
+                              </div>
+                              
+                              <div
+                                className={cn(
+                                  "p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 hover:shadow-md",
+                                  linkChannel === 'whatsapp' 
+                                    ? "border-green-500 bg-green-50 dark:bg-green-950/20" 
+                                    : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                                )}
+                                onClick={() => setLinkChannel('whatsapp')}
+                              >
+                                <div className="flex items-center space-x-3">
+                                  <div className={cn(
+                                    "w-5 h-5 rounded-full border-2 flex items-center justify-center",
+                                    linkChannel === 'whatsapp' 
+                                      ? "border-green-500 bg-green-500" 
+                                      : "border-gray-300 dark:border-gray-600"
+                                  )}>
+                                    {linkChannel === 'whatsapp' && (
+                                      <div className="w-2 h-2 rounded-full bg-white" />
+                                    )}
+                                  </div>
+                                  <Smartphone className={cn(
+                                    "h-5 w-5",
+                                    linkChannel === 'whatsapp' ? "text-green-600" : "text-gray-500"
+                                  )} />
+                                  <span className={cn(
+                                    "font-medium",
+                                    linkChannel === 'whatsapp' ? "text-green-700 dark:text-green-300" : "text-gray-700 dark:text-gray-300"
+                                  )}>
+                                    WhatsApp
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                         )}
+                      </div>
+                      
+                      {(selectedPatient || hasSelectedOption || isEditing) && (
+                        <>
+                          <div className="pt-4 border-t">
+                            {primaryPatient && !isEditing && (
+                              <div className="mb-4">
+                                <Tabs value={bookingFor} onValueChange={(value) => {
+                                  setBookingFor(value);
+                                  if (value === 'member' && primaryPatient) {
+                                    setSelectedPatient(primaryPatient);
+                                    const capitalizedSex = primaryPatient.sex ? (primaryPatient.sex.charAt(0).toUpperCase() + primaryPatient.sex.slice(1).toLowerCase()) : "Male";
+                                    form.reset({
+                                      ...form.getValues(),
+                                      patientId: primaryPatient.id,
+                                      patientName: primaryPatient.name,
+                                      age: primaryPatient.age,
+                                      sex: capitalizedSex as "Male" | "Female" | "Other",
+                                      phone: primaryPatient.communicationPhone?.replace('+91', '') || '',
+                                      place: primaryPatient.place || "",
+                                    });
+                                  }
+                                }}>
+                                  <TabsList className="grid w-full grid-cols-2 bg-muted/30">
+                                    <TabsTrigger 
+                                      value="member" 
+                                      className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary data-[state=active]:border-primary/30 data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:bg-primary/10 transition-all duration-200"
+                                    >
+                                      For Member
+                                    </TabsTrigger>
+                                    <TabsTrigger 
+                                      value="relative"
+                                      className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary data-[state=active]:border-primary/30 data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:bg-primary/10 transition-all duration-200"
+                                    >
+                                      For a Relative
+                                    </TabsTrigger>
+                                  </TabsList>
+                                  <TabsContent value="member" className="mt-4">
+                                    <div className="text-sm p-4 bg-muted/50 rounded-lg">
+                                      <p><strong>Name:</strong> {primaryPatient.name}</p>
+                                      <p><strong>Place:</strong> {primaryPatient.place}</p>
+                                    </div>
+                                  </TabsContent>
+                                  <TabsContent value="relative">
+                                    <Card>
+                                      <CardHeader>
+                                        <CardTitle className="text-base">Relatives</CardTitle>
+                                        <CardDescription className="text-xs">Book for an existing relative or add a new one.</CardDescription>
+                                      </CardHeader>
+                                      <CardContent className="space-y-3">
+                                        {relatives.length > 0 ? (
+                                          <ScrollArea className="h-40">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                                              {relatives.map((relative) => (
+                                                <div
+                                                  key={relative.id}
+                                                  className="flex flex-col items-center justify-center p-3 rounded-lg border bg-card hover:bg-muted/50 cursor-pointer text-center"
+                                                  onClick={() => handleRelativeSelect(relative)}
+                                                >
+                                                  <Avatar className="h-10 w-10 mb-2">
+                                                    <AvatarFallback>{relative.name.charAt(0)}</AvatarFallback>
+                                                  </Avatar>
+                                                  <div>
+                                                    <p className="text-sm font-medium">{relative.name}</p>
+                                                    <p className="text-xs text-muted-foreground">{relative.sex}, {relative.age} years</p>
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </ScrollArea>
+                                        ) : (
+                                          <div className="text-center py-4 space-y-2">
+                                            <p className="text-xs text-muted-foreground">No relatives found for this patient.</p>
+                                            <Button type="button" size="sm" variant="outline" onClick={() => setIsAddRelativeDialogOpen(true)}>
+                                                <UserPlus className="mr-2 h-4 w-4" />
+                                                Add New Relative
+                                            </Button>
+                                          </div>
+                                        )}
+                                        {relatives.length > 0 && (
+                                          <Button type="button" className="w-full" variant="outline" onClick={() => setIsAddRelativeDialogOpen(true)}>
+                                              <UserPlus className="mr-2 h-4 w-4" />
+                                              Add New Relative
+                                          </Button>
+                                        )}
+                                      </CardContent>
+                                    </Card>
+                                  </TabsContent>
+                                </Tabs>
+                              </div>
+                            )}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4 mt-4">
+                              <div className="space-y-4 md:col-span-1">
+                                <h3 className="text-lg font-medium border-b pb-2 flex items-center justify-between">
+                                  Patient Details
+                                </h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                  <FormField control={form.control} name="patientName" render={({ field }) => (
+                                    <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                                  )} />
+                                  <FormField control={form.control} name="age" render={({ field }) => (
+                                    <FormItem><FormLabel>Age</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
+                                  )} />
+                                  <FormField control={form.control} name="sex" render={({ field }) => (
+                                    <FormItem><FormLabel>Gender</FormLabel>
+                                      <Select onValueChange={field.onChange} value={field.value}>
+                                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                        <SelectContent>
+                                          <SelectItem value="Male">Male</SelectItem>
+                                          <SelectItem value="Female">Female</SelectItem>
+                                          <SelectItem value="Other">Other</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )} />
+                                  <FormField control={form.control} name="place" render={({ field }) => (
+                                    <FormItem><FormLabel>Place</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                                  )} />
+                                </div>
+                                
+                                 <FormField
+                                    control={form.control}
+                                    name="phone"
+                                    render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Communication Phone</FormLabel>
+                                        <FormControl>
+                                        <Input
+                                            type="tel"
+                                            placeholder="Auto-filled"
+                                            {...field}
+                                            disabled
+                                        />
+                                        </FormControl>
+                                        <FormDescription className="text-xs">This number will be used for appointment communication.</FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                />
+                              </div>
+                              <div className="space-y-4 md:col-span-1">
+                                <h3 className="text-lg font-medium border-b pb-2">Appointment Details</h3>
+                                {appointmentType === 'Advanced Booking' ? (
+                                  <FormField control={form.control} name="date" render={({ field }) => (
+                                    <FormItem className="flex flex-col">
+                                      <FormLabel>Select Date</FormLabel>
+                                      <Calendar
+                                        className="bg-primary text-primary-foreground rounded-md [&_button:hover]:bg-primary/80 [&_.rdp-day_today]:bg-primary-foreground/20 [&_button]:text-primary-foreground"
+                                        mode="single"
+                                        selected={field.value}
+                                        onSelect={(date) => {
+                                          if (date) field.onChange(date);
+                                          form.clearErrors("date");
+                                        }}
+                                        disabled={isDateDisabled}
+                                        initialFocus
+                                        modifiers={selectedDoctor ? { available: { dayOfWeek: availableDaysOfWeek }, leave: leaveDates } : { leave: leaveDates }}
+                                        modifiersStyles={{
+                                          available: { backgroundColor: 'hsl(var(--accent))', color: 'hsl(var(--accent-foreground))' },
+                                          leave: { backgroundColor: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' },
+                                        }}
+                                      />
+                                      <FormMessage />
+                                    </FormItem>
+                                  )} />
+                                ) : (
+                                  <Card className={cn("mt-4", walkInEstimate ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200")}>
+                                      <CardHeader className="flex-row items-start gap-3 space-y-0 p-4">
+                                        <Info className={cn("w-6 h-6 mt-1", walkInEstimate ? "text-green-600" : "text-red-600")} />
+                                        <div>
+                                            <CardTitle className="text-base">{walkInEstimate ? "Walk-in Available" : "Walk-in Unavailable"}</CardTitle>
+                                            <CardDescription className={cn("text-xs", walkInEstimate ? "text-green-800" : "text-red-800")}>
+                                                {walkInEstimate ? "Estimated waiting time is shown below." : "This doctor is not available for walk-ins at this time."}
+                                            </CardDescription>
+                                        </div>
+                                      </CardHeader>
+                                      {walkInEstimate && (
+                                        <CardContent className="p-4 pt-0">
+                                            {isCalculatingEstimate ? (
+                                                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Calculating wait time...</div>
+                                            ) : (
+                                                <div className="grid grid-cols-2 gap-2 text-center">
+                                                  <div>
+                                                      <p className="text-xs text-muted-foreground">Est. Time</p>
+                                                      <p className="font-bold text-lg">~{format(walkInEstimate.estimatedTime, 'hh:mm a')}</p>
+                                                  </div>
+                                                  <div>
+                                                      <p className="text-xs text-muted-foreground">Queue</p>
+                                                      <p className="font-bold text-lg">{walkInEstimate.patientsAhead} ahead</p>
+                                                  </div>
+                                                </div>
+                                            )}
+                                        </CardContent>
+                                      )}
+                                  </Card>
+                                )}
+                              </div>
+                              <div className="space-y-4 md:col-span-1">
+                                <h3 className="text-lg font-medium border-b pb-2">Doctor & Time</h3>
+                                
+                                {/* Appointment Type Selection */}
+                                <div className="space-y-2">
+                                  <Label className="text-sm font-medium">Appointment Type</Label>
+                                  <RadioGroup onValueChange={(value) => form.setValue('bookedVia', value as any)} value={form.watch('bookedVia')} className="flex items-center space-x-2">
+                                    <Label htmlFor="advanced-booking" className={cn(
+                                      "flex-1 px-4 py-3 rounded-md cursor-pointer transition-all duration-200 border-2 text-center font-medium flex items-center justify-center min-h-[4rem]",
+                                      form.watch('bookedVia') === 'Advanced Booking' 
+                                        ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950/20 dark:text-blue-300" 
+                                        : "border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-gray-600 dark:hover:bg-gray-700"
+                                    )}>
+                                      <RadioGroupItem value="Advanced Booking" id="advanced-booking" className="sr-only" />
+                                      Advanced Booking
+                                    </Label>
+                                    <Label htmlFor="walk-in" className={cn(
+                                      "flex-1 px-4 py-3 rounded-md cursor-pointer transition-all duration-200 border-2 text-center font-medium flex items-center justify-center min-h-[4rem]",
+                                      form.watch('bookedVia') === 'Walk-in' 
+                                        ? "border-green-500 bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-300" 
+                                        : "border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-gray-600 dark:hover:bg-gray-700"
+                                    )}>
+                                      <RadioGroupItem value="Walk-in" id="walk-in" className="sr-only" />
+                                      Walk-in
+                                    </Label>
+                                  </RadioGroup>
+                                </div>
+                                <FormField control={form.control} name="doctor" render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Doctor</FormLabel>
+                                    <Select onValueChange={onDoctorChange} defaultValue={doctors.length > 0 ? doctors[0].id : ""} value={field.value}>
+                                      <FormControl>
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Select a doctor" />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                        {doctors.map(doc => (
+                                          <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                  </FormItem>
+                                )} />
+                                <FormField control={form.control} name="department" render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Department</FormLabel>
+                                    <FormControl>
+                                      <Input readOnly placeholder="Department" {...field} value={field.value ?? ''} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )} />
+                                {appointmentType === 'Advanced Booking' && selectedDoctor && selectedDate && (
+                                    <div className="space-y-4 max-h-60 overflow-y-auto pr-2">
+                                        {sessionSlots.length > 0 ? (
+                                            sessionSlots.map((session, index) => (
+                                                <div key={index}>
+                                                    <h4 className="text-sm font-semibold mb-2">{session.title}</h4>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        {session.slots.map(slot => (
+                                                            <Button
+                                                                key={slot.time}
+                                                                type="button"
+                                                                variant={form.getValues("time") === format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm') ? "default" : "outline"}
+                                                                onClick={() => {
+                                                                    const val = format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm');
+                                                                    form.setValue("time", val, { shouldValidate: true });
+                                                                    if (val) form.clearErrors("time");
+                                                                }}
+                                                                disabled={slot.status !== 'available'}
+                                                                className={cn("text-xs", {
+                                                                    "line-through bg-muted text-muted-foreground": slot.status === 'booked',
+                                                                    "line-through bg-destructive/20 text-destructive-foreground": slot.status === 'leave',
+                                                                })}
+                                                            >
+                                                                {slot.time}
+                                                            </Button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : <p className="text-sm text-muted-foreground col-span-2">No available slots for this day.</p>}
+                                    </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex justify-end items-center pt-4">
+                            <div className="flex justify-end gap-2">
+                              {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
+                              <Button
+                                type="submit"
+                                disabled={isBookingButtonDisabled}
+                               >
+                                {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                {isEditing ? "Save Changes" : "Book Appointment"}
+                              </Button>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </form>
+                  </Form>
+                </CardContent>
+              </Card>
+            </main>
+            <div className="flex items-center justify-center">
+              <Button
+                variant="outline"
+                size="icon"
+                className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground z-10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsDrawerExpanded(!isDrawerExpanded);
+                }}
+              >
+                {isDrawerExpanded ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
+              </Button>
+            </div>
+            <div className={cn("h-full", isDrawerExpanded ? "w-full" : "w-auto")}>
+              <div className={cn("h-full w-full", isDrawerExpanded ? "p-0" : "")}>
+                <Card className="h-full rounded-2xl">
+                  <CardHeader className={cn("border-b", isDrawerExpanded ? "p-4" : "p-4 space-y-3")}>
+                    {isDrawerExpanded ? (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <CardTitle>Appointment Details</CardTitle>
+                          <Tabs value={activeTab} onValueChange={setActiveTab}>
+                            <TabsList>
+                              <TabsTrigger value="all">All</TabsTrigger>
+                              <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
+                              <TabsTrigger value="completed">Completed</TabsTrigger>
+                              <TabsTrigger value="no-show">No-show</TabsTrigger>
+                            </TabsList>
+                          </Tabs>
+                        </div>
+                        <div className="flex items-center gap-2 mt-2 w-full">
+                          <div className="relative flex-1">
+                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              type="search"
+                              placeholder="Search by patient, doctor, department..."
+                              className="w-full rounded-lg bg-background pl-8 h-9"
+                              value={drawerSearchTerm}
+                              onChange={(e) => setDrawerSearchTerm(e.target.value)}
+                            />
+                          </div>
+                          <DateRangePicker
+                            initialDateRange={drawerDateRange}
+                            onDateChange={setDrawerDateRange}
+                            className="mx-2"
+                          />
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="outline" size="icon">
+                                <Stethoscope className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                              <DropdownMenuItem onClick={() => setSelectedDrawerDoctor('all')}>All Doctors</DropdownMenuItem>
+                              {doctors.map(doc => (
+                                <DropdownMenuItem key={doc.id} onClick={() => setSelectedDrawerDoctor(doc.name)}>{doc.name}</DropdownMenuItem>
+                              ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            {selectedDrawerDoctor && selectedDrawerDoctor !== 'all' ? `Doctor: ${selectedDrawerDoctor}` : 'All Doctors'}
+                          </span>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={async () => {
+                              console.log('Manual status update triggered');
+                              if (clinicId) {
+                                try {
+                                  await updateAppointmentAndDoctorStatuses(clinicId);
+                                  console.log('Manual status update completed');
+                                } catch (error) {
+                                  console.error('Manual status update failed:', error);
+                                }
+                              }
+                            }}
+                            className="ml-2"
+                          >
+                            Update Status
+                          </Button>
+                          <Button variant="outline" size="icon">
+                            <Printer className="h-4 w-4" />
+                          </Button>
+                          <Button variant="outline" size="icon">
+                            <FileDown className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <CardTitle>Today's Appointments</CardTitle>
+                        <div className="relative">
+                          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            type="search"
+                            placeholder="Search by patient, doctor..."
+                            className="w-full rounded-lg bg-background pl-8 h-9"
+                            value={drawerSearchTerm}
+                            onChange={(e) => setDrawerSearchTerm(e.target.value)}
+                          />
+                        </div>
+                        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                          <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
+                            <TabsTrigger value="skipped">Skipped</TabsTrigger>
+                          </TabsList>
+                        </Tabs>
+                      </>
+                    )}
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <ScrollArea className="h-[calc(100vh-15rem)]">
+                      {loading ? (
+                        <div className="p-6">
+                          {Array.from({ length: 10 }).map((_, i) => (
+                            <div key={i} className="p-3 rounded-lg border bg-muted animate-pulse h-20 mb-3"></div>
+                          ))}
+                        </div>
+                      ) : isDrawerExpanded ? (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Patient</TableHead>
+                              <TableHead>Age</TableHead>
+                              <TableHead>Gender</TableHead>
+                              <TableHead>Phone</TableHead>
+                              <TableHead>Place</TableHead>
+                              <TableHead>Doctor</TableHead>
+                              <TableHead>Department</TableHead>
+                              <TableHead>Date</TableHead>
+                              <TableHead>Time</TableHead>
+                              <TableHead>Booked Via</TableHead>
+                              <TableHead>Token</TableHead>
+                              <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredAppointments.map((appointment, index) => (
+                              <TableRow key={`${appointment.id}-${index}`} className={cn(
+                                isAppointmentOnLeave(appointment) && "bg-red-100 dark:bg-red-900/30",
+                                appointment.status === 'Skipped' && "bg-orange-100 dark:bg-orange-900/30"
+                              )}>
+                                <TableCell className="font-medium">{appointment.patientName}</TableCell>
+                                <TableCell>{appointment.age}</TableCell>
+                                <TableCell>{appointment.sex}</TableCell>
+                                <TableCell>{appointment.communicationPhone}</TableCell>
+                                <TableCell>{appointment.place}</TableCell>
+                                <TableCell>{appointment.doctor}</TableCell>
+                                <TableCell>{appointment.department}</TableCell>
+                                <TableCell>{format(parse(appointment.date, "d MMMM yyyy", new Date()), "MMM d, yy")}</TableCell>
+                                <TableCell>{appointment.time}</TableCell>
+                                <TableCell>{appointment.bookedVia}</TableCell>
+                                <TableCell>{appointment.tokenNumber}</TableCell>
+                                <TableCell className="text-right">
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" className="h-8 w-8 p-0">
+                                        <span className="sr-only">Open menu</span>
+                                        <MoreHorizontal className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem>
+                                        <Eye className="mr-2 h-4 w-4" />
+                                        View
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => setEditingAppointment(appointment)}>
+                                        <Edit className="mr-2 h-4 w-4" />
+                                        Edit
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => handleDelete(appointment.id)} className="text-red-600">
+                                        <Trash2 className="mr-2 h-4 w-4" />
+                                        Delete
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      ) : (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Patient</TableHead>
+                              <TableHead>Token</TableHead>
+                              <TableHead>Time</TableHead>
+                              <TableHead className="text-right">{activeTab === 'skipped' ? 'Status' : 'Actions'}</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {todaysAppointments
+                              .filter(apt => activeTab === 'upcoming' ? (apt.status === 'Confirmed' || apt.status === 'Pending') : apt.status === 'Skipped')
+                              .map((appointment, index) => (
+                                <TableRow
+                                  key={`${appointment.id}-${index}`}
+                                  className={cn(
+                                    appointment.status === 'Skipped' && "bg-red-200/50 dark:bg-red-900/60"
+                                  )}
+                                >
+                                  <TableCell className="font-medium">{appointment.patientName}</TableCell>
+                                  <TableCell>{appointment.tokenNumber}</TableCell>
+                                  <TableCell>{appointment.time}</TableCell>
+                                  <TableCell className="text-right">
+                                    {activeTab === 'skipped' ? (
+                                      <div className="flex justify-end gap-2">
+                                        <Badge variant="destructive">Skipped</Badge>
+                                        <TooltipProvider>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="p-0 h-auto text-blue-600 hover:text-blue-700"
+                                                onClick={() => handleRejoinQueue(appointment)}
+                                              >
+                                                <Repeat className="h-5 w-5" />
+                                              </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <p>Re-Join Queue</p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        </TooltipProvider>
+                                      </div>
+                                    ) : (
+                                        <div className="flex justify-end gap-2">
+                                            {index === 0 && appointment.status !== 'Skipped' && (
+                                                <TooltipProvider>
+                                                  <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                      <div>
+                                                        <Button
+                                                          variant="ghost"
+                                                          size="icon"
+                                                          className="p-0 h-auto text-green-600 hover:text-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                          onClick={() => handleComplete(appointment)}
+                                                          disabled={!isDoctorInConsultation}
+                                                        >
+                                                          <CheckCircle2 className="h-5 w-5" />
+                                                        </Button>
+                                                      </div>
+                                                    </TooltipTrigger>
+                                                    {!isDoctorInConsultation && (
+                                                      <TooltipContent>
+                                                        <p>Doctor is not in consultation.</p>
+                                                      </TooltipContent>
+                                                    )}
+                                                  </Tooltip>
+                                                </TooltipProvider>
+                                            )}
+                                            {index === 0 && activeTab === 'upcoming' && (
+                                              <TooltipProvider>
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <div>
+                                                      <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="p-0 h-auto text-yellow-600 hover:text-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        onClick={() => setAppointmentToSkip(appointment)}
+                                                        disabled={!isDoctorInConsultation}
+                                                      >
+                                                        <SkipForward className="h-5 w-5" />
+                                                      </Button>
+                                                    </div>
+                                                  </TooltipTrigger>
+                                                  {!isDoctorInConsultation && (
+                                                    <TooltipContent>
+                                                      <p>Doctor is not in consultation.</p>
+                                                    </TooltipContent>
+                                                  )}
+                                                </Tooltip>
+                                              </TooltipProvider>
+                                            )}
+                                        </div>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+      {primaryPatient && (
+        <AddRelativeDialog
+          isOpen={isAddRelativeDialogOpen}
+          setIsOpen={setIsAddRelativeDialogOpen}
+          primaryMemberId={primaryPatient.id}
+          onRelativeAdded={handleNewRelativeAdded}
+        />
+      )}
+      <Dialog open={isTokenModalOpen} onOpenChange={setIsTokenModalOpen}>
+        <DialogContent className="sm:max-w-xs w-[90%]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-center">Walk-in Token Generated!</DialogTitle>
+            <DialogDescription className="text-center">
+              Please wait for your turn. You can monitor the live queue.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 text-center">
+              <p className="text-sm text-muted-foreground">Your Token Number</p>
+              <p className="text-5xl font-bold text-primary">{generatedToken}</p>
+          </div>
+          <DialogClose asChild>
+              <Button variant="ghost" size="icon" className="absolute top-4 right-4 h-6 w-6 text-muted-foreground">
+                  <X className="h-4 w-4" />
+                  <span className="sr-only">Close</span>
+              </Button>
+          </DialogClose>
+        </DialogContent>
+      </Dialog>
+      <AlertDialog open={!!appointmentToSkip} onOpenChange={(open) => !open && setAppointmentToSkip(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure you want to skip this appointment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will move the appointment for "{appointmentToSkip?.patientName}" to the end of the queue.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setAppointmentToSkip(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-yellow-500 hover:bg-yellow-600"
+              onClick={() => {
+                if (appointmentToSkip) {
+                  handleSkip(appointmentToSkip);
+                }
+                setAppointmentToSkip(null);
+              }}
+            >
+              Confirm Skip
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <WeeklyDoctorAvailability />
+    </>
+  );
 }
