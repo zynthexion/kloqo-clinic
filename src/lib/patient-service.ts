@@ -77,25 +77,33 @@ export async function managePatient({
       
       patientIdForAppointment = newRelativePatientRef.id;
 
-      const newRelativeData: Patient = {
-        id: newRelativePatientRef.id,
-        primaryUserId: primaryPatientData.primaryUserId, // Link to the same primary user
-        name,
-        age,
-        place,
-        sex,
-        phone: phone || '', // Explicitly set to empty string if no phone
-        communicationPhone: phone || primaryPatientData.communicationPhone,
-        totalAppointments: 0,
-        visitHistory: [],
-        relatedPatientIds: [bookingUserId], // Link to the primary patient
-        clinicIds: primaryPatientData.clinicIds || [clinicId],
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      };
+      // Check if the phone number matches primary patient's phone (duplicate check)
+      const primaryPhone = primaryPatientData.phone || primaryPatientData.communicationPhone;
+      const isDuplicatePhone = phone && phone.trim().length > 0 && primaryPhone && 
+          phone.replace(/^\+91/, '') === primaryPhone.replace(/^\+91/, '');
+
+      let newRelativeData: Patient;
       
-      // Create a new user for this relative if they have a phone number
-      if (phone) {
+      if (phone && phone.trim().length > 0 && !isDuplicatePhone) {
+        // If relative has unique phone number, check if phone is unique across ALL patients
+        const patientsRef = collection(db, 'patients');
+        const patientPhoneQuery = query(patientsRef, where("phone", "==", phone));
+        const patientPhoneSnapshot = await getDocs(patientPhoneQuery);
+
+        if (!patientPhoneSnapshot.empty) {
+          throw new Error("This phone number is already registered to another patient.");
+        }
+
+        // Check users collection as well
+        const usersRef = collection(db, 'users');
+        const userQuery = query(usersRef, where("phone", "==", phone));
+        const userSnapshot = await getDocs(userQuery);
+
+        if (!userSnapshot.empty) {
+          throw new Error("This phone number is already registered to another user.");
+        }
+
+        // Create user document
         const newUserRef = doc(collection(db, 'users'));
         const newUserData: User = {
           uid: newUserRef.id,
@@ -104,11 +112,51 @@ export async function managePatient({
           patientId: newRelativePatientRef.id,
         };
         batch.set(newUserRef, newUserData);
+
+        // If relative has phone, they become PRIMARY patient themselves
+        newRelativeData = {
+          id: newRelativePatientRef.id,
+          primaryUserId: newUserRef.id, // Their own user ID since they're primary
+          name,
+          age,
+          place,
+          sex,
+          phone: phone, // Set phone field
+          communicationPhone: phone, // Set communication phone
+          isPrimary: true, // They become primary since they have a phone
+          relatedPatientIds: [], // Empty array - they're primary, relatives will be added later
+          totalAppointments: 0,
+          visitHistory: [],
+          clinicIds: primaryPatientData.clinicIds || [clinicId],
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+      } else {
+        // If duplicate phone or no phone provided, use primary patient's communication phone
+        newRelativeData = {
+          id: newRelativePatientRef.id,
+          primaryUserId: primaryPatientData.primaryUserId, // Link to the same primary user
+          name,
+          age,
+          place,
+          sex,
+          phone: '', // Explicitly set to empty string
+          communicationPhone: primaryPatientData.communicationPhone || primaryPatientData.phone,
+          isPrimary: false,
+          totalAppointments: 0,
+          visitHistory: [],
+          // Relatives should NOT have relatedPatientIds - only primary patients have this field
+          clinicIds: primaryPatientData.clinicIds || [clinicId],
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+        // NO user document created for duplicate phone
       }
       
       batch.set(newRelativePatientRef, newRelativeData);
-      
-      // Update the primary patient to include this relative
+
+      // Always add to primary's relatedPatientIds, regardless of whether relative has a phone
+      // Even if relative has a unique phone and becomes isPrimary: true, they are still a relative of the primary patient
       batch.update(primaryPatientRef, {
         relatedPatientIds: arrayUnion(newRelativePatientRef.id),
         updatedAt: serverTimestamp(),

@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useCallback, useTransition } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import {
@@ -68,22 +68,38 @@ import Link from "next/link";
 import { Label } from "@/components/ui/label";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { calculateWalkInDetails, calculateSkippedTokenRejoinSlot } from '@/lib/appointment-service';
+import { calculateWalkInDetails, calculateSkippedTokenRejoinSlot, generateNextTokenAndReserveSlot } from '@/lib/appointment-service';
 import { sendAppointmentCancelledNotification, sendTokenCalledNotification, sendAppointmentBookedByStaffNotification } from '@/lib/notification-service';
 
 const formSchema = z.object({
   id: z.string().optional(),
-  patientName: z.string().min(2, { message: "Name must be at least 2 characters." }),
-  sex: z.enum(["Male", "Female", "Other"]),
-  phone: z.string(),
-  age: z.coerce.number({
-    invalid_type_error: "Age must be a number."
-  }).min(0, "Age cannot be negative.").optional(),
+  patientName: z.string()
+    .min(3, { message: "Name must be at least 3 characters." })
+    .regex(/^[a-zA-Z\s]+$/, { message: "Name must contain only alphabets and spaces." })
+    .refine(name => !name.startsWith(' ') && !name.endsWith(' ') && !name.includes('  '), { 
+      message: "Spaces are only allowed between letters, not at the start, end, or multiple consecutive spaces."
+    }),
+  sex: z.enum(["Male", "Female", "Other"], { required_error: "Please select a gender." }),
+  phone: z.string()
+    .refine((val) => {
+      if (!val || val.length === 0) return false; // Phone is required
+      // Strip +91 prefix if present, then check for exactly 10 digits
+      const cleaned = val.replace(/^\+91/, '').replace(/\D/g, ''); // Remove +91 and non-digits
+      if (cleaned.length === 0) return false; // If all digits removed, invalid
+      if (cleaned.length < 10) return false; // Less than 10 digits is invalid
+      if (cleaned.length > 10) return false; // More than 10 digits is invalid
+      return /^\d{10}$/.test(cleaned);
+    }, { 
+      message: "Phone number must be exactly 10 digits."
+    }),
+  age: z.coerce.number()
+    .min(1, { message: "Age must be a positive number above zero." })
+    .max(120, { message: "Age must be less than 120." }),
   doctor: z.string().min(1, { message: "Please select a doctor." }),
   department: z.string().min(1, { message: "Department is required." }),
   date: z.date().optional(),
   time: z.string().optional(),
-  place: z.string().min(2, { message: "Place must be at least 2 characters." }),
+  place: z.string().min(2, { message: "Location is required." }),
   bookedVia: z.enum(["Advanced Booking", "Walk-in"]),
   tokenNumber: z.string().optional(),
   patientId: z.string().optional(),
@@ -164,11 +180,13 @@ export default function AppointmentsPage() {
 
   const form = useForm<AppointmentFormValues>({
     resolver: zodResolver(formSchema),
+    mode: 'onBlur',
+    reValidateMode: 'onChange',
     defaultValues: {
       patientName: "",
       phone: "",
       age: undefined,
-      sex: "Male",
+      sex: undefined,
       doctor: "",
       department: "",
       date: undefined,
@@ -348,7 +366,7 @@ export default function AppointmentsPage() {
       patientName: "",
       phone: "",
       age: undefined,
-      sex: "Male",
+      sex: undefined,
       doctor: doctors.length > 0 ? doctors[0].id : "",
       department: doctors.length > 0 ? doctors[0].department || "" : "",
       date: undefined,
@@ -390,37 +408,19 @@ export default function AppointmentsPage() {
     }
   }, [editingAppointment, form, doctors, resetForm]);
 
+  const watchedDoctorId = useWatch({
+    control: form.control,
+    name: "doctor"
+  });
+
   const selectedDoctor = useMemo(() => {
-    const doctorId = form.watch("doctor");
-    if (!doctorId) return doctors.length > 0 ? doctors[0] : null;
-    return doctors.find(d => d.id === doctorId) || null;
-  }, [doctors, form.watch("doctor")]);
+    if (!watchedDoctorId) return doctors.length > 0 ? doctors[0] : null;
+    return doctors.find(d => d.id === watchedDoctorId) || null;
+  }, [doctors, watchedDoctorId]);
 
   const selectedDate = form.watch("date");
   const appointmentType = form.watch("bookedVia");
 
-  const generateNextToken = async (date: Date, type: 'A' | 'W'): Promise<{tokenNumber: string, numericToken: number}> => {
-    if (!clinicId || !selectedDoctor) return { tokenNumber: `${type}001`, numericToken: 1 };
-    const dateStr = format(date, "d MMMM yyyy");
-    const appointmentsRef = collection(db, 'appointments');
-    const q = query(
-      appointmentsRef,
-      where('clinicId', '==', clinicId),
-      where('doctor', '==', selectedDoctor.name),
-      where('date', '==', dateStr),
-    );
-    const querySnapshot = await getDocs(q);
-    const tokenNumbers = querySnapshot.docs.map(doc => {
-      const token = doc.data().tokenNumber;
-      if (typeof token === 'string' && (token.startsWith('A') || token.startsWith('W'))) {
-        return parseInt(token.substring(1));
-      }
-      return 0;
-    }).filter(num => !isNaN(num) && num > 0);
-    const lastToken = tokenNumbers.length > 0 ? Math.max(...tokenNumbers) : 0;
-    const nextTokenNum = lastToken + 1;
-    return { tokenNumber: `${type}${String(nextTokenNum).padStart(3, '0')}`, numericToken: nextTokenNum };
-  };
 
   const isWithinBookingWindow = (doctor: Doctor | null): boolean => {
     if (!doctor || !doctor.availabilitySlots) return false;
@@ -497,7 +497,7 @@ export default function AppointmentsPage() {
         
         const patientDataToUpdate = {
           name: values.patientName,
-            age: values.age || 0,
+            age: values.age ?? undefined,
           sex: values.sex,
           place: values.place,
           phone: values.phone ? `+91${values.phone}` : "",
@@ -507,13 +507,48 @@ export default function AppointmentsPage() {
         if (isEditing && editingAppointment) {
           patientForAppointmentId = editingAppointment.patientId;
           const patientRef = doc(db, 'patients', patientForAppointmentId);
-          batch.update(patientRef, { ...patientDataToUpdate, updatedAt: serverTimestamp() });
+          // Get the existing patient to check if they have a phone
+          const existingPatientSnap = await getDoc(patientRef);
+          const existingPatient = existingPatientSnap.exists() ? existingPatientSnap.data() as Patient : null;
+          
+          const updateData: any = {
+            name: patientDataToUpdate.name,
+            age: patientDataToUpdate.age,
+            sex: patientDataToUpdate.sex,
+            place: patientDataToUpdate.place,
+            communicationPhone: patientDataToUpdate.communicationPhone,
+            updatedAt: serverTimestamp()
+          };
+          // Only update phone field if patient already has a phone (not a relative without phone)
+          // Preserve empty phone field for relatives
+          if (existingPatient && existingPatient.phone && existingPatient.phone.trim().length > 0) {
+            updateData.phone = patientDataToUpdate.phone;
+          } else {
+            // Relative without phone - keep phone field empty
+            updateData.phone = '';
+          }
+          batch.update(patientRef, updateData);
           patientForAppointmentName = values.patientName;
         } else if (selectedPatient && !isEditing) {
           patientForAppointmentId = selectedPatient.id;
           const patientRef = doc(db, 'patients', patientForAppointmentId);
           const clinicIds = selectedPatient.clinicIds || [];
-          const updateData: any = { ...patientDataToUpdate, updatedAt: serverTimestamp() };
+          const updateData: any = { 
+            name: patientDataToUpdate.name,
+            age: patientDataToUpdate.age,
+            sex: patientDataToUpdate.sex,
+            place: patientDataToUpdate.place,
+            communicationPhone: patientDataToUpdate.communicationPhone,
+            updatedAt: serverTimestamp() 
+          };
+          // Only update phone field if patient already has a phone (not a relative without phone)
+          // Preserve empty phone field for relatives
+          if (selectedPatient.phone && selectedPatient.phone.trim().length > 0) {
+            updateData.phone = patientDataToUpdate.phone;
+          } else {
+            // Relative without phone - keep phone field empty
+            updateData.phone = '';
+          }
           if (!clinicIds.includes(clinicId)) {
             updateData.clinicIds = arrayUnion(clinicId);
           }
@@ -522,7 +557,19 @@ export default function AppointmentsPage() {
         } else {
           // Creating a new user and patient
           const usersRef = collection(db, 'users');
-          const patientPhoneNumber = `+91${values.phone}`;
+          
+          // Clean phone: remove +91 if user entered it, remove any non-digits, then ensure exactly 10 digits
+          let patientPhoneNumber = "";
+          if (values.phone) {
+            const cleaned = values.phone.replace(/^\+91/, '').replace(/\D/g, ''); // Remove +91 prefix and non-digits
+            if (cleaned.length === 10) {
+              patientPhoneNumber = `+91${cleaned}`; // Add +91 prefix when saving
+            }
+          }
+          if (!patientPhoneNumber) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Please enter a valid 10-digit phone number.'});
+            return;
+          }
           const userQuery = query(
               usersRef, 
               where('phone', '==', patientPhoneNumber),
@@ -556,6 +603,8 @@ export default function AppointmentsPage() {
               visitHistory: [],
               totalAppointments: 0,
               relatedPatientIds: [],
+              isPrimary: true,
+              isKloqoMember: false,
               createdAt: serverTimestamp(),
               updatedAt: serverTimestamp(),
             };
@@ -591,6 +640,8 @@ export default function AppointmentsPage() {
                   visitHistory: [],
                   totalAppointments: 0,
                   relatedPatientIds: [],
+                  isPrimary: true,
+                  isKloqoMember: false,
                   createdAt: serverTimestamp(),
                   updatedAt: serverTimestamp(),
                 };
@@ -652,7 +703,7 @@ export default function AppointmentsPage() {
             sex: values.sex,
             patientId: patientForAppointmentId,
             patientName: values.patientName,
-            age: values.age || 0,
+            age: values.age ?? undefined,
             communicationPhone: communicationPhone,
             place: values.place,
             status: 'Pending',
@@ -677,7 +728,6 @@ export default function AppointmentsPage() {
             return;
           }
           const appointmentId = isEditing && editingAppointment ? editingAppointment.id : doc(collection(db, "appointments")).id;
-          const tokenData = isEditing && editingAppointment ? { tokenNumber: editingAppointment.tokenNumber, numericToken: editingAppointment.numericToken } : await generateNextToken(values.date, 'A');
           const appointmentDateStr = format(values.date, "d MMMM yyyy");
           const appointmentTimeStr = format(parseDateFns(values.time, "HH:mm", new Date()), "hh:mm a");
 
@@ -686,24 +736,52 @@ export default function AppointmentsPage() {
           const dayOfWeek = daysOfWeek[getDay(values.date)];
           const availabilityForDay = selectedDoctor.availabilitySlots?.find(s => s.day === dayOfWeek);
 
+          // Calculate global slotIndex across all sessions (matching patient app logic)
           if (availabilityForDay) {
+            let globalSlotIndex = 0;
             for (let i = 0; i < availabilityForDay.timeSlots.length; i++) {
               const session = availabilityForDay.timeSlots[i];
               let currentTime = parseDateFns(session.from, 'hh:mm a', values.date);
               const endTime = parseDateFns(session.to, 'hh:mm a', values.date);
-              let currentSlotInSession = 0;
+              const slotDuration = selectedDoctor.averageConsultingTime || 15;
 
               while (isBefore(currentTime, endTime)) {
                 if (format(currentTime, "hh:mm a") === appointmentTimeStr) {
-                  slotIndex = currentSlotInSession;
+                  slotIndex = globalSlotIndex;
                   sessionIndex = i;
                   break;
                 }
-                currentTime = addMinutes(currentTime, selectedDoctor.averageConsultingTime || 15);
-                currentSlotInSession++;
+                currentTime = addMinutes(currentTime, slotDuration);
+                globalSlotIndex++;
               }
               if (slotIndex !== -1) break;
             }
+          }
+
+          // Generate token and reserve slot atomically (for both new and rescheduled appointments)
+          // For rescheduling, regenerate token using same logic as new appointment
+          let tokenData: { tokenNumber: string; numericToken: number };
+          try {
+            tokenData = await generateNextTokenAndReserveSlot(
+              clinicId,
+              selectedDoctor.name,
+              values.date,
+              'A',
+              {
+                time: appointmentTimeStr,
+                slotIndex: slotIndex
+              }
+            );
+          } catch (error: any) {
+            if (error.code === 'SLOT_OCCUPIED' || error.message === 'SLOT_ALREADY_BOOKED') {
+              toast({
+                variant: "destructive",
+                title: "Time Slot Already Booked",
+                description: "This time slot was just booked by someone else. Please select another time.",
+              });
+              return;
+            }
+            throw error;
           }
 
           const appointmentData: Appointment = {
@@ -713,7 +791,7 @@ export default function AppointmentsPage() {
             patientName: patientForAppointmentName,
             sex: values.sex,
             communicationPhone: communicationPhone,
-            age: values.age || 0,
+            age: values.age ?? undefined,
             doctorId: selectedDoctor.id, // Add doctorId
             doctor: selectedDoctor.name,
             date: appointmentDateStr,
@@ -810,7 +888,30 @@ export default function AppointmentsPage() {
 
         // Check if user already exists
         if (!userSnapshot.empty) {
-            // User exists, just send the link
+            // User exists, check if patient exists and add clinicId to clinicIds array
+            const existingUser = userSnapshot.docs[0].data() as User;
+            const patientId = existingUser.patientId;
+            
+            if (patientId) {
+                const patientRef = doc(db, 'patients', patientId);
+                const patientDoc = await getFirestoreDoc(patientRef);
+                
+                if (patientDoc.exists()) {
+                    const patientData = patientDoc.data() as Patient;
+                    const clinicIds = patientData.clinicIds || [];
+                    
+                    // Only update if clinicId is not already in the array
+                    if (!clinicIds.includes(clinicId)) {
+                        await updateDoc(patientRef, {
+                            clinicIds: arrayUnion(clinicId),
+                            updatedAt: serverTimestamp(),
+                        }).catch(async (serverError) => {
+                            console.error("Error updating patient clinicIds:", serverError);
+                            // Continue with sending link even if update fails
+                        });
+                    }
+                }
+            }
             console.log("User already exists, sending booking link");
         } else {
             // User doesn't exist, create new user and patient records
@@ -832,8 +933,8 @@ export default function AppointmentsPage() {
                 phone: fullPhoneNumber,
                 communicationPhone: fullPhoneNumber,
                 name: "",
-                age: 0,
-                sex: "",
+                age: undefined,
+                sex: undefined,
                 place: "",
                 email: "",
                 clinicIds: [clinicId],
@@ -1087,14 +1188,14 @@ export default function AppointmentsPage() {
     setRelatives([]);
     setHasSelectedOption(true);
 
-    const capitalizedSex = patient.sex ? (patient.sex.charAt(0).toUpperCase() + patient.sex.slice(1).toLowerCase()) : "Male";
+    const capitalizedSex = patient.sex ? (patient.sex.charAt(0).toUpperCase() + patient.sex.slice(1).toLowerCase()) : undefined;
 
     form.reset({
       ...form.getValues(),
       patientId: patient.id,
       patientName: patient.name,
-      age: patient.age,
-      sex: capitalizedSex as "Male" | "Female" | "Other",
+      age: patient.age ?? undefined,
+      sex: capitalizedSex as "Male" | "Female" | "Other" | undefined,
       phone: patient.communicationPhone?.replace('+91', ''),
       place: patient.place || "",
     });
@@ -1116,13 +1217,13 @@ export default function AppointmentsPage() {
     setBookingFor('relative');
     setSelectedPatient(relative);
     setHasSelectedOption(true);
-    const capitalizedSex = relative.sex ? (relative.sex.charAt(0).toUpperCase() + relative.sex.slice(1).toLowerCase()) : "Male";
+    const capitalizedSex = relative.sex ? (relative.sex.charAt(0).toUpperCase() + relative.sex.slice(1).toLowerCase()) : undefined;
     form.reset({
       ...form.getValues(),
       patientId: relative.id,
       patientName: relative.name,
-      age: relative.age,
-      sex: capitalizedSex as "Male" | "Female" | "Other",
+      age: relative.age ?? undefined,
+      sex: capitalizedSex as "Male" | "Female" | "Other" | undefined,
       phone: (relative.communicationPhone || primaryPatient?.communicationPhone)?.replace('+91', ''),
       place: relative.place || "",
     });
@@ -1479,7 +1580,7 @@ export default function AppointmentsPage() {
                                           ...form.getValues(),
                                           patientName: "",
                                           age: undefined,
-                                          sex: "Male",
+                                          sex: undefined,
                                           phone: patientSearchTerm,
                                           place: "",
                                           doctor: doctors.length > 0 ? doctors[0].id : "",
@@ -1593,13 +1694,13 @@ export default function AppointmentsPage() {
                                   setBookingFor(value);
                                   if (value === 'member' && primaryPatient) {
                                     setSelectedPatient(primaryPatient);
-                                    const capitalizedSex = primaryPatient.sex ? (primaryPatient.sex.charAt(0).toUpperCase() + primaryPatient.sex.slice(1).toLowerCase()) : "Male";
+                                    const capitalizedSex = primaryPatient.sex ? (primaryPatient.sex.charAt(0).toUpperCase() + primaryPatient.sex.slice(1).toLowerCase()) : undefined;
                                     form.reset({
                                       ...form.getValues(),
                                       patientId: primaryPatient.id,
                                       patientName: primaryPatient.name,
-                                      age: primaryPatient.age,
-                                      sex: capitalizedSex as "Male" | "Female" | "Other",
+                                      age: primaryPatient.age ?? undefined,
+                                      sex: capitalizedSex as "Male" | "Female" | "Other" | undefined,
                                       phone: primaryPatient.communicationPhone?.replace('+91', '') || '',
                                       place: primaryPatient.place || "",
                                     });
@@ -1680,15 +1781,59 @@ export default function AppointmentsPage() {
                                 </h3>
                                 <div className="grid grid-cols-2 gap-4">
                                   <FormField control={form.control} name="patientName" render={({ field }) => (
-                                    <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                                    <FormItem>
+                                      <FormLabel>Name</FormLabel>
+                                      <FormControl>
+                                        <Input 
+                                          placeholder="Enter patient name"
+                                          {...field} 
+                                          value={field.value || ''}
+                                          onBlur={field.onBlur}
+                                          onChange={(e) => {
+                                            field.onChange(e);
+                                            form.trigger('patientName');
+                                          }}
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
                                   )} />
                                   <FormField control={form.control} name="age" render={({ field }) => (
-                                    <FormItem><FormLabel>Age</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
+                                    <FormItem>
+                                      <FormLabel>Age</FormLabel>
+                                      <FormControl>
+                                        <Input 
+                                          type="number" 
+                                          placeholder="Enter the age" 
+                                          {...field} 
+                                          value={field.value === 0 ? '' : (field.value ?? '')}
+                                          onBlur={field.onBlur}
+                                          onChange={(e) => {
+                                            const value = e.target.value === '' ? undefined : Number(e.target.value);
+                                            field.onChange(value);
+                                            form.trigger('age');
+                                          }}
+                                          className="[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
                                   )} />
                                   <FormField control={form.control} name="sex" render={({ field }) => (
-                                    <FormItem><FormLabel>Gender</FormLabel>
-                                      <Select onValueChange={field.onChange} value={field.value}>
-                                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                    <FormItem>
+                                      <FormLabel>Gender</FormLabel>
+                                      <Select 
+                                        onValueChange={(value) => {
+                                          field.onChange(value);
+                                          form.trigger('sex');
+                                        }} 
+                                        value={field.value || ""}
+                                      >
+                                        <FormControl>
+                                          <SelectTrigger>
+                                            <SelectValue placeholder="Select gender" />
+                                          </SelectTrigger>
+                                        </FormControl>
                                         <SelectContent>
                                           <SelectItem value="Male">Male</SelectItem>
                                           <SelectItem value="Female">Female</SelectItem>
@@ -1699,7 +1844,22 @@ export default function AppointmentsPage() {
                                     </FormItem>
                                   )} />
                                   <FormField control={form.control} name="place" render={({ field }) => (
-                                    <FormItem><FormLabel>Place</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                                    <FormItem>
+                                      <FormLabel>Place</FormLabel>
+                                      <FormControl>
+                                        <Input 
+                                          placeholder="Enter place"
+                                          {...field} 
+                                          value={field.value || ''}
+                                          onBlur={field.onBlur}
+                                          onChange={(e) => {
+                                            field.onChange(e);
+                                            form.trigger('place');
+                                          }}
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
                                   )} />
                                 </div>
                                 
@@ -1710,12 +1870,17 @@ export default function AppointmentsPage() {
                                     <FormItem>
                                         <FormLabel>Communication Phone</FormLabel>
                                         <FormControl>
-                                        <Input
-                                            type="tel"
-                                            placeholder="Auto-filled"
-                                            {...field}
-                                            disabled
-                                        />
+                                            <div className="relative">
+                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">+91</span>
+                                                <Input
+                                                    type="tel"
+                                                    {...field}
+                                                    value={(field.value || '').replace(/^\+91/, '')}
+                                                    className="pl-12"
+                                                    placeholder="Enter 10-digit number"
+                                                    disabled
+                                                />
+                                            </div>
                                         </FormControl>
                                         <FormDescription className="text-xs">This number will be used for appointment communication.</FormDescription>
                                         <FormMessage />
@@ -1874,7 +2039,7 @@ export default function AppointmentsPage() {
                               {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
                               <Button
                                 type="submit"
-                                disabled={isBookingButtonDisabled}
+                                disabled={isBookingButtonDisabled || !form.formState.isValid}
                                >
                                 {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                 {isEditing ? "Save Changes" : "Book Appointment"}

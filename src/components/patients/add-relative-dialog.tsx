@@ -32,11 +32,30 @@ import { db } from "@/lib/firebase";
 import type { Patient, User } from "@/lib/types";
 
 const formSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters."),
-  age: z.coerce.number().min(0, "Age cannot be negative."),
-  sex: z.enum(["Male", "Female", "Other"]),
-  phone: z.string().optional(),
-  place: z.string().min(2, "Place is required."),
+  name: z.string()
+    .min(3, { message: "Name must be at least 3 characters." })
+    .regex(/^[a-zA-Z\s]+$/, { message: "Name must contain only alphabets and spaces." })
+    .refine(name => !name.startsWith(' ') && !name.endsWith(' ') && !name.includes('  '), { 
+      message: "Spaces are only allowed between letters, not at the start, end, or multiple consecutive spaces."
+    }),
+  age: z.coerce.number()
+    .min(1, { message: "Age must be a positive number above zero." })
+    .max(120, { message: "Age must be less than 120." }),
+  sex: z.enum(["Male", "Female", "Other"], { required_error: "Please select a gender." }),
+  phone: z.string()
+    .optional()
+    .refine((val) => {
+      if (!val || val.length === 0) return true; // Optional field, empty is valid
+      // Strip +91 prefix if present, then check for exactly 10 digits
+      const cleaned = val.replace(/^\+91/, '').replace(/\D/g, ''); // Remove +91 and non-digits
+      if (cleaned.length === 0) return false; // If all digits removed, invalid
+      if (cleaned.length < 10) return false; // Less than 10 digits is invalid
+      if (cleaned.length > 10) return false; // More than 10 digits is invalid
+      return /^\d{10}$/.test(cleaned);
+    }, { 
+      message: "Phone number must be exactly 10 digits."
+    }),
+  place: z.string().min(2, { message: "Location is required." }),
 });
 
 type AddRelativeFormValues = z.infer<typeof formSchema>;
@@ -59,10 +78,12 @@ export function AddRelativeDialog({
 
   const form = useForm<AddRelativeFormValues>({
     resolver: zodResolver(formSchema),
+    mode: 'onBlur',
+    reValidateMode: 'onChange',
     defaultValues: {
       name: "",
-      age: 0,
-      sex: "Male",
+      age: undefined,
+      sex: undefined,
       phone: "",
       place: "",
     },
@@ -81,13 +102,41 @@ export function AddRelativeDialog({
             return;
         }
         const primaryMemberData = primaryMemberSnap.data() as Patient;
-        const primaryMemberPhone = primaryMemberData.communicationPhone;
+        const primaryMemberPhone = primaryMemberData.communicationPhone || primaryMemberData.phone;
 
-        const relativePhone = values.phone ? `+91${values.phone}` : "";
+        // Clean phone: remove +91 if user entered it, remove any non-digits, then ensure exactly 10 digits
+        let relativePhone = "";
+        if (values.phone) {
+          const cleaned = values.phone.replace(/^\+91/, '').replace(/\D/g, ''); // Remove +91 prefix and non-digits
+          if (cleaned.length === 10) {
+            relativePhone = `+91${cleaned}`; // Add +91 prefix when saving
+          }
+        }
+        
+        // Check if the phone number matches primary patient's phone (duplicate check)
+        const primaryPhone = primaryMemberData.phone || primaryMemberData.communicationPhone;
+        const isDuplicatePhone = relativePhone && primaryPhone && 
+            relativePhone.replace(/^\+91/, '') === primaryPhone.replace(/^\+91/, '');
+
         let newRelativeData: Patient;
 
-        if (relativePhone) {
-          // Case 1: Relative HAS a phone number
+        if (relativePhone && !isDuplicatePhone) {
+          // Case 1: Relative HAS a unique phone number (not matching primary)
+          // Check if phone is unique across ALL patients
+          const patientsRef = collection(db, "patients");
+          const patientPhoneQuery = query(patientsRef, where("phone", "==", relativePhone));
+          const patientPhoneSnapshot = await getDocs(patientPhoneQuery);
+
+          if (!patientPhoneSnapshot.empty) {
+            toast({
+              variant: "destructive",
+              title: "Phone Number Already Exists",
+              description: "This phone number is already registered to another patient.",
+            });
+            return;
+          }
+
+          // Check users collection as well
           const usersRef = collection(db, "users");
           const userQuery = query(usersRef, where("phone", "==", relativePhone));
           const userSnapshot = await getDocs(userQuery);
@@ -110,36 +159,40 @@ export function AddRelativeDialog({
           };
           batch.set(newUserRef, newUserData);
 
+          // If relative has phone, they become PRIMARY patient themselves
           newRelativeData = {
             id: newRelativePatientRef.id,
-            primaryUserId: newUserRef.id,
+            primaryUserId: newUserRef.id, // Their own user ID since they're primary
             name: values.name,
             age: values.age,
             sex: values.sex,
             phone: relativePhone, // Set phone field
             communicationPhone: relativePhone, // Set communication phone
             place: values.place,
+            isPrimary: true, // They become primary since they have a phone
+            relatedPatientIds: [], // Empty array - they're primary, relatives will be added later
             totalAppointments: 0,
             visitHistory: [],
-            relatedPatientIds: [primaryMemberId],
             clinicIds: primaryMemberData.clinicIds || [],
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           };
 
         } else {
-            // Case 2: Relative does NOT have a phone number
+            // Case 2: Relative does NOT have a phone number OR phone matches primary (duplicate)
+            // If no phone provided or duplicate, leave 'phone' field empty and use primary's phone for communicationPhone
             newRelativeData = {
               id: newRelativePatientRef.id,
               name: values.name,
               age: values.age,
               sex: values.sex,
-              phone: "", // Phone is explicitly empty
-              communicationPhone: primaryMemberPhone, // Main user's phone for communication
+              phone: "", // Phone field is explicitly empty when no phone entered
+              communicationPhone: primaryMemberPhone, // Use primary patient's communicationPhone (already prioritized communicationPhone || phone on line 84)
               place: values.place,
+              isPrimary: false,
               totalAppointments: 0,
               visitHistory: [],
-              relatedPatientIds: [primaryMemberId],
+              // Relatives should NOT have relatedPatientIds - only primary patients have this field
               clinicIds: primaryMemberData.clinicIds || [],
               createdAt: serverTimestamp(),
               updatedAt: serverTimestamp(),
@@ -147,6 +200,9 @@ export function AddRelativeDialog({
         }
 
         batch.set(newRelativePatientRef, newRelativeData);
+        
+        // Always add to primary's relatedPatientIds, regardless of whether relative has a phone
+        // Even if relative has a unique phone and becomes isPrimary: true, they are still a relative of the primary patient
         batch.update(primaryMemberRef, {
           relatedPatientIds: arrayUnion(newRelativePatientRef.id),
         });
@@ -172,9 +228,23 @@ export function AddRelativeDialog({
     });
   };
 
+  const handleOpenChange = (open: boolean) => {
+    // Only close when explicitly requested (via Cancel or close button), not on outside click
+    if (!open) {
+      setIsOpen(false);
+    }
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+      <DialogContent 
+        onInteractOutside={(e) => {
+          e.preventDefault(); // Prevent closing when clicking outside
+        }}
+        onEscapeKeyDown={(e) => {
+          e.preventDefault(); // Prevent closing with ESC key - only close via Cancel or close button
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Add New Relative</DialogTitle>
           <DialogDescription>
@@ -190,7 +260,16 @@ export function AddRelativeDialog({
                 <FormItem>
                   <FormLabel>Full Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Enter full name" {...field} />
+                    <Input 
+                      placeholder="Enter full name" 
+                      {...field} 
+                      value={field.value || ''}
+                      onBlur={field.onBlur}
+                      onChange={(e) => {
+                        field.onChange(e);
+                        form.trigger('name');
+                      }}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -204,7 +283,19 @@ export function AddRelativeDialog({
                     <FormItem>
                     <FormLabel>Age</FormLabel>
                     <FormControl>
-                        <Input type="number" placeholder="Enter age" {...field} />
+                        <Input 
+                          type="number" 
+                          placeholder="Enter the age" 
+                          {...field} 
+                          value={field.value === 0 ? '' : (field.value ?? '')}
+                          onBlur={field.onBlur}
+                          onChange={(e) => {
+                            const value = e.target.value === '' ? undefined : Number(e.target.value);
+                            field.onChange(value);
+                            form.trigger('age');
+                          }}
+                          className="[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                        />
                     </FormControl>
                     <FormMessage />
                     </FormItem>
@@ -216,10 +307,10 @@ export function AddRelativeDialog({
                 render={({ field }) => (
                     <FormItem>
                     <FormLabel>Gender</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value || ""}>
                         <FormControl>
                         <SelectTrigger>
-                            <SelectValue />
+                            <SelectValue placeholder="Select gender" />
                         </SelectTrigger>
                         </FormControl>
                         <SelectContent>
@@ -240,9 +331,29 @@ export function AddRelativeDialog({
                 <FormItem>
                   <FormLabel>Phone Number (Optional)</FormLabel>
                   <FormControl>
-                    <Input type="tel" placeholder="Enter 10-digit number" {...field} />
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">+91</span>
+                      <Input 
+                        type="tel" 
+                        {...field} 
+                        value={field.value || ''} 
+                        className="pl-12"
+                        placeholder="Enter 10-digit number"
+                        onChange={(e) => {
+                          // Only allow digits, max 10 digits
+                          let value = e.target.value.replace(/\D/g, ''); // Remove all non-digits
+                          // Remove +91 if user tries to enter it manually
+                          value = value.replace(/^91/, '');
+                          // Limit to 10 digits
+                          if (value.length > 10) {
+                            value = value.slice(0, 10);
+                          }
+                          field.onChange(value);
+                        }}
+                      />
+                    </div>
                   </FormControl>
-                   <FormMessage />
+                  <FormMessage />
                 </FormItem>
               )}
             />
@@ -253,7 +364,16 @@ export function AddRelativeDialog({
                 <FormItem>
                   <FormLabel>Place</FormLabel>
                   <FormControl>
-                    <Input placeholder="Enter city or town" {...field} />
+                    <Input 
+                      placeholder="Enter city or town" 
+                      {...field} 
+                      value={field.value || ''}
+                      onBlur={field.onBlur}
+                      onChange={(e) => {
+                        field.onChange(e);
+                        form.trigger('place');
+                      }}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -263,7 +383,7 @@ export function AddRelativeDialog({
               <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={isPending}>
+              <Button type="submit" disabled={isPending || !form.formState.isValid}>
                 {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Save Relative
               </Button>

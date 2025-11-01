@@ -36,7 +36,18 @@ const formSchema = z.object({
   age: z.coerce.number().int().positive({ message: 'Age must be a positive number.' }),
   place: z.string().min(2, { message: 'Place is required.' }),
   sex: z.string().min(1, { message: 'Sex is required.' }),
-  phone: z.string().min(10, { message: "Please enter a valid 10-digit phone number."}).max(10, { message: "Please enter a valid 10-digit phone number."}),
+  phone: z.string()
+    .refine((val) => {
+      if (!val || val.length === 0) return false; // Phone is required
+      // Strip +91 prefix if present, then check for exactly 10 digits
+      const cleaned = val.replace(/^\+91/, '').replace(/\D/g, ''); // Remove +91 and non-digits
+      if (cleaned.length === 0) return false; // If all digits removed, invalid
+      if (cleaned.length < 10) return false; // Less than 10 digits is invalid
+      if (cleaned.length > 10) return false; // More than 10 digits is invalid
+      return /^\d{10}$/.test(cleaned);
+    }, { 
+      message: "Please enter exactly 10 digits for the phone number."
+    }),
 });
 
 // Define a type for the unsaved appointment data
@@ -237,7 +248,19 @@ function WalkInRegistrationContent() {
 
         const { estimatedTime, patientsAhead, numericToken, slotIndex } = await calculateWalkInDetails(doctor, walkInTokenAllotment, walkInCapacityThreshold);
         
-        const fullPhoneNumber = `+91${values.phone}`;
+        // Clean phone: remove +91 if user entered it, remove any non-digits, then ensure exactly 10 digits
+        let fullPhoneNumber = "";
+        if (values.phone) {
+          const cleaned = values.phone.replace(/^\+91/, '').replace(/\D/g, ''); // Remove +91 prefix and non-digits
+          if (cleaned.length === 10) {
+            fullPhoneNumber = `+91${cleaned}`; // Add +91 prefix when saving
+          }
+        }
+        if (!fullPhoneNumber) {
+          toast({ variant: 'destructive', title: 'Error', description: 'Please enter a valid 10-digit phone number.'});
+          setIsSubmitting(false);
+          return;
+        }
         const patientId = await managePatient({
             phone: fullPhoneNumber,
             name: values.patientName,
@@ -520,11 +543,11 @@ function WalkInRegistrationContent() {
                                     )} />
                                      <div className="grid grid-cols-2 gap-4">
                                         <FormField control={form.control} name="age" render={({ field }) => (
-                                            <FormItem><FormLabel>Age</FormLabel><FormControl><Input type="number" placeholder="e.g. 34" {...field} /></FormControl><FormMessage /></FormItem>
+                                            <FormItem><FormLabel>Age</FormLabel><FormControl><Input type="number" placeholder="Enter the age" {...field} value={field.value === 0 ? '' : (field.value ?? '')} className="[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" /></FormControl><FormMessage /></FormItem>
                                         )} />
                                         <FormField control={form.control} name="sex" render={({ field }) => (
                                             <FormItem><FormLabel>Sex</FormLabel>
-                                                <Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select sex" /></SelectTrigger></FormControl>
+                                                <Select onValueChange={field.onChange} value={field.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger></FormControl>
                                                     <SelectContent>
                                                         <SelectItem value="Male">Male</SelectItem>
                                                         <SelectItem value="Female">Female</SelectItem>

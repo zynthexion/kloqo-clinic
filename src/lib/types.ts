@@ -100,6 +100,7 @@ export type Patient = {
   createdAt: any; // Can be Date or Firestore Timestamp
   updatedAt: any; // Can be Date or Firestore Timestamp
   relatedPatientIds?: string[];
+  isPrimary?: boolean;
   isKloqoMember?: boolean;
 };
 

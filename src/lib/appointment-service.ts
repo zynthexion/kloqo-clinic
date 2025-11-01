@@ -186,10 +186,20 @@ export async function generateNextTokenAndReserveSlot(
       });
     }
     
-    const tokenNumber = `${type}${String(nextTokenNum).padStart(3, '0')}`;
+    // For A tokens, use slotIndex + 1 for both tokenNumber and numericToken
+    // For W tokens, use the counter-based nextTokenNum
+    let tokenNumber: string;
+    let numericToken: number;
     
-    // numericToken should align with position within the day's slots
-    const numericToken = (typeof appointmentData.slotIndex === 'number') ? (appointmentData.slotIndex + 1) : nextTokenNum;
+    if (type === 'A' && typeof appointmentData.slotIndex === 'number') {
+      const tokenNum = appointmentData.slotIndex + 1;
+      tokenNumber = `${type}${String(tokenNum).padStart(3, '0')}`;
+      numericToken = tokenNum;
+    } else {
+      tokenNumber = `${type}${String(nextTokenNum).padStart(3, '0')}`;
+      numericToken = (typeof appointmentData.slotIndex === 'number') ? (appointmentData.slotIndex + 1) : nextTokenNum;
+    }
+    
     return { tokenNumber, numericToken };
   });
 }
