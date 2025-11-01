@@ -298,18 +298,51 @@ export default function SignupPage() {
 
     const user = userCredential.user;
 
-    const uploadFileToStorage = async (file: File | null, path: string): Promise<string | null> => {
+    // Upload files via server-side API route to bypass CORS issues
+    const uploadFileViaAPI = async (file: File | null, documentType: string): Promise<string | null> => {
       if (!file) return null;
-      const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
-      const { storage } = await import('@/lib/firebase');
-      const fileRef = ref(storage, path);
-      await uploadBytes(fileRef, file);
-      return await getDownloadURL(fileRef);
+      
+      try {
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', file);
+        uploadFormData.append('userId', user.uid);
+        uploadFormData.append('documentType', documentType);
+
+        const response = await fetch('/api/upload-clinic-document', {
+          method: 'POST',
+          body: uploadFormData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Upload failed' }));
+          throw new Error(errorData.error || 'Upload failed');
+        }
+
+        const data = await response.json();
+        return data.url;
+      } catch (error: any) {
+        console.error(`Error uploading ${documentType}:`, error);
+        throw error;
+      }
     };
 
-    const logoUrl = await uploadFileToStorage(formData.logo, `clinics/${user.uid}/documents/logo`);
-    const licenseUrl = await uploadFileToStorage(formData.license, `clinics/${user.uid}/documents/license`);
-    const receptionPhotoUrl = await uploadFileToStorage(formData.receptionPhoto, `clinics/${user.uid}/documents/reception_photo`);
+    // Upload files using server-side API (bypasses CORS)
+    let logoUrl: string | null = null;
+    let licenseUrl: string | null = null;
+    let receptionPhotoUrl: string | null = null;
+    
+    try {
+      logoUrl = await uploadFileViaAPI(formData.logo, 'logo');
+      licenseUrl = await uploadFileViaAPI(formData.license, 'license');
+      receptionPhotoUrl = await uploadFileViaAPI(formData.receptionPhoto, 'reception_photo');
+    } catch (uploadError: any) {
+      toast({
+        variant: "destructive",
+        title: "Upload Failed",
+        description: uploadError.message || "Failed to upload clinic documents. Please try again.",
+      });
+      return;
+    }
 
     const clinicRef = doc(collection(db, "clinics"));
     const clinicId = clinicRef.id;
