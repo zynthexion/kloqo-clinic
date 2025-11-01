@@ -125,6 +125,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
   const isEditMode = !!doctor;
   const auth = useAuth();
   const [isPending, startTransition] = useTransition();
+  const [isSubmitting, setIsSubmitting] = useState(false); // Guard against duplicate submissions
   const [clinicId, setClinicId] = useState<string | null>(null);
   const [clinicDetails, setClinicDetails] = useState<any | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -340,18 +341,26 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
 
 
   const onSubmit = (values: AddDoctorFormValues) => {
+    // Prevent duplicate submissions
+    if (isSubmitting || isPending) {
+      console.warn('Form submission already in progress, ignoring duplicate submit');
+      return;
+    }
+
+    setIsSubmitting(true);
     startTransition(async () => {
-      if (!auth.currentUser) {
-        toast({ variant: "destructive", title: "Authentication Error", description: "You must be logged in to save a doctor." });
-        return;
-      }
-
-      if (!clinicId) {
-        toast({ variant: "destructive", title: "Configuration Error", description: "Cannot save doctor without a valid clinic ID." });
-        return;
-      }
-
       try {
+        if (!auth.currentUser) {
+          toast({ variant: "destructive", title: "Authentication Error", description: "You must be logged in to save a doctor." });
+          setIsSubmitting(false);
+          return;
+        }
+
+        if (!clinicId) {
+          toast({ variant: "destructive", title: "Configuration Error", description: "Cannot save doctor without a valid clinic ID." });
+          setIsSubmitting(false);
+          return;
+        }
         if (!isEditMode) {
             const clinicDocRef = doc(db, "clinics", clinicId);
             const clinicDocSnap = await getDoc(clinicDocRef);
@@ -370,6 +379,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
                   description: `Your plan allows for ${maxDoctors} doctor(s). To add more, please upgrade your plan.`,
                   duration: 6000
                 });
+                setIsSubmitting(false);
                 return;
               }
             }
@@ -418,15 +428,29 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
                     title: "Upload Failed",
                     description: uploadError.message,
                 });
+                setIsSubmitting(false);
                 return;
             }
         }
 
-        const docId = values.id || `doc-${Date.now()}`;
         const scheduleString = values.availabilitySlots
           ?.sort((a, b) => daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day))
           .map(slot => `${slot.day}: ${slot.timeSlots.map(ts => `${format(parse(ts.from, "HH:mm", new Date()), "hh:mm a")}-${format(parse(ts.to, "HH:mm", new Date()), "hh:mm a")}`).join(', ')}`)
           .join('; ');
+
+        // Generate unique ID: use existing ID for edit mode, or generate a unique one for new doctors
+        // Use a combination of timestamp and random to avoid collisions
+        let docId = values.id || (isEditMode && doctor?.id ? doctor.id : `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+        
+        // For new doctors, check if this ID already exists (safety check for duplicates)
+        if (!isEditMode) {
+          const existingDocRef = doc(db, "doctors", docId);
+          const existingDocSnap = await getDoc(existingDocRef);
+          if (existingDocSnap.exists()) {
+            // If by chance the ID exists, generate a new one
+            docId = `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          }
+        }
 
         const doctorToSave: Doctor = {
           id: docId,
@@ -476,12 +500,14 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
         setIsOpen(false);
         form.reset();
         setPhotoPreview(null);
+        setIsSubmitting(false);
         toast({
           title: `Doctor ${isEditMode ? "Updated" : "Added"}`,
           description: `${values.name} has been successfully ${isEditMode ? "updated" : "added"}.`,
         });
 
       } catch (error: any) {
+        setIsSubmitting(false);
         console.error("An error occurred during form submission:", error);
         toast({
           variant: "destructive",
@@ -541,6 +567,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
     <Dialog open={isOpen} onOpenChange={(open) => {
         if (!open) {
            setIsOpen(false);
+           setIsSubmitting(false); // Reset submission state when dialog closes
         }
     }}>
       <DialogContent 
@@ -916,10 +943,13 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
               </div>
             </ScrollArea>
             <DialogFooter className="pt-4">
-              <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancel</Button>
+              <Button type="button" variant="ghost" onClick={() => {
+                setIsOpen(false);
+                setIsSubmitting(false); // Reset submission state when cancelled
+              }}>Cancel</Button>
               <Button
                 type="submit"
-                disabled={isPending || !form.formState.isValid}
+                disabled={isPending || isSubmitting || !form.formState.isValid}
               >
                 {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {isEditMode ? "Save Changes" : "Save Doctor"}
