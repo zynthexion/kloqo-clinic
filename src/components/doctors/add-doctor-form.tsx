@@ -79,7 +79,7 @@ const formSchema = z.object({
   specialty: z.string().min(2, { message: "Specialty must be at least 2 characters." }),
   department: z.string().min(1, { message: "Please select a department." }),
   registrationNumber: z.string().optional(),
-  bio: z.string().min(10, { message: "Bio must be at least 10 characters." }),
+  bio: z.string().optional(),
   experience: z.coerce.number().min(0, "Years of experience cannot be negative."),
   consultationFee: z.coerce.number({invalid_type_error: "Consultation fee is required."}).min(1, "Consultation fee must be greater than 0."),
   averageConsultingTime: z.coerce.number().min(5, "Must be at least 5 minutes."),
@@ -712,9 +712,8 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
                     name="bio"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="flex items-center gap-1">
+                        <FormLabel>
                           Bio
-                          <span className="text-red-500">*</span>
                         </FormLabel>
                         <FormControl>
                           <Textarea placeholder="A brief biography of the doctor..." {...field} />
