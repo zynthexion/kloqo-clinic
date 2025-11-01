@@ -510,3 +510,110 @@ function findCurrentSlotIndex(slots: Date[], now: Date): number {
   // If all slots are in the past, return length (next slot would be after the last)
   return slots.length;
 }
+
+/**
+ * Calculates slot details for a skipped token to rejoin the queue
+ * 
+ * Logic:
+ * - Uses slotIndex-based placement (consistent with walk-in logic)
+ * - Places token after N active patients (N = skippedTokenRecurrence)
+ * - Updates both slotIndex and time field to keep in sync
+ * - Shows error if target slot is conflicted (no auto-resolve)
+ * 
+ * @param skippedAppointment - The skipped appointment that needs to rejoin
+ * @param activeAppointments - Active appointments (Pending/Confirmed) for same doctor and date, sorted by slotIndex
+ * @param doctor - Doctor details
+ * @param recurrence - Number of patients to skip ahead (from clinicDetails.skippedTokenRecurrence)
+ * @param date - The appointment date
+ * @returns Object with slotIndex, time, sessionIndex, or throws error on conflict
+ */
+export async function calculateSkippedTokenRejoinSlot(
+  skippedAppointment: Appointment,
+  activeAppointments: Appointment[],
+  doctor: Doctor,
+  recurrence: number,
+  date: Date
+): Promise<{
+  slotIndex: number;
+  time: string;
+  sessionIndex: number;
+}> {
+  const dateStr = format(date, 'd MMMM yyyy');
+  const dayOfWeek = format(date, 'EEEE');
+  const slotDuration = doctor.averageConsultingTime || 15;
+
+  // Step 1: Get doctor's availability for the day
+  const todaysAvailability = doctor.availabilitySlots?.find(s => s.day === dayOfWeek);
+  if (!todaysAvailability || !todaysAvailability.timeSlots?.length) {
+    throw new Error('Doctor not available on this date');
+  }
+
+  // Step 2: Generate all time slots for the day
+  const allSlots = generateTimeSlotsWithSession(todaysAvailability.timeSlots, date, slotDuration);
+  if (allSlots.length === 0) {
+    throw new Error('No consultation slots available for this date');
+  }
+
+  // Step 3: Get active appointments sorted by slotIndex
+  const activeBySlotIndex = activeAppointments
+    .filter(a => a.doctor === skippedAppointment.doctor && a.date === dateStr)
+    .filter(a => (a.status === 'Pending' || a.status === 'Confirmed'))
+    .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
+
+  // Step 4: Handle empty queue
+  if (activeBySlotIndex.length === 0) {
+    // No active queue, place at current or first available slot
+    const now = new Date();
+    const currentSlotIndex = findCurrentSlotIndex(allSlots.map(s => s.time), now);
+    const targetSlotIndex = Math.min(currentSlotIndex, allSlots.length - 1);
+    
+    return {
+      slotIndex: targetSlotIndex,
+      time: format(allSlots[targetSlotIndex].time, 'hh:mm a'),
+      sessionIndex: allSlots[targetSlotIndex].sessionIndex,
+    };
+  }
+
+  // Step 5: Calculate target slotIndex based on recurrence
+  // Place after N active patients (where N = recurrence)
+  const insertionPoint = Math.min(recurrence, activeBySlotIndex.length);
+  
+  // Get the slotIndex of the patient at insertion point
+  const lastPatientBeforeInsertion = activeBySlotIndex[insertionPoint - 1];
+  const targetSlotIndex = (lastPatientBeforeInsertion.slotIndex ?? 0) + 1;
+
+  // Step 6: Validate slot availability
+  // Check if target slot is within available slots
+  if (targetSlotIndex >= allSlots.length) {
+    // Beyond scheduled hours - use last slot
+    const lastSlot = allSlots[allSlots.length - 1];
+    return {
+      slotIndex: allSlots.length - 1,
+      time: format(lastSlot.time, 'hh:mm a'),
+      sessionIndex: lastSlot.sessionIndex,
+    };
+  }
+
+  // Step 7: Check for slot conflict (occupied by another A token)
+  const isOccupied = activeBySlotIndex.some(apt => 
+    apt.slotIndex === targetSlotIndex && 
+    apt.bookedVia !== 'Walk-in' && 
+    apt.tokenNumber?.startsWith('A')
+  );
+
+  if (isOccupied) {
+    throw new Error(`Slot ${targetSlotIndex} is already occupied. Cannot rejoin at this position.`);
+  }
+
+  // Step 8: Get slot time and session index
+  const targetSlot = allSlots[targetSlotIndex];
+  if (!targetSlot) {
+    throw new Error(`Invalid slot index: ${targetSlotIndex}`);
+  }
+
+  return {
+    slotIndex: targetSlotIndex,
+    time: format(targetSlot.time, 'hh:mm a'),
+    sessionIndex: targetSlot.sessionIndex,
+  };
+}

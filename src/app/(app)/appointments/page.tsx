@@ -68,7 +68,7 @@ import Link from "next/link";
 import { Label } from "@/components/ui/label";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { calculateWalkInDetails } from '@/lib/appointment-service';
+import { calculateWalkInDetails, calculateSkippedTokenRejoinSlot } from '@/lib/appointment-service';
 import { sendAppointmentCancelledNotification, sendTokenCalledNotification, sendAppointmentBookedByStaffNotification } from '@/lib/notification-service';
 
 const formSchema = z.object({
@@ -1010,57 +1010,47 @@ export default function AppointmentsPage() {
       if (!clinicId || !selectedDoctor) return;
   
       const recurrence = clinicDetails?.skippedTokenRecurrence || 3;
-      const avgConsultingTime = selectedDoctor.averageConsultingTime || 15;
-  
-      // Get today's active appointments for the same doctor, sorted by time
       const today = new Date();
       const todayStr = format(today, 'd MMMM yyyy');
+      
+      // Get today's active appointments for the same doctor
       const activeAppointments = appointments
         .filter(a =>
           a.doctor === appointment.doctor &&
           a.date === todayStr &&
           (a.status === 'Pending' || a.status === 'Confirmed')
-        )
-        .sort((a, b) => parseTime(a.time, today).getTime() - parseTime(b.time, today).getTime());
-  
-      if (activeAppointments.length === 0) {
-        // No active queue, just set their time to now + a small delay
-        const newTime = format(addMinutes(new Date(), 5), 'hh:mm a');
-        await updateDoc(doc(db, 'appointments', appointment.id), { time: newTime, status: 'Confirmed' });
-        toast({ title: 'Re-joined Queue', description: `${appointment.patientName} is now next.` });
-        return;
-      }
-  
-      const insertionIndex = Math.min(recurrence, activeAppointments.length);
-      const lastPatientBeforeInsertion = activeAppointments[insertionIndex - 1];
-      const newTimeForSkipped = addMinutes(parseTime(lastPatientBeforeInsertion.time, today), avgConsultingTime);
-      
-      const batch = writeBatch(db);
-  
-      // Update the skipped appointment
-      const skippedRef = doc(db, 'appointments', appointment.id);
-      batch.update(skippedRef, {
-        status: 'Confirmed',
-        time: format(newTimeForSkipped, 'hh:mm a'),
-      });
-  
-      // Ripple update for subsequent appointments
-      for (let i = insertionIndex; i < activeAppointments.length; i++) {
-        const aptToShift = activeAppointments[i];
-        const newTime = addMinutes(parseTime(aptToShift.time, today), avgConsultingTime);
-        const aptRef = doc(db, 'appointments', aptToShift.id);
-        batch.update(aptRef, { time: format(newTime, 'hh:mm a') });
-      }
-  
+        );
+
       try {
-        await batch.commit();
+        // Calculate slot-based rejoin position
+        const rejoinDetails = await calculateSkippedTokenRejoinSlot(
+          appointment,
+          activeAppointments,
+          selectedDoctor,
+          recurrence,
+          today
+        );
+
+        // Update the skipped appointment with both slotIndex and time
+        await updateDoc(doc(db, 'appointments', appointment.id), {
+          status: 'Confirmed',
+          slotIndex: rejoinDetails.slotIndex,
+          time: rejoinDetails.time,
+          sessionIndex: rejoinDetails.sessionIndex,
+        });
+
         toast({
           title: "Patient Re-joined Queue",
-          description: `${appointment.patientName} has been added back to the queue. Subsequent appointments have been rescheduled.`
+          description: `${appointment.patientName} has been added back to the queue at position after ${recurrence} patient(s).`
         });
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error re-joining queue:", error);
-        toast({ variant: "destructive", title: "Error", description: "Could not re-join the patient to the queue." });
+        const errorMessage = error?.message || "Could not re-join the patient to the queue.";
+        toast({ 
+          variant: "destructive", 
+          title: "Error", 
+          description: errorMessage 
+        });
       }
     });
   };
