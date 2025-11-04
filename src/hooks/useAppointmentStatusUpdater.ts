@@ -72,13 +72,38 @@ export function useAppointmentStatusUpdater() {
       const batch = writeBatch(db);
       let hasWrites = false;
 
-      // The snapshot already filters for 'Confirmed' and 'Skipped',
-      // so we just need to check the time.
-      for (const apt of appointments) {
+      // Only check Skipped appointments
+      const skippedAppointments = appointments.filter(apt => apt.status === 'Skipped');
+      
+      for (const apt of skippedAppointments) {
         try {
-          const appointmentDateTime = parseAppointmentDateTime(apt.date, apt.time);
-          const fiveHoursLater = addHours(appointmentDateTime, 5);
+          // Get skippedAt timestamp (when the appointment was marked as Skipped)
+          const skippedAt = apt.skippedAt;
+          
+          if (!skippedAt) {
+            // If skippedAt doesn't exist (old data), skip this appointment
+            console.warn(`Appointment ${apt.id} is Skipped but missing skippedAt timestamp`);
+            continue;
+          }
+          
+          // Convert Firestore timestamp to Date
+          let skippedAtDate: Date;
+          if (skippedAt instanceof Date) {
+            skippedAtDate = skippedAt;
+          } else if (skippedAt && typeof skippedAt.toDate === 'function') {
+            // Firestore Timestamp
+            skippedAtDate = skippedAt.toDate();
+          } else if (skippedAt && skippedAt.seconds) {
+            // Firestore Timestamp object with seconds property
+            skippedAtDate = new Date(skippedAt.seconds * 1000);
+          } else {
+            // Fallback: try to parse as string or number
+            skippedAtDate = new Date(skippedAt);
+          }
+          
+          const fiveHoursLater = addHours(skippedAtDate, 5);
 
+          // Check if 5 hours have passed since the appointment was skipped
           if (isAfter(now, fiveHoursLater)) {
             const aptRef = doc(db, 'appointments', apt.id);
             batch.update(aptRef, { status: 'No-show' });
@@ -86,7 +111,7 @@ export function useAppointmentStatusUpdater() {
           }
         } catch (e) {
           // Ignore parsing errors for potentially malformed old data
-          console.warn(`Could not parse date/time for appointment ${apt.id}:`, e);
+          console.warn(`Could not process Skipped appointment ${apt.id}:`, e);
           continue;
         }
       }
@@ -150,11 +175,11 @@ export function useAppointmentStatusUpdater() {
             // Run doctor status update immediately when app opens
             checkAndUpdateDoctorStatuses(clinicId);
             
-            // Query for appointments that are potential candidates for being marked as "No-show"
+            // Query for Skipped appointments that are potential candidates for being marked as "No-show"
             const q = query(
                 collection(db, "appointments"), 
                 where("clinicId", "==", clinicId),
-                where("status", "in", ["Confirmed", "Pending", "Cancelled", "No-show", "Skipped"])
+                where("status", "==", "Skipped")
             );
 
             // Listen for real-time changes

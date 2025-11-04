@@ -1,5 +1,6 @@
-import { collection, query, where, getDocs, updateDoc, doc, writeBatch } from 'firebase/firestore';
+import { collection, query, where, getDocs, updateDoc, doc, writeBatch, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { assignWalkInsFromPool } from './walk-in-pool-service';
 import { format, parse, addHours, isAfter, isBefore, isWithinInterval } from 'date-fns';
 import type { Appointment, Doctor } from '@/lib/types';
 
@@ -24,45 +25,67 @@ export async function updateAppointmentAndDoctorStatuses(clinicId: string): Prom
 }
 
 /**
- * Updates appointment statuses to 'No-show' for appointments that are 5+ hours past their appointment time
+ * Updates appointment statuses to 'No-show' for Skipped appointments that are 5+ hours past the skip time
  */
 async function updateAppointmentStatuses(clinicId: string): Promise<void> {
   const now = new Date();
   const fiveHoursAgo = addHours(now, -5);
   
-  console.log('Checking appointments for status updates...', {
+  console.log('Checking Skipped appointments for No-show status updates...', {
     now: now.toISOString(),
     fiveHoursAgo: fiveHoursAgo.toISOString()
   });
   
-  // Query appointments that need status updates
+  // Query only Skipped appointments
   const appointmentsRef = collection(db, 'appointments');
   const q = query(
     appointmentsRef,
     where('clinicId', '==', clinicId),
-    where('status', 'in', ['Confirmed', 'Pending', 'Cancelled', 'No-show', 'Skipped'])
+    where('status', '==', 'Skipped')
   );
   
   const querySnapshot = await getDocs(q);
-  console.log(`Found ${querySnapshot.size} appointments to check`);
+  console.log(`Found ${querySnapshot.size} Skipped appointments to check`);
   
   const appointmentsToUpdate: { id: string; appointment: Appointment }[] = [];
   
   querySnapshot.forEach((docSnapshot) => {
     const appointment = docSnapshot.data() as Appointment;
-    const appointmentDateTime = parseAppointmentDateTime(appointment.date, appointment.time);
     
-    console.log('Checking appointment:', {
+    // Get skippedAt timestamp (when the appointment was marked as Skipped)
+    const skippedAt = appointment.skippedAt;
+    
+    if (!skippedAt) {
+      // If skippedAt doesn't exist (old data), skip this appointment
+      console.log('Appointment missing skippedAt timestamp, skipping:', docSnapshot.id);
+      return;
+    }
+    
+    // Convert Firestore timestamp to Date
+    let skippedAtDate: Date;
+    if (skippedAt instanceof Date) {
+      skippedAtDate = skippedAt;
+    } else if (skippedAt && typeof skippedAt.toDate === 'function') {
+      // Firestore Timestamp
+      skippedAtDate = skippedAt.toDate();
+    } else if (skippedAt && skippedAt.seconds) {
+      // Firestore Timestamp object with seconds property
+      skippedAtDate = new Date(skippedAt.seconds * 1000);
+    } else {
+      // Fallback: try to parse as string or number
+      skippedAtDate = new Date(skippedAt);
+    }
+    
+    console.log('Checking Skipped appointment:', {
       id: docSnapshot.id,
       patientName: appointment.patientName,
-      date: appointment.date,
-      time: appointment.time,
       status: appointment.status,
-      appointmentDateTime: appointmentDateTime?.toISOString(),
-      isBeforeFiveHoursAgo: appointmentDateTime ? isBefore(appointmentDateTime, fiveHoursAgo) : false
+      skippedAt: skippedAtDate.toISOString(),
+      isBeforeFiveHoursAgo: isBefore(skippedAtDate, fiveHoursAgo)
     });
     
-    if (appointmentDateTime && isBefore(appointmentDateTime, fiveHoursAgo)) {
+    // Check if skipped time is 5+ hours ago
+    if (isBefore(skippedAtDate, fiveHoursAgo)) {
       appointmentsToUpdate.push({ id: docSnapshot.id, appointment });
     }
   });
@@ -136,6 +159,59 @@ async function updateDoctorConsultationStatuses(clinicId: string): Promise<void>
     } else if (shouldBeIn && doctor.consultationStatus !== 'In') {
       doctorsToUpdate.push({ id: docSnapshot.id, doctor, newStatus: 'In' });
       console.log(`Doctor ${doctor.name} should be marked as In`);
+      
+      // When consultation starts, assign walk-ins from pool for each session
+      // This runs asynchronously in the background
+      const todaySlot = doctor.availabilitySlots?.find(slot => 
+        slot.day.toLowerCase() === currentDay.toLowerCase()
+      );
+      
+      if (doctor.availabilitySlots && todaySlot && todaySlot.timeSlots) {
+        const todayStr = format(now, 'd MMMM yyyy');
+        
+        // Get clinic details once for all sessions
+        getDoc(doc(db, 'clinics', clinicId)).then(clinicDocSnap => {
+          const clinicData = clinicDocSnap.data();
+          const capacityRatio = clinicData?.advancedTokenCapacityRatio ?? 0.7;
+          const allotment = clinicData?.walkInTokenAllotment ?? 5;
+          
+          // Process each session
+          Promise.all(
+            todaySlot.timeSlots.map(async (session, sessionIndex) => {
+              try {
+                // Get today's active appointments for this doctor
+                const appointmentsQuery = query(
+                  collection(db, 'appointments'),
+                  where('clinicId', '==', clinicId),
+                  where('doctor', '==', doctor.name),
+                  where('date', '==', todayStr)
+                );
+                const appointmentsSnap = await getDocs(appointmentsQuery);
+                const activeAppointments = appointmentsSnap.docs.map(doc => ({
+                  id: doc.id,
+                  ...doc.data()
+                })) as Appointment[];
+                
+                // Assign walk-ins from pool for this session
+                await assignWalkInsFromPool(
+                  clinicId,
+                  doctor,
+                  sessionIndex,
+                  activeAppointments,
+                  allotment,
+                  capacityRatio
+                );
+              } catch (error) {
+                console.error(`Error assigning walk-ins from pool for doctor ${doctor.name}, session ${sessionIndex}:`, error);
+              }
+            })
+          ).catch(error => {
+            console.error(`Error processing W pool assignments for doctor ${doctor.name}:`, error);
+          });
+        }).catch(error => {
+          console.error(`Error fetching clinic details for W pool assignment:`, error);
+        });
+      }
     } else {
       console.log(`Doctor ${doctor.name} status is correct (${doctor.consultationStatus})`);
     }

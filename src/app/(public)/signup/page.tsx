@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
 import { StepperNav } from '@/components/signup-stepper/stepper-nav';
 import { Step1ClinicProfile } from '@/components/signup-stepper/step-1-clinic-profile';
 import { Step2OwnerInfo } from '@/components/signup-stepper/step-2-owner-info';
@@ -22,7 +23,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { auth, db } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { writeBatch, doc, collection, getDocs, query, where } from 'firebase/firestore';
+import { writeBatch, doc, collection } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
@@ -64,7 +65,7 @@ const signupSchema = z.object({
   longitude: z.coerce.number().min(-180, "Invalid longitude").max(180, "Invalid longitude"),
   skippedTokenRecurrence: z.coerce.number().min(2, "Value must be at least 2."),
   walkInTokenAllotment: z.coerce.number().min(2, "Value must be at least 2."),
-  walkInCapacityThreshold: z.coerce.number().min(0.5, "Threshold must be at least 50%").max(1.0, "Threshold cannot exceed 100%"),
+  advancedTokenCapacityRatio: z.coerce.number().min(0.5, "Ratio must be at least 50%").max(0.9, "Ratio cannot exceed 90%"),
 
   // Step 2
   ownerName: z.string()
@@ -134,7 +135,7 @@ const defaultFormData: SignUpFormData = {
   longitude: 0,
   skippedTokenRecurrence: 3,
   walkInTokenAllotment: 5,
-  walkInCapacityThreshold: 0.75,
+  advancedTokenCapacityRatio: 0.7,
   
   ownerName: "",
   designation: 'Doctor',
@@ -174,7 +175,7 @@ const defaultFormData: SignUpFormData = {
 };
 
 const stepFields: (keyof SignUpFormData)[][] = [
-    ['clinicName', 'clinicType', 'numDoctors', 'skippedTokenRecurrence', 'walkInTokenAllotment'], // Step 1, latitude/longitude are special
+    ['clinicName', 'clinicType', 'numDoctors', 'skippedTokenRecurrence', 'walkInTokenAllotment', 'advancedTokenCapacityRatio'], // Step 1, latitude/longitude are special
     ['ownerName', 'designation', 'mobileNumber', 'emailAddress', 'password'], // Step 2
     ['addressLine1', 'city', 'state', 'pincode'], // Step 3
     ['hours', 'avgPatientsPerDay'], // Step 4
@@ -186,6 +187,7 @@ const stepFields: (keyof SignUpFormData)[][] = [
 export default function SignupPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
 
@@ -282,10 +284,12 @@ export default function SignupPage() {
   };
 
   const onSubmit = async (formData: SignUpFormData) => {
+    setIsSubmitting(true);
     let userCredential;
     try {
         userCredential = await createUserWithEmailAndPassword(auth, formData.emailAddress, formData.password);
     } catch (error: any) {
+        setIsSubmitting(false);
         toast({
             variant: "destructive",
             title: "Authentication Failed",
@@ -336,6 +340,7 @@ export default function SignupPage() {
       licenseUrl = await uploadFileViaAPI(formData.license, 'license');
       receptionPhotoUrl = await uploadFileViaAPI(formData.receptionPhoto, 'reception_photo');
     } catch (uploadError: any) {
+      setIsSubmitting(false);
       toast({
         variant: "destructive",
         title: "Upload Failed",
@@ -377,6 +382,7 @@ export default function SignupPage() {
         longitude: formData.longitude,
         skippedTokenRecurrence: formData.skippedTokenRecurrence,
         walkInTokenAllotment: formData.walkInTokenAllotment,
+        advancedTokenCapacityRatio: formData.advancedTokenCapacityRatio,
         numDoctors: formData.numDoctors,
         currentDoctorCount: 0,
         clinicRegNumber: formData.clinicRegNumber,
@@ -401,51 +407,17 @@ export default function SignupPage() {
         onboarded: false,
         role: 'clinicAdmin' as const,
     };
-    
-    const generateUniqueUsername = async (clinicName: string): Promise<string> => {
-      const prefix = clinicName.replace(/[^a-zA-Z]/g, '').slice(0, 3).toLowerCase();
-      let username = '';
-      let isUnique = false;
-      while (!isUnique) {
-        const randomNumbers = Math.floor(100 + Math.random() * 900); // 3-digit number
-        username = `${prefix}${randomNumbers}`;
-        const q = query(collection(db, 'mobile-app'), where('username', '==', username));
-        const querySnapshot = await getDocs(q);
-        isUnique = querySnapshot.empty;
-      }
-      return username;
-    };
-
-    const generateRandomPassword = (length = 8): string => {
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-      let password = '';
-      for (let i = 0; i < length; i++) {
-        password += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-      return password;
-    };
-
-    const mobileAppCredsRef = doc(collection(db, "mobile-app"));
-    const mobileUsername = await generateUniqueUsername(formData.clinicName);
-    const mobilePassword = generateRandomPassword(8);
-    const mobileCredsData = {
-        id: mobileAppCredsRef.id,
-        clinicId: clinicId,
-        username: mobileUsername,
-        password: mobilePassword,
-    };
 
     const batch = writeBatch(db);
     batch.set(clinicRef, clinicData);
     batch.set(userRef, userData);
-    batch.set(mobileAppCredsRef, mobileCredsData);
     
     batch.commit()
     .catch(async (serverError) => {
+        setIsSubmitting(false);
         const errorContexts = [
             { path: clinicRef.path, data: clinicData },
-            { path: userRef.path, data: userData },
-            { path: mobileAppCredsRef.path, data: mobileCredsData }
+            { path: userRef.path, data: userData }
         ];
 
         for (const context of errorContexts) {
@@ -539,9 +511,16 @@ export default function SignupPage() {
                     type="button" 
                     size="lg" 
                     onClick={handleNext}
-                    disabled={!isStepValid}
+                    disabled={!isStepValid || isSubmitting}
                 >
-                  {currentStep === steps.length ? 'Register Clinic' : 'Next'}
+                  {isSubmitting && currentStep === steps.length ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Registering...
+                    </>
+                  ) : (
+                    currentStep === steps.length ? 'Register Clinic' : 'Next'
+                  )}
                 </Button>
               </footer>
             </form>

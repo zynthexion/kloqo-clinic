@@ -82,6 +82,7 @@ export type Appointment = {
   reviewed?: boolean;
   reviewId?: string;
   completedAt?: any;
+  skippedAt?: any; // Timestamp when appointment was marked as Skipped
 };
 
 export type Patient = {

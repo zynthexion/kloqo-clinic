@@ -164,8 +164,6 @@ export function AddRelativeDialog({
             id: newRelativePatientRef.id,
             primaryUserId: newUserRef.id, // Their own user ID since they're primary
             name: values.name,
-            age: values.age,
-            sex: values.sex,
             phone: relativePhone, // Set phone field
             communicationPhone: relativePhone, // Set communication phone
             place: values.place,
@@ -176,7 +174,15 @@ export function AddRelativeDialog({
             clinicIds: primaryMemberData.clinicIds || [],
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
-          };
+          } as any;
+          
+          // Only add age and sex if they have values (Firestore doesn't allow undefined)
+          if (values.age !== undefined && values.age !== null) {
+            newRelativeData.age = values.age;
+          }
+          if (values.sex) {
+            newRelativeData.sex = values.sex;
+          }
 
         } else {
             // Case 2: Relative does NOT have a phone number OR phone matches primary (duplicate)
@@ -184,8 +190,6 @@ export function AddRelativeDialog({
             newRelativeData = {
               id: newRelativePatientRef.id,
               name: values.name,
-              age: values.age,
-              sex: values.sex,
               phone: "", // Phone field is explicitly empty when no phone entered
               communicationPhone: primaryMemberPhone, // Use primary patient's communicationPhone (already prioritized communicationPhone || phone on line 84)
               place: values.place,
@@ -196,10 +200,22 @@ export function AddRelativeDialog({
               clinicIds: primaryMemberData.clinicIds || [],
               createdAt: serverTimestamp(),
               updatedAt: serverTimestamp(),
-            };
+            } as any;
+            
+            // Only add age and sex if they have values (Firestore doesn't allow undefined)
+            if (values.age !== undefined && values.age !== null) {
+              newRelativeData.age = values.age;
+            }
+            if (values.sex) {
+              newRelativeData.sex = values.sex;
+            }
         }
 
-        batch.set(newRelativePatientRef, newRelativeData);
+        // Remove undefined values - Firestore doesn't allow undefined
+        const cleanedRelativeData = Object.fromEntries(
+          Object.entries(newRelativeData).filter(([_, v]) => v !== undefined)
+        );
+        batch.set(newRelativePatientRef, cleanedRelativeData);
         
         // Always add to primary's relatedPatientIds, regardless of whether relative has a phone
         // Even if relative has a unique phone and becomes isPrimary: true, they are still a relative of the primary patient

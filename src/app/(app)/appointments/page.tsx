@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Appointment, Doctor, Patient, User } from "@/lib/types";
-import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc, orderBy, onSnapshot } from "firebase/firestore";
+import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc, orderBy, onSnapshot, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes, isAfter, startOfDay, addHours } from "date-fns";
@@ -70,6 +70,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { calculateWalkInDetails, calculateSkippedTokenRejoinSlot, generateNextTokenAndReserveSlot } from '@/lib/appointment-service';
 import { sendAppointmentCancelledNotification, sendTokenCalledNotification, sendAppointmentBookedByStaffNotification } from '@/lib/notification-service';
+import { calculateSessionCapacity, isSlotInAdvancedZone, getBookedATokenCount, canBookAToken } from '@/lib/capacity-service';
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -172,6 +173,7 @@ export default function AppointmentsPage() {
   const [walkInEstimate, setWalkInEstimate] = useState<WalkInEstimate>(null);
   const [isCalculatingEstimate, setIsCalculatingEstimate] = useState(false);
   const [appointmentToSkip, setAppointmentToSkip] = useState<Appointment | null>(null);
+  const [appointmentToCancel, setAppointmentToCancel] = useState<Appointment | null>(null);
   
   const [linkChannel, setLinkChannel] = useState<'sms' | 'whatsapp'>('sms');
 
@@ -495,30 +497,43 @@ export default function AppointmentsPage() {
         
         const communicationPhone = `+91${form.getValues('phone')}`;
         
-        const patientDataToUpdate = {
+        const patientDataToUpdate: any = {
           name: values.patientName,
-            age: values.age ?? undefined,
-          sex: values.sex,
           place: values.place,
           phone: values.phone ? `+91${values.phone}` : "",
           communicationPhone: communicationPhone,
         };
+        
+        // Only add age and sex if they have values (Firestore doesn't allow undefined)
+        if (values.age !== undefined && values.age !== null) {
+          patientDataToUpdate.age = values.age;
+        }
+        if (values.sex) {
+          patientDataToUpdate.sex = values.sex;
+        }
 
         if (isEditing && editingAppointment) {
           patientForAppointmentId = editingAppointment.patientId;
           const patientRef = doc(db, 'patients', patientForAppointmentId);
           // Get the existing patient to check if they have a phone
-          const existingPatientSnap = await getDoc(patientRef);
+          const existingPatientSnap = await getFirestoreDoc(patientRef);
           const existingPatient = existingPatientSnap.exists() ? existingPatientSnap.data() as Patient : null;
           
           const updateData: any = {
             name: patientDataToUpdate.name,
-            age: patientDataToUpdate.age,
-            sex: patientDataToUpdate.sex,
             place: patientDataToUpdate.place,
             communicationPhone: patientDataToUpdate.communicationPhone,
             updatedAt: serverTimestamp()
           };
+          
+          // Only add age and sex if they have values (Firestore doesn't allow undefined)
+          if (patientDataToUpdate.age !== undefined && patientDataToUpdate.age !== null) {
+            updateData.age = patientDataToUpdate.age;
+          }
+          if (patientDataToUpdate.sex) {
+            updateData.sex = patientDataToUpdate.sex;
+          }
+          
           // Only update phone field if patient already has a phone (not a relative without phone)
           // Preserve empty phone field for relatives
           if (existingPatient && existingPatient.phone && existingPatient.phone.trim().length > 0) {
@@ -595,7 +610,7 @@ export default function AppointmentsPage() {
             };
             batch.set(newUserRef, newUserData);
 
-            const newPatientData: Patient = {
+            const newPatientData: any = {
               id: patientId,
               primaryUserId: userId,
               ...patientDataToUpdate,
@@ -608,7 +623,11 @@ export default function AppointmentsPage() {
               createdAt: serverTimestamp(),
               updatedAt: serverTimestamp(),
             };
-            batch.set(patientRef, newPatientData);
+            // Remove undefined values - Firestore doesn't allow undefined
+            const cleanedPatientData = Object.fromEntries(
+              Object.entries(newPatientData).filter(([_, v]) => v !== undefined)
+            );
+            batch.set(patientRef, cleanedPatientData);
 
           } else {
             // User exists, just create/update patient
@@ -622,9 +641,21 @@ export default function AppointmentsPage() {
                 // Patient record exists, update it and ensure clinicId is present
                 patientId = existingPatientSnap.id;
                 const updateData: any = {
-                    ...patientDataToUpdate,
+                    name: patientDataToUpdate.name,
+                    place: patientDataToUpdate.place,
+                    phone: patientDataToUpdate.phone,
+                    communicationPhone: patientDataToUpdate.communicationPhone,
                     updatedAt: serverTimestamp()
                 };
+                
+                // Only add age and sex if they have values (Firestore doesn't allow undefined)
+                if (patientDataToUpdate.age !== undefined && patientDataToUpdate.age !== null) {
+                  updateData.age = patientDataToUpdate.age;
+                }
+                if (patientDataToUpdate.sex) {
+                  updateData.sex = patientDataToUpdate.sex;
+                }
+                
                 if (!existingPatientSnap.data().clinicIds?.includes(clinicId)) {
                     updateData.clinicIds = arrayUnion(clinicId);
                 }
@@ -632,7 +663,7 @@ export default function AppointmentsPage() {
             } else {
                 // This case is unlikely if DB is consistent, but handles it.
                 // User exists but patient record is missing. Create it.
-                const newPatientData: Patient = {
+                const newPatientData: any = {
                   id: patientId,
                   primaryUserId: userId,
                   ...patientDataToUpdate,
@@ -645,7 +676,11 @@ export default function AppointmentsPage() {
                   createdAt: serverTimestamp(),
                   updatedAt: serverTimestamp(),
                 };
-                batch.set(patientRef, newPatientData);
+                // Remove undefined values - Firestore doesn't allow undefined
+                const cleanedPatientData = Object.fromEntries(
+                  Object.entries(newPatientData).filter(([_, v]) => v !== undefined)
+                );
+                batch.set(patientRef, cleanedPatientData);
             }
           }
 
@@ -693,6 +728,18 @@ export default function AppointmentsPage() {
           }
           const date = new Date();
           
+          // Create appointment directly (no pool needed)
+          const { tokenNumber, numericToken } = await generateNextTokenAndReserveSlot(
+            clinicId,
+            selectedDoctor.name,
+            date,
+            'W',
+            {
+              time: format(walkInEstimate.estimatedTime, "hh:mm a"),
+              slotIndex: walkInEstimate.slotIndex
+            }
+          );
+          
           const appointmentData: Omit<Appointment, 'id'> = {
             bookedVia: appointmentType,
             clinicId: selectedDoctor.clinicId,
@@ -708,8 +755,8 @@ export default function AppointmentsPage() {
             place: values.place,
             status: 'Pending',
             time: format(walkInEstimate.estimatedTime, "hh:mm a"),
-            tokenNumber: `W${String(walkInEstimate.numericToken).padStart(3, '0')}`,
-            numericToken: walkInEstimate.numericToken,
+            tokenNumber: tokenNumber,
+            numericToken: numericToken,
             slotIndex: walkInEstimate.slotIndex,
             sessionIndex: walkInEstimate.sessionIndex,
             treatment: "General Consultation",
@@ -718,6 +765,27 @@ export default function AppointmentsPage() {
           const appointmentRef = doc(collection(db, 'appointments'));
           await setDoc(appointmentRef, { ...appointmentData, id: appointmentRef.id });
           setAppointments(prev => [...prev, { ...appointmentData, id: appointmentRef.id }]);
+
+          // Ensure clinicId is added to patient's clinicIds array if it doesn't exist
+          if (!isEditing) {
+            try {
+              const patientRef = doc(db, 'patients', patientForAppointmentId);
+              const patientDoc = await getFirestoreDoc(patientRef);
+              if (patientDoc.exists()) {
+                const patientData = patientDoc.data();
+                const clinicIds = patientData?.clinicIds || [];
+                if (!clinicIds.includes(clinicId)) {
+                  await updateDoc(patientRef, {
+                    clinicIds: arrayUnion(clinicId),
+                    updatedAt: serverTimestamp(),
+                  });
+                }
+              }
+            } catch (error) {
+              console.error("Error updating patient clinicIds:", error);
+              // Don't fail the appointment creation if this update fails
+            }
+          }
 
           setGeneratedToken(appointmentData.tokenNumber);
           setIsTokenModalOpen(true);
@@ -755,6 +823,67 @@ export default function AppointmentsPage() {
                 globalSlotIndex++;
               }
               if (slotIndex !== -1) break;
+            }
+          }
+
+          // Validate 70/30 capacity for A tokens
+          if (sessionIndex !== -1 && availabilityForDay) {
+            const capacityRatio = clinicDetails?.advancedTokenCapacityRatio ?? 0.7;
+            const session = availabilityForDay.timeSlots[sessionIndex];
+            
+            // Calculate total slots for this session
+            const sessionStart = parseDateFns(session.from, 'hh:mm a', values.date);
+            const sessionEnd = parseDateFns(session.to, 'hh:mm a', values.date);
+            const slotDuration = selectedDoctor.averageConsultingTime || 15;
+            let sessionSlotCount = 0;
+            let tempTime = new Date(sessionStart);
+            while (tempTime < sessionEnd) {
+              sessionSlotCount++;
+              tempTime = addMinutes(tempTime, slotDuration);
+            }
+            
+            const { advancedCapacity } = calculateSessionCapacity(sessionSlotCount, capacityRatio);
+            
+            // Calculate local slot index within the session
+            let localSlotIndex = 0;
+            let tempTime2 = new Date(sessionStart);
+            while (tempTime2 < sessionEnd) {
+              if (format(tempTime2, "hh:mm a") === appointmentTimeStr) {
+                break;
+              }
+              tempTime2 = addMinutes(tempTime2, slotDuration);
+              localSlotIndex++;
+            }
+            
+            // Check if slot is in 30% zone (reserved for walk-ins)
+            if (localSlotIndex >= advancedCapacity) {
+              toast({
+                variant: "destructive",
+                title: "Slot Reserved for Walk-ins",
+                description: "This time slot is reserved for walk-in patients. Please select another time within the advance booking zone.",
+              });
+              return;
+            }
+            
+            // Check if 70% capacity is already full
+            const sessionAppointments = appointments.filter(
+              apt => apt.doctor === selectedDoctor.name && 
+              apt.date === appointmentDateStr && 
+              apt.sessionIndex === sessionIndex &&
+              apt.bookedVia !== 'Walk-in' &&
+              apt.status !== 'Cancelled' &&
+              apt.status !== 'Completed' &&
+              apt.status !== 'No-show' &&
+              !(isEditing && apt.id === editingAppointment?.id)
+            );
+            
+            if (sessionAppointments.length >= advancedCapacity) {
+              toast({
+                variant: "destructive",
+                title: "A Token Capacity Full",
+                description: `Advanced booking capacity (${Math.round(capacityRatio * 100)}%) is full for this session. Please select another date or use walk-in.`,
+              });
+              return;
             }
           }
 
@@ -813,11 +942,23 @@ export default function AppointmentsPage() {
 
           if (!isEditing) {
             const patientRef = doc(db, 'patients', patientForAppointmentId);
-            await updateDoc(patientRef, {
+            const patientDoc = await getFirestoreDoc(patientRef);
+            const updateData: any = {
               visitHistory: arrayUnion(appointmentId),
               totalAppointments: increment(1),
               updatedAt: serverTimestamp(),
-            });
+            };
+            
+            // Ensure clinicId is added to patient's clinicIds array if it doesn't exist
+            if (patientDoc.exists()) {
+              const patientData = patientDoc.data();
+              const clinicIds = patientData?.clinicIds || [];
+              if (!clinicIds.includes(clinicId)) {
+                updateData.clinicIds = arrayUnion(clinicId);
+              }
+            }
+            
+            await updateDoc(patientRef, updateData);
           }
 
           // Send notification for new appointments
@@ -933,8 +1074,6 @@ export default function AppointmentsPage() {
                 phone: fullPhoneNumber,
                 communicationPhone: fullPhoneNumber,
                 name: "",
-                age: undefined,
-                sex: undefined,
                 place: "",
                 email: "",
                 clinicIds: [clinicId],
@@ -946,7 +1085,11 @@ export default function AppointmentsPage() {
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
             };
-            batch.set(newPatientRef, newPatientData as Patient);
+            // Remove undefined values - Firestore doesn't allow undefined
+            const cleanedPatientData = Object.fromEntries(
+                Object.entries(newPatientData).filter(([_, v]) => v !== undefined)
+            ) as Partial<Patient>;
+            batch.set(newPatientRef, cleanedPatientData);
 
             await batch.commit().catch(async (serverError) => {
             const permissionError = new FirestorePermissionError({
@@ -1089,16 +1232,64 @@ export default function AppointmentsPage() {
   const handleSkip = async (appointment: Appointment) => {
     startTransition(async () => {
       try {
+        const skippedSlotIndex = appointment.slotIndex ?? -1;
+        if (skippedSlotIndex < 0) {
+          throw new Error('Invalid appointment slot index');
+        }
+
         const appointmentRef = doc(db, "appointments", appointment.id);
-        await updateDoc(appointmentRef, { status: 'Skipped' });
+        const todayStr = format(new Date(), 'd MMMM yyyy');
+
+        // Find all appointments with slotIndex > skippedSlotIndex that need to be shifted backwards
+        const appointmentsToShift = appointments.filter(a => {
+          const slotIdx = a.slotIndex ?? -1;
+          return slotIdx > skippedSlotIndex && 
+                 a.doctor === appointment.doctor &&
+                 a.date === todayStr &&
+                 (a.status === 'Pending' || a.status === 'Confirmed');
+        });
+
+        // Step 1: Mark as skipped with timestamp
+        await updateDoc(appointmentRef, { 
+          status: 'Skipped',
+          skippedAt: serverTimestamp()
+        });
+
+        // Step 2: Shift subsequent appointments backwards (slotIndex - 1) using batch
+        if (appointmentsToShift.length > 0) {
+          const batch = writeBatch(db);
+          for (const apt of appointmentsToShift) {
+            const aptRef = doc(db, 'appointments', apt.id);
+            batch.update(aptRef, {
+              slotIndex: (apt.slotIndex ?? 0) - 1,
+              updatedAt: serverTimestamp()
+            });
+          }
+          await batch.commit();
+        }
+
+        // Step 3: Update local state
         setAppointments(prev => {
-          const updated = prev.map(a => a.id === appointment.id ? { ...a, status: 'Skipped' as const } : a);
+          const updated = prev.map(a => {
+            if (a.id === appointment.id) {
+              return { ...a, status: 'Skipped' as const };
+            }
+            // Shift subsequent appointments backwards
+            if (a.slotIndex && a.slotIndex > skippedSlotIndex && 
+                a.doctor === appointment.doctor &&
+                a.date === todayStr &&
+                (a.status === 'Pending' || a.status === 'Confirmed')) {
+              return { ...a, slotIndex: (a.slotIndex ?? 0) - 1 };
+            }
+            return a;
+          });
           return [
             ...updated.filter(a => a.status !== 'Skipped'),
             ...updated.filter(a => a.status === 'Skipped'),
           ] as Appointment[];
         });
-        toast({ title: "Appointment Skipped" });
+
+        toast({ title: "Appointment Skipped", description: "Subsequent appointments have been shifted backwards to fill the gap." });
       } catch (error) {
         console.error("Error skipping appointment:", error);
         toast({ variant: "destructive", title: "Error", description: "Failed to skip appointment." });
@@ -1132,17 +1323,72 @@ export default function AppointmentsPage() {
           today
         );
 
-        // Update the skipped appointment with both slotIndex and time
-        await updateDoc(doc(db, 'appointments', appointment.id), {
-          status: 'Confirmed',
-          slotIndex: rejoinDetails.slotIndex,
-          time: rejoinDetails.time,
-          sessionIndex: rejoinDetails.sessionIndex,
+        const targetSlotIndex = rejoinDetails.slotIndex;
+
+        // Find all appointments with slotIndex >= targetSlotIndex that need to be shifted forwards
+        const appointmentsToShift = appointments.filter(a => {
+          const slotIdx = a.slotIndex ?? -1;
+          return slotIdx >= targetSlotIndex && 
+                 a.id !== appointment.id && // Exclude the skipped appointment itself
+                 a.doctor === appointment.doctor &&
+                 a.date === todayStr &&
+                 (a.status === 'Pending' || a.status === 'Confirmed');
+        });
+
+        // Use transaction to atomically shift appointments and update skipped appointment
+        await runTransaction(db, async (transaction) => {
+          // First, shift subsequent appointments forwards (slotIndex + 1)
+          for (const apt of appointmentsToShift) {
+            const aptRef = doc(db, 'appointments', apt.id);
+            transaction.update(aptRef, {
+              slotIndex: (apt.slotIndex ?? 0) + 1,
+              updatedAt: serverTimestamp()
+            });
+          }
+
+          // Then, update skipped appointment
+          const aptRef = doc(db, 'appointments', appointment.id);
+          transaction.update(aptRef, {
+            status: 'Confirmed',
+            slotIndex: targetSlotIndex,
+            time: rejoinDetails.time,
+            sessionIndex: rejoinDetails.sessionIndex,
+            updatedAt: serverTimestamp()
+          });
+        });
+
+        // Update local state
+        setAppointments(prev => {
+          const updated = prev.map(a => {
+            if (a.id === appointment.id) {
+              return { 
+                ...a, 
+                status: 'Confirmed' as const,
+                slotIndex: targetSlotIndex,
+                time: rejoinDetails.time,
+                sessionIndex: rejoinDetails.sessionIndex
+              };
+            }
+            // Shift subsequent appointments forwards
+            if (a.slotIndex && a.slotIndex >= targetSlotIndex &&
+                a.id !== appointment.id &&
+                a.doctor === appointment.doctor &&
+                a.date === todayStr &&
+                (a.status === 'Pending' || a.status === 'Confirmed')) {
+              return { ...a, slotIndex: (a.slotIndex ?? 0) + 1 };
+            }
+            return a;
+          });
+          return updated.sort((a, b) => {
+            const slotA = a.slotIndex ?? Infinity;
+            const slotB = b.slotIndex ?? Infinity;
+            return slotA - slotB;
+          });
         });
 
         toast({
           title: "Patient Re-joined Queue",
-          description: `${appointment.patientName} has been added back to the queue at position after ${recurrence} patient(s).`
+          description: `${appointment.patientName} has been added back to the queue at position after ${recurrence} patient(s). Subsequent appointments have been shifted forwards.`
         });
       } catch (error: any) {
         console.error("Error re-joining queue:", error);
@@ -1283,23 +1529,56 @@ export default function AppointmentsPage() {
     const otherAppointments = appointments.filter(apt => !(isEditing && apt.id === editingAppointment?.id));
     
     const bookedSlotsForDay = otherAppointments
-      .filter(apt => apt.doctor === selectedDoctor.name && apt.date === formattedDate)
-      .map(apt => apt.time);
+      .filter(apt => apt.doctor === selectedDoctor.name && apt.date === formattedDate && apt.status !== 'Cancelled')
+      .reduce((acc, apt) => {
+        acc[apt.time] = apt.tokenNumber || apt.time; // Map time to token number
+        return acc;
+      }, {} as Record<string, string>);
     
     const leaveForDate = selectedDoctor.leaveSlots?.find(ls => typeof ls !== 'string' && ls.date && isSameDay(parse(ls.date, 'yyyy-MM-dd', new Date()), selectedDate));
     const leaveTimeSlots = leaveForDate && typeof leaveForDate !== 'string' ? leaveForDate.slots : [];
 
+    // Get capacity ratio from clinic details (default 0.7 = 70%)
+    const capacityRatio = clinicDetails?.advancedTokenCapacityRatio ?? 0.7;
+
     const sessions = availabilityForDay.timeSlots.map((session, sessionIndex) => {
       const slots = [];
-      let availableCount = 0;
+      let foundFirstAvailable = false;
       let currentTime = parseDateFns(session.from, 'hh:mm a', selectedDate);
       const endTime = parseDateFns(session.to, 'hh:mm a', selectedDate);
 
+      // Calculate total slots for this session
+      let slotIndex = 0;
+      const sessionSlotsArray: Array<{ time: Date; index: number }> = [];
+      let tempTime = new Date(currentTime);
+      while (tempTime < endTime) {
+        sessionSlotsArray.push({ time: new Date(tempTime), index: slotIndex });
+        tempTime = new Date(tempTime.getTime() + selectedDoctor.averageConsultingTime! * 60000);
+        slotIndex++;
+      }
+      const totalSlotsForSession = sessionSlotsArray.length;
+      const { advancedCapacity } = calculateSessionCapacity(totalSlotsForSession, capacityRatio);
+
+      // Get booked A tokens for this session
+      const sessionAppointments = otherAppointments.filter(
+        apt => apt.doctor === selectedDoctor.name && 
+        apt.date === formattedDate && 
+        apt.sessionIndex === sessionIndex &&
+        apt.bookedVia !== 'Walk-in' &&
+        apt.status !== 'Cancelled' &&
+        apt.status !== 'Completed' &&
+        apt.status !== 'No-show'
+      );
+      const bookedACount = sessionAppointments.length;
+
       while (currentTime < endTime) {
         const slotTime = format(currentTime, "hh:mm a");
-        let status: 'available' | 'booked' | 'leave' = 'available';
+        const currentSlotIndex = sessionSlotsArray.findIndex(s => 
+          Math.abs(s.time.getTime() - currentTime.getTime()) < 1000
+        );
+        let status: 'available' | 'booked' | 'leave' | 'reserved' = 'available';
 
-        if (bookedSlotsForDay.includes(slotTime)) {
+        if (slotTime in bookedSlotsForDay) {
           status = 'booked';
         } else if (leaveTimeSlots.some((leaveSlot: any) => {
           const leaveStart = parseDateFns(leaveSlot.from, 'hh:mm a', selectedDate);
@@ -1307,19 +1586,44 @@ export default function AppointmentsPage() {
           return currentTime >= leaveStart && currentTime < leaveEnd;
         })) {
           status = 'leave';
+        } else if (appointmentType === 'Advanced Booking') {
+          // For A tokens: Check if slot is in 30% zone (reserved for walk-ins)
+          if (currentSlotIndex >= advancedCapacity) {
+            status = 'reserved'; // Reserved for walk-ins, don't show for A tokens
+          }
+          // Also check if 70% capacity is already full
+          else if (bookedACount >= advancedCapacity) {
+            status = 'reserved'; // Capacity full, don't show
+          }
         }
 
-        if (isToday(selectedDate) && isBefore(currentTime, subMinutes(new Date(), 30))) {
-            status = 'booked'; 
+        // For same-day bookings, check if slot is within 30-minute window from current time
+        // Never show any slots (regular or cancelled) inside the 30-minute window
+        if (isToday(selectedDate) && appointmentType === 'Advanced Booking') {
+            const now = new Date();
+            const slotDateTime = currentTime; // Current slot time
+            const thirtyMinutesFromNow = addMinutes(now, 30);
+            
+            // Hide slot if it's within 30 minutes from now
+            if (isBefore(slotDateTime, thirtyMinutesFromNow) || slotDateTime.getTime() === thirtyMinutesFromNow.getTime()) {
+                status = 'booked'; // Slot too close to current time
+            }
         }
 
         if (status === 'available') {
-            if (availableCount < MAX_VISIBLE_SLOTS) {
+            // Show only the first (earliest) available slot per session for A tokens
+            if (!foundFirstAvailable) {
                 slots.push({ time: slotTime, status });
-                availableCount++;
+                foundFirstAvailable = true;
             }
-        } else {
-            slots.push({ time: slotTime, status });
+        } else if (status !== 'reserved') {
+            // Always show booked/leave slots for visibility, but hide reserved slots
+            // For booked slots, include the token number
+            const slotData: { time: string; status: 'available' | 'booked' | 'leave' | 'reserved'; tokenNumber?: string } = { time: slotTime, status };
+            if (status === 'booked' && bookedSlotsForDay[slotTime]) {
+                slotData.tokenNumber = bookedSlotsForDay[slotTime];
+            }
+            slots.push(slotData);
         }
         
         currentTime = new Date(currentTime.getTime() + selectedDoctor.averageConsultingTime! * 60000);
@@ -1330,7 +1634,7 @@ export default function AppointmentsPage() {
     });
 
     return sessions.filter(s => s.slots.length > 0);
-  }, [selectedDate, selectedDoctor, appointments, isEditing, editingAppointment]);
+  }, [selectedDate, selectedDoctor, appointments, isEditing, editingAppointment, appointmentType, clinicDetails]);
 
   const isAppointmentOnLeave = (appointment: Appointment): boolean => {
       if (!doctors.length || !appointment) return false;
@@ -1447,6 +1751,11 @@ export default function AppointmentsPage() {
   
   const isDateDisabled = (date: Date) => {
     if (!selectedDoctor) return true;
+  
+    // Walk-ins are only available for today (same day)
+    if (appointmentType === 'Walk-in') {
+      return !isToday(date);
+    }
   
     const isPastDate = isBefore(date, startOfDay(new Date()));
     const isNotAvailableDay = !availableDaysOfWeek.includes(getDay(date));
@@ -1951,7 +2260,13 @@ export default function AppointmentsPage() {
                                 {/* Appointment Type Selection */}
                                 <div className="space-y-2">
                                   <Label className="text-sm font-medium">Appointment Type</Label>
-                                  <RadioGroup onValueChange={(value) => form.setValue('bookedVia', value as any)} value={form.watch('bookedVia')} className="flex items-center space-x-2">
+                                  <RadioGroup onValueChange={(value) => {
+                                    form.setValue('bookedVia', value as any);
+                                    // When switching to Walk-in, set date to today (walk-ins are same-day only)
+                                    if (value === 'Walk-in') {
+                                      form.setValue('date', new Date());
+                                    }
+                                  }} value={form.watch('bookedVia')} className="flex items-center space-x-2">
                                     <Label htmlFor="advanced-booking" className={cn(
                                       "flex-1 px-4 py-3 rounded-md cursor-pointer transition-all duration-200 border-2 text-center font-medium flex items-center justify-center min-h-[4rem]",
                                       form.watch('bookedVia') === 'Advanced Booking' 
@@ -2022,7 +2337,7 @@ export default function AppointmentsPage() {
                                                                     "line-through bg-destructive/20 text-destructive-foreground": slot.status === 'leave',
                                                                 })}
                                                             >
-                                                                {slot.time}
+                                                                {slot.status === 'booked' && slot.tokenNumber ? slot.tokenNumber : slot.time}
                                                             </Button>
                                                         ))}
                                                     </div>
@@ -2039,7 +2354,7 @@ export default function AppointmentsPage() {
                               {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
                               <Button
                                 type="submit"
-                                disabled={isBookingButtonDisabled || !form.formState.isValid}
+                                disabled={appointmentType === 'Walk-in' ? isBookingButtonDisabled : (isBookingButtonDisabled || !form.formState.isValid)}
                                >
                                 {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                 {isEditing ? "Save Changes" : "Book Appointment"}
@@ -2221,11 +2536,11 @@ export default function AppointmentsPage() {
                                       </DropdownMenuItem>
                                       <DropdownMenuItem onClick={() => setEditingAppointment(appointment)}>
                                         <Edit className="mr-2 h-4 w-4" />
-                                        Edit
+                                        Reschedule
                                       </DropdownMenuItem>
-                                      <DropdownMenuItem onClick={() => handleDelete(appointment.id)} className="text-red-600">
-                                        <Trash2 className="mr-2 h-4 w-4" />
-                                        Delete
+                                      <DropdownMenuItem onClick={() => setAppointmentToCancel(appointment)} className="text-red-600">
+                                        <X className="mr-2 h-4 w-4" />
+                                        Cancel
                                       </DropdownMenuItem>
                                     </DropdownMenuContent>
                                   </DropdownMenu>
@@ -2393,6 +2708,30 @@ export default function AppointmentsPage() {
               }}
             >
               Confirm Skip
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={!!appointmentToCancel} onOpenChange={(open) => !open && setAppointmentToCancel(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure you want to cancel this appointment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will cancel the appointment for "{appointmentToCancel?.patientName}" on {appointmentToCancel?.date} at {appointmentToCancel?.time}. The patient will be notified.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setAppointmentToCancel(null)}>No, Keep Appointment</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-500 hover:bg-red-600"
+              onClick={() => {
+                if (appointmentToCancel) {
+                  handleCancel(appointmentToCancel);
+                }
+                setAppointmentToCancel(null);
+              }}
+            >
+              Yes, Cancel Appointment
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

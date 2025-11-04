@@ -15,6 +15,7 @@ import {
   MoreVertical,
   User as UserIcon,
   FileImage,
+  Grid3x3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -48,6 +49,7 @@ const menuItems = [
   { href: "/patients", icon: Users, label: "Patients" },
   { href: "/departments", icon: Building2, label: "Departments" },
   { href: "/live-status", icon: Activity, label: "Live Status" },
+  { href: "/slot-visualizer", icon: Grid3x3, label: "Slot Visualizer" },
 ];
 
 export function Sidebar() {

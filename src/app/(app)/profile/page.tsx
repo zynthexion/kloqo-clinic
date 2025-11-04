@@ -62,6 +62,7 @@ const clinicFormSchema = z.object({
     type: z.enum(['Single Doctor', 'Multi-Doctor']),
     numDoctors: z.coerce.number().min(1),
     clinicRegNumber: z.string().optional(),
+    advancedTokenCapacityRatio: z.coerce.number().min(0.5, "Ratio must be at least 50%").max(0.9, "Ratio cannot exceed 90%"),
     addressLine1: z.string().min(1, "Address Line 1 is required."),
     addressLine2: z.string().optional(),
     city: z.string().min(1, "City is required."),
@@ -121,6 +122,7 @@ export default function ProfilePage() {
         type: "Single Doctor", 
         numDoctors: 1, 
         clinicRegNumber: "", 
+        advancedTokenCapacityRatio: 0.7,
         addressLine1: "", 
         addressLine2: "", 
         city: "", 
@@ -202,6 +204,7 @@ export default function ProfilePage() {
         type: clinicDetails.type || 'Single Doctor',
         numDoctors: clinicDetails.numDoctors || 1,
         clinicRegNumber: clinicDetails.clinicRegNumber || '',
+        advancedTokenCapacityRatio: clinicDetails.advancedTokenCapacityRatio ?? 0.7,
         addressLine1: clinicDetails.addressDetails?.line1 || '',
         addressLine2: clinicDetails.addressDetails?.line2 || '',
         city: clinicDetails.addressDetails?.city || '',
@@ -303,6 +306,7 @@ export default function ProfilePage() {
                 type: values.type,
                 numDoctors: values.numDoctors,
                 clinicRegNumber: values.clinicRegNumber,
+                advancedTokenCapacityRatio: values.advancedTokenCapacityRatio,
                 addressDetails: {
                     line1: values.addressLine1,
                     line2: values.addressLine2,
@@ -348,6 +352,7 @@ export default function ProfilePage() {
             type: clinicDetails.type || 'Single Doctor',
             numDoctors: clinicDetails.numDoctors || 1,
             clinicRegNumber: clinicDetails.clinicRegNumber || '',
+            advancedTokenCapacityRatio: clinicDetails.advancedTokenCapacityRatio ?? 0.7,
             addressLine1: clinicDetails.addressDetails?.line1 || '',
             addressLine2: clinicDetails.addressDetails?.line2 || '',
             city: clinicDetails.addressDetails?.city || '',
@@ -574,6 +579,31 @@ export default function ProfilePage() {
                                     />
                                     <FormField control={clinicForm.control} name="clinicRegNumber" render={({ field }) => (
                                         <FormItem><FormLabel>Clinic Registration Number</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
+                                    )}/>
+                                    <FormField control={clinicForm.control} name="advancedTokenCapacityRatio" render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Advanced Token Capacity Ratio (%)</FormLabel>
+                                            <FormControl>
+                                                <Input 
+                                                    type="number" 
+                                                    min="50" 
+                                                    max="90" 
+                                                    step="5"
+                                                    placeholder="e.g., 70" 
+                                                    {...field} 
+                                                    value={field.value ? Math.round(field.value * 100) : ''} 
+                                                    onChange={(e) => {
+                                                        const value = parseInt(e.target.value, 10);
+                                                        field.onChange(value ? value / 100 : 0.7);
+                                                    }}
+                                                    disabled={!isEditingClinic || isPending}
+                                                />
+                                            </FormControl>
+                                            <FormDescription className="text-xs">
+                                                Percentage of slots reserved for advance bookings (remaining for walk-ins). Default: 70%
+                                            </FormDescription>
+                                            <FormMessage />
+                                        </FormItem>
                                     )}/>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                       <FormField control={clinicForm.control} name="addressLine1" render={({ field }) => (

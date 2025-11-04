@@ -244,9 +244,8 @@ function WalkInRegistrationContent() {
         const clinicSnap = await getDoc(clinicDocRef);
         const clinicData = clinicSnap.data();
         const walkInTokenAllotment = clinicData?.walkInTokenAllotment || 5;
-        const walkInCapacityThreshold = clinicData?.walkInCapacityThreshold || 0.75;
 
-        const { estimatedTime, patientsAhead, numericToken, slotIndex } = await calculateWalkInDetails(doctor, walkInTokenAllotment, walkInCapacityThreshold);
+        const { estimatedTime, patientsAhead, numericToken, slotIndex } = await calculateWalkInDetails(doctor, walkInTokenAllotment);
         
         // Clean phone: remove +91 if user entered it, remove any non-digits, then ensure exactly 10 digits
         let fullPhoneNumber = "";
@@ -331,9 +330,7 @@ function WalkInRegistrationContent() {
         const clinicSnap = await getDoc(clinicDocRef);
         const clinicData = clinicSnap.data();
         const walkInTokenAllotment = clinicData?.walkInTokenAllotment || 5;
-        const walkInCapacityThreshold = clinicData?.walkInCapacityThreshold || 0.75;
-
-        const recalculatedDetails = await calculateWalkInDetails(doctor, walkInTokenAllotment, walkInCapacityThreshold);
+        const recalculatedDetails = await calculateWalkInDetails(doctor, walkInTokenAllotment);
         
         // Use generateNextToken service to ensure sequential numbering and prevent duplicates
         const walkInTokenNumber = await generateNextToken(clinicId, doctor.name, new Date(), 'W');

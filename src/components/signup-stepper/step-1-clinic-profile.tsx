@@ -226,26 +226,26 @@ export function Step1ClinicProfile() {
         />
         <FormField
           control={control}
-          name="walkInCapacityThreshold"
+          name="advancedTokenCapacityRatio"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Walk-in Capacity Threshold (%)</FormLabel>
+              <FormLabel>Advanced Token Capacity Ratio (%)</FormLabel>
               <FormControl>
                 <Input 
                   type="number" 
                   min="50" 
-                  max="100" 
+                  max="90" 
                   step="5"
-                  placeholder="e.g., 75" 
+                  placeholder="e.g., 70" 
                   {...field} 
                   value={field.value ? Math.round(field.value * 100) : ''} 
                   onChange={(e) => {
                     const value = parseInt(e.target.value, 10);
-                    field.onChange(value ? value / 100 : 0.75);
+                    field.onChange(value ? value / 100 : 0.7);
                   }}
                 />
               </FormControl>
-              <p className="text-xs text-muted-foreground">Suspend walk-ins when advanced appointments reach this percentage of total slots</p>
+              <p className="text-xs text-muted-foreground">Percentage of slots reserved for advance bookings (remaining for walk-ins)</p>
               <FormMessage />
             </FormItem>
           )}

@@ -126,6 +126,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
   const auth = useAuth();
   const [isPending, startTransition] = useTransition();
   const [isSubmitting, setIsSubmitting] = useState(false); // Guard against duplicate submissions
+  const submittingDocIdRef = useRef<string | null>(null); // Track which doctor ID is being submitted
   const [clinicId, setClinicId] = useState<string | null>(null);
   const [clinicDetails, setClinicDetails] = useState<any | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -385,8 +386,14 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
             }
         }
         
-        let photoUrl = doctor?.avatar || defaultDoctorImage;
+        // Handle photo URL: for edit mode, preserve existing; for new doctors, only set if photo uploaded
+        let photoUrl: string = defaultDoctorImage; // Always initialize with default
         const photoFile = form.getValues('photo');
+
+        if (isEditMode) {
+            // In edit mode, preserve existing avatar or use default
+            photoUrl = doctor?.avatar || defaultDoctorImage;
+        }
 
         if (photoFile instanceof File) {
             console.log("New photo file detected:", photoFile.name, `(${(photoFile.size / 1024).toFixed(2)} KB)`);
@@ -418,7 +425,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
                 }
 
                 const data = await response.json();
-                photoUrl = data.url;
+                photoUrl = data.url; // Override with uploaded URL
                 console.log("File uploaded successfully. URL:", photoUrl);
                 
             } catch (uploadError: any) {
@@ -432,6 +439,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
                 return;
             }
         }
+        // If no photo uploaded and not edit mode, photoUrl remains as defaultDoctorImage (already set)
 
         const scheduleString = values.availabilitySlots
           ?.sort((a, b) => daysOfWeek.indexOf(a.day) - daysOfWeek.indexOf(b.day))
@@ -442,6 +450,15 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
         // Use a combination of timestamp and random to avoid collisions
         let docId = values.id || (isEditMode && doctor?.id ? doctor.id : `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
         
+        // Prevent duplicate submission for the same doctor ID
+        if (submittingDocIdRef.current === docId) {
+          console.warn('Duplicate submission prevented for doctor ID:', docId);
+          setIsSubmitting(false);
+          return;
+        }
+        
+        submittingDocIdRef.current = docId;
+        
         // For new doctors, check if this ID already exists (safety check for duplicates)
         if (!isEditMode) {
           const existingDocRef = doc(db, "doctors", docId);
@@ -449,6 +466,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
           if (existingDocSnap.exists()) {
             // If by chance the ID exists, generate a new one
             docId = `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            submittingDocIdRef.current = docId; // Update the ref with new ID
           }
         }
 
@@ -501,6 +519,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
         form.reset();
         setPhotoPreview(null);
         setIsSubmitting(false);
+        submittingDocIdRef.current = null; // Clear the ref after successful save
         toast({
           title: `Doctor ${isEditMode ? "Updated" : "Added"}`,
           description: `${values.name} has been successfully ${isEditMode ? "updated" : "added"}.`,
@@ -508,6 +527,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
 
       } catch (error: any) {
         setIsSubmitting(false);
+        submittingDocIdRef.current = null; // Clear the ref on error
         console.error("An error occurred during form submission:", error);
         toast({
           variant: "destructive",
@@ -568,6 +588,7 @@ export function AddDoctorForm({ onSave, isOpen, setIsOpen, doctor, departments, 
         if (!open) {
            setIsOpen(false);
            setIsSubmitting(false); // Reset submission state when dialog closes
+           submittingDocIdRef.current = null; // Clear the ref when dialog closes
         }
     }}>
       <DialogContent 

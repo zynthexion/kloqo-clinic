@@ -118,9 +118,7 @@ export async function managePatient({
           id: newRelativePatientRef.id,
           primaryUserId: newUserRef.id, // Their own user ID since they're primary
           name,
-          age,
           place,
-          sex,
           phone: phone, // Set phone field
           communicationPhone: phone, // Set communication phone
           isPrimary: true, // They become primary since they have a phone
@@ -130,16 +128,22 @@ export async function managePatient({
           clinicIds: primaryPatientData.clinicIds || [clinicId],
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
-        };
+        } as any;
+        
+        // Only add age and sex if they have values (Firestore doesn't allow undefined)
+        if (age !== undefined && age !== null) {
+          newRelativeData.age = age;
+        }
+        if (sex) {
+          newRelativeData.sex = sex;
+        }
       } else {
         // If duplicate phone or no phone provided, use primary patient's communication phone
         newRelativeData = {
           id: newRelativePatientRef.id,
           primaryUserId: primaryPatientData.primaryUserId, // Link to the same primary user
           name,
-          age,
           place,
-          sex,
           phone: '', // Explicitly set to empty string
           communicationPhone: primaryPatientData.communicationPhone || primaryPatientData.phone,
           isPrimary: false,
@@ -149,11 +153,24 @@ export async function managePatient({
           clinicIds: primaryPatientData.clinicIds || [clinicId],
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
-        };
+        } as any;
+        
+        // Only add age and sex if they have values (Firestore doesn't allow undefined)
+        if (age !== undefined && age !== null) {
+          newRelativeData.age = age;
+        }
+        if (sex) {
+          newRelativeData.sex = sex;
+        }
+        
         // NO user document created for duplicate phone
       }
       
-      batch.set(newRelativePatientRef, newRelativeData);
+      // Remove undefined values - Firestore doesn't allow undefined
+      const cleanedRelativeData = Object.fromEntries(
+        Object.entries(newRelativeData).filter(([_, v]) => v !== undefined)
+      );
+      batch.set(newRelativePatientRef, cleanedRelativeData);
 
       // Always add to primary's relatedPatientIds, regardless of whether relative has a phone
       // Even if relative has a unique phone and becomes isPrimary: true, they are still a relative of the primary patient
@@ -176,13 +193,11 @@ export async function managePatient({
         patientId: newPatientRef.id,
       };
 
-      const newPatientData: Patient = {
+      const newPatientData: any = {
         id: newPatientRef.id,
         primaryUserId: newUserRef.id,
         name,
-        age,
         place,
-        sex,
         phone,
         communicationPhone: phone,
         email: '',
@@ -196,8 +211,21 @@ export async function managePatient({
         updatedAt: serverTimestamp(),
       };
       
+      // Only add age and sex if they have values (Firestore doesn't allow undefined)
+      if (age !== undefined && age !== null) {
+        newPatientData.age = age;
+      }
+      if (sex) {
+        newPatientData.sex = sex;
+      }
+      
+      // Remove undefined values - Firestore doesn't allow undefined
+      const cleanedPatientData = Object.fromEntries(
+        Object.entries(newPatientData).filter(([_, v]) => v !== undefined)
+      );
+      
       batch.set(newUserRef, newUserData);
-      batch.set(newPatientRef, newPatientData);
+      batch.set(newPatientRef, cleanedPatientData);
     }
   }
 
