@@ -224,32 +224,6 @@ export function Step1ClinicProfile() {
             </FormItem>
           )}
         />
-        <FormField
-          control={control}
-          name="advancedTokenCapacityRatio"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Advanced Token Capacity Ratio (%)</FormLabel>
-              <FormControl>
-                <Input 
-                  type="number" 
-                  min="50" 
-                  max="90" 
-                  step="5"
-                  placeholder="e.g., 70" 
-                  {...field} 
-                  value={field.value ? Math.round(field.value * 100) : ''} 
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value, 10);
-                    field.onChange(value ? value / 100 : 0.7);
-                  }}
-                />
-              </FormControl>
-              <p className="text-xs text-muted-foreground">Percentage of slots reserved for advance bookings (remaining for walk-ins)</p>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
         <div className="md:col-span-2">
             <Button type="button" variant={latitude !== 0 ? "secondary" : "outline"} onClick={handleDetectLocation} className="w-full" disabled={isDetecting}>
                 {isDetecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (latitude !== 0 ? <CheckCircle className="mr-2 h-4 w-4" /> : <MapPin className="mr-2 h-4 w-4" />)}

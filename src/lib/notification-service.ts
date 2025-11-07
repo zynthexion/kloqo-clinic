@@ -264,3 +264,36 @@ export async function sendBreakUpdateNotification(params: {
   });
 }
 
+/**
+ * Send notification when appointment is marked as Skipped
+ */
+export async function sendAppointmentSkippedNotification(params: {
+  firestore: Firestore;
+  patientId: string;
+  appointmentId: string;
+  doctorName: string;
+  clinicName: string;
+  date: string;
+  time: string;
+  tokenNumber: string;
+}): Promise<boolean> {
+  const { firestore, patientId, appointmentId, doctorName, clinicName, date, time, tokenNumber } = params;
+
+  return sendNotificationToPatient({
+    firestore,
+    patientId,
+    title: 'Appointment Skipped',
+    body: `Your appointment with Dr. ${doctorName} on ${date} at ${time} (Token: ${tokenNumber}) has been marked as Skipped because you didn't confirm your arrival 5 minutes before the appointment time.`,
+    data: {
+      type: 'appointment_skipped',
+      appointmentId,
+      doctorName,
+      clinicName,
+      date,
+      time,
+      tokenNumber,
+      url: '/live-token', // Click will open live token page
+    },
+  });
+}
+

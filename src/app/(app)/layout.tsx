@@ -19,7 +19,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
 
   // Custom hooks to handle automatic status updates
   useAppointmentStatusUpdater(); // Updates appointment statuses and sets doctors to 'Out'
-  useDoctorStatusUpdater(); // Updates doctor consultation status based on availability (bidirectional)
+  useDoctorStatusUpdater(); // Auto-sets doctors to 'Out' when outside availability (In status is manual only)
 
   useEffect(() => {
     if (!loading && !currentUser) {

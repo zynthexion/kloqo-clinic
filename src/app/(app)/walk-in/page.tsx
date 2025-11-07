@@ -18,16 +18,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AppFrameLayout from '@/components/layout/app-frame';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, collection, addDoc, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, addDoc, query, where, getDocs, serverTimestamp, setDoc } from 'firebase/firestore';
 import type { Appointment, Doctor, Patient } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
-import { format, isWithinInterval } from 'date-fns';
+import { format, isWithinInterval, parse, subMinutes, addMinutes } from 'date-fns';
 import { parseTime } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { managePatient } from '@/lib/patient-service';
-import { calculateWalkInDetails, generateNextToken } from '@/lib/appointment-service';
+import { calculateWalkInDetails, generateNextTokenAndReserveSlot } from '@/lib/appointment-service';
 import PatientSearchResults from '@/components/clinic/patient-search-results';
 import { Suspense } from 'react';
 
@@ -276,6 +276,12 @@ function WalkInRegistrationContent() {
         const tokenNumber = await generateNextToken(clinicId, doctor.name, new Date(), 'W');
         const numericTokenFromService = parseInt(tokenNumber.substring(1), 10);
       
+        // Calculate cut-off time and no-show time
+        const appointmentDate = parse(format(new Date(), "d MMMM yyyy"), "d MMMM yyyy", new Date());
+        const appointmentTime = estimatedTime;
+        const cutOffTime = subMinutes(appointmentTime, 15);
+        const noShowTime = addMinutes(appointmentTime, 15);
+        
         const newAppointmentData: UnsavedAppointment = {
             patientName: values.patientName,
             age: values.age,
@@ -289,13 +295,15 @@ function WalkInRegistrationContent() {
             bookedVia: 'Walk-in',
             date: format(new Date(), "d MMMM yyyy"),
             time: format(estimatedTime, "hh:mm a"),
-            status: 'Pending',
+            status: 'Confirmed', // Walk-ins are physically present at clinic
             tokenNumber,
             numericToken: numericTokenFromService,
             clinicId,
             treatment: "General Consultation",
             createdAt: serverTimestamp(),
             slotIndex,
+            cutOffTime: cutOffTime,
+            noShowTime: noShowTime,
         };
 
         setAppointmentToSave(newAppointmentData);
@@ -332,9 +340,24 @@ function WalkInRegistrationContent() {
         const walkInTokenAllotment = clinicData?.walkInTokenAllotment || 5;
         const recalculatedDetails = await calculateWalkInDetails(doctor, walkInTokenAllotment);
         
-        // Use generateNextToken service to ensure sequential numbering and prevent duplicates
-        const walkInTokenNumber = await generateNextToken(clinicId, doctor.name, new Date(), 'W');
-        const walkInNumericToken = parseInt(walkInTokenNumber.substring(1), 10);
+        // Use generateNextTokenAndReserveSlot to ensure sequential numbering and shift subsequent appointments
+        const { tokenNumber: walkInTokenNumber, numericToken: walkInNumericToken, slotIndex: actualSlotIndex } = await generateNextTokenAndReserveSlot(
+            clinicId,
+            doctor.name,
+            new Date(),
+            'W',
+            {
+                time: format(recalculatedDetails.estimatedTime, "hh:mm a"),
+                slotIndex: recalculatedDetails.slotIndex
+            }
+        );
+        
+        // W tokens don't have a fixed time - use the time from the appointment before this slot
+        // Calculate cut-off time and no-show time based on the actual slot time
+        const appointmentDate = parse(format(new Date(), "d MMMM yyyy"), "d MMMM yyyy", new Date());
+        const appointmentTime = recalculatedDetails.estimatedTime;
+        const cutOffTime = subMinutes(appointmentTime, 15);
+        const noShowTime = addMinutes(appointmentTime, 15);
         
         // Update appointment data with recalculated values
         const updatedAppointmentData = {
@@ -342,7 +365,10 @@ function WalkInRegistrationContent() {
             time: format(recalculatedDetails.estimatedTime, "hh:mm a"),
             tokenNumber: walkInTokenNumber,
             numericToken: walkInNumericToken,
-            slotIndex: recalculatedDetails.slotIndex,
+            slotIndex: actualSlotIndex, // Use the actual slotIndex returned from the function
+            sessionIndex: recalculatedDetails.sessionIndex,
+            cutOffTime: cutOffTime,
+            noShowTime: noShowTime,
         };
         
         console.log('🎯 DEBUG: Creating appointment document');
@@ -586,7 +612,7 @@ function WalkInRegistrationContent() {
                      <div className="flex flex-col items-center">
                         <Users className="w-8 h-8 text-primary mb-2" />
                         <span className="text-2xl font-bold">{patientsAhead}</span>
-                        <span className="text-xs text-muted-foreground">Patients Ahead</span>
+                        <span className="text-xs text-muted-foreground">People Ahead</span>
                     </div>
                 </div>
                 <DialogFooter className="flex-col space-y-2">

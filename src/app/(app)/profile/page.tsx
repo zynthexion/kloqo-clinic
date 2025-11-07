@@ -29,7 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import { collection, getDocs, setDoc, doc, query, where, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { User, Appointment, TimeSlot } from "@/lib/types";
-import { UserCircle, Edit, Save, X, Building, Loader2, Clock, PlusCircle, Trash2 } from "lucide-react";
+import { UserCircle, Edit, Save, X, Building, Loader2, Clock, PlusCircle, Trash2, Settings } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/firebase";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -62,7 +62,6 @@ const clinicFormSchema = z.object({
     type: z.enum(['Single Doctor', 'Multi-Doctor']),
     numDoctors: z.coerce.number().min(1),
     clinicRegNumber: z.string().optional(),
-    advancedTokenCapacityRatio: z.coerce.number().min(0.5, "Ratio must be at least 50%").max(0.9, "Ratio cannot exceed 90%"),
     addressLine1: z.string().min(1, "Address Line 1 is required."),
     addressLine2: z.string().optional(),
     city: z.string().min(1, "City is required."),
@@ -95,6 +94,12 @@ const operatingHoursFormSchema = z.object({
 });
 type OperatingHoursFormValues = z.infer<typeof operatingHoursFormSchema>;
 
+const settingsFormSchema = z.object({
+  walkInTokenAllotment: z.coerce.number().min(2, "Walk-in token allotment must be at least 2."),
+  skippedTokenRecurrence: z.coerce.number().min(1, "Skipped token recurrence must be at least 1."),
+});
+type SettingsFormValues = z.infer<typeof settingsFormSchema>;
+
 
 export default function ProfilePage() {
   const auth = useAuth();
@@ -110,6 +115,7 @@ export default function ProfilePage() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isEditingClinic, setIsEditingClinic] = useState(false);
   const [isEditingHours, setIsEditingHours] = useState(false);
+  const [isEditingSettings, setIsEditingSettings] = useState(false);
   
   const { toast } = useToast();
 
@@ -122,7 +128,6 @@ export default function ProfilePage() {
         type: "Single Doctor", 
         numDoctors: 1, 
         clinicRegNumber: "", 
-        advancedTokenCapacityRatio: 0.7,
         addressLine1: "", 
         addressLine2: "", 
         city: "", 
@@ -136,6 +141,14 @@ export default function ProfilePage() {
   const hoursForm = useForm<OperatingHoursFormValues>({
     resolver: zodResolver(operatingHoursFormSchema),
     defaultValues: { hours: [] }
+  });
+
+  const settingsForm = useForm<SettingsFormValues>({
+    resolver: zodResolver(settingsFormSchema),
+    defaultValues: {
+      walkInTokenAllotment: 5,
+      skippedTokenRecurrence: 3,
+    }
   });
 
   const { fields, update } = useFieldArray({
@@ -178,6 +191,12 @@ export default function ProfilePage() {
                 hours: clinicData.operatingHours,
               };
               hoursForm.reset(hoursResetData);
+
+              const settingsResetData = {
+                walkInTokenAllotment: clinicData.walkInTokenAllotment || 5,
+                skippedTokenRecurrence: clinicData.skippedTokenRecurrence || 3,
+              };
+              settingsForm.reset(settingsResetData);
               
               const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
               const doctorsSnapshot = await getDocs(doctorsQuery);
@@ -194,7 +213,7 @@ export default function ProfilePage() {
       }
     };
     fetchUserData();
-  }, [auth.currentUser, profileForm, clinicForm, hoursForm]);
+  }, [auth.currentUser, profileForm, clinicForm, hoursForm, settingsForm]);
 
   // Separate effect to handle clinic form reset when clinicDetails changes
   useEffect(() => {
@@ -204,7 +223,6 @@ export default function ProfilePage() {
         type: clinicDetails.type || 'Single Doctor',
         numDoctors: clinicDetails.numDoctors || 1,
         clinicRegNumber: clinicDetails.clinicRegNumber || '',
-        advancedTokenCapacityRatio: clinicDetails.advancedTokenCapacityRatio ?? 0.7,
         addressLine1: clinicDetails.addressDetails?.line1 || '',
         addressLine2: clinicDetails.addressDetails?.line2 || '',
         city: clinicDetails.addressDetails?.city || '',
@@ -221,6 +239,40 @@ export default function ProfilePage() {
       }, 100);
     }
   }, [clinicDetails, clinicForm]);
+
+  const onSettingsSubmit = async (values: SettingsFormValues) => {
+    if (!userProfile?.clinicId) return;
+
+    startTransition(async () => {
+      const clinicRef = doc(db, 'clinics', userProfile.clinicId!);
+      try {
+        await updateDoc(clinicRef, {
+          walkInTokenAllotment: values.walkInTokenAllotment,
+          skippedTokenRecurrence: values.skippedTokenRecurrence,
+        });
+        setClinicDetails((prev: any) => prev ? {
+          ...prev,
+          walkInTokenAllotment: values.walkInTokenAllotment,
+          skippedTokenRecurrence: values.skippedTokenRecurrence,
+        } : null);
+        toast({ title: "Settings Updated", description: "Clinic settings have been saved successfully." });
+        setIsEditingSettings(false);
+      } catch (error) {
+        console.error("Error updating settings: ", error);
+        toast({ variant: "destructive", title: "Update Failed", description: "Could not save settings." });
+      }
+    });
+  };
+
+  const handleCancelSettings = () => {
+    if (clinicDetails) {
+      settingsForm.reset({
+        walkInTokenAllotment: clinicDetails.walkInTokenAllotment || 5,
+        skippedTokenRecurrence: clinicDetails.skippedTokenRecurrence || 3,
+      });
+    }
+    setIsEditingSettings(false);
+  };
 
 
 
@@ -306,7 +358,6 @@ export default function ProfilePage() {
                 type: values.type,
                 numDoctors: values.numDoctors,
                 clinicRegNumber: values.clinicRegNumber,
-                advancedTokenCapacityRatio: values.advancedTokenCapacityRatio,
                 addressDetails: {
                     line1: values.addressLine1,
                     line2: values.addressLine2,
@@ -352,7 +403,6 @@ export default function ProfilePage() {
             type: clinicDetails.type || 'Single Doctor',
             numDoctors: clinicDetails.numDoctors || 1,
             clinicRegNumber: clinicDetails.clinicRegNumber || '',
-            advancedTokenCapacityRatio: clinicDetails.advancedTokenCapacityRatio ?? 0.7,
             addressLine1: clinicDetails.addressDetails?.line1 || '',
             addressLine2: clinicDetails.addressDetails?.line2 || '',
             city: clinicDetails.addressDetails?.city || '',
@@ -580,31 +630,6 @@ export default function ProfilePage() {
                                     <FormField control={clinicForm.control} name="clinicRegNumber" render={({ field }) => (
                                         <FormItem><FormLabel>Clinic Registration Number</FormLabel><FormControl><Input {...field} disabled={!isEditingClinic || isPending} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
                                     )}/>
-                                    <FormField control={clinicForm.control} name="advancedTokenCapacityRatio" render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Advanced Token Capacity Ratio (%)</FormLabel>
-                                            <FormControl>
-                                                <Input 
-                                                    type="number" 
-                                                    min="50" 
-                                                    max="90" 
-                                                    step="5"
-                                                    placeholder="e.g., 70" 
-                                                    {...field} 
-                                                    value={field.value ? Math.round(field.value * 100) : ''} 
-                                                    onChange={(e) => {
-                                                        const value = parseInt(e.target.value, 10);
-                                                        field.onChange(value ? value / 100 : 0.7);
-                                                    }}
-                                                    disabled={!isEditingClinic || isPending}
-                                                />
-                                            </FormControl>
-                                            <FormDescription className="text-xs">
-                                                Percentage of slots reserved for advance bookings (remaining for walk-ins). Default: 70%
-                                            </FormDescription>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}/>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                       <FormField control={clinicForm.control} name="addressLine1" render={({ field }) => (
                                         <FormItem className="md:col-span-2">
@@ -780,6 +805,88 @@ export default function ProfilePage() {
                       )}
                   </Card>
               );
+          case 'settings':
+            if (!clinicDetails) {
+              return <Card><CardHeader><CardTitle>Loading Clinic Settings...</CardTitle></CardHeader></Card>;
+            }
+            return (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>Clinic Settings</CardTitle>
+                    {!isEditingSettings && (
+                      <Button variant="outline" size="icon" onClick={() => setIsEditingSettings(true)} disabled={isPending}>
+                        <Edit className="w-4 h-4"/>
+                      </Button>
+                    )}
+                  </div>
+                  <CardDescription>Configure walk-in token allotment and skipped token recurrence settings.</CardDescription>
+                </CardHeader>
+                <Form {...settingsForm}>
+                  <form onSubmit={settingsForm.handleSubmit(onSettingsSubmit)}>
+                    <CardContent className="space-y-4">
+                      <FormField
+                        control={settingsForm.control}
+                        name="walkInTokenAllotment"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Walk-in Token Allotment</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min="2"
+                                {...field}
+                                onChange={e => field.onChange(parseInt(e.target.value, 10) || 2)}
+                                disabled={!isEditingSettings || isPending}
+                                value={field.value || ''}
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              Allot one walk-in token after every X online tokens. This determines how many slots to skip before placing a walk-in patient.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={settingsForm.control}
+                        name="skippedTokenRecurrence"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Skipped Token Recurrence</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min="1"
+                                {...field}
+                                onChange={e => field.onChange(parseInt(e.target.value, 10) || 1)}
+                                disabled={!isEditingSettings || isPending}
+                                value={field.value || ''}
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              Number of active patients to skip before rejoining a skipped token to the queue.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      {isEditingSettings && (
+                        <div className="flex justify-end gap-2 pt-4">
+                          <Button type="button" variant="ghost" onClick={handleCancelSettings} disabled={isPending}>
+                            Cancel
+                          </Button>
+                          <Button type="submit" disabled={isPending}>
+                            {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />}
+                            Save Settings
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  </form>
+                </Form>
+              </Card>
+            );
           default:
               return null;
       }
@@ -806,6 +913,10 @@ export default function ProfilePage() {
                             <Button variant={activeView === 'hours' ? 'secondary' : 'ghost'} className="w-full justify-start" onClick={() => setActiveView('hours')}>
                                 <Clock className="mr-2 h-4 w-4"/>
                                 Operating Hours
+                            </Button>
+                            <Button variant={activeView === 'settings' ? 'secondary' : 'ghost'} className="w-full justify-start" onClick={() => setActiveView('settings')}>
+                                <Settings className="mr-2 h-4 w-4"/>
+                                Settings
                             </Button>
                         </nav>
                     </CardContent>

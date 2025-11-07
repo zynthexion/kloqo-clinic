@@ -1,8 +1,8 @@
 import { collection, query, where, getDocs, updateDoc, doc, writeBatch, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { assignWalkInsFromPool } from './walk-in-pool-service';
-import { format, parse, addHours, isAfter, isBefore, isWithinInterval } from 'date-fns';
+import { format, parse, addHours, addMinutes, subMinutes, isAfter, isBefore, isWithinInterval } from 'date-fns';
 import type { Appointment, Doctor } from '@/lib/types';
+import { sendAppointmentSkippedNotification } from '@/lib/notification-service';
 
 /**
  * Updates appointment statuses and doctor consultation statuses when the app opens
@@ -25,80 +25,115 @@ export async function updateAppointmentAndDoctorStatuses(clinicId: string): Prom
 }
 
 /**
- * Updates appointment statuses to 'No-show' for Skipped appointments that are 5+ hours past the skip time
+ * Updates appointment statuses:
+ * 1. Pending → Skipped when arrive-by time (appointment time - 15 minutes) has passed and appointment is still Pending (not Confirmed)
+ * 2. Skipped → No-show when appointment time + 15 minutes has passed
  */
 async function updateAppointmentStatuses(clinicId: string): Promise<void> {
   const now = new Date();
-  const fiveHoursAgo = addHours(now, -5);
+  const today = format(now, 'd MMMM yyyy');
   
-  console.log('Checking Skipped appointments for No-show status updates...', {
+  console.log('Checking appointments for status updates...', {
     now: now.toISOString(),
-    fiveHoursAgo: fiveHoursAgo.toISOString()
+    today
   });
   
-  // Query only Skipped appointments
+  // Query Pending and Skipped appointments for today
   const appointmentsRef = collection(db, 'appointments');
   const q = query(
     appointmentsRef,
     where('clinicId', '==', clinicId),
-    where('status', '==', 'Skipped')
+    where('date', '==', today),
+    where('status', 'in', ['Pending', 'Skipped'])
   );
   
   const querySnapshot = await getDocs(q);
-  console.log(`Found ${querySnapshot.size} Skipped appointments to check`);
+  console.log(`Found ${querySnapshot.size} appointments to check`);
   
-  const appointmentsToUpdate: { id: string; appointment: Appointment }[] = [];
+  const appointmentsToSkip: { id: string; appointment: Appointment }[] = [];
+  const appointmentsToMarkNoShow: { id: string; appointment: Appointment }[] = [];
   
   querySnapshot.forEach((docSnapshot) => {
     const appointment = docSnapshot.data() as Appointment;
     
-    // Get skippedAt timestamp (when the appointment was marked as Skipped)
-    const skippedAt = appointment.skippedAt;
-    
-    if (!skippedAt) {
-      // If skippedAt doesn't exist (old data), skip this appointment
-      console.log('Appointment missing skippedAt timestamp, skipping:', docSnapshot.id);
-      return;
-    }
-    
-    // Convert Firestore timestamp to Date
-    let skippedAtDate: Date;
-    if (skippedAt instanceof Date) {
-      skippedAtDate = skippedAt;
-    } else if (skippedAt && typeof skippedAt.toDate === 'function') {
-      // Firestore Timestamp
-      skippedAtDate = skippedAt.toDate();
-    } else if (skippedAt && skippedAt.seconds) {
-      // Firestore Timestamp object with seconds property
-      skippedAtDate = new Date(skippedAt.seconds * 1000);
-    } else {
-      // Fallback: try to parse as string or number
-      skippedAtDate = new Date(skippedAt);
-    }
-    
-    console.log('Checking Skipped appointment:', {
-      id: docSnapshot.id,
-      patientName: appointment.patientName,
-      status: appointment.status,
-      skippedAt: skippedAtDate.toISOString(),
-      isBeforeFiveHoursAgo: isBefore(skippedAtDate, fiveHoursAgo)
-    });
-    
-    // Check if skipped time is 5+ hours ago
-    if (isBefore(skippedAtDate, fiveHoursAgo)) {
-      appointmentsToUpdate.push({ id: docSnapshot.id, appointment });
+    try {
+      // Parse appointment date and time
+      const appointmentDate = parse(appointment.date, 'd MMMM yyyy', new Date());
+      const appointmentTime = parseTime(appointment.time, appointmentDate);
+      const confirmDeadline = subMinutes(appointmentTime, 15); // 15 minutes before appointment (cut-off time)
+      
+      if (appointment.status === 'Pending') {
+        // Check if 15 minutes before appointment time has passed and appointment is still Pending (not confirmed)
+        // If patient hasn't confirmed by 15 minutes before, mark as Skipped
+        if (isAfter(now, confirmDeadline)) {
+          appointmentsToSkip.push({ id: docSnapshot.id, appointment });
+        }
+      } else if (appointment.status === 'Skipped') {
+        // Check if appointment time + 15 minutes has passed
+        const noShowTime = addMinutes(appointmentTime, 15);
+        
+        if (isAfter(now, noShowTime)) {
+          appointmentsToMarkNoShow.push({ id: docSnapshot.id, appointment });
+        }
+      }
+    } catch (error) {
+      console.error('Error processing appointment:', docSnapshot.id, error);
     }
   });
   
-  console.log(`Found ${appointmentsToUpdate.length} appointments to update to No-show`);
-  
-  if (appointmentsToUpdate.length > 0) {
-    console.log(`Updating ${appointmentsToUpdate.length} appointments to No-show status`);
-    
-    // Use batch update for better performance
+  // Update Pending → Skipped
+  if (appointmentsToSkip.length > 0) {
+    console.log(`Updating ${appointmentsToSkip.length} appointments from Pending to Skipped`);
     const batch = writeBatch(db);
     
-    appointmentsToUpdate.forEach(({ id }) => {
+    appointmentsToSkip.forEach(({ id }) => {
+      const appointmentRef = doc(db, 'appointments', id);
+      batch.update(appointmentRef, { 
+        status: 'Skipped',
+        skippedAt: new Date(),
+        updatedAt: new Date()
+      });
+    });
+    
+    await batch.commit();
+    console.log(`Successfully updated ${appointmentsToSkip.length} appointments to Skipped`);
+    
+    // Send notifications for skipped appointments
+    for (const { id, appointment } of appointmentsToSkip) {
+      try {
+        if (!appointment.patientId) {
+          console.log(`Skipping notification for appointment ${id} - no patientId`);
+          continue;
+        }
+
+        // Get clinic name
+        const clinicDoc = await getDoc(doc(db, 'clinics', clinicId));
+        const clinicName = clinicDoc.exists() ? clinicDoc.data()?.name || 'The clinic' : 'The clinic';
+        
+        await sendAppointmentSkippedNotification({
+          firestore: db,
+          patientId: appointment.patientId,
+          appointmentId: id,
+          doctorName: appointment.doctor,
+          clinicName,
+          date: appointment.date,
+          time: appointment.time,
+          tokenNumber: appointment.tokenNumber || 'N/A',
+        });
+        console.log(`Skipped notification sent for appointment ${id}`);
+      } catch (notifError) {
+        console.error(`Failed to send skipped notification for appointment ${id}:`, notifError);
+        // Don't fail the status update if notification fails
+      }
+    }
+  }
+  
+  // Update Skipped → No-show
+  if (appointmentsToMarkNoShow.length > 0) {
+    console.log(`Updating ${appointmentsToMarkNoShow.length} appointments from Skipped to No-show`);
+    const batch = writeBatch(db);
+    
+    appointmentsToMarkNoShow.forEach(({ id }) => {
       const appointmentRef = doc(db, 'appointments', id);
       batch.update(appointmentRef, { 
         status: 'No-show',
@@ -107,7 +142,97 @@ async function updateAppointmentStatuses(clinicId: string): Promise<void> {
     });
     
     await batch.commit();
-    console.log(`Successfully updated ${appointmentsToUpdate.length} appointments to No-show`);
+    console.log(`Successfully updated ${appointmentsToMarkNoShow.length} appointments to No-show`);
+    
+    // Reduce delays for subsequent appointments when slots become vacant (no-show)
+    for (const { id, appointment } of appointmentsToMarkNoShow) {
+      try {
+        // Get doctor info to get slot duration
+        const doctorsRef = collection(db, 'doctors');
+        const doctorQuery = query(
+          doctorsRef,
+          where('clinicId', '==', appointment.clinicId),
+          where('name', '==', appointment.doctor)
+        );
+        const doctorSnapshot = await getDocs(doctorQuery);
+        if (!doctorSnapshot.empty) {
+          const doctor = { id: doctorSnapshot.docs[0].id, ...doctorSnapshot.docs[0].data() } as Doctor;
+          const slotDuration = doctor.averageConsultingTime || 15;
+          
+          const { reduceDelayOnSlotVacancy } = await import('@/lib/delay-propagation-service');
+          await reduceDelayOnSlotVacancy(
+            appointment.clinicId,
+            appointment.doctor,
+            appointment.date,
+            id,
+            slotDuration
+          );
+        }
+      } catch (delayError) {
+        console.error('Error reducing delay on no-show:', delayError);
+        // Don't fail the status update if delay reduction fails
+      }
+    }
+    
+    // Trigger automatic reassignment of arrived patients to empty slots
+    // Group by doctor and session to avoid duplicate calls
+    const reassignmentMap = new Map<string, { appointment: Appointment; doctor: Doctor | null }[]>();
+    
+    for (const { id, appointment } of appointmentsToMarkNoShow) {
+      if (appointment.sessionIndex === undefined) continue;
+      
+      const key = `${appointment.clinicId}_${appointment.doctor}_${appointment.sessionIndex}`;
+      if (!reassignmentMap.has(key)) {
+        reassignmentMap.set(key, []);
+      }
+      
+      // Get doctor info
+      const doctorsRef = collection(db, 'doctors');
+      const doctorQuery = query(
+        doctorsRef,
+        where('clinicId', '==', appointment.clinicId),
+        where('name', '==', appointment.doctor)
+      );
+      const doctorSnapshot = await getDocs(doctorQuery);
+      const doctor = doctorSnapshot.empty ? null : ({ id: doctorSnapshot.docs[0].id, ...doctorSnapshot.docs[0].data() } as Doctor);
+      
+      reassignmentMap.get(key)!.push({ appointment, doctor });
+    }
+    
+    // Trigger reassignment for each unique doctor/session combination
+    for (const [key, appointments] of reassignmentMap.entries()) {
+      if (appointments.length === 0 || !appointments[0].doctor) continue;
+      
+      const { appointment, doctor } = appointments[0];
+      const appointmentDate = parse(appointment.date, 'd MMMM yyyy', new Date());
+      
+      try {
+        const { triggerReassignmentOnSlotVacancy } = await import('@/lib/slot-reassignment-service');
+        await triggerReassignmentOnSlotVacancy(
+          appointment.clinicId,
+          appointment.doctor,
+          appointmentDate,
+          appointment.sessionIndex!,
+          doctor
+        );
+      } catch (reassignError) {
+        console.error('Error triggering reassignment after No-show:', reassignError);
+        // Don't fail the status update if reassignment fails
+      }
+    }
+  }
+}
+
+// Helper function to parse time string
+function parseTime(timeStr: string, referenceDate: Date): Date {
+  try {
+    return parse(timeStr, 'hh:mm a', referenceDate);
+  } catch {
+    // Fallback to 24h format
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const date = new Date(referenceDate);
+    date.setHours(hours, minutes, 0, 0);
+    return date;
   }
 }
 
@@ -135,7 +260,7 @@ async function updateDoctorConsultationStatuses(clinicId: string): Promise<void>
   const querySnapshot = await getDocs(q);
   console.log(`Found ${querySnapshot.size} doctors to check`);
   
-  const doctorsToUpdate: { id: string; doctor: Doctor; newStatus: 'In' | 'Out' }[] = [];
+  const doctorsToUpdate: { id: string; doctor: Doctor }[] = [];
   
   querySnapshot.forEach((docSnapshot) => {
     const doctor = docSnapshot.data() as Doctor;
@@ -149,69 +274,13 @@ async function updateDoctorConsultationStatuses(clinicId: string): Promise<void>
     });
     
     // Check if doctor should be marked as 'Out'
+    // Only auto-set to 'Out', never auto-set to 'In' (manual only)
     const shouldBeOut = shouldDoctorBeOut(doctor, currentDay, currentTime);
-    const shouldBeIn = !shouldBeOut;
     
-    // Only update if status needs to change
-    if (shouldBeOut && doctor.consultationStatus !== 'Out') {
-      doctorsToUpdate.push({ id: docSnapshot.id, doctor, newStatus: 'Out' });
-      console.log(`Doctor ${doctor.name} should be marked as Out`);
-    } else if (shouldBeIn && doctor.consultationStatus !== 'In') {
-      doctorsToUpdate.push({ id: docSnapshot.id, doctor, newStatus: 'In' });
-      console.log(`Doctor ${doctor.name} should be marked as In`);
-      
-      // When consultation starts, assign walk-ins from pool for each session
-      // This runs asynchronously in the background
-      const todaySlot = doctor.availabilitySlots?.find(slot => 
-        slot.day.toLowerCase() === currentDay.toLowerCase()
-      );
-      
-      if (doctor.availabilitySlots && todaySlot && todaySlot.timeSlots) {
-        const todayStr = format(now, 'd MMMM yyyy');
-        
-        // Get clinic details once for all sessions
-        getDoc(doc(db, 'clinics', clinicId)).then(clinicDocSnap => {
-          const clinicData = clinicDocSnap.data();
-          const capacityRatio = clinicData?.advancedTokenCapacityRatio ?? 0.7;
-          const allotment = clinicData?.walkInTokenAllotment ?? 5;
-          
-          // Process each session
-          Promise.all(
-            todaySlot.timeSlots.map(async (session, sessionIndex) => {
-              try {
-                // Get today's active appointments for this doctor
-                const appointmentsQuery = query(
-                  collection(db, 'appointments'),
-                  where('clinicId', '==', clinicId),
-                  where('doctor', '==', doctor.name),
-                  where('date', '==', todayStr)
-                );
-                const appointmentsSnap = await getDocs(appointmentsQuery);
-                const activeAppointments = appointmentsSnap.docs.map(doc => ({
-                  id: doc.id,
-                  ...doc.data()
-                })) as Appointment[];
-                
-                // Assign walk-ins from pool for this session
-                await assignWalkInsFromPool(
-                  clinicId,
-                  doctor,
-                  sessionIndex,
-                  activeAppointments,
-                  allotment,
-                  capacityRatio
-                );
-              } catch (error) {
-                console.error(`Error assigning walk-ins from pool for doctor ${doctor.name}, session ${sessionIndex}:`, error);
-              }
-            })
-          ).catch(error => {
-            console.error(`Error processing W pool assignments for doctor ${doctor.name}:`, error);
-          });
-        }).catch(error => {
-          console.error(`Error fetching clinic details for W pool assignment:`, error);
-        });
-      }
+    // Only update if doctor is currently 'In' and should be 'Out'
+    if (doctor.consultationStatus === 'In' && shouldBeOut) {
+      doctorsToUpdate.push({ id: docSnapshot.id, doctor });
+      console.log(`Doctor ${doctor.name} should be marked as Out (outside availability)`);
     } else {
       console.log(`Doctor ${doctor.name} status is correct (${doctor.consultationStatus})`);
     }
@@ -220,22 +289,22 @@ async function updateDoctorConsultationStatuses(clinicId: string): Promise<void>
   console.log(`Found ${doctorsToUpdate.length} doctors to update`);
   
   if (doctorsToUpdate.length > 0) {
-    console.log(`Updating ${doctorsToUpdate.length} doctors`);
+    console.log(`Updating ${doctorsToUpdate.length} doctors to Out status`);
     
     // Use batch update for better performance
     const batch = writeBatch(db);
     
-    doctorsToUpdate.forEach(({ id, doctor, newStatus }) => {
+    doctorsToUpdate.forEach(({ id }) => {
       const doctorRef = doc(db, 'doctors', id);
       batch.update(doctorRef, { 
-        consultationStatus: newStatus,
+        consultationStatus: 'Out',
         updatedAt: new Date()
       });
-      console.log(`Updating doctor ${doctor.name} to ${newStatus}`);
+      console.log(`Updating doctor ${id} to Out`);
     });
     
     await batch.commit();
-    console.log(`Successfully updated ${doctorsToUpdate.length} doctors`);
+    console.log(`Successfully updated ${doctorsToUpdate.length} doctors to Out status`);
   }
 }
 

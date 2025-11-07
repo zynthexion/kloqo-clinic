@@ -53,13 +53,16 @@ export function useDoctorStatusUpdater() {
 
         let batchHasWrites = false;
 
+        // Only auto-set to 'Out' if doctor is currently 'In' and outside availability
+        // 'In' status is now manual only
         for (const doctor of doctors) {
           const todaysAvailability = doctor.availabilitySlots?.find(s => 
             s.day.toLowerCase() === todayDay.toLowerCase()
           );
-          let isCurrentlyAvailable = false;
+          
+          let shouldBeOut = false;
           if (todaysAvailability && todaysAvailability.timeSlots?.length > 0) {
-            isCurrentlyAvailable = todaysAvailability.timeSlots.some(slot => {
+            const isWithinAnySlot = todaysAvailability.timeSlots.some(slot => {
               try {
                 const startTime = parseTime(slot.from, now);
                 const endTime = parseTime(slot.to, now);
@@ -69,24 +72,27 @@ export function useDoctorStatusUpdater() {
                 return false;
               }
             });
+            shouldBeOut = !isWithinAnySlot;
+          } else {
+            // No availability slots = should be out
+            shouldBeOut = true;
           }
           
-          const newStatus = isCurrentlyAvailable ? 'In' : 'Out';
-
-          if (doctor.consultationStatus !== newStatus) {
+          // Only auto-set to 'Out', never auto-set to 'In'
+          if (doctor.consultationStatus === 'In' && shouldBeOut) {
             const doctorRef = doc(db, 'doctors', doctor.id);
             batch.update(doctorRef, { 
-              consultationStatus: newStatus,
+              consultationStatus: 'Out',
               updatedAt: new Date()
             });
             batchHasWrites = true;
-            console.log(`Updating doctor ${doctor.name} status from ${doctor.consultationStatus} to ${newStatus}`);
+            console.log(`Auto-updating doctor ${doctor.name} status from In to Out (outside availability)`);
           }
         }
 
         if (batchHasWrites) {
           await batch.commit();
-          console.log(`Successfully updated ${doctors.length} doctors' consultation statuses`);
+          console.log(`Successfully updated doctors' consultation statuses`);
         }
       } catch (error) {
         console.error("Error updating doctor consultation statuses:", error);

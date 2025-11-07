@@ -83,6 +83,10 @@ export type Appointment = {
   reviewId?: string;
   completedAt?: any;
   skippedAt?: any; // Timestamp when appointment was marked as Skipped
+  lateMinutes?: number; // Late minutes for skipped appointments
+  cutOffTime?: any; // Cut-off time (appointment time - 15 minutes) - when Pending becomes Skipped
+  noShowTime?: any; // No-show time (appointment time + 15 minutes) - when Skipped becomes No-show
+  delay?: number; // Delay in minutes added when W tokens are inserted before this appointment
 };
 
 export type Patient = {

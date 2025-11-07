@@ -18,7 +18,7 @@ import type { Appointment, Doctor, Patient, User } from "@/lib/types";
 import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc, orderBy, onSnapshot, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
-import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes, isAfter, startOfDay, addHours } from "date-fns";
+import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes, isAfter, startOfDay, addHours, differenceInMinutes } from "date-fns";
 import { updateAppointmentAndDoctorStatuses } from "@/lib/status-update-service";
 import { cn } from "@/lib/utils";
 import {
@@ -41,7 +41,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck, UserPlus, Users, Plus, X, Clock, Calendar as CalendarLucide, CheckCircle2, Info, Send, MessageSquare, Smartphone, SkipForward, Hourglass, Repeat } from "lucide-react";
+import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck, UserPlus, Users, Plus, X, Clock, Calendar as CalendarLucide, CheckCircle2, Info, Send, MessageSquare, Smartphone, Hourglass, Repeat } from "lucide-react";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
@@ -70,7 +70,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { calculateWalkInDetails, calculateSkippedTokenRejoinSlot, generateNextTokenAndReserveSlot } from '@/lib/appointment-service';
 import { sendAppointmentCancelledNotification, sendTokenCalledNotification, sendAppointmentBookedByStaffNotification } from '@/lib/notification-service';
-import { calculateSessionCapacity, isSlotInAdvancedZone, getBookedATokenCount, canBookAToken } from '@/lib/capacity-service';
+import { computeQueues, type QueueState } from '@/lib/queue-management-service';
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -172,10 +172,34 @@ export default function AppointmentsPage() {
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
   const [walkInEstimate, setWalkInEstimate] = useState<WalkInEstimate>(null);
   const [isCalculatingEstimate, setIsCalculatingEstimate] = useState(false);
-  const [appointmentToSkip, setAppointmentToSkip] = useState<Appointment | null>(null);
   const [appointmentToCancel, setAppointmentToCancel] = useState<Appointment | null>(null);
+  const [appointmentToAddToQueue, setAppointmentToAddToQueue] = useState<Appointment | null>(null);
+  const [appointmentToComplete, setAppointmentToComplete] = useState<Appointment | null>(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [showVisualView, setShowVisualView] = useState(false);
   
   const [linkChannel, setLinkChannel] = useState<'sms' | 'whatsapp'>('sms');
+
+  // Update current time every minute
+  useEffect(() => {
+    const timerId = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(timerId);
+  }, []);
+
+  // Check if Confirm Arrival button should be shown (disappears 5 minutes before appointment)
+  const shouldShowConfirmArrival = useCallback((appointment: Appointment): boolean => {
+    if (appointment.status !== 'Pending') return false;
+    
+    try {
+      const appointmentDate = parse(appointment.date, 'd MMMM yyyy', new Date());
+      const appointmentTime = parseTime(appointment.time, appointmentDate);
+      const confirmDeadline = subMinutes(appointmentTime, 15); // 15 minutes before appointment (cut-off time)
+      // Show button if current time is before the deadline (15 minutes before appointment)
+      return isBefore(currentTime, confirmDeadline);
+    } catch {
+      return false;
+    }
+  }, [currentTime]);
 
   const { toast } = useToast();
   const isEditing = !!editingAppointment;
@@ -452,8 +476,35 @@ export default function AppointmentsPage() {
   };
 
   const isWalkInAvailable = useMemo(() => {
-    if (appointmentType !== 'Walk-in' || !selectedDoctor) return false;
-    return isWithinBookingWindow(selectedDoctor);
+    if (appointmentType !== 'Walk-in' || !selectedDoctor || !selectedDoctor.availabilitySlots) return false;
+    
+    const now = new Date();
+    const todayStr = format(now, 'EEEE');
+    const todaySlots = selectedDoctor.availabilitySlots.find(s => s.day === todayStr);
+    if (!todaySlots || !todaySlots.timeSlots.length) return false;
+
+    const getTimeOnDate = (timeStr: string, date: Date) => {
+      const newDate = new Date(date);
+      const [time, modifier] = timeStr.split(' ');
+      let [hours, minutes] = time.split(':').map(Number);
+      if (modifier === 'PM' && hours < 12) hours += 12;
+      if (modifier === 'AM' && hours === 12) hours = 0;
+      newDate.setHours(hours, minutes, 0, 0);
+      return newDate;
+    };
+
+    // Get first session start time
+    const firstSessionStart = getTimeOnDate(todaySlots.timeSlots[0].from, now);
+    // Get last session end time
+    const lastSessionEnd = getTimeOnDate(todaySlots.timeSlots[todaySlots.timeSlots.length - 1].to, now);
+    
+    // Walk-in opens 2 hours before the first session starts
+    const walkInOpenTime = subMinutes(firstSessionStart, 120);
+    // Walk-in closes 15 minutes before consultation end
+    const walkInCloseTime = subMinutes(lastSessionEnd, 15);
+    
+    // Check if current time is within walk-in window
+    return now >= walkInOpenTime && now <= walkInCloseTime;
   }, [appointmentType, selectedDoctor]);
 
   useEffect(() => {
@@ -729,7 +780,7 @@ export default function AppointmentsPage() {
           const date = new Date();
           
           // Create appointment directly (no pool needed)
-          const { tokenNumber, numericToken } = await generateNextTokenAndReserveSlot(
+          const { tokenNumber, numericToken, slotIndex: actualSlotIndex } = await generateNextTokenAndReserveSlot(
             clinicId,
             selectedDoctor.name,
             date,
@@ -739,6 +790,12 @@ export default function AppointmentsPage() {
               slotIndex: walkInEstimate.slotIndex
             }
           );
+          
+          // Calculate cut-off time and no-show time
+          const appointmentDate = parse(format(date, "d MMMM yyyy"), "d MMMM yyyy", new Date());
+          const appointmentTime = walkInEstimate.estimatedTime;
+          const cutOffTime = subMinutes(appointmentTime, 15);
+          const noShowTime = addMinutes(appointmentTime, 15);
           
           const appointmentData: Omit<Appointment, 'id'> = {
             bookedVia: appointmentType,
@@ -753,14 +810,16 @@ export default function AppointmentsPage() {
             age: values.age ?? undefined,
             communicationPhone: communicationPhone,
             place: values.place,
-            status: 'Pending',
+            status: 'Confirmed', // Walk-ins are physically present at clinic
             time: format(walkInEstimate.estimatedTime, "hh:mm a"),
             tokenNumber: tokenNumber,
             numericToken: numericToken,
-            slotIndex: walkInEstimate.slotIndex,
+            slotIndex: actualSlotIndex, // Use the actual slotIndex returned from the function
             sessionIndex: walkInEstimate.sessionIndex,
             treatment: "General Consultation",
             createdAt: serverTimestamp(),
+            cutOffTime: cutOffTime,
+            noShowTime: noShowTime,
           };
           const appointmentRef = doc(collection(db, 'appointments'));
           await setDoc(appointmentRef, { ...appointmentData, id: appointmentRef.id });
@@ -817,6 +876,12 @@ export default function AppointmentsPage() {
                 if (format(currentTime, "hh:mm a") === appointmentTimeStr) {
                   slotIndex = globalSlotIndex;
                   sessionIndex = i;
+                  console.log('🔍 [DEBUG] Slot calculation:', {
+                    selectedTime: appointmentTimeStr,
+                    calculatedSlotIndex: slotIndex,
+                    currentTime: format(currentTime, "hh:mm a"),
+                    globalSlotIndex
+                  });
                   break;
                 }
                 currentTime = addMinutes(currentTime, slotDuration);
@@ -825,71 +890,17 @@ export default function AppointmentsPage() {
               if (slotIndex !== -1) break;
             }
           }
+          
+          console.log('🔍 [DEBUG] Final slot calculation result:', {
+            selectedTime: appointmentTimeStr,
+            calculatedSlotIndex: slotIndex,
+            sessionIndex
+          });
 
-          // Validate 70/30 capacity for A tokens
-          if (sessionIndex !== -1 && availabilityForDay) {
-            const capacityRatio = clinicDetails?.advancedTokenCapacityRatio ?? 0.7;
-            const session = availabilityForDay.timeSlots[sessionIndex];
-            
-            // Calculate total slots for this session
-            const sessionStart = parseDateFns(session.from, 'hh:mm a', values.date);
-            const sessionEnd = parseDateFns(session.to, 'hh:mm a', values.date);
-            const slotDuration = selectedDoctor.averageConsultingTime || 15;
-            let sessionSlotCount = 0;
-            let tempTime = new Date(sessionStart);
-            while (tempTime < sessionEnd) {
-              sessionSlotCount++;
-              tempTime = addMinutes(tempTime, slotDuration);
-            }
-            
-            const { advancedCapacity } = calculateSessionCapacity(sessionSlotCount, capacityRatio);
-            
-            // Calculate local slot index within the session
-            let localSlotIndex = 0;
-            let tempTime2 = new Date(sessionStart);
-            while (tempTime2 < sessionEnd) {
-              if (format(tempTime2, "hh:mm a") === appointmentTimeStr) {
-                break;
-              }
-              tempTime2 = addMinutes(tempTime2, slotDuration);
-              localSlotIndex++;
-            }
-            
-            // Check if slot is in 30% zone (reserved for walk-ins)
-            if (localSlotIndex >= advancedCapacity) {
-              toast({
-                variant: "destructive",
-                title: "Slot Reserved for Walk-ins",
-                description: "This time slot is reserved for walk-in patients. Please select another time within the advance booking zone.",
-              });
-              return;
-            }
-            
-            // Check if 70% capacity is already full
-            const sessionAppointments = appointments.filter(
-              apt => apt.doctor === selectedDoctor.name && 
-              apt.date === appointmentDateStr && 
-              apt.sessionIndex === sessionIndex &&
-              apt.bookedVia !== 'Walk-in' &&
-              apt.status !== 'Cancelled' &&
-              apt.status !== 'Completed' &&
-              apt.status !== 'No-show' &&
-              !(isEditing && apt.id === editingAppointment?.id)
-            );
-            
-            if (sessionAppointments.length >= advancedCapacity) {
-              toast({
-                variant: "destructive",
-                title: "A Token Capacity Full",
-                description: `Advanced booking capacity (${Math.round(capacityRatio * 100)}%) is full for this session. Please select another date or use walk-in.`,
-              });
-              return;
-            }
-          }
 
           // Generate token and reserve slot atomically (for both new and rescheduled appointments)
           // For rescheduling, regenerate token using same logic as new appointment
-          let tokenData: { tokenNumber: string; numericToken: number };
+          let tokenData: { tokenNumber: string; numericToken: number; slotIndex: number };
           try {
             tokenData = await generateNextTokenAndReserveSlot(
               clinicId,
@@ -913,6 +924,88 @@ export default function AppointmentsPage() {
             throw error;
           }
 
+          // Use the slotIndex returned from generateNextTokenAndReserveSlot (may have been auto-adjusted)
+          const actualSlotIndex = tokenData.slotIndex;
+
+          // Recalculate the time from the actual slotIndex to ensure consistency
+          let actualAppointmentTimeStr = appointmentTimeStr;
+          let actualAppointmentTime = parseDateFns(appointmentTimeStr, "hh:mm a", values.date);
+          try {
+            // Generate all time slots for the day to find the correct time for the actual slotIndex
+            const dayOfWeek = daysOfWeek[getDay(values.date)];
+            const availabilityForDay = selectedDoctor.availabilitySlots?.find(s => s.day === dayOfWeek);
+            if (availabilityForDay) {
+              const slotDuration = selectedDoctor.averageConsultingTime || 15;
+              let globalSlotIndex = 0;
+              let foundSlot = false;
+              for (let i = 0; i < availabilityForDay.timeSlots.length && !foundSlot; i++) {
+                const session = availabilityForDay.timeSlots[i];
+                let currentTime = parseDateFns(session.from, 'hh:mm a', values.date);
+                const endTime = parseDateFns(session.to, 'hh:mm a', values.date);
+                
+                while (isBefore(currentTime, endTime) && !foundSlot) {
+                  if (globalSlotIndex === actualSlotIndex) {
+                    actualAppointmentTime = currentTime;
+                    actualAppointmentTimeStr = format(currentTime, "hh:mm a");
+                    sessionIndex = i; // Update sessionIndex to match the actual slot
+                    foundSlot = true;
+                    break;
+                  }
+                  currentTime = addMinutes(currentTime, slotDuration);
+                  globalSlotIndex++;
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error recalculating time from slotIndex:', error);
+            // Fall back to original time if recalculation fails
+          }
+
+          // Calculate cut-off time and no-show time
+          let cutOffTime: Date | undefined;
+          let noShowTime: Date | undefined;
+          let inheritedDelay = 0;
+          try {
+            const appointmentDate = parse(appointmentDateStr, "d MMMM yyyy", new Date());
+            const appointmentTime = parseDateFns(actualAppointmentTimeStr, "hh:mm a", appointmentDate); // Use recalculated time
+            cutOffTime = subMinutes(appointmentTime, 15);
+            
+            // Inherit delay from previous appointment (if any)
+            // Find the appointment with the highest slotIndex that is less than actualSlotIndex
+            const appointmentsRef = collection(db, 'appointments');
+            const appointmentsQuery = query(
+              appointmentsRef,
+              where('clinicId', '==', clinicId),
+              where('doctor', '==', selectedDoctor.name),
+              where('date', '==', appointmentDateStr)
+            );
+            const appointmentsSnapshot = await getDocs(appointmentsQuery);
+            const allAppointments = appointmentsSnapshot.docs.map(doc => ({
+              id: doc.id,
+              ...doc.data()
+            })) as Array<Appointment & { id: string }>;
+            
+            // Find the previous appointment (highest slotIndex < actualSlotIndex)
+            const previousAppointments = allAppointments
+              .filter(a => {
+                const aptSlotIndex = a.slotIndex ?? -1;
+                return aptSlotIndex >= 0 && aptSlotIndex < actualSlotIndex;
+              })
+              .sort((a, b) => (b.slotIndex ?? 0) - (a.slotIndex ?? 0));
+            
+            if (previousAppointments.length > 0) {
+              const previousAppointment = previousAppointments[0];
+              inheritedDelay = previousAppointment.delay || 0;
+            }
+            
+            // Apply delay to noShowTime only (not to cutOffTime or time)
+            // cutOffTime remains: appointment time - 15 minutes (no delay)
+            // noShowTime becomes: appointment time + 15 minutes + delay
+            noShowTime = addMinutes(appointmentTime, 15 + inheritedDelay);
+          } catch (error) {
+            console.error('Error calculating cut-off and no-show times:', error);
+          }
+          
           const appointmentData: Appointment = {
             id: appointmentId,
             clinicId: clinicId,
@@ -924,7 +1017,7 @@ export default function AppointmentsPage() {
             doctorId: selectedDoctor.id, // Add doctorId
             doctor: selectedDoctor.name,
             date: appointmentDateStr,
-            time: appointmentTimeStr,
+            time: actualAppointmentTimeStr, // Use the recalculated time from actual slotIndex
             department: values.department,
             status: isEditing ? editingAppointment!.status : "Pending",
             treatment: "General Consultation",
@@ -932,9 +1025,12 @@ export default function AppointmentsPage() {
             numericToken: tokenData.numericToken,
             bookedVia: values.bookedVia,
             place: values.place,
-            slotIndex: slotIndex,
+            slotIndex: actualSlotIndex, // Use the actual slotIndex returned from the function
             sessionIndex: sessionIndex,
             createdAt: isEditing ? editingAppointment.createdAt : serverTimestamp(),
+            cutOffTime: cutOffTime,
+            noShowTime: noShowTime,
+            ...(inheritedDelay > 0 && { delay: inheritedDelay }), // Only include delay if > 0
           };
 
           const appointmentRef = doc(db, 'appointments', appointmentId);
@@ -1166,6 +1262,44 @@ export default function AppointmentsPage() {
         await updateDoc(appointmentRef, { status: 'Cancelled' });
         setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Cancelled' as const } : a));
         
+        // Reduce delays for subsequent appointments when slot becomes vacant
+        try {
+          const appointmentDoctor = doctors.find(d => d.name === appointment.doctor);
+          if (appointmentDoctor) {
+            const slotDuration = appointmentDoctor.averageConsultingTime || 15;
+            const { reduceDelayOnSlotVacancy } = await import('@/lib/delay-propagation-service');
+            await reduceDelayOnSlotVacancy(
+              appointment.clinicId,
+              appointment.doctor,
+              appointment.date,
+              appointment.id,
+              slotDuration
+            );
+          }
+        } catch (delayError) {
+          console.error('Error reducing delay on cancellation:', delayError);
+          // Don't fail the cancellation if delay reduction fails
+        }
+        
+        // Trigger automatic reassignment of arrived patients to empty slots
+        try {
+          const appointmentDoctor = doctors.find(d => d.name === appointment.doctor);
+          if (appointmentDoctor && appointment.sessionIndex !== undefined) {
+            const appointmentDate = parse(appointment.date, 'd MMMM yyyy', new Date());
+            const { triggerReassignmentOnSlotVacancy } = await import('@/lib/slot-reassignment-service');
+            await triggerReassignmentOnSlotVacancy(
+              appointment.clinicId,
+              appointment.doctor,
+              appointmentDate,
+              appointment.sessionIndex,
+              appointmentDoctor
+            );
+          }
+        } catch (reassignError) {
+          console.error('Error triggering reassignment:', reassignError);
+          // Don't fail the cancellation if reassignment fails
+        }
+        
         // Send cancellation notification
         try {
             const clinicDoc = await getFirestoreDoc(doc(db, 'clinics', appointment.clinicId));
@@ -1199,8 +1333,69 @@ export default function AppointmentsPage() {
     startTransition(async () => {
       try {
         const appointmentRef = doc(db, "appointments", appointment.id);
-        await updateDoc(appointmentRef, { status: 'Completed' });
+        const appointmentDoctor = doctors.find(d => d.name === appointment.doctor);
+        const now = new Date();
+        
+        // Calculate delay if consultation took longer than average time
+        let delayMinutes = 0;
+        if (appointmentDoctor) {
+          try {
+            const { parseTime } = await import('@/lib/utils');
+            const appointmentDate = parse(appointment.date, 'd MMMM yyyy', new Date());
+            const appointmentTime = parseTime(appointment.time, appointmentDate);
+            const averageConsultingTime = appointmentDoctor.averageConsultingTime || 15;
+            
+            // Calculate actual consultation duration (from appointment time to now)
+            const actualDuration = differenceInMinutes(now, appointmentTime);
+            
+            // If actual duration exceeds average time, calculate delay
+            if (actualDuration > averageConsultingTime) {
+              delayMinutes = actualDuration - averageConsultingTime;
+              
+              // Propagate delay to subsequent appointments
+              if (delayMinutes > 0) {
+                try {
+                  const { propagateDelay } = await import('@/lib/delay-propagation-service');
+                  await propagateDelay(
+                    appointment.clinicId,
+                    appointment.doctor,
+                    appointment.date,
+                    appointment.id,
+                    delayMinutes
+                  );
+                } catch (delayError) {
+                  console.error('Error propagating delay:', delayError);
+                  // Don't fail the completion if delay propagation fails
+                }
+              }
+            }
+          } catch (delayCalcError) {
+            console.error('Error calculating delay:', delayCalcError);
+            // Don't fail the completion if delay calculation fails
+          }
+        }
+        
+        await updateDoc(appointmentRef, { 
+          status: 'Completed',
+          completedAt: serverTimestamp()
+        });
         setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Completed' as const } : a));
+        
+        // Increment consultation counter
+        try {
+          if (appointmentDoctor && appointment.sessionIndex !== undefined) {
+            const { incrementConsultationCounter } = await import('@/lib/queue-management-service');
+            await incrementConsultationCounter(
+              appointment.clinicId,
+              appointmentDoctor.id,
+              appointment.date,
+              appointment.sessionIndex
+            );
+          }
+        } catch (counterError) {
+          console.error('Error incrementing consultation counter:', counterError);
+          // Don't fail the completion if counter update fails
+        }
         
         // Send token called notification
         try {
@@ -1221,7 +1416,10 @@ export default function AppointmentsPage() {
             // Don't fail the completion if notification fails
         }
         
-        toast({ title: "Appointment Marked as Completed" });
+        toast({ 
+          title: "Appointment Marked as Completed",
+          description: delayMinutes > 0 ? `Delay of ${delayMinutes} minutes propagated to subsequent appointments.` : undefined
+        });
       } catch (error) {
         console.error("Error completing appointment:", error);
         toast({ variant: "destructive", title: "Error", description: "Failed to mark as completed." });
@@ -1297,9 +1495,57 @@ export default function AppointmentsPage() {
     });
   };
 
+  const handleAddToQueue = async (appointment: Appointment) => {
+    // Only process if status is still 'Pending'
+    if (appointment.status !== 'Pending') {
+      toast({ 
+        variant: "destructive", 
+        title: "Cannot Add to Queue", 
+        description: "This appointment is no longer in Pending status." 
+      });
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const appointmentRef = doc(db, "appointments", appointment.id);
+        await updateDoc(appointmentRef, { 
+          status: 'Confirmed'
+        });
+        
+        setAppointments(prev => prev.map(a => 
+          a.id === appointment.id ? { ...a, status: 'Confirmed' as const } : a
+        ));
+        
+        toast({ 
+          title: "Patient Added to Queue", 
+          description: `${appointment.patientName} has been confirmed and added to the queue.`
+        });
+      } catch (error) {
+        console.error("Error adding to queue:", error);
+        toast({ 
+          variant: "destructive", 
+          title: "Error", 
+          description: "Failed to add patient to queue." 
+        });
+      }
+    });
+  };
+
   const handleRejoinQueue = (appointment: Appointment) => {
     startTransition(async () => {
-      if (!clinicId || !selectedDoctor) return;
+      if (!clinicId) return;
+  
+      // Find the doctor from the appointment
+      const appointmentDoctor = doctors.find(d => d.name === appointment.doctor);
+      if (!appointmentDoctor) {
+        toast({ 
+          variant: "destructive", 
+          title: "Error", 
+          description: "Doctor not found for this appointment." 
+        });
+        return;
+      }
   
       const recurrence = clinicDetails?.skippedTokenRecurrence || 3;
       const today = new Date();
@@ -1318,7 +1564,7 @@ export default function AppointmentsPage() {
         const rejoinDetails = await calculateSkippedTokenRejoinSlot(
           appointment,
           activeAppointments,
-          selectedDoctor,
+          appointmentDoctor,
           recurrence,
           today
         );
@@ -1528,8 +1774,14 @@ export default function AppointmentsPage() {
     const formattedDate = format(selectedDate, "d MMMM yyyy");
     const otherAppointments = appointments.filter(apt => !(isEditing && apt.id === editingAppointment?.id));
     
+    // Only consider Pending and Confirmed appointments as "booked"
+    // No-show, Skipped, Completed, and Cancelled slots are available for reuse
     const bookedSlotsForDay = otherAppointments
-      .filter(apt => apt.doctor === selectedDoctor.name && apt.date === formattedDate && apt.status !== 'Cancelled')
+      .filter(apt => 
+        apt.doctor === selectedDoctor.name && 
+        apt.date === formattedDate && 
+        (apt.status === 'Pending' || apt.status === 'Confirmed')
+      )
       .reduce((acc, apt) => {
         acc[apt.time] = apt.tokenNumber || apt.time; // Map time to token number
         return acc;
@@ -1538,45 +1790,15 @@ export default function AppointmentsPage() {
     const leaveForDate = selectedDoctor.leaveSlots?.find(ls => typeof ls !== 'string' && ls.date && isSameDay(parse(ls.date, 'yyyy-MM-dd', new Date()), selectedDate));
     const leaveTimeSlots = leaveForDate && typeof leaveForDate !== 'string' ? leaveForDate.slots : [];
 
-    // Get capacity ratio from clinic details (default 0.7 = 70%)
-    const capacityRatio = clinicDetails?.advancedTokenCapacityRatio ?? 0.7;
-
     const sessions = availabilityForDay.timeSlots.map((session, sessionIndex) => {
       const slots = [];
       let foundFirstAvailable = false;
       let currentTime = parseDateFns(session.from, 'hh:mm a', selectedDate);
       const endTime = parseDateFns(session.to, 'hh:mm a', selectedDate);
 
-      // Calculate total slots for this session
-      let slotIndex = 0;
-      const sessionSlotsArray: Array<{ time: Date; index: number }> = [];
-      let tempTime = new Date(currentTime);
-      while (tempTime < endTime) {
-        sessionSlotsArray.push({ time: new Date(tempTime), index: slotIndex });
-        tempTime = new Date(tempTime.getTime() + selectedDoctor.averageConsultingTime! * 60000);
-        slotIndex++;
-      }
-      const totalSlotsForSession = sessionSlotsArray.length;
-      const { advancedCapacity } = calculateSessionCapacity(totalSlotsForSession, capacityRatio);
-
-      // Get booked A tokens for this session
-      const sessionAppointments = otherAppointments.filter(
-        apt => apt.doctor === selectedDoctor.name && 
-        apt.date === formattedDate && 
-        apt.sessionIndex === sessionIndex &&
-        apt.bookedVia !== 'Walk-in' &&
-        apt.status !== 'Cancelled' &&
-        apt.status !== 'Completed' &&
-        apt.status !== 'No-show'
-      );
-      const bookedACount = sessionAppointments.length;
-
       while (currentTime < endTime) {
         const slotTime = format(currentTime, "hh:mm a");
-        const currentSlotIndex = sessionSlotsArray.findIndex(s => 
-          Math.abs(s.time.getTime() - currentTime.getTime()) < 1000
-        );
-        let status: 'available' | 'booked' | 'leave' | 'reserved' = 'available';
+        let status: 'available' | 'booked' | 'leave' = 'available';
 
         if (slotTime in bookedSlotsForDay) {
           status = 'booked';
@@ -1586,26 +1808,17 @@ export default function AppointmentsPage() {
           return currentTime >= leaveStart && currentTime < leaveEnd;
         })) {
           status = 'leave';
-        } else if (appointmentType === 'Advanced Booking') {
-          // For A tokens: Check if slot is in 30% zone (reserved for walk-ins)
-          if (currentSlotIndex >= advancedCapacity) {
-            status = 'reserved'; // Reserved for walk-ins, don't show for A tokens
-          }
-          // Also check if 70% capacity is already full
-          else if (bookedACount >= advancedCapacity) {
-            status = 'reserved'; // Capacity full, don't show
-          }
         }
 
-        // For same-day bookings, check if slot is within 30-minute window from current time
-        // Never show any slots (regular or cancelled) inside the 30-minute window
+        // For same-day bookings, check if slot is within 1-hour window from current time
+        // Never show any slots (regular or cancelled) inside the 1-hour window
         if (isToday(selectedDate) && appointmentType === 'Advanced Booking') {
             const now = new Date();
             const slotDateTime = currentTime; // Current slot time
-            const thirtyMinutesFromNow = addMinutes(now, 30);
+            const oneHourFromNow = addMinutes(now, 60);
             
-            // Hide slot if it's within 30 minutes from now
-            if (isBefore(slotDateTime, thirtyMinutesFromNow) || slotDateTime.getTime() === thirtyMinutesFromNow.getTime()) {
+            // Hide slot if it's within 1 hour from now
+            if (isBefore(slotDateTime, oneHourFromNow) || slotDateTime.getTime() === oneHourFromNow.getTime()) {
                 status = 'booked'; // Slot too close to current time
             }
         }
@@ -1616,10 +1829,10 @@ export default function AppointmentsPage() {
                 slots.push({ time: slotTime, status });
                 foundFirstAvailable = true;
             }
-        } else if (status !== 'reserved') {
-            // Always show booked/leave slots for visibility, but hide reserved slots
+        } else {
+            // Always show booked/leave slots for visibility
             // For booked slots, include the token number
-            const slotData: { time: string; status: 'available' | 'booked' | 'leave' | 'reserved'; tokenNumber?: string } = { time: slotTime, status };
+            const slotData: { time: string; status: 'available' | 'booked' | 'leave'; tokenNumber?: string } = { time: slotTime, status };
             if (status === 'booked' && bookedSlotsForDay[slotTime]) {
                 slotData.tokenNumber = bookedSlotsForDay[slotTime];
             }
@@ -1634,7 +1847,7 @@ export default function AppointmentsPage() {
     });
 
     return sessions.filter(s => s.slots.length > 0);
-  }, [selectedDate, selectedDoctor, appointments, isEditing, editingAppointment, appointmentType, clinicDetails]);
+  }, [selectedDate, selectedDoctor, appointments, isEditing, editingAppointment, appointmentType]);
 
   const isAppointmentOnLeave = (appointment: Appointment): boolean => {
       if (!doctors.length || !appointment) return false;
@@ -1720,31 +1933,95 @@ export default function AppointmentsPage() {
 
   const today = format(new Date(), "d MMMM yyyy");
   
+  // Compute queues for each doctor/session combination
+  const [queuesByDoctor, setQueuesByDoctor] = useState<Record<string, QueueState>>({});
+  
+  useEffect(() => {
+    const computeAllQueues = async () => {
+      if (!clinicId || !doctors.length) return;
+      
+      const filteredForToday = filteredAppointments.filter(apt => apt.date === today);
+      const queues: Record<string, QueueState> = {};
+      
+      // Group appointments by doctor
+      const appointmentsByDoctor = filteredForToday.reduce((acc, apt) => {
+        if (!acc[apt.doctor]) {
+          acc[apt.doctor] = [];
+        }
+        acc[apt.doctor].push(apt);
+        return acc;
+      }, {} as Record<string, Appointment[]>);
+      
+      // Compute queues for each doctor (using first session for now, or we can compute per session)
+      for (const [doctorName, doctorAppointments] of Object.entries(appointmentsByDoctor)) {
+        const doctor = doctors.find(d => d.name === doctorName);
+        if (!doctor) continue;
+        
+        // For queue computation, we'll use sessionIndex 0 for now (or compute per session)
+        // In a real scenario, we'd compute queues per session
+        const sessionIndex = 0; // Default to first session
+        
+        try {
+          const queueState = await computeQueues(
+            doctorAppointments,
+            doctorName,
+            doctor.id,
+            clinicId,
+            today,
+            sessionIndex
+          );
+          
+          // Store queue state keyed by doctor name
+          queues[doctorName] = queueState;
+        } catch (error) {
+          console.error(`Error computing queues for ${doctorName}:`, error);
+        }
+      }
+      
+      setQueuesByDoctor(queues);
+    };
+    
+    computeAllQueues();
+  }, [filteredAppointments, today, clinicId, doctors]);
+  
   const todaysAppointments = useMemo(() => {
     const filteredForToday = filteredAppointments.filter(apt => apt.date === today);
     const skipped = filteredForToday.filter(apt => apt.status === 'Skipped');
-    const notSkipped = filteredForToday.filter(apt => apt.status !== 'Skipped');
+    const confirmed = filteredForToday.filter(apt => apt.status === 'Confirmed');
+    const pending = filteredForToday.filter(apt => apt.status === 'Pending');
   
     const parseTimeForSort = (timeStr: string) => parse(timeStr, "hh:mm a", new Date()).getTime();
   
-    // Sort by time first, then by appointment type (A before W)
-    notSkipped.sort((a, b) => {
+    // Sort Confirmed by appointment time
+    confirmed.sort((a, b) => {
       const timeA = parseTimeForSort(a.time);
       const timeB = parseTimeForSort(b.time);
-      
-      // If times are different, sort by time
-      if (timeA !== timeB) {
-        return timeA - timeB;
-      }
-      
-      // If times are the same, sort by appointment type (A before W)
-      const typeA = a.bookedVia === 'Advanced Booking' ? 0 : 1;
-      const typeB = b.bookedVia === 'Advanced Booking' ? 0 : 1;
-      return typeA - typeB;
+      return timeA - timeB;
     });
   
-    return [...notSkipped, ...skipped];
+    // Sort Pending by appointment time
+    pending.sort((a, b) => {
+      const timeA = parseTimeForSort(a.time);
+      const timeB = parseTimeForSort(b.time);
+      return timeA - timeB;
+    });
+  
+    // Return Confirmed at top, then Pending, then Skipped
+    return [...confirmed, ...pending, ...skipped];
   }, [filteredAppointments, today]);
+  
+  // Get buffer queue for a specific doctor (first 2 from arrived queue)
+  const getBufferQueue = (doctorName: string): Appointment[] => {
+    const queueState = queuesByDoctor[doctorName];
+    if (!queueState) return [];
+    return queueState.bufferQueue;
+  };
+  
+  // Check if appointment is in buffer queue
+  const isInBufferQueue = (appointment: Appointment): boolean => {
+    const bufferQueue = getBufferQueue(appointment.doctor);
+    return bufferQueue.some(apt => apt.id === appointment.id);
+  };
 
   const isNewPatient = patientSearchTerm.length >= 10 && !selectedPatient;
   const isKloqoMember = primaryPatient && !primaryPatient.clinicIds?.includes(clinicId!);
@@ -1765,18 +2042,8 @@ export default function AppointmentsPage() {
       return true;
     }
   
-    if (isToday(date) && appointmentType === 'Advanced Booking') {
-        const todaysSlots = selectedDoctor.availabilitySlots?.find(s => s.day === format(date, 'EEEE'))?.timeSlots;
-        if (!todaysSlots) return true;
-
-        // Check if ALL sessions for today are past the booking cutoff.
-        const allSessionsUnbookable = todaysSlots.every(session => {
-            const sessionStartTime = parseTime(session.from, date);
-            return isAfter(new Date(), subMinutes(sessionStartTime, 30));
-        });
-        
-        return allSessionsUnbookable;
-    }
+    // Don't disable the date based on 1-hour cutoff - only individual slots within 1 hour will be hidden
+    // Booking remains open throughout the day, only slots within 1 hour are hidden
   
     return false;
   };
@@ -2337,7 +2604,14 @@ export default function AppointmentsPage() {
                                                                     "line-through bg-destructive/20 text-destructive-foreground": slot.status === 'leave',
                                                                 })}
                                                             >
-                                                                {slot.status === 'booked' && slot.tokenNumber ? slot.tokenNumber : slot.time}
+                                                                {slot.status === 'booked' && slot.tokenNumber ? slot.tokenNumber : (() => {
+                                                                    try {
+                                                                        const slotTime = parseDateFns(slot.time, "hh:mm a", selectedDate || new Date());
+                                                                        return format(subMinutes(slotTime, 15), 'hh:mm a');
+                                                                    } catch {
+                                                                        return slot.time;
+                                                                    }
+                                                                })()}
                                                             </Button>
                                                         ))}
                                                     </div>
@@ -2550,107 +2824,188 @@ export default function AppointmentsPage() {
                           </TableBody>
                         </Table>
                       ) : (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Patient</TableHead>
-                              <TableHead>Token</TableHead>
-                              <TableHead>Time</TableHead>
-                              <TableHead className="text-right">{activeTab === 'skipped' ? 'Status' : 'Actions'}</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {todaysAppointments
-                              .filter(apt => activeTab === 'upcoming' ? (apt.status === 'Confirmed' || apt.status === 'Pending') : apt.status === 'Skipped')
-                              .map((appointment, index) => (
-                                <TableRow
-                                  key={`${appointment.id}-${index}`}
-                                  className={cn(
-                                    appointment.status === 'Skipped' && "bg-red-200/50 dark:bg-red-900/60"
-                                  )}
-                                >
-                                  <TableCell className="font-medium">{appointment.patientName}</TableCell>
-                                  <TableCell>{appointment.tokenNumber}</TableCell>
-                                  <TableCell>{appointment.time}</TableCell>
-                                  <TableCell className="text-right">
-                                    {activeTab === 'skipped' ? (
-                                      <div className="flex justify-end gap-2">
-                                        <Badge variant="destructive">Skipped</Badge>
-                                        <TooltipProvider>
-                                          <Tooltip>
-                                            <TooltipTrigger asChild>
-                                              <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="p-0 h-auto text-blue-600 hover:text-blue-700"
-                                                onClick={() => handleRejoinQueue(appointment)}
-                                              >
-                                                <Repeat className="h-5 w-5" />
-                                              </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent>
-                                              <p>Re-Join Queue</p>
-                                            </TooltipContent>
-                                          </Tooltip>
-                                        </TooltipProvider>
-                                      </div>
-                                    ) : (
+                        <>
+                          {activeTab === 'skipped' ? (
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Patient</TableHead>
+                                  <TableHead>Token</TableHead>
+                                  <TableHead>Time</TableHead>
+                                  <TableHead className="text-right">Status</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {todaysAppointments
+                                  .filter(apt => apt.status === 'Skipped')
+                                  .map((appointment, index) => (
+                                    <TableRow
+                                      key={`${appointment.id}-${index}`}
+                                      className={cn(
+                                        appointment.status === 'Skipped' && "bg-red-200/50 dark:bg-red-900/60"
+                                      )}
+                                    >
+                                      <TableCell className="font-medium">{appointment.patientName}</TableCell>
+                                      <TableCell>{appointment.tokenNumber}</TableCell>
+                                      <TableCell>{appointment.time}</TableCell>
+                                      <TableCell className="text-right">
                                         <div className="flex justify-end gap-2">
-                                            {index === 0 && appointment.status !== 'Skipped' && (
+                                          <Badge variant="destructive">Skipped</Badge>
+                                          <TooltipProvider>
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <Button
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  className="p-0 h-auto text-blue-600 hover:text-blue-700"
+                                                  onClick={() => handleRejoinQueue(appointment)}
+                                                >
+                                                  <Repeat className="h-5 w-5" />
+                                                </Button>
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                <p>Re-Join Queue</p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          </TooltipProvider>
+                                        </div>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                              </TableBody>
+                            </Table>
+                          ) : (
+                            <div className="space-y-6 p-4">
+                              {/* Arrived Section (Confirmed) */}
+                              <div>
+                                <div className="mb-3 flex items-center gap-2">
+                                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                  <h3 className="font-semibold text-sm">Arrived ({todaysAppointments.filter(apt => apt.status === 'Confirmed').length})</h3>
+                                </div>
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>Patient</TableHead>
+                                      <TableHead>Token</TableHead>
+                                      <TableHead>Time</TableHead>
+                                      <TableHead className="text-right">Actions</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {todaysAppointments
+                                      .filter(apt => apt.status === 'Confirmed')
+                                      .map((appointment, index) => {
+                                        const isBuffer = isInBufferQueue(appointment);
+                                        return (
+                                          <TableRow
+                                            key={`${appointment.id}-${index}`}
+                                            className={cn(
+                                              isBuffer && "bg-yellow-100 dark:bg-yellow-900/30"
+                                            )}
+                                          >
+                                            <TableCell className="font-medium">
+                                              <div className="flex items-center gap-2">
+                                                {appointment.patientName}
+                                                {isBuffer && (
+                                                  <Badge variant="outline" className="text-xs bg-yellow-200 border-yellow-400">
+                                                    Buffer
+                                                  </Badge>
+                                                )}
+                                              </div>
+                                            </TableCell>
+                                            <TableCell>{appointment.tokenNumber}</TableCell>
+                                            <TableCell>{appointment.time}</TableCell>
+                                            <TableCell className="text-right">
+                                              <div className="flex justify-end gap-2">
+                                                {index === 0 && (
+                                                  <TooltipProvider>
+                                                    <Tooltip>
+                                                      <TooltipTrigger asChild>
+                                                        <div>
+                                                          <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="p-0 h-auto text-green-600 hover:text-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            onClick={() => setAppointmentToComplete(appointment)}
+                                                            disabled={!isDoctorInConsultation}
+                                                          >
+                                                            <CheckCircle2 className="h-5 w-5" />
+                                                          </Button>
+                                                        </div>
+                                                      </TooltipTrigger>
+                                                      {!isDoctorInConsultation && (
+                                                        <TooltipContent>
+                                                          <p>Doctor is not in consultation.</p>
+                                                        </TooltipContent>
+                                                      )}
+                                                    </Tooltip>
+                                                  </TooltipProvider>
+                                                )}
+                                              </div>
+                                            </TableCell>
+                                          </TableRow>
+                                        );
+                                      })}
+                                  </TableBody>
+                                </Table>
+                              </div>
+                              
+                              {/* Pending Section */}
+                              <div>
+                                <div className="mb-3 flex items-center gap-2">
+                                  <Clock className="h-4 w-4 text-orange-600" />
+                                  <h3 className="font-semibold text-sm">Pending ({todaysAppointments.filter(apt => apt.status === 'Pending').length})</h3>
+                                </div>
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>Patient</TableHead>
+                                      <TableHead>Token</TableHead>
+                                      <TableHead>Time</TableHead>
+                                      <TableHead className="text-right">Actions</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {todaysAppointments
+                                      .filter(apt => apt.status === 'Pending')
+                                      .map((appointment, index) => (
+                                        <TableRow
+                                          key={`${appointment.id}-${index}`}
+                                        >
+                                          <TableCell className="font-medium">{appointment.patientName}</TableCell>
+                                          <TableCell>{appointment.tokenNumber}</TableCell>
+                                          <TableCell>{appointment.time}</TableCell>
+                                          <TableCell className="text-right">
+                                            <div className="flex justify-end gap-2">
+                                              {shouldShowConfirmArrival(appointment) && (
                                                 <TooltipProvider>
                                                   <Tooltip>
                                                     <TooltipTrigger asChild>
-                                                      <div>
-                                                        <Button
-                                                          variant="ghost"
-                                                          size="icon"
-                                                          className="p-0 h-auto text-green-600 hover:text-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                          onClick={() => handleComplete(appointment)}
-                                                          disabled={!isDoctorInConsultation}
-                                                        >
-                                                          <CheckCircle2 className="h-5 w-5" />
-                                                        </Button>
-                                                      </div>
-                                                    </TooltipTrigger>
-                                                    {!isDoctorInConsultation && (
-                                                      <TooltipContent>
-                                                        <p>Doctor is not in consultation.</p>
-                                                      </TooltipContent>
-                                                    )}
-                                                  </Tooltip>
-                                                </TooltipProvider>
-                                            )}
-                                            {index === 0 && activeTab === 'upcoming' && (
-                                              <TooltipProvider>
-                                                <Tooltip>
-                                                  <TooltipTrigger asChild>
-                                                    <div>
                                                       <Button
                                                         variant="ghost"
                                                         size="icon"
-                                                        className="p-0 h-auto text-yellow-600 hover:text-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                        onClick={() => setAppointmentToSkip(appointment)}
-                                                        disabled={!isDoctorInConsultation}
+                                                        className="p-0 h-auto text-blue-600 hover:text-blue-700"
+                                                        onClick={() => setAppointmentToAddToQueue(appointment)}
                                                       >
-                                                        <SkipForward className="h-5 w-5" />
+                                                        <CheckCircle2 className="h-5 w-5" />
                                                       </Button>
-                                                    </div>
-                                                  </TooltipTrigger>
-                                                  {!isDoctorInConsultation && (
+                                                    </TooltipTrigger>
                                                     <TooltipContent>
-                                                      <p>Doctor is not in consultation.</p>
+                                                      <p>Confirm Arrival</p>
                                                     </TooltipContent>
-                                                  )}
-                                                </Tooltip>
-                                              </TooltipProvider>
-                                            )}
-                                        </div>
-                                    )}
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                          </TableBody>
-                        </Table>
+                                                  </Tooltip>
+                                                </TooltipProvider>
+                                              )}
+                                            </div>
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            </div>
+                          )}
+                        </>
                       )}
                     </ScrollArea>
                   </CardContent>
@@ -2688,30 +3043,6 @@ export default function AppointmentsPage() {
           </DialogClose>
         </DialogContent>
       </Dialog>
-      <AlertDialog open={!!appointmentToSkip} onOpenChange={(open) => !open && setAppointmentToSkip(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure you want to skip this appointment?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will move the appointment for "{appointmentToSkip?.patientName}" to the end of the queue.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setAppointmentToSkip(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-yellow-500 hover:bg-yellow-600"
-              onClick={() => {
-                if (appointmentToSkip) {
-                  handleSkip(appointmentToSkip);
-                }
-                setAppointmentToSkip(null);
-              }}
-            >
-              Confirm Skip
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
       <AlertDialog open={!!appointmentToCancel} onOpenChange={(open) => !open && setAppointmentToCancel(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -2732,6 +3063,54 @@ export default function AppointmentsPage() {
               }}
             >
               Yes, Cancel Appointment
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={!!appointmentToAddToQueue && appointmentToAddToQueue.status === 'Pending'} onOpenChange={(open) => !open && setAppointmentToAddToQueue(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Patient Arrived at Clinic?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Confirm that "{appointmentToAddToQueue?.patientName}" has arrived at the clinic. This will change their status to "Confirmed" and add them to the queue.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setAppointmentToAddToQueue(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-blue-500 hover:bg-blue-600"
+              onClick={() => {
+                if (appointmentToAddToQueue && appointmentToAddToQueue.status === 'Pending') {
+                  handleAddToQueue(appointmentToAddToQueue);
+                }
+                setAppointmentToAddToQueue(null);
+              }}
+            >
+              Yes, Confirm Arrival
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={!!appointmentToComplete} onOpenChange={(open) => !open && setAppointmentToComplete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark Appointment as Completed?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to mark the appointment for "{appointmentToComplete?.patientName}" as completed? This will update the appointment status and notify the patient.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setAppointmentToComplete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-green-500 hover:bg-green-600"
+              onClick={() => {
+                if (appointmentToComplete) {
+                  handleComplete(appointmentToComplete);
+                }
+                setAppointmentToComplete(null);
+              }}
+            >
+              Yes, Mark as Completed
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -6,11 +6,24 @@ import { collection, doc, getDoc, writeBatch, where, query, onSnapshot, getDocs 
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/firebase';
 import type { Appointment, Doctor } from '@/lib/types';
-import { addHours, isAfter, parse, format } from 'date-fns';
+import { addMinutes, isAfter, parse, format, subMinutes } from 'date-fns';
 
 function parseAppointmentDateTime(dateStr: string, timeStr: string): Date {
     // This format needs to exactly match how dates/times are stored in Firestore
     return parse(`${dateStr} ${timeStr}`, 'd MMMM yyyy hh:mm a', new Date());
+}
+
+// Helper function to parse time string
+function parseTime(timeStr: string, referenceDate: Date): Date {
+  try {
+    return parse(timeStr, 'hh:mm a', referenceDate);
+  } catch {
+    // Fallback to 24h format
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const date = new Date(referenceDate);
+    date.setHours(hours, minutes, 0, 0);
+    return date;
+  }
 }
 
 function shouldDoctorBeOut(doctor: Doctor, currentDay: string, currentTime: string): boolean {
@@ -77,34 +90,14 @@ export function useAppointmentStatusUpdater() {
       
       for (const apt of skippedAppointments) {
         try {
-          // Get skippedAt timestamp (when the appointment was marked as Skipped)
-          const skippedAt = apt.skippedAt;
+          // Parse appointment date and time
+          const appointmentDate = parse(apt.date, 'd MMMM yyyy', new Date());
+          const appointmentTime = parseTime(apt.time, appointmentDate);
           
-          if (!skippedAt) {
-            // If skippedAt doesn't exist (old data), skip this appointment
-            console.warn(`Appointment ${apt.id} is Skipped but missing skippedAt timestamp`);
-            continue;
-          }
+          // Check if appointment time + 15 minutes has passed
+          const noShowTime = addMinutes(appointmentTime, 15);
           
-          // Convert Firestore timestamp to Date
-          let skippedAtDate: Date;
-          if (skippedAt instanceof Date) {
-            skippedAtDate = skippedAt;
-          } else if (skippedAt && typeof skippedAt.toDate === 'function') {
-            // Firestore Timestamp
-            skippedAtDate = skippedAt.toDate();
-          } else if (skippedAt && skippedAt.seconds) {
-            // Firestore Timestamp object with seconds property
-            skippedAtDate = new Date(skippedAt.seconds * 1000);
-          } else {
-            // Fallback: try to parse as string or number
-            skippedAtDate = new Date(skippedAt);
-          }
-          
-          const fiveHoursLater = addHours(skippedAtDate, 5);
-
-          // Check if 5 hours have passed since the appointment was skipped
-          if (isAfter(now, fiveHoursLater)) {
+          if (isAfter(now, noShowTime)) {
             const aptRef = doc(db, 'appointments', apt.id);
             batch.update(aptRef, { status: 'No-show' });
             hasWrites = true;
@@ -120,6 +113,47 @@ export function useAppointmentStatusUpdater() {
         try {
           await batch.commit();
           console.log("Appointment statuses automatically updated to No-show.");
+          
+          // Reduce delays for subsequent appointments when slots become vacant (no-show)
+          const noShowAppointments = skippedAppointments.filter(apt => {
+            try {
+              const appointmentDate = parse(apt.date, 'd MMMM yyyy', new Date());
+              const appointmentTime = parseTime(apt.time, appointmentDate);
+              const noShowTime = addMinutes(appointmentTime, 15);
+              return isAfter(now, noShowTime);
+            } catch {
+              return false;
+            }
+          });
+          
+          for (const apt of noShowAppointments) {
+            try {
+              // Get doctor info to get slot duration
+              const doctorsRef = collection(db, 'doctors');
+              const doctorQuery = query(
+                doctorsRef,
+                where('clinicId', '==', apt.clinicId),
+                where('name', '==', apt.doctor)
+              );
+              const doctorSnapshot = await getDocs(doctorQuery);
+              if (!doctorSnapshot.empty) {
+                const doctor = { id: doctorSnapshot.docs[0].id, ...doctorSnapshot.docs[0].data() } as Doctor;
+                const slotDuration = doctor.averageConsultingTime || 15;
+                
+                const { reduceDelayOnSlotVacancy } = await import('@/lib/delay-propagation-service');
+                await reduceDelayOnSlotVacancy(
+                  apt.clinicId,
+                  apt.doctor,
+                  apt.date,
+                  apt.id,
+                  slotDuration
+                );
+              }
+            } catch (delayError) {
+              console.error('Error reducing delay on no-show:', delayError);
+              // Don't fail the status update if delay reduction fails
+            }
+          }
         } catch (e) {
           console.error("Error in automatic status update batch:", e);
         }

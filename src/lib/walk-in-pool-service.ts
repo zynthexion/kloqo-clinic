@@ -143,7 +143,6 @@ export async function getWalkInPool(
  * @param sessionIndex Session index
  * @param activeAppointments Current active appointments for the doctor/date
  * @param allotment Walk-in token allotment (default: 5)
- * @param capacityRatio Capacity ratio for 70/30 split
  */
 export async function assignWalkInsFromPool(
   clinicId: string,
@@ -156,8 +155,7 @@ export async function assignWalkInsFromPool(
     doctor: string;
     date: string;
   }>,
-  allotment: number = 5,
-  capacityRatio: number = 0.7
+  allotment: number = 5
 ): Promise<void> {
   const date = new Date();
   const dateStr = formatDate(date);

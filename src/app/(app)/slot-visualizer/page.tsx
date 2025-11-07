@@ -1,59 +1,22 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { format, getDay, parse, addMinutes, isBefore, isAfter, startOfDay, isToday, differenceInMinutes } from "date-fns";
+import { format, getDay, parse, addMinutes, subMinutes, isBefore, isAfter, startOfDay, isToday, differenceInMinutes, isSameMinute } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/firebase";
 import { db } from "@/lib/firebase";
-import { collection, query, where, orderBy, onSnapshot, doc, getDoc as getFirestoreDoc } from "firebase/firestore";
+import { collection, query, where, orderBy, onSnapshot, doc, getDoc as getFirestoreDoc, getDocs } from "firebase/firestore";
 import type { Doctor, Appointment, Clinic } from "@/lib/types";
-import { Loader2, Calendar as CalendarIcon } from "lucide-react";
+import { Loader2, Calendar as CalendarIcon, Users, Clock, UserCheck, UserX, Stethoscope } from "lucide-react";
 import { cn, parseTime } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-
-// Generate slots with session index
-function generateTimeSlotsWithSession(
-  timeSlots: { from: string; to: string }[],
-  referenceDate: Date,
-  slotDuration: number
-): { time: Date; sessionIndex: number }[] {
-  const slots: { time: Date; sessionIndex: number }[] = [];
-  timeSlots.forEach((slot, sessionIndex) => {
-    const startTime = parseTime(slot.from, referenceDate);
-    const endTime = parseTime(slot.to, referenceDate);
-    let current = new Date(startTime);
-    while (isBefore(current, endTime)) {
-      slots.push({ time: new Date(current), sessionIndex });
-      current = addMinutes(current, slotDuration);
-    }
-  });
-  return slots;
-}
-
-// Group slots into 2-hour subsessions
-function groupIntoSubsessions(
-  slots: { time: Date; sessionIndex: number }[],
-  sessionIndex: number,
-  slotDuration: number // in minutes
-): { time: Date; sessionIndex: number }[][] {
-  const sessionSlots = slots.filter(s => s.sessionIndex === sessionIndex);
-  const subsessions: { time: Date; sessionIndex: number }[][] = [];
-  
-  // Calculate how many slots make up 2 hours
-  // 2 hours = 120 minutes, so slots per subsession = 120 / slotDuration
-  const slotsPerSubsession = Math.floor(120 / slotDuration);
-  
-  for (let i = 0; i < sessionSlots.length; i += slotsPerSubsession) {
-    subsessions.push(sessionSlots.slice(i, i + slotsPerSubsession));
-  }
-  
-  return subsessions;
-}
+import { computeQueues, type QueueState } from "@/lib/queue-management-service";
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -61,11 +24,23 @@ export default function SlotVisualizerPage() {
   const { currentUser } = useAuth();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
+  const [selectedSessionIndex, setSelectedSessionIndex] = useState<number>(0);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [clinicDetails, setClinicDetails] = useState<Clinic | null>(null);
   const [loading, setLoading] = useState(true);
+  const [queueState, setQueueState] = useState<QueueState | null>(null);
+  const [currentTime, setCurrentTime] = useState<Date>(new Date());
   const { toast } = useToast();
+  
+  // Update current time every minute to recalculate which slots are past
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Update every minute
+    
+    return () => clearInterval(interval);
+  }, []);
 
   // Fetch clinic details and doctors
   useEffect(() => {
@@ -152,170 +127,89 @@ export default function SlotVisualizerPage() {
     return () => unsubscribe();
   }, [selectedDate, selectedDoctorId, doctors]);
 
+  // Compute queues for the selected doctor/date/session
+  useEffect(() => {
+    if (!selectedDoctorId || !selectedDate || appointments.length === 0) {
+      setQueueState(null);
+      return;
+    }
+
+    const selectedDoctor = doctors.find(d => d.id === selectedDoctorId);
+    if (!selectedDoctor || !clinicDetails) return;
+
+    const formattedDate = format(selectedDate, "d MMMM yyyy");
+
+    const computeQueue = async () => {
+      try {
+        const state = await computeQueues(
+          appointments,
+          selectedDoctor.name,
+          selectedDoctor.id,
+          clinicDetails.id,
+          formattedDate,
+          selectedSessionIndex
+        );
+        setQueueState(state);
+      } catch (error) {
+        console.error("Error computing queues:", error);
+        setQueueState(null);
+      }
+    };
+
+    computeQueue();
+  }, [selectedDoctorId, selectedDate, selectedSessionIndex, appointments, doctors, clinicDetails]);
+
   const selectedDoctor = doctors.find(d => d.id === selectedDoctorId);
 
-  // Generate all slots for the selected date
-  const allSlots = useMemo(() => {
+  // Get available sessions for the selected doctor and date
+  const availableSessions = useMemo(() => {
     if (!selectedDoctor || !selectedDate) return [];
-
+    
     const dayOfWeek = daysOfWeek[getDay(selectedDate)];
     const availabilityForDay = selectedDoctor.availabilitySlots?.find(s => s.day === dayOfWeek);
     if (!availabilityForDay?.timeSlots) return [];
-
-    const slotDuration = selectedDoctor.averageConsultingTime || 15;
-    return generateTimeSlotsWithSession(availabilityForDay.timeSlots, selectedDate, slotDuration);
+    
+    return availabilityForDay.timeSlots.map((slot, index) => ({
+      index,
+      label: `Session ${index + 1} (${slot.from} - ${slot.to})`,
+      from: slot.from,
+      to: slot.to,
+    }));
   }, [selectedDoctor, selectedDate]);
 
-  // Get appointment status for a slot
-  const getSlotStatus = (slotIndex: number) => {
-    const appointment = appointments.find(apt => apt.slotIndex === slotIndex);
-    if (!appointment) {
-      return { type: "available", appointment: null };
+  // Reset session index when doctor or date changes
+  useEffect(() => {
+    if (availableSessions.length > 0 && selectedSessionIndex >= availableSessions.length) {
+      setSelectedSessionIndex(0);
     }
+  }, [availableSessions, selectedSessionIndex]);
 
-    const status = appointment.status;
-    const bookedVia = appointment.bookedVia || "Advanced Booking";
+  // Filter appointments by selected session index
+  const filteredAppointments = useMemo(() => {
+    if (!selectedSessionIndex && selectedSessionIndex !== 0) return appointments;
+    return appointments.filter(apt => apt.sessionIndex === selectedSessionIndex || apt.sessionIndex === undefined);
+  }, [appointments, selectedSessionIndex]);
 
-    if (status === "Skipped") {
-      return { type: "skipped", appointment };
-    }
-    if (status === "Completed") {
-      return { type: "completed", appointment };
-    }
-    if (status === "No-show") {
-      return { type: "vacant", appointment };
-    }
-    if (status === "Cancelled") {
-      return { type: "cancelled", appointment };
-    }
-    if (bookedVia === "Walk-in") {
-      return { type: "walkin", appointment };
-    }
-    return { type: "advanced", appointment };
-  };
-
-  // Calculate last A token slotIndex
-  const lastAdvancedSlotIndex = useMemo(() => {
-    const advancedAppointments = appointments.filter(
-      apt => apt.bookedVia !== "Walk-in" && 
-      (apt.status === "Pending" || apt.status === "Confirmed")
-    );
-    if (advancedAppointments.length === 0) return -1;
-    return Math.max(...advancedAppointments.map(a => a.slotIndex ?? -1));
-  }, [appointments]);
-
-  // Calculate reference point for walk-ins
-  const walkInReferenceSlot = useMemo(() => {
-    const walkInAppointments = appointments.filter(
-      apt => apt.bookedVia === "Walk-in" && apt.status !== "Skipped"
-    );
-    if (walkInAppointments.length === 0) return null;
-    const futureWalkIns = walkInAppointments.filter(w => {
-      const slotIndex = w.slotIndex ?? -1;
-      if (slotIndex < 0 || slotIndex >= allSlots.length) return false;
-      const slot = allSlots[slotIndex];
-      return slot && (isAfter(slot.time, new Date()) || slot.time.getTime() === new Date().getTime());
+  // Get all appointments for today (all sessions)
+  const todaysAppointments = useMemo(() => {
+    if (!isToday(selectedDate)) return [];
+    return appointments.filter(apt => {
+      try {
+        const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
+        return isToday(aptDate);
+      } catch {
+        return false;
+      }
+    }).sort((a, b) => {
+      try {
+        const timeA = parseTime(a.time, parse(a.date, 'd MMMM yyyy', new Date()));
+        const timeB = parseTime(b.time, parse(b.date, 'd MMMM yyyy', new Date()));
+        return timeA.getTime() - timeB.getTime();
+      } catch {
+        return 0;
+      }
     });
-    if (futureWalkIns.length === 0) return null;
-    return futureWalkIns.sort((a, b) => (b.slotIndex ?? 0) - (a.slotIndex ?? 0))[0];
-  }, [appointments, allSlots]);
-
-  // Calculate current delay
-  const currentDelay = useMemo(() => {
-    if (!selectedDoctor || !isToday(selectedDate)) return null;
-
-    const now = new Date();
-    const activeAppointments = appointments.filter(
-      apt => (apt.status === "Pending" || apt.status === "Confirmed") &&
-      apt.slotIndex !== undefined && apt.slotIndex >= 0 &&
-      apt.slotIndex < allSlots.length
-    );
-
-    if (activeAppointments.length === 0) return null;
-
-    // Find the current/next appointment
-    let currentOrNextAppointment = activeAppointments.find(apt => {
-      const slotIndex = apt.slotIndex!;
-      const slot = allSlots[slotIndex];
-      if (!slot) return false;
-      // Appointment that hasn't started yet or is currently happening
-      return isAfter(slot.time, now) || (isBefore(slot.time, now) && !apt.status.includes("Completed"));
-    });
-
-    if (!currentOrNextAppointment || currentOrNextAppointment.slotIndex === undefined) {
-      // Find the earliest future appointment
-      const futureAppointments = activeAppointments
-        .filter(apt => {
-          const slotIndex = apt.slotIndex!;
-          const slot = allSlots[slotIndex];
-          return slot && isAfter(slot.time, now);
-        })
-        .sort((a, b) => (a.slotIndex ?? 0) - (b.slotIndex ?? 0));
-
-      if (futureAppointments.length === 0) return null;
-      currentOrNextAppointment = futureAppointments[0];
-    }
-
-    const slotIndex = currentOrNextAppointment.slotIndex!;
-    const slot = allSlots[slotIndex];
-    if (!slot) return null;
-
-    const expectedTime = slot.time;
-    const delay = differenceInMinutes(now, expectedTime);
-
-    return {
-      appointment: currentOrNextAppointment,
-      expectedTime,
-      delayMinutes: delay,
-      slotIndex,
-    };
-  }, [appointments, allSlots, selectedDoctor, selectedDate]);
-
-  // Get subsessions for each session
-  const sessionSlots = useMemo(() => {
-    if (!selectedDoctor || !selectedDate || allSlots.length === 0) return [];
-
-    const dayOfWeek = daysOfWeek[getDay(selectedDate)];
-    const availabilityForDay = selectedDoctor.availabilitySlots?.find(s => s.day === dayOfWeek);
-    if (!availabilityForDay?.timeSlots) return [];
-
-    const slotDuration = selectedDoctor.averageConsultingTime || 15;
-    const sessions: Array<{
-      sessionIndex: number;
-      title: string;
-      subsessions: Array<{
-        subsessionIndex: number;
-        slots: Array<{ slotIndex: number; time: Date; sessionIndex: number }>;
-      }>;
-    }> = [];
-
-    availabilityForDay.timeSlots.forEach((timeSlot, sessionIndex) => {
-      const subsessions = groupIntoSubsessions(allSlots, sessionIndex, slotDuration);
-      const sessionTitle = `Session ${sessionIndex + 1} (${timeSlot.from} - ${timeSlot.to})`;
-
-      const subsessionData = subsessions.map((subsession, subsessionIndex) => ({
-        subsessionIndex,
-        slots: subsession.map((slot, idx) => {
-          const slotIndex = allSlots.findIndex(s => 
-            s.time.getTime() === slot.time.getTime() && s.sessionIndex === slot.sessionIndex
-          );
-          return {
-            slotIndex,
-            time: slot.time,
-            sessionIndex: slot.sessionIndex,
-          };
-        }).filter(s => s.slotIndex >= 0),
-      }));
-
-      sessions.push({
-        sessionIndex,
-        title: sessionTitle,
-        subsessions: subsessionData,
-      });
-    });
-
-    return sessions;
-  }, [selectedDoctor, selectedDate, allSlots]);
+  }, [appointments, selectedDate]);
 
   if (loading) {
     return (
@@ -329,55 +223,14 @@ export default function SlotVisualizerPage() {
     <div className="flex-1 overflow-auto p-6">
       <Card>
         <CardHeader>
-          <CardTitle>Slot Visualizer</CardTitle>
+          <CardTitle>Slot Visualizer - Queue System</CardTitle>
           <CardDescription>
-            Visualize slot assignments and token distribution for testing purposes
+            Complete visualization of the queue management system showing Arrived Queue, Buffer Queue, Skipped Queue, and Doctor Consultation Room
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Current Delay Indicator */}
-          {currentDelay && (
-            <Card className={cn(
-              "p-4",
-              currentDelay.delayMinutes > 0 
-                ? "bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800"
-                : "bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-800"
-            )}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-semibold text-sm text-muted-foreground mb-1">Current Status</h4>
-                  <div className="flex items-center gap-4">
-                    <div>
-                      <span className="text-xs text-muted-foreground">Expected Time:</span>
-                      <span className="ml-2 font-semibold">{format(currentDelay.expectedTime, "hh:mm a")}</span>
-                    </div>
-                    <div>
-                      <span className="text-xs text-muted-foreground">Current Time:</span>
-                      <span className="ml-2 font-semibold">{format(new Date(), "hh:mm a")}</span>
-                    </div>
-                    <div>
-                      <span className="text-xs text-muted-foreground">Delay:</span>
-                      <span className={cn(
-                        "ml-2 font-bold text-lg",
-                        currentDelay.delayMinutes > 0 ? "text-red-600" : "text-green-600"
-                      )}>
-                        {currentDelay.delayMinutes > 0 ? `+${currentDelay.delayMinutes}` : currentDelay.delayMinutes} min
-                      </span>
-                    </div>
-                    {currentDelay.appointment && (
-                      <div>
-                        <span className="text-xs text-muted-foreground">Token:</span>
-                        <span className="ml-2 font-semibold">{currentDelay.appointment.tokenNumber || `#${currentDelay.slotIndex + 1}`}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </Card>
-          )}
-
           {/* Controls */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Select Doctor</label>
               <Select value={selectedDoctorId} onValueChange={setSelectedDoctorId}>
@@ -419,181 +272,1402 @@ export default function SlotVisualizerPage() {
                 </PopoverContent>
               </Popover>
             </div>
-          </div>
-
-          {/* Legend */}
-          <div className="flex flex-wrap gap-4 p-4 bg-muted/50 rounded-lg">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 border-2 border-gray-300 bg-white rounded" />
-              <span className="text-sm">Available</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-500 rounded" />
-              <span className="text-sm">A Token</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-green-500 rounded" />
-              <span className="text-sm">W Token</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-yellow-500 rounded" />
-              <span className="text-sm">Skipped</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gray-400 rounded" />
-              <span className="text-sm">Completed</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-green-200 border-2 border-green-400 rounded" />
-              <span className="text-sm">Vacant</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-red-300 border-2 border-red-500 rounded" />
-              <span className="text-sm">Cancelled</span>
-            </div>
-            {lastAdvancedSlotIndex >= 0 && (
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 border-4 border-blue-700 bg-transparent rounded" />
-                <span className="text-sm">Last A Token</span>
-              </div>
-            )}
-            {walkInReferenceSlot && (
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 border-4 border-green-700 bg-transparent rounded" />
-                <span className="text-sm">W Reference</span>
+            {availableSessions.length > 0 && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Select Session</label>
+                <Select 
+                  value={selectedSessionIndex.toString()} 
+                  onValueChange={(value) => setSelectedSessionIndex(parseInt(value, 10))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a session" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableSessions.map((session) => (
+                      <SelectItem key={session.index} value={session.index.toString()}>
+                        {session.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
           </div>
 
-          {/* Slots Display */}
-          {selectedDoctor && sessionSlots.length > 0 ? (
-            <div className="space-y-4">
-              {sessionSlots.map((session) => (
-                <div key={session.sessionIndex} className="space-y-4">
-                  {session.subsessions.map((subsession) => {
-                    const firstSlot = subsession.slots[0];
-                    const lastSlot = subsession.slots[subsession.slots.length - 1];
-                    const subsessionTitle = firstSlot && lastSlot
-                      ? `${format(firstSlot.time, "hh:mm a")} - ${format(lastSlot.time, "hh:mm a")}`
-                      : `Subsession ${subsession.subsessionIndex + 1}`;
+          {/* Today's Appointments Summary */}
+          {isToday(selectedDate) && todaysAppointments.length > 0 && (
+            <Card className="border-2 border-blue-300">
+              <CardHeader className="bg-blue-50 dark:bg-blue-950/20">
+                <CardTitle className="flex items-center gap-2">
+                  <CalendarIcon className="h-5 w-5 text-blue-600" />
+                  Today's Appointments
+                  <Badge variant="outline" className="ml-auto bg-blue-100 text-blue-800 border-blue-400">
+                    {todaysAppointments.length} total
+                  </Badge>
+                </CardTitle>
+                <CardDescription>
+                  All booked appointments for today across all sessions
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <div className="text-muted-foreground">Total Appointments</div>
+                    <div className="text-2xl font-bold">{todaysAppointments.length}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground">A Tokens</div>
+                    <div className="text-2xl font-bold text-blue-600">
+                      {todaysAppointments.filter(a => a.bookedVia !== "Walk-in").length}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground">W Tokens</div>
+                    <div className="text-2xl font-bold text-green-600">
+                      {todaysAppointments.filter(a => a.bookedVia === "Walk-in").length}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground">Confirmed</div>
+                    <div className="text-2xl font-bold text-green-600">
+                      {todaysAppointments.filter(a => a.status === "Confirmed").length}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-                    // Calculate dynamic grid columns based on number of slots
-                    const slotCount = subsession.slots.length;
-                    // Use responsive grid that wraps naturally
-                    // For 2-hour subsessions: typically 8 slots (15 min), 6 slots (20 min), 4 slots (30 min), etc.
-
-                    return (
-                      <Card key={`${session.sessionIndex}-${subsession.subsessionIndex}`} className="p-4">
-                        <div className="mb-3">
-                          <h4 className="text-base font-semibold">
-                            {subsessionTitle} <span className="text-sm text-muted-foreground font-normal">({slotCount} slots, 2 hours)</span>
-                          </h4>
+          {/* Slot Visualization for Selected Session */}
+          {selectedDoctor && availableSessions[selectedSessionIndex] && (
+            <Card className="border-2 border-purple-300">
+              <CardHeader className="bg-purple-50 dark:bg-purple-950/20">
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5 text-purple-600" />
+                  Slot Visualization - Session {selectedSessionIndex + 1}
+                  <Badge variant="outline" className="ml-auto bg-purple-100 text-purple-800 border-purple-400">
+                    {availableSessions[selectedSessionIndex]?.label || `Session ${selectedSessionIndex + 1}`}
+                  </Badge>
+                </CardTitle>
+                <CardDescription>
+                  Visual representation of all slots showing which are booked (A/W tokens) and which are empty
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-4">
+                {(() => {
+                  const session = availableSessions[selectedSessionIndex];
+                  if (!session || !selectedDoctor) return null;
+                  
+                  // Generate all slots for this session
+                  const consultationTime = selectedDoctor.averageConsultingTime || 15;
+                  const sessionStart = parseTime(session.from, selectedDate);
+                  const sessionEnd = parseTime(session.to, selectedDate);
+                  
+                  const allSlots: { time: Date; slotIndex: number }[] = [];
+                  let slotTime = sessionStart;
+                  let globalSlotIndex = 0;
+                  
+                  // Calculate starting global slot index for this session
+                  const dayOfWeek = daysOfWeek[getDay(selectedDate)];
+                  const availabilityForDay = selectedDoctor.availabilitySlots?.find(s => s.day === dayOfWeek);
+                  let sessionStartSlotIndex = 0;
+                  if (availabilityForDay) {
+                    for (let i = 0; i < selectedSessionIndex; i++) {
+                      const timeSlot = availabilityForDay.timeSlots[i];
+                      let ts = parseTime(timeSlot.from, selectedDate);
+                      const endTime = parseTime(timeSlot.to, selectedDate);
+                      while (isBefore(ts, endTime)) {
+                        sessionStartSlotIndex++;
+                        ts = addMinutes(ts, consultationTime);
+                      }
+                    }
+                  }
+                  
+                  // Generate slots for this session
+                  while (isBefore(slotTime, sessionEnd)) {
+                    allSlots.push({
+                      time: new Date(slotTime),
+                      slotIndex: sessionStartSlotIndex + allSlots.length
+                    });
+                    slotTime = addMinutes(slotTime, consultationTime);
+                  }
+                  
+                  // Filter out past slots or mark them as passed
+                  // Find the first slot that hasn't started yet (current time or future)
+                  const now = currentTime; // Use component's currentTime state
+                  const futureSlots = allSlots.filter(slot => isAfter(slot.time, now) || isSameMinute(slot.time, now));
+                  const pastSlots = allSlots.filter(slot => isBefore(slot.time, now) && !isSameMinute(slot.time, now));
+                  
+                  // Find the reference point - the first future slot (or first slot if all are future)
+                  let referenceSlotIndex = 0;
+                  if (futureSlots.length > 0) {
+                    referenceSlotIndex = futureSlots[0].slotIndex;
+                  } else if (allSlots.length > 0) {
+                    // All slots are in the past, use the last slot
+                    referenceSlotIndex = allSlots[allSlots.length - 1].slotIndex;
+                  }
+                  
+                  // Create a map of slotIndex to appointment
+                  const slotToAppointment = new Map<number, Appointment>();
+                  filteredAppointments.forEach(apt => {
+                    if (apt.slotIndex !== undefined) {
+                      slotToAppointment.set(apt.slotIndex, apt);
+                    }
+                  });
+                  
+                  // Calculate W token positioning pattern (interval-based)
+                  const walkInTokenAllotment = clinicDetails?.walkInTokenAllotment || 7;
+                  const confirmedAppointments = filteredAppointments
+                    .filter(a => a.status === 'Pending' || a.status === 'Confirmed')
+                    .filter(a => a.bookedVia === 'Advanced Booking' || a.bookedVia === 'Online' || a.bookedVia === 'Advanced')
+                    .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
+                  
+                  const existingWTokens = filteredAppointments
+                    .filter(a => a.bookedVia === 'Walk-in' && (a.status === 'Pending' || a.status === 'Confirmed'))
+                    .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
+                  
+                  // Calculate W token positions at intervals (spread within regular slots)
+                  // All imaginary W slots should move together and keep the interval of walkInTokenAllotment
+                  // As time passes, the reference point moves forward, so all W slots move together by the same amount
+                  // W slots are always 15% of the remaining (future) slots, not total slots
+                  const wSlotPositions = new Set<number>();
+                  const maxSlotIndex = allSlots.length > 0 ? Math.max(...allSlots.map(s => s.slotIndex)) : 0;
+                  const remainingSlots = futureSlots.length; // Remaining future slots
+                  
+                  // Calculate total W slots needed (15% of remaining slots, rounded up)
+                  const totalWSlotsNeeded = Math.ceil(remainingSlots * 0.15);
+                  
+                  // Calculate W slots relative to reference point (which moves forward as time passes)
+                  // All W slots move together as a group, maintaining the interval of walkInTokenAllotment
+                  // First W slot is after walkInTokenAllotment A slots from reference point
+                  let currentWSlot = referenceSlotIndex + walkInTokenAllotment;
+                  let wSlotsPlaced = 0;
+                  
+                  // Place W slots at intervals from reference point
+                  // All W slots maintain the same interval spacing (walkInTokenAllotment + 1)
+                  // Only place W slots that fit within the interval pattern - don't place extra ones at the end
+                  while (wSlotsPlaced < totalWSlotsNeeded && currentWSlot <= maxSlotIndex) {
+                    wSlotPositions.add(currentWSlot);
+                    wSlotsPlaced++;
+                    // Next W slot: current position + walkInTokenAllotment + 1 (to account for the W slot itself)
+                    // This maintains the interval spacing between W slots
+                    currentWSlot += walkInTokenAllotment + 1;
+                  }
+                  
+                  // Don't place extra W slots at the end - only place them at intervals
+                  
+                  // Identify empty slots within 1-hour window (where A tokens can't book)
+                  // W tokens should fill these empty slots first, before taking imaginary slots
+                  // A tokens can't book slots that are within 1 hour from the current time
+                  const oneHourFromNow = addMinutes(now, 60);
+                  const emptySlotsWithinOneHour = new Set<number>();
+                  
+                  console.log('🔍 [DEBUG] 1-Hour Window Check:', {
+                    now: format(now, 'hh:mm a'),
+                    oneHourFromNow: format(oneHourFromNow, 'hh:mm a'),
+                    totalSlots: allSlots.length
+                  });
+                  
+                  allSlots.forEach(slot => {
+                    // Check if slot is within 1-hour window (A tokens can't book here)
+                    // Slot must be: now <= slot.time <= oneHourFromNow
+                    const isWithinOneHour = !isBefore(slot.time, now) && !isAfter(slot.time, oneHourFromNow);
+                    
+                    if (isWithinOneHour) {
+                      // Check if this slot is empty (no appointment or vacant)
+                      const appointment = slotToAppointment.get(slot.slotIndex);
+                      const isEmpty = !appointment;
+                      const isNoShow = appointment?.status === 'No-show';
+                      const isVacant = isEmpty || isNoShow || 
+                        (appointment && ['Skipped', 'Cancelled', 'Completed'].includes(appointment.status));
+                      
+                      // Only A tokens can't use these slots, W tokens can
+                      const isAToken = appointment && (appointment.bookedVia === 'Advanced Booking' || appointment.bookedVia === 'Online' || appointment.bookedVia === 'Advanced');
+                      if (isVacant || !isAToken) {
+                        emptySlotsWithinOneHour.add(slot.slotIndex);
+                        console.log('🔍 [DEBUG] Slot within 1-hour window:', {
+                          slotIndex: slot.slotIndex,
+                          slotTime: format(slot.time, 'hh:mm a'),
+                          isEmpty,
+                          isVacant,
+                          isAToken
+                        });
+                      }
+                    }
+                  });
+                  
+                  console.log('🔍 [DEBUG] Empty slots within 1-hour window:', Array.from(emptySlotsWithinOneHour));
+                  
+                  // Also check if there are existing W tokens and calculate next position
+                  const potentialWPositions = new Set<number>();
+                  // Priority 1: Empty slots within 1-hour window
+                  emptySlotsWithinOneHour.forEach(slotIndex => {
+                    potentialWPositions.add(slotIndex);
+                  });
+                  
+                  // Priority 2: Empty slots that are before imaginary W slots
+                  // Check all empty slots and see if they come before any imaginary W slot
+                  const emptySlotsBeforeImaginaryW = new Set<number>();
+                  const sortedImaginaryWSlots = Array.from(wSlotPositions).sort((a, b) => a - b);
+                  
+                  allSlots.forEach(slot => {
+                    const appointment = slotToAppointment.get(slot.slotIndex);
+                    const isEmpty = !appointment;
+                    const isNoShow = appointment?.status === 'No-show';
+                    const isVacant = isEmpty || isNoShow || 
+                      (appointment && ['Skipped', 'Cancelled', 'Completed'].includes(appointment.status));
+                    
+                    // If this slot is empty/vacant and comes before any imaginary W slot
+                    if (isVacant && sortedImaginaryWSlots.length > 0) {
+                      const firstImaginaryWSlot = sortedImaginaryWSlots[0];
+                      if (slot.slotIndex < firstImaginaryWSlot) {
+                        // This empty slot comes before the first imaginary W slot
+                        // Only add if it's not already in emptySlotsWithinOneHour
+                        if (!emptySlotsWithinOneHour.has(slot.slotIndex)) {
+                          emptySlotsBeforeImaginaryW.add(slot.slotIndex);
+                        }
+                      }
+                    }
+                  });
+                  
+                  // Add empty slots before imaginary W slots to potentialWPositions
+                  emptySlotsBeforeImaginaryW.forEach(slotIndex => {
+                    potentialWPositions.add(slotIndex);
+                  });
+                  
+                  console.log('🔍 [DEBUG] Slot Visualizer - W Position Calculation:', {
+                    walkInTokenAllotment,
+                    confirmedAppointmentsCount: confirmedAppointments.length,
+                    existingWTokensCount: existingWTokens.length,
+                    emptySlotsWithinOneHour: Array.from(emptySlotsWithinOneHour),
+                    emptySlotsBeforeImaginaryW: Array.from(emptySlotsBeforeImaginaryW),
+                    imaginaryWSlots: sortedImaginaryWSlots,
+                    confirmedAppointments: confirmedAppointments.map(a => ({
+                      tokenNumber: a.tokenNumber,
+                      slotIndex: a.slotIndex
+                    })),
+                    existingWTokens: existingWTokens.map(a => ({
+                      tokenNumber: a.tokenNumber,
+                      slotIndex: a.slotIndex
+                    }))
+                  });
+                  
+                  // Priority 3: Imaginary W slots (only if no empty slots available before them)
+                  // Calculate where the next imaginary W slot would be placed
+                  // Only show imaginary W slots if there are no empty slots before them
+                  let calculatedImaginaryWSlot: number | null = null;
+                  
+                  if (confirmedAppointments.length === 0) {
+                    // No confirmed appointments - first W would be at slot 0 + walkInTokenAllotment
+                    calculatedImaginaryWSlot = walkInTokenAllotment;
+                    console.log('🔍 [DEBUG] No confirmed appointments - calculated imaginary W slot:', calculatedImaginaryWSlot);
+                  } else if (existingWTokens.length === 0) {
+                    // First W token: after walkInTokenAllotment confirmed appointments
+                    if (confirmedAppointments.length >= walkInTokenAllotment) {
+                      const targetAppointment = confirmedAppointments[walkInTokenAllotment - 1];
+                      calculatedImaginaryWSlot = (targetAppointment.slotIndex ?? 0) + 1;
+                      console.log('🔍 [DEBUG] First W token - enough confirmed appointments:', {
+                        targetAppointmentSlotIndex: targetAppointment.slotIndex,
+                        calculatedImaginaryWSlot
+                      });
+                    } else {
+                      const lastAppointment = confirmedAppointments[confirmedAppointments.length - 1];
+                      calculatedImaginaryWSlot = (lastAppointment.slotIndex ?? 0) + 1;
+                      console.log('🔍 [DEBUG] First W token - fewer confirmed appointments:', {
+                        lastAppointmentSlotIndex: lastAppointment.slotIndex,
+                        calculatedImaginaryWSlot
+                      });
+                    }
+                  } else {
+                    // Subsequent W tokens: after walkInTokenAllotment appointments from last W
+                    const lastWToken = existingWTokens[existingWTokens.length - 1];
+                    const lastWTokenSlotIndex = lastWToken?.slotIndex ?? -1;
+                    
+                    const appointmentsAfterLastW = confirmedAppointments.filter(a => {
+                      const aptSlotIndex = a.slotIndex ?? 0;
+                      return aptSlotIndex > lastWTokenSlotIndex;
+                    });
+                    
+                    if (appointmentsAfterLastW.length >= walkInTokenAllotment) {
+                      const targetAppointment = appointmentsAfterLastW[walkInTokenAllotment - 1];
+                      calculatedImaginaryWSlot = (targetAppointment.slotIndex ?? 0) + 1;
+                      console.log('🔍 [DEBUG] Subsequent W - enough appointments after last W:', {
+                        targetAppointmentSlotIndex: targetAppointment.slotIndex,
+                        calculatedImaginaryWSlot
+                      });
+                    } else if (appointmentsAfterLastW.length > 0) {
+                      const lastAppointment = appointmentsAfterLastW[appointmentsAfterLastW.length - 1];
+                      calculatedImaginaryWSlot = (lastAppointment.slotIndex ?? 0) + 1;
+                      console.log('🔍 [DEBUG] Subsequent W - fewer appointments after last W:', {
+                        lastAppointmentSlotIndex: lastAppointment.slotIndex,
+                        calculatedImaginaryWSlot
+                      });
+                    } else {
+                      calculatedImaginaryWSlot = lastWTokenSlotIndex + 1;
+                      console.log('🔍 [DEBUG] Subsequent W - no appointments after last W:', {
+                        calculatedImaginaryWSlot
+                      });
+                    }
+                  }
+                  
+                  // Only add imaginary W slot if it's valid and there are no empty slots before it
+                  // Check if there are any empty slots before this imaginary W slot
+                  if (calculatedImaginaryWSlot !== null && calculatedImaginaryWSlot < allSlots.length) {
+                    const imaginarySlot = allSlots.find(s => s.slotIndex === calculatedImaginaryWSlot);
+                    if (imaginarySlot) {
+                      // Check if there are any empty slots before this imaginary W slot
+                      const hasEmptySlotsBefore = emptySlotsBeforeImaginaryW.size > 0 && 
+                        Array.from(emptySlotsBeforeImaginaryW).some(slotIndex => slotIndex < calculatedImaginaryWSlot);
+                      
+                      // Only add imaginary W slot if:
+                      // 1. There are no empty slots before it, OR
+                      // 2. It's within the 1-hour window (where A tokens can't book)
+                      const isWithinOneHour = !isBefore(imaginarySlot.time, now) && !isAfter(imaginarySlot.time, oneHourFromNow);
+                      
+                      if (!hasEmptySlotsBefore || isWithinOneHour) {
+                        // Only add if it's not already in emptySlotsWithinOneHour or emptySlotsBeforeImaginaryW
+                        if (!emptySlotsWithinOneHour.has(calculatedImaginaryWSlot) && 
+                            !emptySlotsBeforeImaginaryW.has(calculatedImaginaryWSlot)) {
+                          potentialWPositions.add(calculatedImaginaryWSlot);
+                          console.log('🔍 [DEBUG] Added imaginary W slot:', {
+                            slotIndex: calculatedImaginaryWSlot,
+                            slotTime: format(imaginarySlot.time, 'hh:mm a'),
+                            isWithinOneHour,
+                            hasEmptySlotsBefore
+                          });
+                        } else {
+                          console.log('🔍 [DEBUG] Skipped imaginary W slot (already in empty slots):', calculatedImaginaryWSlot);
+                        }
+                      } else {
+                        console.log('🔍 [DEBUG] Skipped imaginary W slot (empty slots available before it):', {
+                          slotIndex: calculatedImaginaryWSlot,
+                          slotTime: format(imaginarySlot.time, 'hh:mm a'),
+                          hasEmptySlotsBefore,
+                          emptySlotsBefore: Array.from(emptySlotsBeforeImaginaryW).filter(s => s < calculatedImaginaryWSlot)
+                        });
+                      }
+                    }
+                  }
+                  
+                  // Also add all imaginary W slots from wSlotPositions if they don't have empty slots before them
+                  wSlotPositions.forEach(imaginaryWSlotIndex => {
+                    // Check if there are any empty slots before this imaginary W slot
+                    const hasEmptySlotsBefore = emptySlotsBeforeImaginaryW.size > 0 && 
+                      Array.from(emptySlotsBeforeImaginaryW).some(slotIndex => slotIndex < imaginaryWSlotIndex);
+                    
+                    // Only add if there are no empty slots before it
+                    if (!hasEmptySlotsBefore && 
+                        !emptySlotsWithinOneHour.has(imaginaryWSlotIndex) && 
+                        !emptySlotsBeforeImaginaryW.has(imaginaryWSlotIndex)) {
+                      potentialWPositions.add(imaginaryWSlotIndex);
+                    }
+                  });
+                  
+                  console.log('🔍 [DEBUG] Final potentialWPositions:', Array.from(potentialWPositions));
+                  
+                  return (
+                    <div className="space-y-4">
+                      {/* W Token Positioning Info */}
+                      <div className="p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
+                        <h4 className="text-sm font-semibold mb-2 text-green-800 dark:text-green-200">
+                          W Token Positioning Logic
+                        </h4>
+                        <div className="text-xs text-green-700 dark:text-green-300 space-y-1">
+                          <div>• <strong>Priority 1:</strong> W tokens fill empty slots within 1-hour window (where A tokens can't book)</div>
+                          <div>• <strong>Priority 2:</strong> W tokens use imaginary slots at intervals of <strong>{walkInTokenAllotment}</strong> confirmed appointments (use imaginary W slots first!)</div>
+                          <div>• <strong>Priority 3:</strong> If no imaginary W slots available, W tokens fill empty slots that come before imaginary W slots</div>
+                          <div>• First W: After {walkInTokenAllotment} confirmed appointments (at 8th position if {walkInTokenAllotment} = 7)</div>
+                          <div>• Subsequent W: After {walkInTokenAllotment} appointments from the last W token</div>
+                          <div>• When a W token is inserted (in empty slot or imaginary slot), all subsequent A tokens are shifted forward by average consulting time</div>
+                          <div>• W tokens don't have time labels - they're inserted between A tokens</div>
                         </div>
-                        <div 
-                          className="grid gap-2"
-                          style={{ gridTemplateColumns: `repeat(${slotCount <= 12 ? slotCount : 12}, minmax(0, 1fr))` }}
-                        >
-                          {subsession.slots.map((slot) => {
-                            const status = getSlotStatus(slot.slotIndex);
-                            const isLastA = slot.slotIndex === lastAdvancedSlotIndex;
-                            const isWRef = walkInReferenceSlot && slot.slotIndex === walkInReferenceSlot.slotIndex;
-
-                            return (
-                              <div
-                                key={slot.slotIndex}
-                                className={cn(
-                                  "relative p-3 border-2 rounded-lg text-center min-h-[80px] flex flex-col items-center justify-center",
-                                  status.type === "available" && "border-gray-300 bg-white",
-                                  status.type === "advanced" && "bg-blue-500 text-white border-blue-600",
-                                  status.type === "walkin" && "bg-green-500 text-white border-green-600",
-                                  status.type === "skipped" && "bg-yellow-500 text-white border-yellow-600",
-                                  status.type === "completed" && "bg-gray-400 text-white border-gray-500",
-                                  status.type === "vacant" && "bg-green-200 border-green-400",
-                                  status.type === "cancelled" && "bg-red-300 border-red-500 text-red-900",
-                                  isLastA && "border-blue-700 border-4",
-                                  isWRef && "border-green-700 border-4"
-                                )}
-                              >
-                                <div className="text-xs font-bold mb-1">
-                                  #{slot.slotIndex}
-                                </div>
-                                <div className="text-xs mb-1">
-                                  {format(slot.time, "hh:mm a")}
-                                </div>
-                                {status.appointment && (
-                                  <>
-                                    <div className="text-xs font-semibold">
-                                      {status.appointment.tokenNumber || `T${slot.slotIndex + 1}`}
+                      </div>
+                      
+                      {/* Slot Grid Visualization */}
+                      <div>
+                        <h4 className="text-sm font-semibold mb-3">All Slots Timeline</h4>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 max-h-96 overflow-y-auto p-2 border rounded-lg bg-muted/20">
+                          {(() => {
+                            // Create a combined list of all slots including imaginary W slots
+                            // When a W token is booked, it takes the position of the first imaginary W slot
+                            // This updates the time of all upcoming slots after that by adding average consulting time
+                            // W slots are inserted between A slots at intervals
+                            // After each W slot (actual or imaginary), A slots continue from the previous A slot's time + consultation time
+                            // Filter out past slots or mark them as passed
+                            const allSlotsWithW: Array<{ time: Date | null; slotIndex: number; isWSlot: boolean; originalSlotIndex?: number; isPast?: boolean; wTokenAppointment?: Appointment }> = [];
+                            
+                            // Track which regular slots have been used and current time for A slots
+                            let regularSlotIndex = 0;
+                            let currentASlotTime = sessionStart;
+                            
+                            // Build the combined list: A slots with time, then W slots without time, alternating
+                            // Calculate how many total slots we need (regular slots + W slots)
+                            const totalSlotsNeeded = allSlots.length + wSlotPositions.size;
+                            const now = currentTime; // Use component's currentTime state
+                            
+                            // Create a map of slot index to W token appointments
+                            // W tokens can be in empty slots (within 1-hour window) or imaginary W slots
+                            const wTokenAtSlotIndex = new Map<number, Appointment>();
+                            existingWTokens.forEach(wToken => {
+                              const wTokenSlotIndex = wToken.slotIndex ?? -1;
+                              if (wTokenSlotIndex >= 0) {
+                                wTokenAtSlotIndex.set(wTokenSlotIndex, wToken);
+                              }
+                            });
+                            
+                            // Track which slots have W tokens (either in empty slots or imaginary slots)
+                            const slotsWithWTokens = new Set<number>();
+                            existingWTokens.forEach(wToken => {
+                              const wTokenSlotIndex = wToken.slotIndex ?? -1;
+                              if (wTokenSlotIndex >= 0) {
+                                slotsWithWTokens.add(wTokenSlotIndex);
+                              }
+                            });
+                            
+                            // Build combined list by iterating through all slots (both regular and imaginary W slots)
+                            // We need to process slots in order of their actual slot indices
+                            const allSlotIndices = new Set<number>();
+                            
+                            // Add all regular slot indices
+                            allSlots.forEach(slot => {
+                              allSlotIndices.add(slot.slotIndex);
+                            });
+                            
+                            // Add all imaginary W slot positions
+                            wSlotPositions.forEach(slotIndex => {
+                              allSlotIndices.add(slotIndex);
+                            });
+                            
+                            // Sort all slot indices
+                            const sortedSlotIndices = Array.from(allSlotIndices).sort((a, b) => a - b);
+                            
+                            // Process each slot index in order
+                            for (const actualSlotIndex of sortedSlotIndices) {
+                              // Check if this is an imaginary W slot position
+                              if (wSlotPositions.has(actualSlotIndex)) {
+                                // This is an imaginary W slot position
+                                // Check if there's an actual W token at this imaginary slot position
+                                const wTokenAtThisPosition = wTokenAtSlotIndex.get(actualSlotIndex);
+                                
+                                if (wTokenAtThisPosition) {
+                                  // There's an actual W token at this imaginary slot position
+                                  // Use the actual slotIndex from the W token appointment
+                                  const wTokenSlotIndex = wTokenAtThisPosition.slotIndex ?? actualSlotIndex;
+                                  allSlotsWithW.push({
+                                    time: null,
+                                    slotIndex: wTokenSlotIndex, // Use actual slotIndex from W token appointment
+                                    isWSlot: true,
+                                    isPast: false,
+                                    wTokenAppointment: wTokenAtThisPosition
+                                  });
+                                  // When an actual W token is inserted, subsequent A tokens shift forward by consultation time
+                                  currentASlotTime = addMinutes(currentASlotTime, consultationTime);
+                                } else {
+                                  // This is an imaginary W slot - no actual token yet
+                                  // Imaginary W slots don't take time, so they don't increment time for subsequent slots
+                                  allSlotsWithW.push({
+                                    time: null,
+                                    slotIndex: actualSlotIndex, // Use actual slot index
+                                    isWSlot: true,
+                                    isPast: false
+                                  });
+                                  // Don't increment time for imaginary W slots - they're just placeholders
+                                  // Time will only increment when an actual W token is placed
+                                }
+                              } else {
+                                // This is a regular A slot
+                                const regularSlot = allSlots.find(s => s.slotIndex === actualSlotIndex);
+                                
+                                if (regularSlot) {
+                                  // Check if there's a W token in this regular slot (empty slot within 1-hour window)
+                                  const wTokenAtThisRegularSlot = wTokenAtSlotIndex.get(regularSlot.slotIndex);
+                                  
+                                  if (wTokenAtThisRegularSlot) {
+                                    // W token is in this empty slot (within 1-hour window)
+                                    // Use the actual slotIndex from the W token appointment
+                                    const wTokenSlotIndex = wTokenAtThisRegularSlot.slotIndex ?? regularSlot.slotIndex;
+                                    allSlotsWithW.push({
+                                      time: null,
+                                      slotIndex: wTokenSlotIndex, // Use actual slotIndex from W token appointment
+                                      isWSlot: true,
+                                      originalSlotIndex: regularSlot.slotIndex,
+                                      isPast: false,
+                                      wTokenAppointment: wTokenAtThisRegularSlot
+                                    });
+                                    // When a W token is inserted, subsequent A tokens shift forward by consultation time
+                                    currentASlotTime = addMinutes(currentASlotTime, consultationTime);
+                                  } else {
+                                    // This is a regular A slot - has time
+                                    const slotTime = new Date(currentASlotTime);
+                                    const isPast = isBefore(slotTime, now) && !isSameMinute(slotTime, now);
+                                    
+                                    // Use the actual slotIndex from the original slot
+                                    allSlotsWithW.push({
+                                      time: slotTime,
+                                      slotIndex: regularSlot.slotIndex, // Use actual slotIndex from original slot
+                                      isWSlot: false,
+                                      originalSlotIndex: regularSlot.slotIndex,
+                                      isPast: isPast
+                                    });
+                                    // Move to next A slot time (add consultation time)
+                                    currentASlotTime = addMinutes(currentASlotTime, consultationTime);
+                                  }
+                                }
+                              }
+                            }
+                            
+                            // Sort by slotIndex (should already be sorted, but just in case)
+                            allSlotsWithW.sort((a, b) => a.slotIndex - b.slotIndex);
+                            
+                            // Filter out past slots (only show future and current slots)
+                            const visibleSlots = allSlotsWithW.filter(slot => !slot.isPast);
+                            
+                            return visibleSlots.map((slot, index) => {
+                              // For appointments, check the original slot index if this slot was shifted
+                              // If this is a W slot with an actual token, use that token
+                              const appointmentSlotIndex = slot.originalSlotIndex !== undefined ? slot.originalSlotIndex : slot.slotIndex;
+                              const appointment = slot.wTokenAppointment || slotToAppointment.get(appointmentSlotIndex);
+                              const isEmpty = !appointment;
+                              const isNoShow = appointment?.status === 'No-show';
+                              const isVacant = isEmpty || isNoShow || 
+                                (appointment && ['Skipped', 'Cancelled', 'Completed'].includes(appointment.status));
+                              // Check if this is a potential W position
+                              // Only show "W Position" for imaginary W slots that are actually available
+                              // Don't show "W Position" if there are empty slots before imaginary W slots (A tokens should fill those first)
+                              const isImaginaryWSlot = slot.isWSlot && !appointment;
+                              const isEmptySlotWithinOneHour = emptySlotsWithinOneHour.has(slot.originalSlotIndex ?? slot.slotIndex) && isEmpty && !slot.isWSlot;
+                              const isEmptySlotBeforeImaginaryW = emptySlotsBeforeImaginaryW.has(slot.originalSlotIndex ?? slot.slotIndex) && isEmpty && !slot.isWSlot;
+                              
+                              // Only show "W Position" for imaginary W slots that are:
+                              // 1. Actually imaginary W slots (not regular empty slots)
+                              // 2. Not occupied
+                              // 3. There are no empty slots before them (A tokens should fill those first)
+                              const isPotentialWPosition = isImaginaryWSlot && isEmpty && !isNoShow && emptySlotsBeforeImaginaryW.size === 0;
+                              
+                              // For imaginary W slots, never show time - they don't take time
+                              const shouldShowTime = !isImaginaryWSlot && slot.time !== null;
+                              
+                              // Use the slotIndex from the slot object, which is now set correctly:
+                              // - For A tokens: actual slotIndex from the original slot
+                              // - For W tokens: actual slotIndex from the appointment
+                              // - For imaginary W slots: position in the combined array (for placeholders)
+                              const displaySlotIndex = slot.slotIndex;
+                              
+                              return (
+                                <div
+                                  key={`${slot.slotIndex}-${index}`}
+                                  className={cn(
+                                    "p-2 rounded-lg border-2 text-center transition-all relative",
+                                    appointment && !isVacant
+                                      ? appointment.bookedVia === "Walk-in"
+                                        ? "bg-green-100 border-green-400 dark:bg-green-950/30 dark:border-green-700"
+                                        : "bg-blue-100 border-blue-400 dark:bg-blue-950/30 dark:border-blue-700"
+                                      : isNoShow
+                                      ? "bg-amber-50 border-amber-300 border-dashed dark:bg-amber-950/10 dark:border-amber-600"
+                                      : isImaginaryWSlot
+                                      ? "bg-green-50 border-green-300 border-dashed dark:bg-green-950/10 dark:border-green-600"
+                                      : isEmptySlotWithinOneHour
+                                      ? "bg-green-50 border-green-300 border-dashed dark:bg-green-950/10 dark:border-green-600"
+                                      : isEmptySlotBeforeImaginaryW
+                                      ? "bg-blue-50 border-blue-300 border-dashed dark:bg-blue-950/10 dark:border-blue-600"
+                                      : isPotentialWPosition
+                                      ? "bg-green-50 border-green-300 border-dashed dark:bg-green-950/10 dark:border-green-600"
+                                      : "bg-gray-50 border-gray-200 dark:bg-gray-950/10 dark:border-gray-700"
+                                  )}
+                                >
+                                  {appointment && !isVacant && appointment.bookedVia !== 'Walk-in' ? (
+                                    <>
+                                      {shouldShowTime && (
+                                        <div className="text-xs font-semibold mb-1">
+                                          {format(slot.time!, 'hh:mm a')}
+                                        </div>
+                                      )}
+                                      <div className="text-xs text-muted-foreground mb-1">
+                                        Slot #{displaySlotIndex}
+                                      </div>
+                                    </>
+                                  ) : appointment && !isVacant && appointment.bookedVia === 'Walk-in' ? (
+                                    <>
+                                      <div className="text-xs text-muted-foreground mb-1">
+                                        Slot #{displaySlotIndex}
+                                      </div>
+                                      <div className="text-xs text-muted-foreground italic mb-1">
+                                        (No time - inserted between A tokens)
+                                      </div>
+                                    </>
+                                  ) : isImaginaryWSlot ? (
+                                    <>
+                                      <div className="text-xs text-muted-foreground mb-1 font-medium">
+                                        Slot #{displaySlotIndex}
+                                      </div>
+                                      <div className="text-xs text-muted-foreground italic mb-1">
+                                        (W Slot - No time)
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <>
+                                      {shouldShowTime && (
+                                        <div className="text-xs font-semibold mb-1">
+                                          {format(slot.time!, 'hh:mm a')}
+                                        </div>
+                                      )}
+                                      <div className="text-xs text-muted-foreground mb-1">
+                                        Slot #{displaySlotIndex}
+                                      </div>
+                                    </>
+                                  )}
+                                {appointment && !isVacant ? (
+                                  <div className="space-y-1">
+                                    <div className={cn(
+                                      "text-sm font-bold",
+                                      appointment.bookedVia === "Walk-in" ? "text-green-700 dark:text-green-300" : "text-blue-700 dark:text-blue-300"
+                                    )}>
+                                      {appointment.tokenNumber || `#${appointment.slotIndex}`}
                                     </div>
-                                    <div className="text-xs truncate w-full">
-                                      {status.appointment.patientName?.split(" ")[0] || "N/A"}
-                                    </div>
-                                  </>
-                                )}
-                                {(isLastA || isWRef) && (
-                                  <div className="absolute -top-2 -right-2">
-                                    <Badge
+                                    <Badge 
                                       variant="outline"
                                       className={cn(
                                         "text-xs",
-                                        isLastA && "bg-blue-700 text-white border-blue-800",
-                                        isWRef && "bg-green-700 text-white border-green-800"
+                                        appointment.status === "Confirmed" && "bg-green-200 text-green-900 border-green-400",
+                                        appointment.status === "Pending" && "bg-yellow-200 text-yellow-900 border-yellow-400",
+                                        appointment.status === "Skipped" && "bg-orange-200 text-orange-900 border-orange-400",
+                                        appointment.status === "Completed" && "bg-gray-200 text-gray-900 border-gray-400"
                                       )}
                                     >
-                                      {isLastA ? "A" : "W"}
+                                      {appointment.status}
                                     </Badge>
+                                    <div className="text-xs font-medium truncate" title={appointment.patientName}>
+                                      {appointment.patientName}
+                                    </div>
+                                    {appointment.delay && appointment.delay > 0 && (
+                                      <div className="text-xs text-orange-600 dark:text-orange-400 font-medium">
+                                        ⏱️ +{appointment.delay} min
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : isNoShow ? (
+                                  <div className="space-y-1">
+                                    <div className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                                      No-show (Available)
+                                    </div>
+                                    <div className="text-xs text-muted-foreground truncate" title={appointment?.patientName}>
+                                      {appointment?.patientName || 'N/A'}
+                                    </div>
+                                  </div>
+                                ) : isImaginaryWSlot ? (
+                                  <div className="space-y-1">
+                                    <div className="text-xs text-green-600 dark:text-green-400 font-medium">
+                                      W Slot
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      (Imaginary - No time)
+                                    </div>
+                                  </div>
+                                ) : isEmptySlotWithinOneHour ? (
+                                  <div className="space-y-1">
+                                    <div className="text-xs text-green-600 dark:text-green-400 font-medium">
+                                      W Priority
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      (Empty slot - W can fill)
+                                    </div>
+                                  </div>
+                                ) : isEmptySlotBeforeImaginaryW ? (
+                                  <div className="space-y-1">
+                                    <div className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                                      Available for A
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      (Empty slot - A can fill first)
+                                    </div>
+                                  </div>
+                                ) : isPotentialWPosition ? (
+                                  <div className="space-y-1">
+                                    <div className="text-xs text-green-600 dark:text-green-400 font-medium">
+                                      W Position
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      (Next W here)
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="text-xs text-muted-foreground">
+                                    Empty
+                                  </div>
+                                )}
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                      </div>
+                      
+                      {/* Legend */}
+                      <div className="flex flex-wrap gap-4 text-xs p-3 bg-muted/30 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 rounded border-2 bg-blue-100 border-blue-400"></div>
+                          <span>A Token (Advanced Booking)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 rounded border-2 bg-green-100 border-green-400"></div>
+                          <span>W Token (Walk-in) - Placed at intervals</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 rounded border-2 border-dashed bg-green-50 border-green-300"></div>
+                          <span>W Slot (Imaginary - No time, spread at intervals: {walkInTokenAllotment}, {walkInTokenAllotment * 2}, {walkInTokenAllotment * 3}...)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 rounded border-2 border-dashed bg-green-100 border-green-400"></div>
+                          <span>W Priority (Empty slot within 1-hour - W can fill)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 rounded border-2 border-dashed bg-green-50 border-green-300"></div>
+                          <span>W Position (Imaginary slot - Next W here if no empty slots)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 rounded border-2 border-dashed bg-amber-50 border-amber-300"></div>
+                          <span>No-show Slot (Available for Reuse)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 rounded border-2 bg-gray-50 border-gray-200"></div>
+                          <span>Empty Slot</span>
+                        </div>
+                      </div>
+                      
+                      {/* Next W Token Information */}
+                      {(() => {
+                        // Calculate total slots across all sessions for the day
+                        const dayOfWeek = daysOfWeek[getDay(selectedDate)];
+                        const availabilityForDay = selectedDoctor.availabilitySlots?.find(s => s.day === dayOfWeek);
+                        let totalSlots = 0;
+                        if (availabilityForDay?.timeSlots) {
+                          const consultationTime = selectedDoctor.averageConsultingTime || 15;
+                          availabilityForDay.timeSlots.forEach(timeSlot => {
+                            const sessionStart = parseTime(timeSlot.from, selectedDate);
+                            const sessionEnd = parseTime(timeSlot.to, selectedDate);
+                            let currentTime = sessionStart;
+                            let sessionSlotCount = 0;
+                            while (isBefore(currentTime, sessionEnd)) {
+                              sessionSlotCount++;
+                              currentTime = addMinutes(currentTime, consultationTime);
+                            }
+                            totalSlots += sessionSlotCount;
+                          });
+                        }
+                        
+                        // Calculate next W token number (total slots + 1 + current W counter)
+                        const dateStr = format(selectedDate, "d MMMM yyyy");
+                        const existingWTokens = filteredAppointments
+                          .filter(a => a.bookedVia === 'Walk-in')
+                          .sort((a, b) => {
+                            const aNum = a.tokenNumber ? parseInt(a.tokenNumber.substring(1), 10) : 0;
+                            const bNum = b.tokenNumber ? parseInt(b.tokenNumber.substring(1), 10) : 0;
+                            return bNum - aNum;
+                          });
+                        
+                        const wTokenStartNumber = totalSlots + 1;
+                        let nextWTokenNumber = wTokenStartNumber;
+                        if (existingWTokens.length > 0) {
+                          const lastWToken = existingWTokens[0];
+                          const lastWTokenNum = lastWToken.tokenNumber ? parseInt(lastWToken.tokenNumber.substring(1), 10) : 0;
+                          if (lastWTokenNum >= wTokenStartNumber) {
+                            nextWTokenNumber = lastWTokenNum + 1;
+                          }
+                        }
+                        
+                        // Calculate where the next W token will be placed
+                        const walkInTokenAllotment = clinicDetails?.walkInTokenAllotment || 7;
+                        const confirmedAppointments = filteredAppointments
+                          .filter(a => a.status === 'Pending' || a.status === 'Confirmed')
+                          .filter(a => a.bookedVia === 'Advanced Booking' || a.bookedVia === 'Online' || a.bookedVia === 'Advanced')
+                          .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
+                        
+                        const existingWTokensForPlacement = filteredAppointments
+                          .filter(a => a.bookedVia === 'Walk-in' && (a.status === 'Pending' || a.status === 'Confirmed'))
+                          .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
+                        
+                        // Priority 1: Empty slots within 1-hour window
+                        const oneHourFromNow = addMinutes(now, 60);
+                        const emptySlotsWithinOneHour = allSlots
+                          .filter(slot => {
+                            const isWithinOneHour = !isBefore(slot.time, now) && !isAfter(slot.time, oneHourFromNow);
+                            if (!isWithinOneHour) return false;
+                            const appointment = slotToAppointment.get(slot.slotIndex);
+                            const isEmpty = !appointment;
+                            const isNoShow = appointment?.status === 'No-show';
+                            const isVacant = isEmpty || isNoShow || 
+                              (appointment && ['Skipped', 'Cancelled', 'Completed'].includes(appointment.status));
+                            return isVacant;
+                          })
+                          .map(slot => slot.slotIndex)
+                          .sort((a, b) => a - b);
+                        
+                        // Recalculate imaginary W slot positions for comparison (same logic as in the slot visualization)
+                        const wSlotPositionsForInfo = new Set<number>();
+                        const maxSlotIndexForInfo = allSlots.length > 0 ? Math.max(...allSlots.map(s => s.slotIndex)) : 0;
+                        const futureSlotsForInfo = allSlots.filter(slot => {
+                          const isPast = isBefore(slot.time, now) && !isSameMinute(slot.time, now);
+                          return !isPast;
+                        });
+                        const remainingSlotsForInfo = futureSlotsForInfo.length;
+                        const totalWSlotsNeededForInfo = Math.ceil(remainingSlotsForInfo * 0.15);
+                        
+                        // Find reference slot index (first future slot)
+                        let referenceSlotIndexForInfo = 0;
+                        if (futureSlotsForInfo.length > 0) {
+                          referenceSlotIndexForInfo = futureSlotsForInfo[0].slotIndex;
+                        }
+                        
+                        let currentWSlotForInfo = referenceSlotIndexForInfo + walkInTokenAllotment;
+                        let wSlotsPlacedForInfo = 0;
+                        
+                        while (wSlotsPlacedForInfo < totalWSlotsNeededForInfo && currentWSlotForInfo <= maxSlotIndexForInfo) {
+                          wSlotPositionsForInfo.add(currentWSlotForInfo);
+                          wSlotsPlacedForInfo++;
+                          currentWSlotForInfo += walkInTokenAllotment + 1;
+                        }
+                        
+                        // Calculate imaginary W slot positions for comparison
+                        const sortedImaginaryWSlots = Array.from(wSlotPositionsForInfo).sort((a, b) => a - b);
+                        
+                        // Helper function to check if a slot is occupied (Pending or Confirmed)
+                        const isSlotOccupied = (slotIndex: number): boolean => {
+                          const appointment = slotToAppointment.get(slotIndex);
+                          if (!appointment) return false;
+                          return appointment.status === 'Pending' || appointment.status === 'Confirmed';
+                        };
+                        
+                        // Filter out occupied slots from imaginary W slots
+                        const availableImaginaryWSlots = sortedImaginaryWSlots.filter(slotIndex => !isSlotOccupied(slotIndex));
+                        
+                        // Priority 2: Empty slots that come before imaginary W slots
+                        const emptySlotsBeforeImaginaryW = allSlots
+                          .filter(slot => {
+                            const appointment = slotToAppointment.get(slot.slotIndex);
+                            const isEmpty = !appointment;
+                            const isNoShow = appointment?.status === 'No-show';
+                            const isVacant = isEmpty || isNoShow || 
+                              (appointment && ['Skipped', 'Cancelled', 'Completed'].includes(appointment.status));
+                            
+                            // If this slot is empty/vacant and comes before any imaginary W slot
+                            if (isVacant && availableImaginaryWSlots.length > 0) {
+                              const firstImaginaryWSlot = availableImaginaryWSlots[0];
+                              if (slot.slotIndex < firstImaginaryWSlot) {
+                                // Only add if it's not already in emptySlotsWithinOneHour and not occupied
+                                return !emptySlotsWithinOneHour.includes(slot.slotIndex) && !isSlotOccupied(slot.slotIndex);
+                              }
+                            }
+                            return false;
+                          })
+                          .map(slot => slot.slotIndex)
+                          .sort((a, b) => a - b);
+                        
+                        // Priority 2: Imaginary W slot position, Priority 3: Empty slots before imaginary W
+                        let nextWSlotPosition: number | null = null;
+                        if (emptySlotsWithinOneHour.length > 0) {
+                          // Priority 1: Empty slots within 1-hour window
+                          nextWSlotPosition = emptySlotsWithinOneHour[0];
+                        } else if (availableImaginaryWSlots.length > 0) {
+                          // Priority 2: Use the first available imaginary W slot position (use imaginary W slots first!)
+                          nextWSlotPosition = availableImaginaryWSlots[0];
+                        } else if (emptySlotsBeforeImaginaryW.length > 0) {
+                          // Priority 3: Use earliest empty slot before imaginary W slots (only if no imaginary W slots available)
+                          nextWSlotPosition = emptySlotsBeforeImaginaryW[0];
+                        } else {
+                          // Fallback: Calculate imaginary W slot position
+                          let calculatedSlot: number | null = null;
+                          if (confirmedAppointments.length === 0) {
+                            calculatedSlot = walkInTokenAllotment;
+                          } else if (existingWTokensForPlacement.length === 0) {
+                            if (confirmedAppointments.length >= walkInTokenAllotment) {
+                              const targetAppointment = confirmedAppointments[walkInTokenAllotment - 1];
+                              calculatedSlot = (targetAppointment.slotIndex ?? 0) + 1;
+                            } else {
+                              const lastAppointment = confirmedAppointments[confirmedAppointments.length - 1];
+                              calculatedSlot = (lastAppointment.slotIndex ?? 0) + 1;
+                            }
+                          } else {
+                            const lastWToken = existingWTokensForPlacement[existingWTokensForPlacement.length - 1];
+                            const lastWTokenSlotIndex = lastWToken?.slotIndex ?? -1;
+                            const appointmentsAfterLastW = confirmedAppointments.filter(a => {
+                              const aptSlotIndex = a.slotIndex ?? 0;
+                              return aptSlotIndex > lastWTokenSlotIndex;
+                            });
+                            
+                            if (appointmentsAfterLastW.length >= walkInTokenAllotment) {
+                              const targetAppointment = appointmentsAfterLastW[walkInTokenAllotment - 1];
+                              calculatedSlot = (targetAppointment.slotIndex ?? 0) + 1;
+                            } else if (appointmentsAfterLastW.length > 0) {
+                              const lastAppointment = appointmentsAfterLastW[appointmentsAfterLastW.length - 1];
+                              calculatedSlot = (lastAppointment.slotIndex ?? 0) + 1;
+                            } else {
+                              calculatedSlot = lastWTokenSlotIndex + 1;
+                            }
+                          }
+                          
+                          // Check if calculated slot is occupied, if so find next available slot
+                          if (calculatedSlot !== null && isSlotOccupied(calculatedSlot)) {
+                            // Find next available slot after the calculated one
+                            const allSlotIndices = allSlots.map(s => s.slotIndex).sort((a, b) => a - b);
+                            const calculatedIndex = allSlotIndices.indexOf(calculatedSlot);
+                            if (calculatedIndex >= 0) {
+                              // Find next available slot
+                              for (let i = calculatedIndex + 1; i < allSlotIndices.length; i++) {
+                                const slotIndex = allSlotIndices[i];
+                                if (!isSlotOccupied(slotIndex)) {
+                                  nextWSlotPosition = slotIndex;
+                                  break;
+                                }
+                              }
+                            }
+                          } else {
+                            nextWSlotPosition = calculatedSlot;
+                          }
+                        }
+                        
+                        // Final check: If nextWSlotPosition is still occupied, find next available slot
+                        if (nextWSlotPosition !== null && isSlotOccupied(nextWSlotPosition)) {
+                          const allSlotIndices = allSlots.map(s => s.slotIndex).sort((a, b) => a - b);
+                          const currentIndex = allSlotIndices.indexOf(nextWSlotPosition);
+                          if (currentIndex >= 0) {
+                            // Find next available slot
+                            for (let i = currentIndex + 1; i < allSlotIndices.length; i++) {
+                              const slotIndex = allSlotIndices[i];
+                              if (!isSlotOccupied(slotIndex)) {
+                                nextWSlotPosition = slotIndex;
+                                break;
+                              }
+                            }
+                            // If no available slot found after, set to null
+                            if (isSlotOccupied(nextWSlotPosition!)) {
+                              nextWSlotPosition = null;
+                            }
+                          }
+                        }
+                        
+                        return (
+                          <div className="mt-4 p-4 bg-green-50 dark:bg-green-950/20 border-2 border-green-300 rounded-lg">
+                            <h4 className="text-sm font-semibold mb-2 text-green-800 dark:text-green-200">
+                              Next Walk-in Token Information
+                            </h4>
+                            <div className="space-y-2 text-sm">
+                              <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">Next W Token Number:</span>
+                                <span className="font-bold text-green-700 dark:text-green-300">
+                                  W{String(nextWTokenNumber).padStart(3, '0')}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">Will be placed at:</span>
+                                <span className="font-bold text-green-700 dark:text-green-300">
+                                  {nextWSlotPosition !== null ? (
+                                    <>
+                                      Slot #{nextWSlotPosition}
+                                      {emptySlotsWithinOneHour.includes(nextWSlotPosition) && (
+                                        <Badge variant="outline" className="ml-2 bg-green-200 text-green-900 border-green-400">
+                                          Priority 1: Empty slot (1-hour window)
+                                        </Badge>
+                                      )}
+                                      {availableImaginaryWSlots.includes(nextWSlotPosition) && (
+                                        <Badge variant="outline" className="ml-2 bg-green-200 text-green-900 border-green-400">
+                                          Priority 2: Imaginary W slot
+                                        </Badge>
+                                      )}
+                                      {emptySlotsBeforeImaginaryW.includes(nextWSlotPosition) && !sortedImaginaryWSlots.includes(nextWSlotPosition) && (
+                                        <Badge variant="outline" className="ml-2 bg-green-200 text-green-900 border-green-400">
+                                          Priority 3: Empty slot (before imaginary W)
+                                        </Badge>
+                                      )}
+                                    </>
+                                  ) : (
+                                    'Calculating...'
+                                  )}
+                                </span>
+                              </div>
+                              <div className="text-xs text-muted-foreground mt-2 pt-2 border-t border-green-200">
+                                <div>• W tokens start from W{String(wTokenStartNumber).padStart(3, '0')} (Total slots: {totalSlots} + 1)</div>
+                                <div>• Priority 1: Empty slots within 1-hour window (where A tokens can't book)</div>
+                                <div>• Priority 2: Imaginary W slot position (after {walkInTokenAllotment} confirmed appointments) - use imaginary W slots first!</div>
+                                <div>• Priority 3: Empty slots that come before imaginary W slots (only if no imaginary W slots available)</div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      
+                      {/* Booked Tokens List */}
+                      <div>
+                        <h4 className="text-sm font-semibold mb-3">Booked Tokens - Session {selectedSessionIndex + 1}</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto">
+                          {filteredAppointments.map((apt) => (
+                            <div
+                              key={apt.id}
+                              className={cn(
+                                "p-3 rounded-lg border-2",
+                                apt.status === "Confirmed" && "bg-blue-100 border-blue-400 dark:bg-blue-950/30 dark:border-blue-700",
+                                apt.status === "Pending" && "bg-yellow-100 border-yellow-400 dark:bg-yellow-950/30 dark:border-yellow-700",
+                                apt.status === "Skipped" && "bg-orange-100 border-orange-400 dark:bg-orange-950/30 dark:border-orange-700",
+                                apt.status === "Completed" && "bg-gray-100 border-gray-400 dark:bg-gray-950/30 dark:border-gray-700",
+                                apt.bookedVia === "Walk-in" && "border-green-400"
+                              )}
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-lg font-bold">{apt.tokenNumber || `#${apt.slotIndex}`}</span>
+                                  <Badge 
+                                    variant="outline"
+                                    className={cn(
+                                      apt.status === "Confirmed" && "bg-green-200 text-green-900 border-green-400",
+                                      apt.status === "Pending" && "bg-yellow-200 text-yellow-900 border-yellow-400",
+                                      apt.status === "Skipped" && "bg-orange-200 text-orange-900 border-orange-400",
+                                      apt.status === "Completed" && "bg-gray-200 text-gray-900 border-gray-400"
+                                    )}
+                                  >
+                                    {apt.status}
+                                  </Badge>
+                                </div>
+                                <Badge variant="outline">
+                                  {apt.bookedVia || "Advanced Booking"}
+                                </Badge>
+                              </div>
+                              <div className="text-sm space-y-1">
+                                <div className="font-medium">{apt.patientName}</div>
+                                <div className="text-muted-foreground">Time: {apt.time}</div>
+                                {apt.slotIndex !== undefined && (
+                                  <div className="text-xs text-muted-foreground">Slot: #{apt.slotIndex}</div>
+                                )}
+                                {apt.delay && apt.delay > 0 && (
+                                  <div className="text-xs text-orange-600 dark:text-orange-400 font-medium">
+                                    ⏱️ Delayed by {apt.delay} min
                                   </div>
                                 )}
                               </div>
-                            );
-                          })}
+                            </div>
+                          ))}
+                          {filteredAppointments.length === 0 && (
+                            <div className="col-span-full text-center py-8 text-muted-foreground">
+                              <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                              <p className="text-sm">No appointments booked for this session</p>
+                            </div>
+                          )}
                         </div>
-                      </Card>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          ) : (
+                      </div>
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+          )}
+
+          {!selectedDoctor || !queueState ? (
             <div className="text-center py-8 text-muted-foreground">
               {!selectedDoctor
                 ? "Please select a doctor"
                 : !selectedDate
                 ? "Please select a date"
-                : "No slots available for this date"}
+                : "No appointments found for this date"}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Left Column: Doctor Consultation Room */}
+              <div className="space-y-6">
+                <Card className="border-2 border-primary">
+                  <CardHeader className="bg-primary text-primary-foreground">
+                    <CardTitle className="flex items-center gap-2">
+                      <Stethoscope className="h-5 w-5" />
+                      Doctor Consultation Room
+                    </CardTitle>
+                    <CardDescription className="text-primary-foreground/80">
+                      Currently consulting patient
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-6">
+                    {queueState.currentConsultation ? (
+                      <div className="space-y-4">
+                        <div className="text-center">
+                          <div className="text-4xl font-bold text-primary mb-2">
+                            {queueState.currentConsultation.tokenNumber || "N/A"}
+                          </div>
+                          <div className="text-sm text-muted-foreground">Token Number</div>
+                        </div>
+                        <Separator />
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Patient Name:</span>
+                            <span className="text-sm font-semibold">{queueState.currentConsultation.patientName}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Appointment Time:</span>
+                            <span className="text-sm font-semibold">{queueState.currentConsultation.time}</span>
+                          </div>
+                          {queueState.currentConsultation.delay && queueState.currentConsultation.delay > 0 && (
+                            <div className="flex justify-between">
+                              <span className="text-sm text-muted-foreground">Delay:</span>
+                              <span className="text-sm font-semibold text-orange-600 dark:text-orange-400">
+                                ⏱️ +{queueState.currentConsultation.delay} min
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Status:</span>
+                            <Badge variant="default" className="bg-green-600">
+                              {queueState.currentConsultation.status}
+                            </Badge>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">Booked Via:</span>
+                            <Badge variant="outline">
+                              {queueState.currentConsultation.bookedVia || "Advanced Booking"}
+                            </Badge>
+                          </div>
+                          {queueState.consultationCount > 0 && (
+                            <div className="flex justify-between">
+                              <span className="text-sm text-muted-foreground">Consultations Completed:</span>
+                              <span className="text-sm font-semibold">{queueState.consultationCount}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Stethoscope className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p>No patient currently consulting</p>
+                        <p className="text-xs mt-2">Waiting for next patient from buffer queue</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Buffer Queue */}
+                <Card className="border-2 border-yellow-400">
+                  <CardHeader className="bg-yellow-50 dark:bg-yellow-950/20">
+                    <CardTitle className="flex items-center gap-2">
+                      <Clock className="h-5 w-5 text-yellow-600" />
+                      Buffer Queue
+                      <Badge variant="outline" className="ml-auto bg-yellow-100 text-yellow-800 border-yellow-400">
+                        Max 2
+                      </Badge>
+                    </CardTitle>
+                    <CardDescription>
+                      Top 2 patients from Arrived Queue (ready for consultation)
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-4">
+                    {queueState.bufferQueue.length > 0 ? (
+                      <div className="space-y-3">
+                        {queueState.bufferQueue.map((apt, index) => (
+                          <div
+                            key={apt.id}
+                            className={cn(
+                              "p-4 rounded-lg border-2",
+                              index === 0
+                                ? "bg-yellow-100 border-yellow-400 dark:bg-yellow-950/30 dark:border-yellow-800"
+                                : "bg-yellow-50 border-yellow-300 dark:bg-yellow-950/20 dark:border-yellow-700"
+                            )}
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="bg-yellow-200 text-yellow-900 border-yellow-400">
+                                  Position {index + 1}
+                                </Badge>
+                                <span className="text-lg font-bold">{apt.tokenNumber || `#${apt.slotIndex}`}</span>
+                              </div>
+                              <Badge variant="outline">
+                                {apt.bookedVia || "Advanced Booking"}
+                              </Badge>
+                            </div>
+                            <div className="text-sm space-y-1">
+                              <div className="font-medium">{apt.patientName}</div>
+                              <div className="text-muted-foreground">Time: {apt.time}</div>
+                              {apt.delay && apt.delay > 0 && (
+                                <div className="text-xs text-orange-600 dark:text-orange-400 font-medium">
+                                  ⏱️ +{apt.delay} min
+                                </div>
+                              )}
+                            </div>
+                            {index === 0 && (
+                              <div className="mt-2 text-xs font-semibold text-yellow-800 dark:text-yellow-200">
+                                ⬆️ Next to consult
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 text-muted-foreground">
+                        <Clock className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">Buffer queue is empty</p>
+                        <p className="text-xs mt-1">No patients ready in buffer</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Right Column: Arrived Queue and Skipped Queue */}
+              <div className="space-y-6">
+                {/* Arrived Queue */}
+                <Card className="border-2 border-blue-400">
+                  <CardHeader className="bg-blue-50 dark:bg-blue-950/20">
+                    <CardTitle className="flex items-center gap-2">
+                      <Users className="h-5 w-5 text-blue-600" />
+                      Arrived Queue
+                      <Badge variant="outline" className="ml-auto bg-blue-100 text-blue-800 border-blue-400">
+                        {queueState.arrivedQueue.length} patients
+                      </Badge>
+                    </CardTitle>
+                    <CardDescription>
+                      All Confirmed appointments sorted by appointment time (first on top)
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-4 max-h-96 overflow-y-auto">
+                    {queueState.arrivedQueue.length > 0 ? (
+                      <div className="space-y-2">
+                        {queueState.arrivedQueue.map((apt, index) => {
+                          const isInBuffer = queueState.bufferQueue.some(b => b.id === apt.id);
+                          return (
+                            <div
+                              key={apt.id}
+                              className={cn(
+                                "p-3 rounded-lg border-2 transition-all",
+                                isInBuffer
+                                  ? "bg-yellow-100 border-yellow-400 dark:bg-yellow-950/30 dark:border-yellow-800"
+                                  : index < 2
+                                  ? "bg-blue-100 border-blue-300 dark:bg-blue-950/20 dark:border-blue-700"
+                                  : "bg-blue-50 border-blue-200 dark:bg-blue-950/10 dark:border-blue-600"
+                              )}
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline" className="bg-blue-200 text-blue-900 border-blue-400">
+                                    #{index + 1}
+                                  </Badge>
+                                  <span className="font-bold">{apt.tokenNumber || `#${apt.slotIndex}`}</span>
+                                  {isInBuffer && (
+                                    <Badge variant="outline" className="bg-yellow-200 text-yellow-900 border-yellow-400">
+                                      Buffer
+                                    </Badge>
+                                  )}
+                                </div>
+                                <Badge variant="outline">
+                                  {apt.bookedVia || "Advanced Booking"}
+                                </Badge>
+                              </div>
+                              <div className="text-sm space-y-1">
+                                <div className="font-medium">{apt.patientName}</div>
+                                <div className="text-muted-foreground">Time: {apt.time}</div>
+                                {apt.delay && apt.delay > 0 && (
+                                  <div className="text-xs text-orange-600 dark:text-orange-400 font-medium">
+                                    ⏱️ +{apt.delay} min
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 text-muted-foreground">
+                        <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No patients in arrived queue</p>
+                        <p className="text-xs mt-1">Waiting for patients to confirm arrival</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Skipped Queue */}
+                <Card className="border-2 border-orange-400">
+                  <CardHeader className="bg-orange-50 dark:bg-orange-950/20">
+                    <CardTitle className="flex items-center gap-2">
+                      <UserX className="h-5 w-5 text-orange-600" />
+                      Skipped Queue
+                      <Badge variant="outline" className="ml-auto bg-orange-100 text-orange-800 border-orange-400">
+                        {queueState.skippedQueue.length} patients
+                      </Badge>
+                    </CardTitle>
+                    <CardDescription>
+                      Patients who didn't confirm arrival by cut-off time (15 minutes before appointment)
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-4 max-h-96 overflow-y-auto">
+                    {queueState.skippedQueue.length > 0 ? (
+                      <div className="space-y-2">
+                        {queueState.skippedQueue.map((apt, index) => (
+                          <div
+                            key={apt.id}
+                            className="p-3 rounded-lg border-2 bg-orange-50 border-orange-300 dark:bg-orange-950/20 dark:border-orange-700"
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="bg-orange-200 text-orange-900 border-orange-400">
+                                  #{index + 1}
+                                </Badge>
+                                <span className="font-bold">{apt.tokenNumber || `#${apt.slotIndex}`}</span>
+                              </div>
+                              <Badge variant="outline">
+                                {apt.bookedVia || "Advanced Booking"}
+                              </Badge>
+                            </div>
+                            <div className="text-sm space-y-1">
+                              <div className="font-medium">{apt.patientName}</div>
+                              <div className="text-muted-foreground">Appointment Time: {apt.time}</div>
+                              {apt.skippedAt && (
+                                <div className="text-xs text-orange-600 dark:text-orange-400">
+                                  Skipped at: {format(apt.skippedAt.toDate?.() || new Date(apt.skippedAt), "hh:mm a")}
+                                </div>
+                              )}
+                            </div>
+                            <div className="mt-2 text-xs text-orange-700 dark:text-orange-300">
+                              ⚠️ Can be requeued after {clinicDetails?.skippedTokenRecurrence || 3} confirmed patients
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 text-muted-foreground">
+                        <UserX className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No skipped patients</p>
+                        <p className="text-xs mt-1">All patients arrived on time</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           )}
 
-          {/* Statistics */}
-          {appointments.length > 0 && (
-            <Card className="p-4">
-              <h4 className="font-semibold mb-3">Statistics</h4>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          {/* System Logic Explanation */}
+          {queueState && (
+            <Card className="bg-muted/50">
+              <CardHeader>
+                <CardTitle className="text-lg">System Logic Explanation</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
                 <div>
-                  <div className="text-muted-foreground">Total Appointments</div>
-                  <div className="text-2xl font-bold">{appointments.length}</div>
+                  <strong className="text-blue-600">1. Arrived Queue:</strong> Contains all appointments with status "Confirmed" sorted by appointment time (earliest first). This is the master queue of patients who have confirmed their arrival.
                 </div>
                 <div>
-                  <div className="text-muted-foreground">A Tokens</div>
-                  <div className="text-2xl font-bold text-blue-600">
-                    {appointments.filter(a => a.bookedVia !== "Walk-in").length}
+                  <strong className="text-yellow-600">2. Buffer Queue:</strong> Contains the top 2 patients from the Arrived Queue. These are the next patients ready for consultation. If the buffer is empty, the doctor consults the top patient from the Arrived Queue directly.
+                </div>
+                <div>
+                  <strong className="text-primary">3. Doctor Consultation Room:</strong> Shows the patient currently being consulted. This is always the first patient from the Buffer Queue (or Arrived Queue if buffer is empty).
+                </div>
+                <div>
+                  <strong className="text-orange-600">4. Skipped Queue:</strong> Contains patients with status "Skipped" who didn't confirm arrival by the cut-off time (15 minutes before their appointment). These can be requeued after {clinicDetails?.skippedTokenRecurrence || 3} confirmed patients.
+                </div>
+                <Separator />
+                <div className="space-y-2">
+                  <div><strong>Flow:</strong></div>
+                  <div className="ml-4 space-y-1">
+                    <div>• Patient confirms arrival → Status changes to "Confirmed" → Added to Arrived Queue</div>
+                    <div>• Top 2 from Arrived Queue → Moved to Buffer Queue</div>
+                    <div>• Top patient from Buffer Queue → Goes to Doctor Consultation Room</div>
+                    <div>• After consultation → Status changes to "Completed" → Consultation counter increments</div>
+                    <div>• If patient doesn't confirm by cut-off time → Status changes to "Skipped" → Added to Skipped Queue</div>
                   </div>
                 </div>
-                <div>
-                  <div className="text-muted-foreground">W Tokens</div>
-                  <div className="text-2xl font-bold text-green-600">
-                    {appointments.filter(a => a.bookedVia === "Walk-in").length}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground">Available Slots</div>
-                  <div className="text-2xl font-bold text-gray-600">
-                    {allSlots.length - appointments.filter(a => 
-                      a.status === "Pending" || a.status === "Confirmed"
-                    ).length}
-                  </div>
-                </div>
-              </div>
+              </CardContent>
             </Card>
           )}
         </CardContent>
@@ -601,4 +1675,3 @@ export default function SlotVisualizerPage() {
     </div>
   );
 }
-

@@ -65,7 +65,6 @@ const signupSchema = z.object({
   longitude: z.coerce.number().min(-180, "Invalid longitude").max(180, "Invalid longitude"),
   skippedTokenRecurrence: z.coerce.number().min(2, "Value must be at least 2."),
   walkInTokenAllotment: z.coerce.number().min(2, "Value must be at least 2."),
-  advancedTokenCapacityRatio: z.coerce.number().min(0.5, "Ratio must be at least 50%").max(0.9, "Ratio cannot exceed 90%"),
 
   // Step 2
   ownerName: z.string()
@@ -135,7 +134,6 @@ const defaultFormData: SignUpFormData = {
   longitude: 0,
   skippedTokenRecurrence: 3,
   walkInTokenAllotment: 5,
-  advancedTokenCapacityRatio: 0.7,
   
   ownerName: "",
   designation: 'Doctor',
@@ -175,7 +173,7 @@ const defaultFormData: SignUpFormData = {
 };
 
 const stepFields: (keyof SignUpFormData)[][] = [
-    ['clinicName', 'clinicType', 'numDoctors', 'skippedTokenRecurrence', 'walkInTokenAllotment', 'advancedTokenCapacityRatio'], // Step 1, latitude/longitude are special
+    ['clinicName', 'clinicType', 'numDoctors', 'skippedTokenRecurrence', 'walkInTokenAllotment'], // Step 1, latitude/longitude are special
     ['ownerName', 'designation', 'mobileNumber', 'emailAddress', 'password'], // Step 2
     ['addressLine1', 'city', 'state', 'pincode'], // Step 3
     ['hours', 'avgPatientsPerDay'], // Step 4
@@ -382,7 +380,6 @@ export default function SignupPage() {
         longitude: formData.longitude,
         skippedTokenRecurrence: formData.skippedTokenRecurrence,
         walkInTokenAllotment: formData.walkInTokenAllotment,
-        advancedTokenCapacityRatio: formData.advancedTokenCapacityRatio,
         numDoctors: formData.numDoctors,
         currentDoctorCount: 0,
         clinicRegNumber: formData.clinicRegNumber,
