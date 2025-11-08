@@ -1583,24 +1583,42 @@ export default function AppointmentsPage() {
 
         // Use transaction to atomically shift appointments and update skipped appointment
         await runTransaction(db, async (transaction) => {
+          // STEP 1: Read all documents first (Firestore requires all reads before writes)
+          const appointmentRefs = appointmentsToShift.map(apt => ({
+            ref: doc(db, 'appointments', apt.id),
+            apt
+          }));
+          const skippedAppointmentRef = doc(db, 'appointments', appointment.id);
+          
+          // Read all documents that will be updated
+          const appointmentDocs = await Promise.all(
+            appointmentRefs.map(async ({ ref }) => await transaction.get(ref))
+          );
+          const skippedAppointmentDoc = await transaction.get(skippedAppointmentRef);
+          
+          // STEP 2: Now perform all writes after all reads
           // First, shift subsequent appointments forwards (slotIndex + 1)
-          for (const apt of appointmentsToShift) {
-            const aptRef = doc(db, 'appointments', apt.id);
-            transaction.update(aptRef, {
-              slotIndex: (apt.slotIndex ?? 0) + 1,
-              updatedAt: serverTimestamp()
-            });
+          for (let i = 0; i < appointmentRefs.length; i++) {
+            const { ref, apt } = appointmentRefs[i];
+            const aptDoc = appointmentDocs[i];
+            if (aptDoc.exists()) {
+              transaction.update(ref, {
+                slotIndex: (apt.slotIndex ?? 0) + 1,
+                updatedAt: serverTimestamp()
+              });
+            }
           }
 
           // Then, update skipped appointment
-          const aptRef = doc(db, 'appointments', appointment.id);
-          transaction.update(aptRef, {
-            status: 'Confirmed',
-            slotIndex: targetSlotIndex,
-            time: rejoinDetails.time,
-            sessionIndex: rejoinDetails.sessionIndex,
-            updatedAt: serverTimestamp()
-          });
+          if (skippedAppointmentDoc.exists()) {
+            transaction.update(skippedAppointmentRef, {
+              status: 'Confirmed',
+              slotIndex: targetSlotIndex,
+              time: rejoinDetails.time,
+              sessionIndex: rejoinDetails.sessionIndex,
+              updatedAt: serverTimestamp()
+            });
+          }
         });
 
         // Update local state
@@ -1793,61 +1811,93 @@ export default function AppointmentsPage() {
     const sessions = availabilityForDay.timeSlots.map((session, sessionIndex) => {
       const slots = [];
       let foundFirstAvailable = false;
-      let currentTime = parseDateFns(session.from, 'hh:mm a', selectedDate);
+      let slotTimeIterator = parseDateFns(session.from, 'hh:mm a', selectedDate);
       const endTime = parseDateFns(session.to, 'hh:mm a', selectedDate);
+      // Use currentTime state which updates every minute, not a static new Date()
+      const now = currentTime;
 
-      while (currentTime < endTime) {
-        const slotTime = format(currentTime, "hh:mm a");
+      let totalSlotsGenerated = 0;
+      let pastSlotsSkipped = 0;
+      let oneHourWindowSlotsSkipped = 0;
+      let bookedSlotsCount = 0;
+      let leaveSlotsCount = 0;
+      let availableSlotsCount = 0;
+      
+      while (slotTimeIterator < endTime) {
+        totalSlotsGenerated++;
+        const slotTime = format(slotTimeIterator, "hh:mm a");
         let status: 'available' | 'booked' | 'leave' = 'available';
 
-        if (slotTime in bookedSlotsForDay) {
-          status = 'booked';
-        } else if (leaveTimeSlots.some((leaveSlot: any) => {
-          const leaveStart = parseDateFns(leaveSlot.from, 'hh:mm a', selectedDate);
-          const leaveEnd = parseDateFns(leaveSlot.to, 'hh:mm a', selectedDate);
-          return currentTime >= leaveStart && currentTime < leaveEnd;
-        })) {
-          status = 'leave';
+        // Skip past slots - don't show slots that are in the past
+        if (isBefore(slotTimeIterator, now)) {
+          pastSlotsSkipped++;
+          slotTimeIterator = new Date(slotTimeIterator.getTime() + selectedDoctor.averageConsultingTime! * 60000);
+          continue;
         }
 
-        // For same-day bookings, check if slot is within 1-hour window from current time
-        // Never show any slots (regular or cancelled) inside the 1-hour window
+        // For same-day bookings, skip slots within 1-hour window from current time
+        // Slots within 1 hour are reserved for W tokens only - don't show them for A tokens
         if (isToday(selectedDate) && appointmentType === 'Advanced Booking') {
-            const now = new Date();
-            const slotDateTime = currentTime; // Current slot time
+            const slotDateTime = slotTimeIterator; // Current slot time
             const oneHourFromNow = addMinutes(now, 60);
             
-            // Hide slot if it's within 1 hour from now
-            if (isBefore(slotDateTime, oneHourFromNow) || slotDateTime.getTime() === oneHourFromNow.getTime()) {
-                status = 'booked'; // Slot too close to current time
+            // Skip slot if it's within 1 hour from now (reserved for walk-in tokens)
+            // Check: slot time must be AFTER oneHourFromNow (not equal or before)
+            if (!isAfter(slotDateTime, oneHourFromNow)) {
+                oneHourWindowSlotsSkipped++;
+                slotTimeIterator = new Date(slotTimeIterator.getTime() + selectedDoctor.averageConsultingTime! * 60000);
+                continue; // Skip this slot entirely
             }
         }
 
+        if (slotTime in bookedSlotsForDay) {
+          status = 'booked';
+          bookedSlotsCount++;
+        } else if (leaveTimeSlots.some((leaveSlot: any) => {
+          const leaveStart = parseDateFns(leaveSlot.from, 'hh:mm a', selectedDate);
+          const leaveEnd = parseDateFns(leaveSlot.to, 'hh:mm a', selectedDate);
+          return slotTimeIterator >= leaveStart && slotTimeIterator < leaveEnd;
+        })) {
+          status = 'leave';
+          leaveSlotsCount++;
+        } else {
+          availableSlotsCount++;
+        }
+
+        // Only show the first available slot, skip booked and leave slots
         if (status === 'available') {
             // Show only the first (earliest) available slot per session for A tokens
             if (!foundFirstAvailable) {
                 slots.push({ time: slotTime, status });
                 foundFirstAvailable = true;
             }
-        } else {
-            // Always show booked/leave slots for visibility
-            // For booked slots, include the token number
-            const slotData: { time: string; status: 'available' | 'booked' | 'leave'; tokenNumber?: string } = { time: slotTime, status };
-            if (status === 'booked' && bookedSlotsForDay[slotTime]) {
-                slotData.tokenNumber = bookedSlotsForDay[slotTime];
-            }
-            slots.push(slotData);
         }
+        // Don't show booked or leave slots - they are filtered out
         
-        currentTime = new Date(currentTime.getTime() + selectedDoctor.averageConsultingTime! * 60000);
+        slotTimeIterator = new Date(slotTimeIterator.getTime() + selectedDoctor.averageConsultingTime! * 60000);
       }
+      
+      console.log(`🔍 [CLINIC APP] Session ${sessionIndex + 1} slot filtering:`, {
+        totalSlotsGenerated,
+        pastSlotsSkipped,
+        oneHourWindowSlotsSkipped,
+        bookedSlotsCount,
+        leaveSlotsCount,
+        availableSlotsCount,
+        visibleSlotsCount: slots.length,
+        firstAvailableSlot: foundFirstAvailable ? slots.find(s => s.status === 'available')?.time : 'none',
+        currentTime: format(now, 'hh:mm a'),
+        oneHourFromNow: isToday(selectedDate) ? format(addMinutes(now, 60), 'hh:mm a') : 'N/A',
+        isToday: isToday(selectedDate),
+        appointmentType
+      });
       
       const sessionTitle = `Session ${sessionIndex + 1} (${session.from} - ${session.to})`;
       return { title: sessionTitle, slots };
     });
 
     return sessions.filter(s => s.slots.length > 0);
-  }, [selectedDate, selectedDoctor, appointments, isEditing, editingAppointment, appointmentType]);
+  }, [selectedDate, selectedDoctor, appointments, isEditing, editingAppointment, appointmentType, currentTime]);
 
   const isAppointmentOnLeave = (appointment: Appointment): boolean => {
       if (!doctors.length || !appointment) return false;
