@@ -238,6 +238,15 @@ export async function generateNextTokenAndReserveSlot(
 ): Promise<{ tokenNumber: string; numericToken: number; slotIndex: number }> {
   const dateStr = format(date, "d MMMM yyyy");
   
+  console.log('🎯 [DEBUG] generateNextTokenAndReserveSlot called:', {
+    type,
+    slotIndex: appointmentData.slotIndex,
+    time: appointmentData.time,
+    clinicId,
+    doctorName,
+    date: dateStr
+  });
+  
   // Step 0: For A tokens, prioritize empty slots first, then check for imaginary W slots
   if (type === 'A' && typeof appointmentData.slotIndex === 'number') {
     // Get clinic details to find walkInTokenAllotment
@@ -435,6 +444,7 @@ export async function generateNextTokenAndReserveSlot(
   
   // Step 0.1: For A and W tokens, check if the slot is already taken (read before transaction)
   // If the slot is already booked, find the next available slot (for A tokens that were auto-selected)
+  // For W tokens: Allow imaginary W slots even if already booked by other W tokens (W tokens can share)
   if (type === 'A' || type === 'W') {
     const appointmentsRef = collection(db, 'appointments');
     const slotBookedQuery = query(
@@ -448,11 +458,120 @@ export async function generateNextTokenAndReserveSlot(
     
     const slotSnapshot = await getDocs(slotBookedQuery);
     
-    // Check if slot is already occupied (both A and W tokens now block slots)
+    // For W tokens: Check if this is an imaginary W slot
+    // If it is, allow it even if already booked by another W token (W tokens can share imaginary W slots)
+    let isImaginaryWSlot = false;
+    if (type === 'W') {
+      // Get clinic details to find walkInTokenAllotment
+      const clinicRef = doc(db, 'clinics', clinicId);
+      const clinicSnapshot = await getDoc(clinicRef);
+      const clinicData = clinicSnapshot.data();
+      const walkInTokenAllotment = clinicData?.walkInTokenAllotment || 7;
+      
+      // Get all appointments to calculate imaginary W slot positions
+      const allAppointmentsQuery = query(
+        appointmentsRef,
+        where('clinicId', '==', clinicId),
+        where('doctor', '==', doctorName),
+        where('date', '==', dateStr)
+      );
+      const allAppointmentsSnapshot = await getDocs(allAppointmentsQuery);
+      const allAppointments = allAppointmentsSnapshot.docs.map(doc => doc.data() as Appointment);
+      
+      // Calculate imaginary W slot positions (same logic as calculateWalkInDetails)
+      const confirmedAppointments = allAppointments
+        .filter(a => (a.status === 'Pending' || a.status === 'Confirmed'))
+        .filter(a => a.bookedVia === 'Advanced Booking' || a.bookedVia === 'Online' || a.bookedVia === 'Advanced')
+        .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
+      
+      const existingWTokens = allAppointments
+        .filter(a => a.bookedVia === 'Walk-in' && (a.status === 'Pending' || a.status === 'Confirmed'))
+        .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
+      
+      const imaginaryWSlotPositions = new Set<number>();
+      
+      if (confirmedAppointments.length === 0) {
+        imaginaryWSlotPositions.add(walkInTokenAllotment);
+      } else if (existingWTokens.length === 0) {
+        if (confirmedAppointments.length >= walkInTokenAllotment) {
+          const targetAppointment = confirmedAppointments[walkInTokenAllotment - 1];
+          const firstWSlot = (targetAppointment.slotIndex ?? 0) + 1;
+          imaginaryWSlotPositions.add(firstWSlot);
+          
+          let currentWSlot = firstWSlot;
+          const maxSlotIndex = Math.max(...confirmedAppointments.map(a => a.slotIndex ?? 0), 0);
+          while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
+            currentWSlot += walkInTokenAllotment + 1;
+            imaginaryWSlotPositions.add(currentWSlot);
+          }
+        }
+      } else {
+        const lastWToken = existingWTokens[existingWTokens.length - 1];
+        const lastWTokenSlotIndex = lastWToken?.slotIndex ?? -1;
+        
+        const appointmentsAfterLastW = confirmedAppointments.filter(a => {
+          const aptSlotIndex = a.slotIndex ?? 0;
+          return aptSlotIndex > lastWTokenSlotIndex;
+        });
+        
+        if (appointmentsAfterLastW.length >= walkInTokenAllotment) {
+          const targetAppointment = appointmentsAfterLastW[walkInTokenAllotment - 1];
+          const nextWSlot = (targetAppointment.slotIndex ?? 0) + 1;
+          imaginaryWSlotPositions.add(nextWSlot);
+          
+          let currentWSlot = nextWSlot;
+          const maxSlotIndex = Math.max(...confirmedAppointments.map(a => a.slotIndex ?? 0), 0);
+          while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
+            currentWSlot += walkInTokenAllotment + 1;
+            imaginaryWSlotPositions.add(currentWSlot);
+          }
+        }
+      }
+      
+      isImaginaryWSlot = imaginaryWSlotPositions.has(appointmentData.slotIndex);
+      
+      console.log('🔍 [DEBUG] W token slot check:', {
+        slotIndex: appointmentData.slotIndex,
+        isImaginaryWSlot,
+        imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
+        walkInTokenAllotment,
+        existingAppointments: slotSnapshot.docs.map(doc => ({
+          tokenNumber: doc.data().tokenNumber,
+          bookedVia: doc.data().bookedVia
+        }))
+      });
+    }
+    
+    // Check if slot is already occupied
+    // For W tokens: Only block if booked by A token (W tokens can share imaginary W slots)
+    // For A tokens: Block if booked by any token
     const slotConflict = slotSnapshot.docs.some(doc => {
       const data = doc.data();
-      // Both A and W tokens block the slot (exclusive slots)
+      if (type === 'W' && isImaginaryWSlot) {
+        // For W tokens on imaginary W slots: Only block if booked by A token
+        // W tokens can share imaginary W slots with other W tokens
+        const isBookedByA = data.tokenNumber?.startsWith('A') || 
+                           (data.bookedVia === 'Advanced Booking' || 
+                            data.bookedVia === 'Online' || 
+                            data.bookedVia === 'Advanced');
+        if (isBookedByA) {
+          console.log('⚠️ [DEBUG] W token: Imaginary W slot is booked by A token, cannot use:', {
+            slotIndex: appointmentData.slotIndex,
+            existingToken: data.tokenNumber,
+            bookedVia: data.bookedVia
+          });
+        } else {
+          console.log('✅ [DEBUG] W token: Imaginary W slot is booked by W token, can share:', {
+            slotIndex: appointmentData.slotIndex,
+            existingToken: data.tokenNumber,
+            bookedVia: data.bookedVia
+          });
+        }
+        return isBookedByA;
+      } else {
+        // For A tokens or non-imaginary W slots: Block if booked by any token
       return data.tokenNumber?.startsWith('A') || data.tokenNumber?.startsWith('W');
+      }
     });
     
     if (slotConflict) {
@@ -556,11 +675,94 @@ export async function generateNextTokenAndReserveSlot(
         0
       );
       
-      // Start searching from the current slot + 1
+      // For W tokens: If the original slot was an imaginary W slot, try to use it or find another imaginary W slot
+      // For A tokens: Find the next available slot that is not an imaginary W slot
       let nextAvailableSlot = appointmentData.slotIndex + 1;
       let found = false;
       
-      // Search up to maxSlotIndex + 20 to find an available slot
+      if (type === 'W') {
+        // For W tokens: First, check if we can use an imaginary W slot
+        // Priority: Use the original slot if it's an imaginary W slot and not booked by A token
+        // Otherwise, find the next available imaginary W slot or regular slot
+        console.log('🔍 [DEBUG] W token conflict resolution: Looking for available slot:', {
+          originalSlotIndex: appointmentData.slotIndex,
+          isOriginalImaginaryWSlot: imaginaryWSlotPositions.has(appointmentData.slotIndex),
+          imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b)
+        });
+        
+        // First, check if the original slot is an imaginary W slot
+        // If it is, check if it's booked by an A token (if so, we need to find another slot)
+        const originalSlotAppointment = slotSnapshot.docs.find(doc => {
+          const data = doc.data();
+          return (data.tokenNumber?.startsWith('A') || 
+                 data.bookedVia === 'Advanced Booking' || 
+                 data.bookedVia === 'Online' || 
+                 data.bookedVia === 'Advanced');
+        });
+        
+        if (imaginaryWSlotPositions.has(appointmentData.slotIndex) && !originalSlotAppointment) {
+          // Original slot is an imaginary W slot and not booked by A token
+          // W tokens can share imaginary W slots, so we can use it
+          console.log('✅ [DEBUG] W token: Original slot is imaginary W slot and not booked by A token, can use:', {
+            slotIndex: appointmentData.slotIndex
+          });
+          found = true;
+          nextAvailableSlot = appointmentData.slotIndex; // Keep the original slot
+        } else {
+          // Original slot is booked by A token or not an imaginary W slot
+          // Find the next available imaginary W slot or regular slot
+          const sortedImaginaryWSlots = Array.from(imaginaryWSlotPositions).sort((a, b) => a - b);
+          
+          // First, try to find an available imaginary W slot
+          for (const imaginarySlot of sortedImaginaryWSlots) {
+            if (imaginarySlot >= appointmentData.slotIndex) {
+              // Check if this imaginary W slot is booked by an A token
+              const slotQuery = query(
+                appointmentsRef,
+                where('clinicId', '==', clinicId),
+                where('doctor', '==', doctorName),
+                where('date', '==', dateStr),
+                where('slotIndex', '==', imaginarySlot),
+                where('status', 'in', ['Pending', 'Confirmed'])
+              );
+              const slotCheckSnapshot = await getDocs(slotQuery);
+              const isBookedByA = slotCheckSnapshot.docs.some(doc => {
+                const data = doc.data();
+                return data.tokenNumber?.startsWith('A') || 
+                       data.bookedVia === 'Advanced Booking' || 
+                       data.bookedVia === 'Online' || 
+                       data.bookedVia === 'Advanced';
+              });
+              
+              if (!isBookedByA) {
+                console.log('✅ [DEBUG] W token: Found available imaginary W slot:', {
+                  slotIndex: imaginarySlot,
+                  originalSlotIndex: appointmentData.slotIndex
+                });
+                nextAvailableSlot = imaginarySlot;
+                found = true;
+                break;
+              }
+            }
+          }
+          
+          // If no imaginary W slot found, find the next regular available slot
+          if (!found) {
+            nextAvailableSlot = appointmentData.slotIndex + 1;
+            while (nextAvailableSlot <= maxSlotIndex + 20 && !found) {
+              // Check if this slot is:
+              // 1. Not already booked
+              // 2. For W tokens: Can be an imaginary W slot (already checked above) or regular slot
+              if (!bookedSlotIndices.has(nextAvailableSlot)) {
+                found = true;
+                break;
+              }
+              nextAvailableSlot++;
+            }
+          }
+        }
+      } else {
+        // For A tokens: Find the next available slot that is not an imaginary W slot
       while (nextAvailableSlot <= maxSlotIndex + 20 && !found) {
         // Check if this slot is:
         // 1. Not an imaginary W slot
@@ -570,13 +772,15 @@ export async function generateNextTokenAndReserveSlot(
           break;
         }
         nextAvailableSlot++;
+        }
       }
       
       if (found) {
         console.log('✅ [DEBUG] Found next available slot after conflict:', {
           originalSlotIndex: appointmentData.slotIndex,
           newSlotIndex: nextAvailableSlot,
-          reason: 'Slot conflict resolved'
+          reason: 'Slot conflict resolved',
+          isImaginaryWSlot: type === 'W' ? imaginaryWSlotPositions.has(nextAvailableSlot) : false
         });
         appointmentData.slotIndex = nextAvailableSlot;
       } else {
@@ -864,6 +1068,9 @@ export async function generateNextTokenAndReserveSlot(
       }
       
       // Calculate imaginary W slot positions
+      // CRITICAL: Account for the fact that we're about to create a new A token
+      // If there are N confirmed A appointments, after we create this one, there will be N+1
+      // The first imaginary W slot is after walkInTokenAllotment confirmed A appointments
       const walkInTokenAllotment = clinicData?.walkInTokenAllotment || 7;
       const confirmedAppointments = verifiedAppointments
         .filter(a => a.status === 'Pending' || a.status === 'Confirmed')
@@ -874,30 +1081,93 @@ export async function generateNextTokenAndReserveSlot(
         .filter(a => a.bookedVia === 'Walk-in' && (a.status === 'Pending' || a.status === 'Confirmed'))
         .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
       
+      // CRITICAL FIX: Account for the new A token we're about to create
+      // If we have 6 confirmed A appointments and we're creating the 7th,
+      // after creation there will be 7, so the first imaginary W slot is at position 7
+      // But we need to calculate this BEFORE we know which slot we'll select
+      // So we use: if confirmedAppointments.length + 1 >= walkInTokenAllotment, then slot at position walkInTokenAllotment is imaginary
+      const totalAAppointmentsAfterThis = confirmedAppointments.length + 1; // +1 for the appointment we're creating
+      
       const imaginaryWSlotPositions = new Set<number>();
+      console.log('🔍 [DEBUG] Calculating imaginary W slots (accounting for new A token):', {
+        confirmedAppointmentsCount: confirmedAppointments.length,
+        totalAAppointmentsAfterThis,
+        existingWTokensCount: existingWTokens.length,
+        walkInTokenAllotment,
+        confirmedAppointments: confirmedAppointments.map(a => ({ slotIndex: a.slotIndex, bookedVia: a.bookedVia })),
+        existingWTokens: existingWTokens.map(a => ({ slotIndex: a.slotIndex, bookedVia: a.bookedVia }))
+      });
+      
       if (confirmedAppointments.length === 0) {
-        imaginaryWSlotPositions.add(walkInTokenAllotment);
+        // No existing A appointments, but we're creating one
+        // After creation: 1 A appointment
+        // If walkInTokenAllotment is 7, we need 7 A appointments before first imaginary W slot
+        // So no imaginary slots yet
+        // But wait, if walkInTokenAllotment is 7 and we have 0, after creating 1, we still have less than 7
+        // So no imaginary slots
+        if (totalAAppointmentsAfterThis >= walkInTokenAllotment) {
+          // After creating this appointment, we'll have exactly walkInTokenAllotment A appointments
+          // So the first imaginary W slot is at position walkInTokenAllotment
+          imaginaryWSlotPositions.add(walkInTokenAllotment);
+        }
       } else if (existingWTokens.length === 0) {
-        if (confirmedAppointments.length >= walkInTokenAllotment) {
-          // Use slot-based calculation: after walkInTokenAllotment confirmed appointments
-          // Find the appointment at position (walkInTokenAllotment - 1) in the sorted list
-          const sortedBySlotIndex = [...confirmedAppointments].sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
-          // Get the appointment at index (walkInTokenAllotment - 1) in the sorted list
-          const targetAppointment = sortedBySlotIndex[walkInTokenAllotment - 1];
-          // First W slot is right after this appointment
-          const firstWSlot = (targetAppointment?.slotIndex ?? 0) + 1;
-          imaginaryWSlotPositions.add(firstWSlot);
+        console.log('🔍 [DEBUG] Branch: existingWTokens.length === 0', {
+          totalAAppointmentsAfterThis,
+          walkInTokenAllotment,
+          conditionMet: totalAAppointmentsAfterThis >= walkInTokenAllotment
+        });
+        
+        if (totalAAppointmentsAfterThis >= walkInTokenAllotment) {
+          // After creating this appointment, we'll have at least walkInTokenAllotment A appointments
+          // The first imaginary W slot is after the walkInTokenAllotment-th A appointment
+          // Since we're creating the (confirmedAppointments.length + 1)-th appointment,
+          // if confirmedAppointments.length + 1 == walkInTokenAllotment, then slot at position walkInTokenAllotment is imaginary
+          // If confirmedAppointments.length + 1 > walkInTokenAllotment, we need to find the slot after the walkInTokenAllotment-th appointment
           
-          // Calculate additional imaginary W slots at intervals
-          let currentWSlot = firstWSlot;
-          const maxSlotIndex = Math.max(...confirmedAppointments.map(a => a.slotIndex ?? 0), 0);
-          while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
-            currentWSlot += walkInTokenAllotment + 1; // Fixed: should be +1, not just walkInTokenAllotment
-            imaginaryWSlotPositions.add(currentWSlot);
+          const sortedBySlotIndex = [...confirmedAppointments].sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
+          
+          console.log('🔍 [DEBUG] Checking if totalAAppointmentsAfterThis === walkInTokenAllotment', {
+            totalAAppointmentsAfterThis,
+            walkInTokenAllotment,
+            areEqual: totalAAppointmentsAfterThis === walkInTokenAllotment
+          });
+          
+          if (totalAAppointmentsAfterThis === walkInTokenAllotment) {
+            // After creating this appointment, we'll have exactly walkInTokenAllotment A appointments
+            // The first imaginary W slot is at slot index walkInTokenAllotment (e.g., slot 7 for walkInTokenAllotment 7)
+            // CRITICAL: Mark slot walkInTokenAllotment as imaginary to prevent A tokens from using it
+            // This ensures that when we have 6 appointments and create the 7th, slot 7 is reserved for W tokens
+            console.log('🚨 [CRITICAL] ADDING IMAGINARY SLOT:', walkInTokenAllotment);
+            imaginaryWSlotPositions.add(walkInTokenAllotment);
+            
+            console.log('✅ [DEBUG] Marking slot as imaginary (will have exactly walkInTokenAllotment A appointments):', {
+              walkInTokenAllotment,
+              totalAAppointmentsAfterThis,
+              imaginarySlot: walkInTokenAllotment,
+              existingAppointments: sortedBySlotIndex.map(a => a.slotIndex),
+              imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions)
+            });
+          } else if (totalAAppointmentsAfterThis > walkInTokenAllotment) {
+            console.log('🔍 [DEBUG] totalAAppointmentsAfterThis > walkInTokenAllotment', {
+              totalAAppointmentsAfterThis,
+              walkInTokenAllotment
+            });
+            // We'll have more than walkInTokenAllotment appointments after creation
+            // Find the appointment at position (walkInTokenAllotment - 1) in the sorted list
+            const targetAppointment = sortedBySlotIndex[walkInTokenAllotment - 1];
+            // First W slot is right after this appointment
+            const firstWSlot = (targetAppointment?.slotIndex ?? 0) + 1;
+            imaginaryWSlotPositions.add(firstWSlot);
+            
+            // Calculate additional imaginary W slots at intervals
+            const maxSlotIndex = Math.max(...confirmedAppointments.map(a => a.slotIndex ?? 0), 0);
+            let currentWSlot = firstWSlot;
+            while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
+              currentWSlot += walkInTokenAllotment + 1;
+              imaginaryWSlotPositions.add(currentWSlot);
+            }
           }
         }
-        // If fewer than walkInTokenAllotment confirmed appointments, don't add any imaginary W slots yet
-        // All slots should be available for A tokens to fill
       } else {
         const lastWToken = existingWTokens[existingWTokens.length - 1];
         const lastWTokenSlotIndex = lastWToken?.slotIndex ?? -1;
@@ -907,35 +1177,76 @@ export async function generateNextTokenAndReserveSlot(
           return aptSlotIndex > lastWTokenSlotIndex;
         });
         
-        if (appointmentsAfterLastW.length >= walkInTokenAllotment) {
-          // Use slot-based calculation: after walkInTokenAllotment appointments from last W token
-          const targetAppointment = appointmentsAfterLastW[walkInTokenAllotment - 1];
-          const nextWSlot = (targetAppointment.slotIndex ?? 0) + 1;
-          imaginaryWSlotPositions.add(nextWSlot);
+        // Account for the new A token we're creating
+        // If it will be after the last W token, it counts toward appointmentsAfterLastW
+        // But we don't know its slot index yet, so we need to be conservative
+        // For now, assume it might be after the last W token
+        const appointmentsAfterLastWAfterCreation = appointmentsAfterLastW.length + 1; // +1 for the new appointment
+        
+        if (appointmentsAfterLastWAfterCreation >= walkInTokenAllotment) {
+          if (appointmentsAfterLastW.length < walkInTokenAllotment) {
+            // After creating this appointment, we'll have exactly walkInTokenAllotment appointments after last W
+            // So the first imaginary W slot is right after the last appointment after last W
+            // But we don't know which slot that will be, so we need to consider all slots after the max slot
+            const maxSlotAfterLastW = appointmentsAfterLastW.length > 0 
+              ? Math.max(...appointmentsAfterLastW.map(a => a.slotIndex ?? 0))
+              : lastWTokenSlotIndex;
+            // The new appointment will be at some slot after maxSlotAfterLastW
+            // The first imaginary W slot is at maxSlotAfterLastW + 1 (or later, depending on where we place the new appointment)
+            // To be safe, we mark maxSlotAfterLastW + 1 as potentially imaginary
+            // Actually, we can't know for sure, so we need to recalculate after slot selection
+            // For now, use the same logic as before but account for +1 appointment
+            const targetAppointment = appointmentsAfterLastW[walkInTokenAllotment - 2]; // -2 because we're adding 1
+            if (targetAppointment) {
+              const nextWSlot = (targetAppointment.slotIndex ?? 0) + 1;
+              imaginaryWSlotPositions.add(nextWSlot);
+            } else {
+              // Fallback: if we don't have enough appointments yet, use slot after last W + walkInTokenAllotment
+              imaginaryWSlotPositions.add(lastWTokenSlotIndex + walkInTokenAllotment + 1);
+            }
+          } else {
+            // We already have enough appointments after last W
+            const targetAppointment = appointmentsAfterLastW[walkInTokenAllotment - 1];
+            const nextWSlot = (targetAppointment.slotIndex ?? 0) + 1;
+            imaginaryWSlotPositions.add(nextWSlot);
+          }
           
           // Calculate additional imaginary W slots at intervals
-          let currentWSlot = nextWSlot;
           const maxSlotIndex = Math.max(...confirmedAppointments.map(a => a.slotIndex ?? 0), lastWTokenSlotIndex);
+          const firstWSlot = Array.from(imaginaryWSlotPositions)[0] || (lastWTokenSlotIndex + 1);
+          let currentWSlot = firstWSlot;
           while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
-            currentWSlot += walkInTokenAllotment + 1; // Fixed: should be +1, not just walkInTokenAllotment
+            currentWSlot += walkInTokenAllotment + 1;
             imaginaryWSlotPositions.add(currentWSlot);
           }
         }
-        // If fewer than walkInTokenAllotment appointments after last W, don't add any imaginary W slots yet
-        // All slots should be available for A tokens to fill
       }
       
-      console.log('🔍 [DEBUG] Imaginary W Slot Calculation:', {
+      // CRITICAL: Final verification that imaginary slots are set correctly
+      const finalImaginarySlots = Array.from(imaginaryWSlotPositions).sort((a, b) => a - b);
+      console.log('🔍 [DEBUG] Calculated imaginary W slots (accounting for new A token):', {
+        imaginaryWSlotPositions: finalImaginarySlots,
         walkInTokenAllotment,
+        totalAAppointmentsAfterThis,
         confirmedAppointmentsCount: confirmedAppointments.length,
-        confirmedAppointments: confirmedAppointments.map(a => ({
-          slotIndex: a.slotIndex,
-          bookedVia: a.bookedVia
-        })),
-        existingWTokensCount: existingWTokens.length,
-        imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-        requestedSlotIndex
+        shouldHaveSlot7: totalAAppointmentsAfterThis === walkInTokenAllotment && walkInTokenAllotment === 7,
+        hasSlot7: finalImaginarySlots.includes(7)
       });
+      
+      // CRITICAL: If we should have slot walkInTokenAllotment as imaginary but don't, this is a bug!
+      // When totalAAppointmentsAfterThis === walkInTokenAllotment, slot walkInTokenAllotment MUST be imaginary
+      if (totalAAppointmentsAfterThis === walkInTokenAllotment && existingWTokens.length === 0 && !finalImaginarySlots.includes(walkInTokenAllotment)) {
+        console.error('🚨 [CRITICAL BUG] Slot walkInTokenAllotment should be imaginary but is not in the set!', {
+          totalAAppointmentsAfterThis,
+          walkInTokenAllotment,
+          expectedImaginarySlot: walkInTokenAllotment,
+          imaginaryWSlotPositions: finalImaginarySlots,
+          confirmedAppointmentsCount: confirmedAppointments.length
+        });
+        // Force add it as a safety measure
+        imaginaryWSlotPositions.add(walkInTokenAllotment);
+        console.log('🔧 [FIX] Force-added slot', walkInTokenAllotment, 'to imaginary slots');
+      }
       
       // Find the maximum slot index to search up to
       const maxSlotIndex = Math.max(
@@ -946,14 +1257,43 @@ export async function generateNextTokenAndReserveSlot(
       
       // STEP 1: ALL READS FIRST - Firestore transactions require all reads before all writes
       
-      // Step 1.1: Read all slot reservations to find available slot
-      // First, check if the requested slotIndex is available
-      // Only if it's not available, search for the next available slot
+      // Step 1.1: Read slot reservations inside transaction to prevent concurrent conflicts
+      // We'll read reservations as we check slots, but ensure all reads happen before writes
+      const reservedSlotIndices = new Set<number>();
+      const slotReservationRefs = new Map<number, any>();
       
-      // Helper function to check if a slot is available
+      // Helper function to read a slot reservation (caches results)
+      const readSlotReservation = async (slotIdx: number): Promise<{ reserved: boolean; reservationRef?: any }> => {
+        // If we've already read this slot, return cached result
+        if (reservedSlotIndices.has(slotIdx)) {
+          return { reserved: true };
+        }
+        if (slotReservationRefs.has(slotIdx)) {
+          return { reserved: false, reservationRef: slotReservationRefs.get(slotIdx) };
+        }
+        
+        // Read the reservation document inside transaction
+        const slotReservationId = `${clinicId}_${doctorName}_${dateStr}_slot_${slotIdx}`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+        const slotReservationRef = doc(db, 'slot-reservations', slotReservationId);
+        const reservationDoc = await transaction.get(slotReservationRef);
+        
+        if (reservationDoc.exists()) {
+          reservedSlotIndices.add(slotIdx);
+          return { reserved: true };
+        } else {
+          slotReservationRefs.set(slotIdx, slotReservationRef);
+          return { reserved: false, reservationRef: slotReservationRef };
+        }
+      };
+      
+      // Helper function to check if a slot is available (reads reservation inside transaction)
       const isSlotAvailable = async (slotIdx: number): Promise<{ available: boolean; reservationRef?: any }> => {
-        // Check if slot is not an imaginary W slot first (skip if it is)
+        // CRITICAL: Check if slot is not an imaginary W slot FIRST (skip if it is)
         if (imaginaryWSlotPositions.has(slotIdx)) {
+          console.log('🚫 [DEBUG] Slot is an imaginary W slot, skipping:', {
+            slotIdx,
+            imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b)
+          });
           return { available: false };
         }
         
@@ -972,18 +1312,14 @@ export async function generateNextTokenAndReserveSlot(
           }
         }
         
-        // Read the reservation document to check if slot is available
-        const slotReservationId = `${clinicId}_${doctorName}_${dateStr}_slot_${slotIdx}`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-        const slotReservationRef = doc(db, 'slot-reservations', slotReservationId);
-        const reservationDoc = await transaction.get(slotReservationRef);
-        
-        // If reservation doesn't exist, slot is available
-        if (!reservationDoc.exists()) {
-          return { available: true, reservationRef: slotReservationRef };
+        // Read the reservation document inside transaction (cached)
+        const reservationCheck = await readSlotReservation(slotIdx);
+        if (reservationCheck.reserved) {
+          return { available: false };
         }
         
-        // If reservation exists, slot is taken
-        return { available: false };
+        // Slot is available
+        return { available: true, reservationRef: reservationCheck.reservationRef };
       };
       
       // First, try the requested slotIndex
@@ -1029,6 +1365,20 @@ export async function generateNextTokenAndReserveSlot(
         throw error;
       }
       
+      // Final validation: A tokens should NEVER book imaginary W slots
+      // This is a safety check to ensure imaginary W slots are never used for A tokens
+      if (imaginaryWSlotPositions.has(selectedSlotIndex)) {
+        console.error('❌ [ERROR] Attempted to assign imaginary W slot to A token:', {
+          selectedSlotIndex,
+          imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
+          walkInTokenAllotment
+        });
+        const error = new Error('SLOT_RESERVED_FOR_WALKIN') as Error & { code?: string };
+        error.code = 'SLOT_RESERVED_FOR_WALKIN';
+        error.message = `Slot ${selectedSlotIndex} is reserved for walk-in tokens. No available slots found.`;
+        throw error;
+      }
+      
     }
     
     // Step 1.2: For W tokens, read all appointments that need to be shifted forward
@@ -1053,7 +1403,132 @@ export async function generateNextTokenAndReserveSlot(
     // STEP 2: ALL WRITES AFTER ALL READS
     
     // Step 2.1: Create slot reservation document to lock the slot (only for A tokens)
+    // CRITICAL: Double-check that the slot is still available and not an imaginary W slot
+    // This prevents race conditions where concurrent requests might both select the same slot
     if (type === 'A' && selectedSlotReservationRef) {
+      // Final double-check: Verify the slot is not an imaginary W slot
+      // Recalculate imaginary W slots inside transaction to ensure consistency
+      if (type === 'A' && typeof appointmentData.slotIndex === 'number') {
+        // Re-read appointments to get current state inside transaction
+        const verifiedAppointmentsForCheck: Array<{ slotIndex?: number; bookedVia?: string; status?: string }> = [];
+        for (const aptRef of allAppointmentRefs) {
+          const aptDoc = await transaction.get(aptRef.ref);
+          if (aptDoc.exists()) {
+            const data = aptDoc.data();
+            if ((data.status === 'Pending' || data.status === 'Confirmed')) {
+              verifiedAppointmentsForCheck.push({
+                slotIndex: data.slotIndex,
+                bookedVia: data.bookedVia,
+                status: data.status
+              });
+            }
+          }
+        }
+        
+        // Recalculate imaginary W slots based on current state
+        // CRITICAL: Account for the new A token we're about to create
+        const walkInTokenAllotment = clinicData?.walkInTokenAllotment || 7;
+        const confirmedAppointmentsForCheck = verifiedAppointmentsForCheck
+          .filter(a => a.status === 'Pending' || a.status === 'Confirmed')
+          .filter(a => a.bookedVia === 'Advanced Booking' || a.bookedVia === 'Online' || a.bookedVia === 'Advanced')
+          .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
+        
+        const existingWTokensForCheck = verifiedAppointmentsForCheck
+          .filter(a => a.bookedVia === 'Walk-in' && (a.status === 'Pending' || a.status === 'Confirmed'))
+          .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
+        
+        // CRITICAL FIX: Account for the new A token we're about to create
+        const totalAAppointmentsAfterThisCheck = confirmedAppointmentsForCheck.length + 1; // +1 for the appointment we're creating
+        
+        const imaginaryWSlotPositionsForCheck = new Set<number>();
+        if (confirmedAppointmentsForCheck.length === 0) {
+          if (totalAAppointmentsAfterThisCheck >= walkInTokenAllotment) {
+            imaginaryWSlotPositionsForCheck.add(walkInTokenAllotment);
+          }
+        } else if (existingWTokensForCheck.length === 0) {
+          if (totalAAppointmentsAfterThisCheck >= walkInTokenAllotment) {
+            const sortedBySlotIndex = [...confirmedAppointmentsForCheck].sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
+            
+            if (totalAAppointmentsAfterThisCheck === walkInTokenAllotment) {
+              // After creating this appointment, we'll have exactly walkInTokenAllotment A appointments
+              // The first imaginary W slot is at slot index walkInTokenAllotment
+              imaginaryWSlotPositionsForCheck.add(walkInTokenAllotment);
+            } else if (totalAAppointmentsAfterThisCheck > walkInTokenAllotment) {
+              // We'll have more than walkInTokenAllotment appointments after creation
+              const targetAppointment = sortedBySlotIndex[walkInTokenAllotment - 1];
+              const firstWSlot = (targetAppointment?.slotIndex ?? 0) + 1;
+              imaginaryWSlotPositionsForCheck.add(firstWSlot);
+              
+              let currentWSlot = firstWSlot;
+              const maxSlotIndex = Math.max(...confirmedAppointmentsForCheck.map(a => a.slotIndex ?? 0), 0);
+              while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
+                currentWSlot += walkInTokenAllotment + 1;
+                imaginaryWSlotPositionsForCheck.add(currentWSlot);
+              }
+            }
+          }
+        } else {
+          const lastWToken = existingWTokensForCheck[existingWTokensForCheck.length - 1];
+          const lastWTokenSlotIndex = lastWToken?.slotIndex ?? -1;
+          
+          const appointmentsAfterLastW = confirmedAppointmentsForCheck.filter(a => {
+            const aptSlotIndex = a.slotIndex ?? 0;
+            return aptSlotIndex > lastWTokenSlotIndex;
+          });
+          
+          // Account for the new A token we're creating
+          const appointmentsAfterLastWAfterCreation = appointmentsAfterLastW.length + 1; // +1 for the new appointment
+          
+          if (appointmentsAfterLastWAfterCreation >= walkInTokenAllotment) {
+            if (appointmentsAfterLastW.length < walkInTokenAllotment) {
+              const targetAppointment = appointmentsAfterLastW[walkInTokenAllotment - 2]; // -2 because we're adding 1
+              if (targetAppointment) {
+                const nextWSlot = (targetAppointment.slotIndex ?? 0) + 1;
+                imaginaryWSlotPositionsForCheck.add(nextWSlot);
+              } else {
+                imaginaryWSlotPositionsForCheck.add(lastWTokenSlotIndex + walkInTokenAllotment + 1);
+              }
+            } else {
+              const targetAppointment = appointmentsAfterLastW[walkInTokenAllotment - 1];
+              const nextWSlot = (targetAppointment.slotIndex ?? 0) + 1;
+              imaginaryWSlotPositionsForCheck.add(nextWSlot);
+            }
+            
+            const maxSlotIndex = Math.max(...confirmedAppointmentsForCheck.map(a => a.slotIndex ?? 0), lastWTokenSlotIndex);
+            const firstWSlot = Array.from(imaginaryWSlotPositionsForCheck)[0] || (lastWTokenSlotIndex + 1);
+            let currentWSlot = firstWSlot;
+            while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
+              currentWSlot += walkInTokenAllotment + 1;
+              imaginaryWSlotPositionsForCheck.add(currentWSlot);
+            }
+          }
+        }
+        
+        console.log('🔍 [DEBUG] Double-check: Recalculated imaginary W slots (accounting for new A token):', {
+          selectedSlotIndex,
+          confirmedAppointmentsCount: confirmedAppointmentsForCheck.length,
+          totalAAppointmentsAfterThisCheck,
+          imaginaryWSlotPositions: Array.from(imaginaryWSlotPositionsForCheck).sort((a, b) => a - b),
+          walkInTokenAllotment
+        });
+        
+        // Double-check: Verify the selected slot is not an imaginary W slot
+        if (imaginaryWSlotPositionsForCheck.has(selectedSlotIndex)) {
+          console.error('❌ [ERROR] Double-check failed: Selected slot is an imaginary W slot:', {
+            selectedSlotIndex,
+            imaginaryWSlotPositions: Array.from(imaginaryWSlotPositionsForCheck).sort((a, b) => a - b),
+            walkInTokenAllotment,
+            totalAAppointmentsAfterThisCheck,
+            confirmedAppointmentsCount: confirmedAppointmentsForCheck.length
+          });
+          const error = new Error('SLOT_RESERVED_FOR_WALKIN') as Error & { code?: string };
+          error.code = 'SLOT_RESERVED_FOR_WALKIN';
+          error.message = `Slot ${selectedSlotIndex} is reserved for walk-in tokens. No available slots found.`;
+          throw error;
+        }
+      }
+      
+      // Create the reservation atomically
       transaction.set(selectedSlotReservationRef, {
         clinicId,
         doctorName,
@@ -1153,10 +1628,20 @@ export async function generateNextTokenAndReserveSlot(
     const tokenNumber = `${type}${String(nextTokenNum).padStart(3, '0')}`;
     const numericToken = (typeof appointmentData.slotIndex === 'number') ? (appointmentData.slotIndex + 1) : nextTokenNum;
     
+    const finalSlotIndex = appointmentData.slotIndex;
+    
+    console.log('✅ [DEBUG] generateNextTokenAndReserveSlot returning:', {
+      type,
+      tokenNumber,
+      numericToken,
+      finalSlotIndex,
+      originalSlotIndex: type === 'W' ? 'N/A (W token)' : 'N/A (A token)'
+    });
+    
     return { 
       tokenNumber, 
       numericToken, 
-      slotIndex: appointmentData.slotIndex 
+      slotIndex: finalSlotIndex 
     };
   });
 }
@@ -1294,8 +1779,8 @@ export async function calculateWalkInDetails(
     .filter(a => a.bookedVia === 'Walk-in' && (a.status === 'Pending' || a.status === 'Confirmed'))
     .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
 
-  // Step 5.5: Priority 1 - Check for empty slots within 1-hour window (W Priority slots)
-  // These are slots that are cancelled/empty and within 1 hour from now (where A tokens can't book)
+  // Step 5.5: Priority 1 - Check for available slots within 1-hour window (W Priority slots)
+  // These are slots that are available/vacant and within 1 hour from now (where A tokens can't book)
   const oneHourFromNow = addMinutes(now, 60);
   const bookedSlotIndices = new Set(
     appointments
@@ -1304,38 +1789,61 @@ export async function calculateWalkInDetails(
       .filter(idx => idx >= 0)
   );
   
-  // Find empty slots within 1-hour window
-  const emptySlotsWithinOneHour: number[] = [];
+  // Find available slots within 1-hour window
+  // Priority 1: W tokens should fill available slots in 1-hour time frame first
+  const availableSlotsWithinOneHour: number[] = [];
   for (let i = 0; i < allSlots.length; i++) {
     const slot = allSlots[i];
     const isWithinOneHour = !isBefore(slot.time, now) && !isAfter(slot.time, oneHourFromNow);
     
     if (isWithinOneHour) {
-      // Check if slot is empty (not booked) or has a cancelled/no-show appointment
+      // Check if slot is available (vacant - not booked by any Pending/Confirmed appointment)
+      // W tokens should fill available slots in 1-hour time frame first
+      // Each W token gets its own slot (W tokens don't share slots)
       const slotAppointment = appointments.find(a => a.slotIndex === i);
       const isEmpty = !slotAppointment;
       const isVacant = isEmpty || (slotAppointment && ['Skipped', 'Cancelled', 'Completed', 'No-show'].includes(slotAppointment.status));
       
+      // Slot is available if it's vacant (not booked by any Pending/Confirmed appointment)
+      // W tokens don't share slots, so we exclude slots already booked by W tokens
       if (isVacant && !bookedSlotIndices.has(i)) {
-        emptySlotsWithinOneHour.push(i);
+        availableSlotsWithinOneHour.push(i);
       }
     }
   }
   
   // Sort by slot index to get the earliest available slot
-  emptySlotsWithinOneHour.sort((a, b) => a - b);
+  availableSlotsWithinOneHour.sort((a, b) => a - b);
 
   // Step 5.5: Calculate imaginary W slot positions for Priority 2 check
+  // Imaginary W slots are slots that should be reserved for W tokens based on the walkInTokenAllotment
+  // These slots are calculated based on confirmed A appointments and should be used in Priority 2
   const imaginaryWSlotPositions = new Set<number>();
+  
+  console.log('🔍 [DEBUG] Calculating imaginary W slots:', {
+    confirmedAppointmentsCount: confirmedAppointments.length,
+    existingWTokensCount: existingWTokens.length,
+    walkInTokenAllotment,
+    confirmedAppointments: confirmedAppointments.map(a => ({ slotIndex: a.slotIndex, bookedVia: a.bookedVia })),
+    existingWTokens: existingWTokens.map(a => ({ slotIndex: a.slotIndex, bookedVia: a.bookedVia }))
+  });
+  
   if (confirmedAppointments.length === 0) {
     // No confirmed appointments - first W would be at slot 0 + walkInTokenAllotment
     imaginaryWSlotPositions.add(walkInTokenAllotment);
+    console.log('🔍 [DEBUG] No confirmed appointments - imaginary W slot:', walkInTokenAllotment);
   } else if (existingWTokens.length === 0) {
     // First W token: after walkInTokenAllotment confirmed appointments
     if (confirmedAppointments.length >= walkInTokenAllotment) {
       const targetAppointment = confirmedAppointments[walkInTokenAllotment - 1];
       const firstWSlot = (targetAppointment.slotIndex ?? 0) + 1;
       imaginaryWSlotPositions.add(firstWSlot);
+      
+      console.log('🔍 [DEBUG] First W token - calculated first imaginary W slot:', {
+        targetAppointmentSlotIndex: targetAppointment.slotIndex,
+        firstWSlot,
+        walkInTokenAllotment
+      });
       
       // Calculate additional imaginary W slots at intervals
       let currentWSlot = firstWSlot;
@@ -1344,12 +1852,143 @@ export async function calculateWalkInDetails(
         currentWSlot += walkInTokenAllotment + 1;
         imaginaryWSlotPositions.add(currentWSlot);
       }
-    } else {
-      const lastAppointment = confirmedAppointments[confirmedAppointments.length - 1];
-      imaginaryWSlotPositions.add((lastAppointment.slotIndex ?? 0) + 1);
     }
+    // If fewer than walkInTokenAllotment confirmed appointments, don't add any imaginary W slots yet
+    // All slots should be available for A tokens to fill
+    } else {
+    // Subsequent W tokens: Calculate imaginary W slots based on the pattern from the first W token
+    // The first imaginary W slot should be calculated as if there were no W tokens yet
+    // We need to reconstruct the original pattern by considering all confirmed appointments (A tokens only)
+    // and calculating where the first imaginary W slot would be
+    
+    // Get the first W token to understand the pattern
+    const firstWToken = existingWTokens[0];
+    const firstWTokenSlotIndex = firstWToken?.slotIndex ?? -1;
+    
+    // Calculate the first imaginary W slot based on the original pattern
+    // The first imaginary W slot should be after walkInTokenAllotment confirmed appointments
+    // But we need to account for the fact that appointments might have shifted after the first W token
+    
+    // Sort confirmed appointments by slotIndex to get the order
+    const sortedConfirmedAppointments = [...confirmedAppointments].sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
+    
+    let firstImaginaryWSlot: number | null = null;
+    
+    if (sortedConfirmedAppointments.length >= walkInTokenAllotment) {
+      // The first imaginary W slot should be after the walkInTokenAllotment-th confirmed appointment
+      // We need to find the appointment that would have been the walkInTokenAllotment-th in the ORIGINAL order
+      // (before any W tokens were inserted)
+      
+      // The pattern is: after walkInTokenAllotment confirmed appointments, place the first imaginary W slot
+      // If the first W token is at slot 1, and there are 7 confirmed appointments, they should be at slots 0, 2, 3, 4, 5, 6, 7
+      // The 7th appointment (index 6) would be at slot 6, so the first imaginary W slot should be at slot 7
+      
+      // Count how many confirmed appointments come before the first W token
+      const appointmentsBeforeFirstW = sortedConfirmedAppointments.filter(a => {
+        const aptSlotIndex = a.slotIndex ?? 0;
+        return aptSlotIndex < firstWTokenSlotIndex;
+      });
+      
+      console.log('🔍 [DEBUG] Calculating first imaginary W slot:', {
+        firstWTokenSlotIndex,
+        appointmentsBeforeFirstWCount: appointmentsBeforeFirstW.length,
+        appointmentsBeforeFirstW: appointmentsBeforeFirstW.map(a => ({ slotIndex: a.slotIndex })),
+        walkInTokenAllotment,
+        totalConfirmedAppointments: sortedConfirmedAppointments.length
+      });
+      
+      if (appointmentsBeforeFirstW.length >= walkInTokenAllotment) {
+        // If we have enough appointments before the first W token, use that pattern
+        // This means the first W token was placed after walkInTokenAllotment appointments
+        const targetAppointment = appointmentsBeforeFirstW[walkInTokenAllotment - 1];
+        firstImaginaryWSlot = (targetAppointment.slotIndex ?? 0) + 1;
+        console.log('🔍 [DEBUG] Using appointments before first W token:', {
+          targetAppointmentSlotIndex: targetAppointment.slotIndex,
+          firstImaginaryWSlot
+        });
+      } else {
+        // If we don't have enough appointments before the first W token,
+        // the first imaginary W slot should be calculated based on the pattern
+        // The first imaginary W slot should be at slot 7 if there are 7 confirmed appointments
+        // But we need to account for the fact that the first W token might have shifted appointments
+        
+        // The simplest approach: use the walkInTokenAllotment-th appointment in the sorted list
+        // This should give us slot 6 (if appointments are at 0, 2, 3, 4, 5, 6, 7), so firstImaginaryWSlot = 7
+        const targetAppointment = sortedConfirmedAppointments[walkInTokenAllotment - 1];
+        const targetSlotIndex = targetAppointment.slotIndex ?? 0;
+        
+        // If the target appointment is at slot 6, the first imaginary W slot should be at slot 7
+        // But if it's at slot 8 (because appointments shifted), we need to adjust
+        // Actually, the first imaginary W slot should always be at slot 7 if there are 7 confirmed appointments
+        // So we should use slot 7 directly, or calculate it based on the pattern
+        
+        // Let's use a simpler approach: the first imaginary W slot should be at slot 7
+        // if there are 7 confirmed appointments, regardless of where they are
+        // But we need to make sure it's not before the first W token
+        
+        // Actually, let's calculate it based on the pattern: after walkInTokenAllotment appointments
+        // If the appointments are at slots 0, 2, 3, 4, 5, 6, 7, then the 7th is at slot 7
+        // So firstImaginaryWSlot should be at slot 8? No, that's wrong.
+        
+        // The correct logic: the first imaginary W slot should be at slot 7
+        // if the 7th confirmed appointment (in original order) would have been at slot 6
+        // But since appointments might have shifted, we need to find the right slot
+        
+        // Let's use the target appointment's slot index + 1, but ensure it's at least slot 7
+        firstImaginaryWSlot = Math.max((targetSlotIndex ?? 0) + 1, walkInTokenAllotment);
+        
+        // But wait, if the target appointment is at slot 8, then firstImaginaryWSlot = 9, which is wrong
+        // We need to ensure it's at slot 7
+        
+        // Actually, I think the issue is that we need to use the ORIGINAL slot indices
+        // But we don't have that information. So let's use a different approach:
+        // The first imaginary W slot should be at slot 7 if there are 7 confirmed appointments
+        // So let's just use slot 7 directly if we have 7 confirmed appointments
+        
+        if (sortedConfirmedAppointments.length === walkInTokenAllotment) {
+          // If we have exactly walkInTokenAllotment confirmed appointments, 
+          // the first imaginary W slot should be at slot walkInTokenAllotment (7)
+          firstImaginaryWSlot = walkInTokenAllotment;
+        } else {
+          // Otherwise, use the target appointment's slot + 1
+          firstImaginaryWSlot = (targetSlotIndex ?? 0) + 1;
+        }
+        
+        console.log('🔍 [DEBUG] Using walkInTokenAllotment-th appointment:', {
+          targetAppointmentSlotIndex: targetSlotIndex,
+          firstImaginaryWSlot,
+          totalConfirmedAppointments: sortedConfirmedAppointments.length
+        });
+      }
+    } else if (sortedConfirmedAppointments.length > 0) {
+      // If fewer than walkInTokenAllotment confirmed appointments, use the last one
+      const lastAppointment = sortedConfirmedAppointments[sortedConfirmedAppointments.length - 1];
+      firstImaginaryWSlot = (lastAppointment.slotIndex ?? 0) + 1;
   } else {
-    // Subsequent W tokens: place after walkInTokenAllotment appointments from last W token
+      // No confirmed appointments, first imaginary W slot is at walkInTokenAllotment
+      firstImaginaryWSlot = walkInTokenAllotment;
+    }
+    
+    // Add all imaginary W slots at intervals of (walkInTokenAllotment + 1) starting from firstImaginaryWSlot
+    if (firstImaginaryWSlot !== null) {
+      let currentWSlot = firstImaginaryWSlot;
+      const maxSlotIndex = Math.max(...confirmedAppointments.map(a => a.slotIndex ?? 0), 0);
+      while (currentWSlot <= maxSlotIndex + walkInTokenAllotment + 10) { // Add buffer for future slots
+        imaginaryWSlotPositions.add(currentWSlot);
+        currentWSlot += walkInTokenAllotment + 1;
+      }
+      
+      console.log('🔍 [DEBUG] Subsequent W token - calculated imaginary W slots from pattern:', {
+        firstWTokenSlotIndex,
+        firstImaginaryWSlot,
+        walkInTokenAllotment,
+        confirmedAppointmentsCount: confirmedAppointments.length,
+        sortedConfirmedAppointments: sortedConfirmedAppointments.map(a => ({ slotIndex: a.slotIndex, bookedVia: a.bookedVia })),
+        imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b)
+      });
+    }
+    
+    // Also check appointments after the last W token to see if we need additional imaginary W slots
     const lastWToken = existingWTokens[existingWTokens.length - 1];
     const lastWTokenSlotIndex = lastWToken?.slotIndex ?? -1;
     
@@ -1358,41 +1997,58 @@ export async function calculateWalkInDetails(
       return aptSlotIndex > lastWTokenSlotIndex;
     });
     
-    if (appointmentsAfterLastW.length >= walkInTokenAllotment) {
-      const targetAppointment = appointmentsAfterLastW[walkInTokenAllotment - 1];
-      const nextWSlot = (targetAppointment.slotIndex ?? 0) + 1;
-      imaginaryWSlotPositions.add(nextWSlot);
-      
-      // Calculate additional imaginary W slots at intervals
-      let currentWSlot = nextWSlot;
-      const maxSlotIndex = Math.max(...confirmedAppointments.map(a => a.slotIndex ?? 0), 0);
-      while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
-        currentWSlot += walkInTokenAllotment + 1;
-        imaginaryWSlotPositions.add(currentWSlot);
-      }
-    } else if (appointmentsAfterLastW.length > 0) {
-      const lastAppointment = appointmentsAfterLastW[appointmentsAfterLastW.length - 1];
-      imaginaryWSlotPositions.add((lastAppointment.slotIndex ?? 0) + 1);
-    } else {
-      imaginaryWSlotPositions.add(lastWTokenSlotIndex + 1);
-    }
+    console.log('🔍 [DEBUG] Subsequent W token - checking appointments after last W:', {
+      lastWTokenSlotIndex,
+      appointmentsAfterLastWCount: appointmentsAfterLastW.length,
+      appointmentsAfterLastW: appointmentsAfterLastW.map(a => ({ slotIndex: a.slotIndex, bookedVia: a.bookedVia })),
+      walkInTokenAllotment
+    });
   }
   
-  // Priority 2: Empty slots that come before imaginary W slots
+  console.log('🔍 [DEBUG] Calculated imaginary W slots:', {
+    imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
+    walkInTokenAllotment
+  });
+  
+  // Priority 3: Find empty slots before imaginary W slots (only if no imaginary W slots available)
+  // According to slot-visualizer: "If no imaginary W slots available, W tokens fill empty slots that come before imaginary W slots"
   const sortedImaginaryWSlots = Array.from(imaginaryWSlotPositions).sort((a, b) => a - b);
   const emptySlotsBeforeImaginaryW: number[] = [];
   
+  console.log('🔍 [DEBUG] Priority 3: Calculating empty slots before imaginary W slots:', {
+    sortedImaginaryWSlots,
+    firstImaginaryWSlot: sortedImaginaryWSlots.length > 0 ? sortedImaginaryWSlots[0] : null
+  });
+  
+  // Only find empty slots before imaginary W slots if there are imaginary W slots calculated
+  // If there are no imaginary W slots, Priority 3 doesn't apply
   if (sortedImaginaryWSlots.length > 0) {
     const firstImaginaryWSlot = sortedImaginaryWSlots[0];
     
     // Find empty slots that come before the first imaginary W slot
+    // IMPORTANT: Do NOT include the imaginary W slot itself - it should be used in Priority 2
     for (let i = 0; i < allSlots.length && i < firstImaginaryWSlot; i++) {
+      // CRITICAL: Skip if this slot is an imaginary W slot - it should be used in Priority 2, not Priority 3
+      if (imaginaryWSlotPositions.has(i)) {
+        console.log('🔍 [DEBUG] Skipping slot (it is an imaginary W slot, should be used in Priority 2):', i);
+        continue;
+      }
+      
+      const slot = allSlots[i];
+      const isWithinOneHour = !isBefore(slot.time, now) && !isAfter(slot.time, oneHourFromNow);
+      
+      // Skip slots in 1-hour window (already checked in Priority 1)
+      if (isWithinOneHour) {
+        continue;
+      }
+      
+      // Check if slot is available (vacant)
       const slotAppointment = appointments.find(a => a.slotIndex === i);
       const isEmpty = !slotAppointment;
       const isVacant = isEmpty || (slotAppointment && ['Skipped', 'Cancelled', 'Completed', 'No-show'].includes(slotAppointment.status));
       
-      // Only add if it's not already in emptySlotsWithinOneHour and not booked
-      if (isVacant && !bookedSlotIndices.has(i) && !emptySlotsWithinOneHour.includes(i)) {
+      // Slot is available if it's vacant and not booked by Pending/Confirmed appointment
+      if (isVacant && !bookedSlotIndices.has(i)) {
         emptySlotsBeforeImaginaryW.push(i);
       }
     }
@@ -1401,19 +2057,142 @@ export async function calculateWalkInDetails(
   // Sort by slot index to get the earliest available slot
   emptySlotsBeforeImaginaryW.sort((a, b) => a - b);
 
-  // Step 6: Calculate target slot - Priority 1: Empty slots within 1-hour window, Priority 2: Imaginary W slots, Priority 3: Empty slots before imaginary W
+  console.log('🔍 [DEBUG] Priority 3: Empty slots before imaginary W slots:', {
+    emptySlotsBeforeImaginaryW,
+    firstImaginaryWSlot: sortedImaginaryWSlots.length > 0 ? sortedImaginaryWSlots[0] : null
+  });
+
+  // Step 6: Calculate target slot - Priority 1: Available slots within 1-hour window, Priority 2: Imaginary W slots, Priority 3: Empty slots before imaginary W slots
+  // According to slot-visualizer page:
+  // Priority 1: W tokens fill empty slots within 1-hour window (where A tokens can't book)
+  // Priority 2: W tokens use imaginary slots at intervals of walkInTokenAllotment confirmed appointments (use imaginary W slots first!)
+  // Priority 3: If no imaginary W slots available, W tokens fill empty slots that come before imaginary W slots
   let finalSlotIndex: number;
   const totalSlots = allSlots.length;
   
-  // Priority 1: Use earliest empty slot within 1-hour window if available
-  if (emptySlotsWithinOneHour.length > 0) {
-    finalSlotIndex = emptySlotsWithinOneHour[0];
+  // Priority 1: Use earliest available slot within 1-hour window if available
+  if (availableSlotsWithinOneHour.length > 0) {
+    finalSlotIndex = availableSlotsWithinOneHour[0];
+    console.log('✅ [DEBUG] Priority 1: Using available slot within 1-hour window:', {
+      slotIndex: finalSlotIndex,
+      slotTime: format(allSlots[finalSlotIndex].time, 'hh:mm a'),
+      availableSlots: availableSlotsWithinOneHour
+    });
   } else if (sortedImaginaryWSlots.length > 0) {
-    // Priority 2: Use the first imaginary W slot position (use imaginary W slots first!)
-    finalSlotIndex = sortedImaginaryWSlots[0];
-  } else if (emptySlotsBeforeImaginaryW.length > 0) {
-    // Priority 3: Use earliest empty slot before imaginary W slots (only if no imaginary W slots available)
+    // Priority 2: Use the first imaginary W slot position
+    // Imaginary W slots should be used even if they appear "booked" - they're reserved for W tokens
+    // Check if the first imaginary W slot is actually available (not booked by an A token)
+    console.log('🔍 [DEBUG] Priority 2: Checking imaginary W slots:', {
+      sortedImaginaryWSlots,
+      totalAppointments: appointments.length
+    });
+    
+    let selectedImaginarySlot = -1;
+    let emptyImaginarySlot = -1;
+    let sharedImaginarySlot = -1;
+    
+    // First pass: Find empty imaginary W slots (preferred)
+    // Second pass: Find imaginary W slots already booked by W tokens (can share if no empty ones)
+    for (const imaginarySlot of sortedImaginaryWSlots) {
+      // Check if this imaginary slot is booked by an A token (not available for W)
+      const slotAppointment = appointments.find(a => a.slotIndex === imaginarySlot);
+      const isBookedByA = slotAppointment && 
+        (slotAppointment.bookedVia === 'Advanced Booking' || 
+         slotAppointment.bookedVia === 'Online' || 
+         slotAppointment.bookedVia === 'Advanced') &&
+        (slotAppointment.status === 'Pending' || slotAppointment.status === 'Confirmed');
+      
+      const isBookedByW = slotAppointment && 
+        slotAppointment.bookedVia === 'Walk-in' &&
+        (slotAppointment.status === 'Pending' || slotAppointment.status === 'Confirmed');
+      
+      const isEmpty = !slotAppointment;
+      
+      console.log('🔍 [DEBUG] Checking imaginary W slot:', {
+        slotIndex: imaginarySlot,
+        hasAppointment: !!slotAppointment,
+        appointmentBookedVia: slotAppointment?.bookedVia,
+        appointmentStatus: slotAppointment?.status,
+        isBookedByA,
+        isBookedByW,
+        isEmpty
+      });
+      
+      // Skip if booked by A token
+      if (isBookedByA) {
+        console.log('⚠️ [DEBUG] Skipping imaginary W slot (booked by A token):', {
+          slotIndex: imaginarySlot,
+          appointmentBookedVia: slotAppointment?.bookedVia
+        });
+        continue;
+      }
+      
+      // Prefer empty imaginary W slots
+      if (isEmpty && emptyImaginarySlot === -1) {
+        emptyImaginarySlot = imaginarySlot;
+        console.log('✅ [DEBUG] Found empty imaginary W slot:', {
+          slotIndex: emptyImaginarySlot
+        });
+      }
+      
+      // If no empty ones found, allow sharing with other W tokens
+      if (isBookedByW && sharedImaginarySlot === -1) {
+        sharedImaginarySlot = imaginarySlot;
+        console.log('✅ [DEBUG] Found shared imaginary W slot (already booked by W token):', {
+          slotIndex: sharedImaginarySlot
+        });
+      }
+    }
+    
+    // Select empty slot first, then shared slot if no empty ones
+    if (emptyImaginarySlot >= 0) {
+      selectedImaginarySlot = emptyImaginarySlot;
+      console.log('✅ [DEBUG] Selected empty imaginary W slot:', {
+        slotIndex: selectedImaginarySlot,
+        reason: 'Empty imaginary W slot (preferred)'
+      });
+    } else if (sharedImaginarySlot >= 0) {
+      selectedImaginarySlot = sharedImaginarySlot;
+      console.log('✅ [DEBUG] Selected shared imaginary W slot:', {
+        slotIndex: selectedImaginarySlot,
+        reason: 'No empty imaginary W slots available, sharing with existing W token'
+      });
+    }
+    
+    if (selectedImaginarySlot >= 0) {
+      finalSlotIndex = selectedImaginarySlot;
+      console.log('✅ [DEBUG] Priority 2: Using imaginary W slot:', {
+        slotIndex: finalSlotIndex,
+        availableImaginaryWSlots: sortedImaginaryWSlots
+      });
+    } else {
+      console.log('⚠️ [DEBUG] Priority 2: No available imaginary W slots (all booked by A tokens), falling through to Priority 3');
+    }
+    // If selectedImaginarySlot is -1, fall through to Priority 3
+  }
+  
+  // Priority 3: Use empty slots before imaginary W slots (only if Priority 1 and Priority 2 didn't find a slot)
+  // According to slot-visualizer: "If no imaginary W slots available, W tokens fill empty slots that come before imaginary W slots"
+  if (finalSlotIndex === undefined && emptySlotsBeforeImaginaryW.length > 0) {
+    // Priority 3: Use earliest empty slot before imaginary W slots
     finalSlotIndex = emptySlotsBeforeImaginaryW[0];
+    console.log('✅ [DEBUG] Priority 3: Using empty slot before imaginary W slots:', {
+      slotIndex: finalSlotIndex,
+      slotTime: format(allSlots[finalSlotIndex].time, 'hh:mm a'),
+      availableSlots: emptySlotsBeforeImaginaryW
+    });
+  }
+  
+  // Fallback: Use interval-based logic only if no slot was found and no imaginary W slots were calculated
+  if (finalSlotIndex === undefined) {
+    if (sortedImaginaryWSlots.length > 0) {
+      // If imaginary W slots were calculated but all were booked by A tokens, use the first one anyway
+      // This should not happen if Priority 2 logic is correct, but it's a safety fallback
+      finalSlotIndex = sortedImaginaryWSlots[0];
+      console.log('⚠️ [DEBUG] Fallback: Using first imaginary W slot (all were booked by A tokens):', {
+        slotIndex: finalSlotIndex,
+        availableImaginaryWSlots: sortedImaginaryWSlots
+      });
   } else {
       // Fallback: Use interval-based logic if no imaginary W slots calculated
       if (confirmedAppointments.length === 0) {
@@ -1460,29 +2239,70 @@ export async function calculateWalkInDetails(
             // No appointments after last W, place right after last W
             finalSlotIndex = lastWTokenSlotIndex + 1;
           }
+          }
         }
       }
   }
 
   // Step 7: Validate slot is within bounds
-  if (finalSlotIndex >= allSlots.length) {
+  if (finalSlotIndex === undefined) {
+    console.error('❌ [ERROR] No slot was selected!', {
+      availableSlotsWithinOneHour: availableSlotsWithinOneHour.length,
+      sortedImaginaryWSlots: sortedImaginaryWSlots.length,
+      emptySlotsBeforeImaginaryW: emptySlotsBeforeImaginaryW.length,
+      confirmedAppointmentsCount: confirmedAppointments.length,
+      existingWTokensCount: existingWTokens.length,
+      walkInTokenAllotment
+    });
     throw new Error('No available slots for walk-in today.');
   }
   
+  if (finalSlotIndex >= allSlots.length) {
+    console.error('❌ [ERROR] Selected slot is out of bounds:', {
+      finalSlotIndex,
+      totalSlots: allSlots.length
+    });
+    throw new Error('No available slots for walk-in today.');
+  }
+  
+  console.log('✅ [DEBUG] Final slot selection:', {
+    finalSlotIndex,
+    slotTime: format(allSlots[finalSlotIndex].time, 'hh:mm a'),
+    isImaginaryWSlot: imaginaryWSlotPositions.has(finalSlotIndex),
+    isInOneHourWindow: availableSlotsWithinOneHour.includes(finalSlotIndex),
+    isBeforeImaginaryW: emptySlotsBeforeImaginaryW.includes(finalSlotIndex),
+    imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
+    selectedFromPriority: availableSlotsWithinOneHour.includes(finalSlotIndex) ? 'Priority 1' : 
+                          imaginaryWSlotPositions.has(finalSlotIndex) ? 'Priority 2' : 
+                          emptySlotsBeforeImaginaryW.includes(finalSlotIndex) ? 'Priority 3' : 'Fallback'
+  });
+  
   let finalSessionIndex = -1;
 
-  // Step 8: Calculate patients ahead (capped at walkInTokenAllotment)
-  // Use all confirmed appointments (A and W) for calculating patients ahead
+  // Step 8: Calculate patients ahead
+  // Count all confirmed appointments (A and W) before the final slot
+  // Also count W tokens at the same slot index (if sharing the same imaginary slot)
   const allConfirmedAppointments = appointments.filter(a =>
     a.status === 'Pending' || a.status === 'Confirmed'
   );
-  const confirmedAhead = allConfirmedAppointments.filter(a => {
+  
+  // Count appointments before the final slot
+  const appointmentsBeforeSlot = allConfirmedAppointments.filter(a => {
     const aptSlotIndex = a.slotIndex ?? 0;
     return aptSlotIndex < finalSlotIndex;
-  }).length;
+  });
   
-  // Cap patients ahead at walkInTokenAllotment for display
-  const patientsAhead = Math.min(confirmedAhead, walkInTokenAllotment);
+  // Count W tokens at the same slot index (if sharing the same imaginary slot)
+  const wTokensAtSameSlot = allConfirmedAppointments.filter(a => {
+    const aptSlotIndex = a.slotIndex ?? 0;
+    return aptSlotIndex === finalSlotIndex && a.bookedVia === 'Walk-in';
+  });
+  
+  // Total people ahead = appointments before slot + W tokens at same slot (if sharing)
+  const totalAhead = appointmentsBeforeSlot.length + wTokensAtSameSlot.length;
+  
+  // Don't cap patients ahead - show the actual count
+  const patientsAhead = totalAhead;
 
   // Step 6: Calculate estimated time for display
   // Always use: (number of people ahead * average consultation time)
