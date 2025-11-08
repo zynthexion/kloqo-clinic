@@ -761,7 +761,28 @@ export async function generateNextTokenAndReserveSlot(
     }
   }
 
+  const transactionStartTime = new Date();
+  console.log('🚀 [CLINIC APP] ========== TRANSACTION START ==========', {
+    type,
+    requestedSlotIndex: appointmentData.slotIndex,
+    time: appointmentData.time,
+    clinicId,
+    doctorName,
+    date: dateStr,
+    transactionStartTime: transactionStartTime.toISOString(),
+    timestamp: Date.now()
+  });
+  
   return await runTransaction(db, async (transaction) => {
+    const transactionAttemptTime = new Date();
+    console.log('🔄 [CLINIC APP] ========== TRANSACTION ATTEMPT ==========', {
+      type,
+      requestedSlotIndex: appointmentData.slotIndex,
+      timeSinceStart: transactionAttemptTime.getTime() - transactionStartTime.getTime(),
+      transactionAttemptTime: transactionAttemptTime.toISOString(),
+      timestamp: Date.now()
+    });
+    
     // Step 1: Read all documents first (all reads before writes)
     
     // Read counter document
@@ -964,9 +985,39 @@ export async function generateNextTokenAndReserveSlot(
         walkInTokenAllotment,
         totalAAppointmentsAfterThis,
         confirmedAppointmentsCount: confirmedAppointments.length,
+        existingWTokensCount: existingWTokens.length,
+        confirmedAppointmentSlots: confirmedAppointments.map(a => a.slotIndex).sort((a, b) => (a ?? 0) - (b ?? 0)),
         shouldHaveSlot7: totalAAppointmentsAfterThis === walkInTokenAllotment && walkInTokenAllotment === 7,
-        hasSlot7: finalImaginarySlots.includes(7)
+        hasSlot7: finalImaginarySlots.includes(7),
+        conditionMet: totalAAppointmentsAfterThis >= walkInTokenAllotment,
+        branch: confirmedAppointments.length === 0 ? 'no-appointments' : existingWTokens.length === 0 ? 'no-w-tokens' : 'has-w-tokens'
       });
+      
+      // CRITICAL DEBUG: Log the exact calculation path taken
+      if (confirmedAppointments.length === 0) {
+        console.log('🔍 [CLINIC APP DEBUG] Calculation path: confirmedAppointments.length === 0', {
+          totalAAppointmentsAfterThis,
+          walkInTokenAllotment,
+          willAddSlot: totalAAppointmentsAfterThis >= walkInTokenAllotment,
+          slotToAdd: totalAAppointmentsAfterThis >= walkInTokenAllotment ? walkInTokenAllotment : 'none'
+        });
+      } else if (existingWTokens.length === 0) {
+        console.log('🔍 [CLINIC APP DEBUG] Calculation path: existingWTokens.length === 0', {
+          totalAAppointmentsAfterThis,
+          walkInTokenAllotment,
+          conditionMet: totalAAppointmentsAfterThis >= walkInTokenAllotment,
+          sortedAppointments: confirmedAppointments.map(a => a.slotIndex).sort((a, b) => (a ?? 0) - (b ?? 0)),
+          targetAppointmentIndex: totalAAppointmentsAfterThis > walkInTokenAllotment ? walkInTokenAllotment - 1 : 'N/A',
+          targetAppointmentSlot: totalAAppointmentsAfterThis > walkInTokenAllotment 
+            ? confirmedAppointments.sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity))[walkInTokenAllotment - 1]?.slotIndex 
+            : 'N/A'
+        });
+      } else {
+        console.log('🔍 [CLINIC APP DEBUG] Calculation path: has existing W tokens', {
+          lastWTokenSlot: existingWTokens[existingWTokens.length - 1]?.slotIndex,
+          appointmentsAfterLastW: confirmedAppointments.filter(a => (a.slotIndex ?? 0) > (existingWTokens[existingWTokens.length - 1]?.slotIndex ?? -1)).map(a => a.slotIndex)
+        });
+      }
       
       // CRITICAL: If we should have slot walkInTokenAllotment as imaginary but don't, this is a bug!
       // When totalAAppointmentsAfterThis === walkInTokenAllotment, slot walkInTokenAllotment MUST be imaginary
@@ -999,23 +1050,64 @@ export async function generateNextTokenAndReserveSlot(
       
       // Helper function to read a slot reservation (caches results)
       const readSlotReservation = async (slotIdx: number): Promise<{ reserved: boolean; reservationRef?: any }> => {
+        const readStartTime = Date.now();
+        
         // If we've already read this slot, return cached result
         if (reservedSlotIndices.has(slotIdx)) {
+          console.log('📋 [CLINIC APP] Reservation read (cached - already reserved):', {
+            slotIdx,
+            timestamp: new Date().toISOString()
+          });
           return { reserved: true };
         }
         if (slotReservationRefs.has(slotIdx)) {
+          console.log('📋 [CLINIC APP] Reservation read (cached - available):', {
+            slotIdx,
+            timestamp: new Date().toISOString()
+          });
           return { reserved: false, reservationRef: slotReservationRefs.get(slotIdx) };
         }
         
         // Read the reservation document inside transaction
         const slotReservationId = `${clinicId}_${doctorName}_${dateStr}_slot_${slotIdx}`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
         const slotReservationRef = doc(db, 'slot-reservations', slotReservationId);
+        
+        console.log('📖 [CLINIC APP] Reading reservation document:', {
+          slotIdx,
+          reservationId: slotReservationId,
+          reservationPath: slotReservationRef.path,
+          timestamp: new Date().toISOString(),
+          readStartTime
+        });
+        
         const reservationDoc = await transaction.get(slotReservationRef);
+        const readEndTime = Date.now();
         
         if (reservationDoc.exists()) {
+          const reservationData = reservationDoc.data();
+          console.error('🚫 [CLINIC APP] Reservation EXISTS (slot is reserved):', {
+            slotIdx,
+            reservationId: slotReservationId,
+            reservationData: {
+              clinicId: reservationData?.clinicId,
+              doctorName: reservationData?.doctorName,
+              date: reservationData?.date,
+              slotIndex: reservationData?.slotIndex,
+              reservedAt: reservationData?.reservedAt,
+              reservedBy: reservationData?.reservedBy
+            },
+            readDuration: readEndTime - readStartTime,
+            timestamp: new Date().toISOString()
+          });
           reservedSlotIndices.add(slotIdx);
           return { reserved: true };
         } else {
+          console.log('✅ [CLINIC APP] Reservation does NOT exist (slot is available):', {
+            slotIdx,
+            reservationId: slotReservationId,
+            readDuration: readEndTime - readStartTime,
+            timestamp: new Date().toISOString()
+          });
           slotReservationRefs.set(slotIdx, slotReservationRef);
           return { reserved: false, reservationRef: slotReservationRef };
         }
@@ -1054,16 +1146,23 @@ export async function generateNextTokenAndReserveSlot(
         
         // STEP 3: Check 1-hour cutoff: A tokens can only book slots that are at least 1 hour in the future
         // Slots within 1 hour are reserved for W tokens only
-        if (allSlotsWithIndices.length > slotIdx && oneHourFromNow) {
+        // CRITICAL: Recalculate oneHourFromNow inside transaction to ensure it's current
+        if (allSlotsWithIndices.length > slotIdx) {
+          const now = new Date();
+          const oneHourFromNowCurrent = addMinutes(now, 60);
           const slotTime = allSlotsWithIndices[slotIdx].time;
           // Skip slots that are within 1 hour from now (these are reserved for W tokens)
-          if (!isAfter(slotTime, oneHourFromNow)) {
-            console.log('🚫 [A TOKEN] Slot is within 1-hour window (reserved for W tokens):', {
+          // Using !isAfter - covers both past slots and slots within 1 hour
+          if (!isAfter(slotTime, oneHourFromNowCurrent)) {
+            console.log('🚫 [CLINIC APP] A TOKEN rejected - slot is past or within 1-hour window:', {
               slotIdx,
               slotTime: format(slotTime, 'hh:mm a'),
-              oneHourFromNow: format(oneHourFromNow, 'hh:mm a')
+              currentTime: format(now, 'hh:mm a'),
+              oneHourFromNow: format(oneHourFromNowCurrent, 'hh:mm a'),
+              isPast: isBefore(slotTime, now),
+              isWithinOneHour: !isAfter(slotTime, oneHourFromNowCurrent)
             });
-            return { available: false }; // Slot is within 1 hour window
+            return { available: false }; // Slot is in past or within 1 hour window
           }
         }
         
@@ -1091,22 +1190,59 @@ export async function generateNextTokenAndReserveSlot(
       
       // First, try the requested slotIndex (if provided)
       if (typeof requestedSlotIndex === 'number' && requestedSlotIndex >= 0) {
-        // CRITICAL: Check if requested slot is an imaginary W slot BEFORE checking availability
-        console.log('🔍 [CLINIC APP DEBUG] Checking requested slot for imaginary status:', {
-          requestedSlotIndex,
-          imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-          isImaginary: imaginaryWSlotPositions.has(requestedSlotIndex),
-          timestamp: new Date().toISOString()
-        });
-        if (imaginaryWSlotPositions.has(requestedSlotIndex)) {
-          console.error('🚫 [CLINIC APP] ❌ REQUESTED SLOT IS IMAGINARY - cannot use:', {
+        // CRITICAL: Recalculate current time and 1-hour cutoff INSIDE transaction to ensure accuracy
+        const now = new Date();
+        const oneHourFromNowForCheck = addMinutes(now, 60);
+        
+        // CRITICAL: Check if requested slot is past, within 1-hour window, or imaginary BEFORE checking availability
+        let skipRequestedSlot = false;
+        
+        // Check if slot is in the past or within 1-hour window
+        if (allSlotsWithIndices.length > requestedSlotIndex) {
+          const slotTime = allSlotsWithIndices[requestedSlotIndex].time;
+          const isPast = isBefore(slotTime, now);
+          const isWithinOneHour = !isAfter(slotTime, oneHourFromNowForCheck);
+          
+          if (isPast) {
+            skipRequestedSlot = true;
+            console.log('🚫 [CLINIC APP] Requested slot is in the past, skipping:', {
+              requestedSlotIndex,
+              slotTime: format(slotTime, 'hh:mm a'),
+              currentTime: format(now, 'hh:mm a')
+            });
+          } else if (isWithinOneHour) {
+            skipRequestedSlot = true;
+            console.log('🚫 [CLINIC APP] Requested slot is within 1-hour window, skipping:', {
+              requestedSlotIndex,
+              slotTime: format(slotTime, 'hh:mm a'),
+              oneHourFromNow: format(oneHourFromNowForCheck, 'hh:mm a'),
+              currentTime: format(now, 'hh:mm a')
+            });
+          }
+        }
+        
+        // Check if requested slot is an imaginary W slot
+        if (!skipRequestedSlot) {
+          console.log('🔍 [CLINIC APP DEBUG] Checking requested slot for imaginary status:', {
             requestedSlotIndex,
             imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-            reason: 'A tokens cannot use imaginary W slots',
+            isImaginary: imaginaryWSlotPositions.has(requestedSlotIndex),
             timestamp: new Date().toISOString()
           });
-        } else {
-          console.log('✅ [CLINIC APP DEBUG] Requested slot is NOT imaginary, checking availability:', {
+          if (imaginaryWSlotPositions.has(requestedSlotIndex)) {
+            skipRequestedSlot = true;
+            console.error('🚫 [CLINIC APP] ❌ REQUESTED SLOT IS IMAGINARY - cannot use:', {
+              requestedSlotIndex,
+              imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
+              reason: 'A tokens cannot use imaginary W slots',
+              timestamp: new Date().toISOString()
+            });
+          }
+        }
+        
+        // If slot passed all checks, verify availability
+        if (!skipRequestedSlot) {
+          console.log('✅ [CLINIC APP DEBUG] Requested slot passed all pre-checks (not past, not within 1-hour, not imaginary), checking availability:', {
             requestedSlotIndex,
             timestamp: new Date().toISOString()
           });
@@ -1129,12 +1265,41 @@ export async function generateNextTokenAndReserveSlot(
       }
       
       // If requested slot is not available, search for the next available slot
-      // CRITICAL: Skip all imaginary W slots during search - A tokens cannot use them
+      // CRITICAL: Skip all imaginary W slots, past slots, and slots within 1-hour window during search
+      // ALIGNED WITH PATIENT APP: Skip past slots and 1-hour window slots early for performance
       if (selectedSlotIndex === -1) {
+        // CRITICAL: Recalculate current time and 1-hour cutoff INSIDE transaction to ensure accuracy
+        const now = new Date();
+        const oneHourFromNowForSearch = addMinutes(now, 60);
+        
         for (let slotIdx = 0; slotIdx <= maxSlotIndex + 20; slotIdx++) {
           // Skip the requested slot if we already checked it
           if (typeof requestedSlotIndex === 'number' && slotIdx === requestedSlotIndex) {
             continue;
+          }
+          
+          // CRITICAL: Skip past slots early (before calling isSlotAvailable for performance)
+          if (allSlotsWithIndices.length > slotIdx) {
+            const slotTime = allSlotsWithIndices[slotIdx].time;
+            if (isBefore(slotTime, now)) {
+              console.log('🚫 [CLINIC APP] Skipping past slot during search:', {
+                slotIdx,
+                slotTime: format(slotTime, 'hh:mm a'),
+                currentTime: format(now, 'hh:mm a')
+              });
+              continue;
+            }
+            
+            // CRITICAL: Skip slots within 1-hour window early (reserved for W tokens)
+            if (!isAfter(slotTime, oneHourFromNowForSearch)) {
+              console.log('🚫 [CLINIC APP] Skipping slot within 1-hour window during search:', {
+                slotIdx,
+                slotTime: format(slotTime, 'hh:mm a'),
+                oneHourFromNow: format(oneHourFromNowForSearch, 'hh:mm a'),
+                currentTime: format(now, 'hh:mm a')
+              });
+              continue;
+            }
           }
           
           // CRITICAL: Skip imaginary W slots early - A tokens cannot use them
@@ -1153,7 +1318,7 @@ export async function generateNextTokenAndReserveSlot(
             });
             continue;
           }
-          console.log('✅ [CLINIC APP DEBUG] Slot is NOT imaginary in search loop, calling isSlotAvailable:', {
+          console.log('✅ [CLINIC APP DEBUG] Slot is NOT imaginary, past, or within 1-hour window, calling isSlotAvailable:', {
             slotIdx,
             timestamp: new Date().toISOString()
           });
@@ -1221,23 +1386,67 @@ export async function generateNextTokenAndReserveSlot(
       // If another transaction creates this reservation, we'll detect it here and throw an error
       // This error will cause the transaction to fail and retry, forcing slot reselection
       if (selectedSlotReservationRef) {
-        const finalReservationRead = await transaction.get(selectedSlotReservationRef);
-        if (finalReservationRead.exists()) {
-          console.error('❌ [CLINIC APP] CRITICAL CONFLICT - Slot reservation already exists:', {
+        const finalCheckStartTime = Date.now();
+        console.log('🔍 [CLINIC APP] ========== FINAL RESERVATION CHECK (LAST READ IN STEP 1) ==========', {
+          selectedSlotIndex,
+          reservationId: selectedSlotReservationRef.id,
+          reservationPath: selectedSlotReservationRef.path,
+          imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
+          isImaginary: imaginaryWSlotPositions.has(selectedSlotIndex),
+          timestamp: new Date().toISOString(),
+          checkStartTime: finalCheckStartTime
+        });
+        
+        // CRITICAL: Double-check that selected slot is NOT imaginary before final reservation check
+        if (imaginaryWSlotPositions.has(selectedSlotIndex)) {
+          console.error('❌ [CLINIC APP] ========== CRITICAL ERROR - SELECTED SLOT IS IMAGINARY ==========', {
             selectedSlotIndex,
-            reservationData: finalReservationRead.data(),
+            imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
+            walkInTokenAllotment,
+            totalAAppointmentsAfterThis,
+            confirmedAppointmentsCount: confirmedAppointments.length,
             timestamp: new Date().toISOString(),
-            reason: 'Another transaction created this reservation - need to select different slot'
+            action: 'THROWING ERROR - Cannot book imaginary W slot'
+          });
+          const error = new Error('SLOT_RESERVED_FOR_WALKIN') as Error & { code?: string };
+          error.code = 'SLOT_RESERVED_FOR_WALKIN';
+          error.message = `Slot ${selectedSlotIndex} is reserved for walk-in tokens. No available slots found.`;
+          throw error;
+        }
+        
+        const finalReservationRead = await transaction.get(selectedSlotReservationRef);
+        const finalCheckEndTime = Date.now();
+        
+        if (finalReservationRead.exists()) {
+          const reservationData = finalReservationRead.data();
+          console.error('❌ [CLINIC APP] ========== CRITICAL CONFLICT DETECTED ==========', {
+            selectedSlotIndex,
+            reservationId: selectedSlotReservationRef.id,
+            reservationData: {
+              clinicId: reservationData?.clinicId,
+              doctorName: reservationData?.doctorName,
+              date: reservationData?.date,
+              slotIndex: reservationData?.slotIndex,
+              reservedAt: reservationData?.reservedAt,
+              reservedBy: reservationData?.reservedBy
+            },
+            checkDuration: finalCheckEndTime - finalCheckStartTime,
+            timestamp: new Date().toISOString(),
+            reason: 'Another transaction created this reservation - need to select different slot',
+            action: 'THROWING ERROR TO TRIGGER TRANSACTION RETRY'
           });
           const error = new Error('SLOT_ALREADY_BOOKED') as Error & { code?: string };
           error.code = 'SLOT_OCCUPIED';
           error.message = `Slot ${selectedSlotIndex} was just booked by another concurrent request. Please try again.`;
           throw error; // This will cause transaction to fail and retry with slot reselection
         }
-        console.log('✅ [CLINIC APP] Final reservation check passed - slot is available:', {
+        console.log('✅ [CLINIC APP] ========== FINAL RESERVATION CHECK PASSED ==========', {
           selectedSlotIndex,
           reservationId: selectedSlotReservationRef.id,
-          timestamp: new Date().toISOString()
+          isImaginary: false,
+          checkDuration: finalCheckEndTime - finalCheckStartTime,
+          timestamp: new Date().toISOString(),
+          note: 'Slot is available and NOT imaginary - proceeding to Step 2 (writes)'
         });
       }
       
@@ -1256,29 +1465,52 @@ export async function generateNextTokenAndReserveSlot(
     // Firestore will detect if another transaction creates this reservation between our read and write
     // If that happens, this transaction will fail and retry
     if (type === 'A' && selectedSlotReservationRef) {
-      // Final validation: A tokens should NEVER book imaginary W slots
-      // This check uses the imaginaryWSlotPositions calculated in Step 1 (reads phase)
-      // No additional reads needed - we already have all the data from Step 1
-      // CRITICAL: Double-check that selected slot is NOT imaginary before creating reservation
-      console.log('🔍 [CLINIC APP DEBUG] Before creating reservation - verifying slot is NOT imaginary:', {
+      const reservationCreateStartTime = Date.now();
+      console.log('✍️ [CLINIC APP] ========== CREATING RESERVATION (STEP 2 - WRITE) ==========', {
         selectedSlotIndex,
-        imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-        isImaginary: imaginaryWSlotPositions.has(selectedSlotIndex),
-        timestamp: new Date().toISOString()
+        reservationId: selectedSlotReservationRef.id,
+        reservationPath: selectedSlotReservationRef.path,
+        timestamp: new Date().toISOString(),
+        createStartTime: reservationCreateStartTime,
+        note: 'Reservation was checked at end of Step 1 - Firestore will detect conflicts and retry if needed'
       });
-      if (imaginaryWSlotPositions.has(selectedSlotIndex)) {
-        console.error('❌ [CLINIC APP] ❌❌❌ CRITICAL ERROR - ABOUT TO CREATE RESERVATION FOR IMAGINARY SLOT:', {
+      
+      // CRITICAL: Final safety check before creating reservation - ensure slot is NOT imaginary
+      // This is a last-ditch safety check in case something went wrong
+      // NOTE: imaginaryWSlotPositions is declared at transaction scope (line 799) and assigned in A token block
+      if (imaginaryWSlotPositions && imaginaryWSlotPositions.size > 0) {
+        const isImaginary = imaginaryWSlotPositions.has(selectedSlotIndex);
+        console.log('🔍 [CLINIC APP] Final safety check before creating reservation:', {
           selectedSlotIndex,
           imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
+          isImaginary,
           timestamp: new Date().toISOString()
         });
-        const error = new Error('SLOT_RESERVED_FOR_WALKIN') as Error & { code?: string };
-        error.code = 'SLOT_RESERVED_FOR_WALKIN';
-        error.message = `Slot ${selectedSlotIndex} is reserved for walk-in tokens. Cannot create reservation.`;
-        throw error;
+        
+        if (isImaginary) {
+          console.error('❌ [CLINIC APP] ========== CRITICAL ERROR - ABOUT TO CREATE RESERVATION FOR IMAGINARY SLOT ==========', {
+            selectedSlotIndex,
+            imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
+            timestamp: new Date().toISOString(),
+            action: 'THROWING ERROR - Cannot create reservation for imaginary W slot'
+          });
+          const error = new Error('SLOT_RESERVED_FOR_WALKIN') as Error & { code?: string };
+          error.code = 'SLOT_RESERVED_FOR_WALKIN';
+          error.message = `Slot ${selectedSlotIndex} is reserved for walk-in tokens. Cannot create reservation.`;
+          throw error;
+        }
+      } else {
+        console.warn('⚠️ [CLINIC APP] imaginaryWSlotPositions is empty or undefined in Step 2:', {
+          selectedSlotIndex,
+          imaginaryWSlotPositionsExists: !!imaginaryWSlotPositions,
+          imaginaryWSlotPositionsSize: imaginaryWSlotPositions?.size ?? 0,
+          timestamp: new Date().toISOString(),
+          note: 'This should not happen - imaginary slots should be calculated in Step 1'
+        });
       }
       
       // Create the reservation atomically
+      // NOTE: Final validation for imaginary slots was already done at end of Step 1
       // CRITICAL: The reservation was already checked at the end of Step 1 (reads phase)
       // Firestore will detect if another transaction creates this reservation between our read and write
       // If that happens, this transaction will fail and retry
@@ -1291,9 +1523,13 @@ export async function generateNextTokenAndReserveSlot(
         reservedBy: 'appointment-booking'
       });
       
-      console.log('✅ [TRANSACTION] Created slot reservation:', {
+      const reservationCreateEndTime = Date.now();
+      console.log('✅ [CLINIC APP] ========== RESERVATION CREATED (transaction.set() called) ==========', {
         selectedSlotIndex,
-        reservationId: selectedSlotReservationRef.id
+        reservationId: selectedSlotReservationRef.id,
+        createDuration: reservationCreateEndTime - reservationCreateStartTime,
+        timestamp: new Date().toISOString(),
+        note: 'Reservation write queued - Firestore will commit after all writes complete'
       });
       
       // Update appointmentData with the atomically selected slot
