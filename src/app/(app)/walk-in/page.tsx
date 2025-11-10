@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AppFrameLayout from '@/components/layout/app-frame';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, collection, addDoc, query, where, getDocs, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, addDoc, query, where, getDocs, serverTimestamp, setDoc, deleteDoc } from 'firebase/firestore';
 import type { Appointment, Doctor, Patient } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { format, isWithinInterval, parse, subMinutes, addMinutes } from 'date-fns';
@@ -245,7 +245,7 @@ function WalkInRegistrationContent() {
         const clinicData = clinicSnap.data();
         const walkInTokenAllotment = clinicData?.walkInTokenAllotment || 5;
 
-        const { estimatedTime, patientsAhead, numericToken, slotIndex } = await calculateWalkInDetails(doctor, walkInTokenAllotment);
+        const { estimatedTime, patientsAhead, numericToken, slotIndex } = await calculateWalkInDetails(clinicId, doctor.name, doctor, walkInTokenAllotment);
         
         // Clean phone: remove +91 if user entered it, remove any non-digits, then ensure exactly 10 digits
         let fullPhoneNumber = "";
@@ -338,17 +338,18 @@ function WalkInRegistrationContent() {
         const clinicSnap = await getDoc(clinicDocRef);
         const clinicData = clinicSnap.data();
         const walkInTokenAllotment = clinicData?.walkInTokenAllotment || 5;
-        const recalculatedDetails = await calculateWalkInDetails(doctor, walkInTokenAllotment);
+        const recalculatedDetails = await calculateWalkInDetails(clinicId, doctor.name, doctor, walkInTokenAllotment);
         
         // Use generateNextTokenAndReserveSlot to ensure sequential numbering and shift subsequent appointments
-        const { tokenNumber: walkInTokenNumber, numericToken: walkInNumericToken, slotIndex: actualSlotIndex } = await generateNextTokenAndReserveSlot(
+        const { tokenNumber: walkInTokenNumber, numericToken: walkInNumericToken, slotIndex: actualSlotIndex, reservationId } = await generateNextTokenAndReserveSlot(
             clinicId,
             doctor.name,
             new Date(),
             'W',
             {
                 time: format(recalculatedDetails.estimatedTime, "hh:mm a"),
-                slotIndex: recalculatedDetails.slotIndex
+                slotIndex: recalculatedDetails.slotIndex,
+                doctorId: doctor.id,
             }
         );
         
@@ -375,7 +376,16 @@ function WalkInRegistrationContent() {
         const appointmentsCollection = collection(db, 'appointments');
         const newDocRef = doc(appointmentsCollection);
         
-        await setDoc(newDocRef, {...updatedAppointmentData, id: newDocRef.id}).catch(async (serverError) => {
+        try {
+            await setDoc(newDocRef, {...updatedAppointmentData, id: newDocRef.id});
+        } catch (serverError) {
+            if (reservationId) {
+                try {
+                    await deleteDoc(doc(db, 'slot-reservations', reservationId));
+                } catch (cleanupError) {
+                    console.warn('⚠️ [WALK-IN] Failed to release reservation after error:', cleanupError);
+                }
+            }
             console.error('🎯 DEBUG: Failed to save appointment');
             const permissionError = new FirestorePermissionError({
             path: 'appointments',
@@ -384,7 +394,14 @@ function WalkInRegistrationContent() {
             });
             errorEmitter.emit('permission-error', permissionError);
             throw serverError;
-        });
+        }
+        if (reservationId) {
+            try {
+                await deleteDoc(doc(db, 'slot-reservations', reservationId));
+            } catch (cleanupError) {
+                console.warn('⚠️ [WALK-IN] Failed to release reservation after success:', cleanupError);
+            }
+        }
         console.log('🎯 DEBUG: Appointment saved successfully:', newDocRef.id);
 
         // Send notification to patient

@@ -511,7 +511,7 @@ export default function AppointmentsPage() {
     if (appointmentType === 'Walk-in' && selectedDoctor && isWalkInAvailable) {
       setIsCalculatingEstimate(true);
       const allotment = clinicDetails?.walkInTokenAllotment || 3;
-      calculateWalkInDetails(selectedDoctor, allotment).then(details => {
+      calculateWalkInDetails(clinicId ?? selectedDoctor.clinicId, selectedDoctor.name, selectedDoctor, allotment).then(details => {
         setWalkInEstimate(details);
         setIsCalculatingEstimate(false);
       }).catch(err => {
@@ -787,7 +787,8 @@ export default function AppointmentsPage() {
             'W',
             {
               time: format(walkInEstimate.estimatedTime, "hh:mm a"),
-              slotIndex: walkInEstimate.slotIndex
+              slotIndex: walkInEstimate.slotIndex,
+              doctorId: selectedDoctor.id,
             }
           );
           
@@ -909,7 +910,9 @@ export default function AppointmentsPage() {
               'A',
               {
                 time: appointmentTimeStr,
-                slotIndex: slotIndex
+                slotIndex,
+                doctorId: selectedDoctor.id,
+                existingAppointmentId: isEditing && editingAppointment ? editingAppointment.id : undefined,
               }
             );
           } catch (error: any) {
@@ -918,6 +921,13 @@ export default function AppointmentsPage() {
                 variant: "destructive",
                 title: "Time Slot Already Booked",
                 description: "This time slot was just booked by someone else. Please select another time.",
+              });
+              return;
+            } else if (error.code === 'A_CAPACITY_REACHED') {
+              toast({
+                variant: "destructive",
+                title: "Advance Booking Full",
+                description: "Advanced bookings have reached the 85% limit for this doctor today. Please choose another day or add as a walk-in.",
               });
               return;
             }
@@ -1262,44 +1272,6 @@ export default function AppointmentsPage() {
         await updateDoc(appointmentRef, { status: 'Cancelled' });
         setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Cancelled' as const } : a));
         
-        // Reduce delays for subsequent appointments when slot becomes vacant
-        try {
-          const appointmentDoctor = doctors.find(d => d.name === appointment.doctor);
-          if (appointmentDoctor) {
-            const slotDuration = appointmentDoctor.averageConsultingTime || 15;
-            const { reduceDelayOnSlotVacancy } = await import('@/lib/delay-propagation-service');
-            await reduceDelayOnSlotVacancy(
-              appointment.clinicId,
-              appointment.doctor,
-              appointment.date,
-              appointment.id,
-              slotDuration
-            );
-          }
-        } catch (delayError) {
-          console.error('Error reducing delay on cancellation:', delayError);
-          // Don't fail the cancellation if delay reduction fails
-        }
-        
-        // Trigger automatic reassignment of arrived patients to empty slots
-        try {
-          const appointmentDoctor = doctors.find(d => d.name === appointment.doctor);
-          if (appointmentDoctor && appointment.sessionIndex !== undefined) {
-            const appointmentDate = parse(appointment.date, 'd MMMM yyyy', new Date());
-            const { triggerReassignmentOnSlotVacancy } = await import('@/lib/slot-reassignment-service');
-            await triggerReassignmentOnSlotVacancy(
-              appointment.clinicId,
-              appointment.doctor,
-              appointmentDate,
-              appointment.sessionIndex,
-              appointmentDoctor
-            );
-          }
-        } catch (reassignError) {
-          console.error('Error triggering reassignment:', reassignError);
-          // Don't fail the cancellation if reassignment fails
-        }
-        
         // Send cancellation notification
         try {
             const clinicDoc = await getFirestoreDoc(doc(db, 'clinics', appointment.clinicId));
@@ -1351,23 +1323,6 @@ export default function AppointmentsPage() {
             // If actual duration exceeds average time, calculate delay
             if (actualDuration > averageConsultingTime) {
               delayMinutes = actualDuration - averageConsultingTime;
-              
-              // Propagate delay to subsequent appointments
-              if (delayMinutes > 0) {
-                try {
-                  const { propagateDelay } = await import('@/lib/delay-propagation-service');
-                  await propagateDelay(
-                    appointment.clinicId,
-                    appointment.doctor,
-                    appointment.date,
-                    appointment.id,
-                    delayMinutes
-                  );
-                } catch (delayError) {
-                  console.error('Error propagating delay:', delayError);
-                  // Don't fail the completion if delay propagation fails
-                }
-              }
             }
           } catch (delayCalcError) {
             console.error('Error calculating delay:', delayCalcError);
@@ -1418,7 +1373,7 @@ export default function AppointmentsPage() {
         
         toast({ 
           title: "Appointment Marked as Completed",
-          description: delayMinutes > 0 ? `Delay of ${delayMinutes} minutes propagated to subsequent appointments.` : undefined
+          description: delayMinutes > 0 ? `Consultation exceeded the average by ${delayMinutes} minute${delayMinutes === 1 ? "" : "s"}.` : undefined
         });
       } catch (error) {
         console.error("Error completing appointment:", error);
@@ -2638,32 +2593,36 @@ export default function AppointmentsPage() {
                                                 <div key={index}>
                                                     <h4 className="text-sm font-semibold mb-2">{session.title}</h4>
                                                     <div className="grid grid-cols-2 gap-2">
-                                                        {session.slots.map(slot => (
-                                                            <Button
-                                                                key={slot.time}
-                                                                type="button"
-                                                                variant={form.getValues("time") === format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm') ? "default" : "outline"}
-                                                                onClick={() => {
-                                                                    const val = format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm');
-                                                                    form.setValue("time", val, { shouldValidate: true });
-                                                                    if (val) form.clearErrors("time");
-                                                                }}
-                                                                disabled={slot.status !== 'available'}
-                                                                className={cn("text-xs", {
-                                                                    "line-through bg-muted text-muted-foreground": slot.status === 'booked',
-                                                                    "line-through bg-destructive/20 text-destructive-foreground": slot.status === 'leave',
-                                                                })}
-                                                            >
-                                                                {slot.status === 'booked' && slot.tokenNumber ? slot.tokenNumber : (() => {
-                                                                    try {
-                                                                        const slotTime = parseDateFns(slot.time, "hh:mm a", selectedDate || new Date());
-                                                                        return format(subMinutes(slotTime, 15), 'hh:mm a');
-                                                                    } catch {
-                                                                        return slot.time;
-                                                                    }
-                                                                })()}
-                                                            </Button>
-                                                        ))}
+                                                        {session.slots.map(slot => {
+                                                            const slotMeta = slot as { status?: string; tokenNumber?: string };
+                                                            const slotStatus = slotMeta.status ?? 'available';
+                                                            return (
+                                                                <Button
+                                                                    key={slot.time}
+                                                                    type="button"
+                                                                    variant={form.getValues("time") === format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm') ? "default" : "outline"}
+                                                                    onClick={() => {
+                                                                        const val = format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm');
+                                                                        form.setValue("time", val, { shouldValidate: true });
+                                                                        if (val) form.clearErrors("time");
+                                                                    }}
+                                                                    disabled={slotStatus !== 'available'}
+                                                                    className={cn("text-xs", {
+                                                                        "line-through bg-muted text-muted-foreground": slotStatus === 'booked',
+                                                                        "line-through bg-destructive/20 text-destructive-foreground": slotStatus === 'leave',
+                                                                    })}
+                                                                >
+                                                                    {slotStatus === 'booked' && slotMeta.tokenNumber ? slotMeta.tokenNumber : (() => {
+                                                                        try {
+                                                                            const slotTime = parseDateFns(slot.time, "hh:mm a", selectedDate || new Date());
+                                                                            return format(subMinutes(slotTime, 15), 'hh:mm a');
+                                                                        } catch {
+                                                                            return slot.time;
+                                                                        }
+                                                                    })()}
+                                                                </Button>
+                                                            );
+                                                        })}
                                                     </div>
                                                 </div>
                                             ))

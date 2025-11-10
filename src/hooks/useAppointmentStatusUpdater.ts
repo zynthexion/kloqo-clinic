@@ -126,34 +126,7 @@ export function useAppointmentStatusUpdater() {
             }
           });
           
-          for (const apt of noShowAppointments) {
-            try {
-              // Get doctor info to get slot duration
-              const doctorsRef = collection(db, 'doctors');
-              const doctorQuery = query(
-                doctorsRef,
-                where('clinicId', '==', apt.clinicId),
-                where('name', '==', apt.doctor)
-              );
-              const doctorSnapshot = await getDocs(doctorQuery);
-              if (!doctorSnapshot.empty) {
-                const doctor = { id: doctorSnapshot.docs[0].id, ...doctorSnapshot.docs[0].data() } as Doctor;
-                const slotDuration = doctor.averageConsultingTime || 15;
-                
-                const { reduceDelayOnSlotVacancy } = await import('@/lib/delay-propagation-service');
-                await reduceDelayOnSlotVacancy(
-                  apt.clinicId,
-                  apt.doctor,
-                  apt.date,
-                  apt.id,
-                  slotDuration
-                );
-              }
-            } catch (delayError) {
-              console.error('Error reducing delay on no-show:', delayError);
-              // Don't fail the status update if delay reduction fails
-            }
-          }
+          // Delay propagation removed in simplified flow
         } catch (e) {
           console.error("Error in automatic status update batch:", e);
         }

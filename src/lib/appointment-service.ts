@@ -1,2804 +1,593 @@
-
-import { collection, query, where, getDocs, orderBy, runTransaction, doc, increment, serverTimestamp, updateDoc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
-  format,
-  parse,
-  addMinutes,
-  subMinutes,
-  isAfter,
-  isBefore,
-  startOfDay,
-  endOfDay,
-  differenceInMinutes,
-  isWithinInterval,
-} from 'date-fns';
-import type { Appointment, Doctor } from '@/lib/types';
+  collection,
+  query,
+  where,
+  getDocs,
+  getDoc,
+  doc,
+  runTransaction,
+  serverTimestamp,
+  type DocumentReference,
+  type Transaction,
+} from 'firebase/firestore';
+import { format, addMinutes, isAfter, isBefore } from 'date-fns';
+import type { Doctor, Appointment } from '@/lib/types';
 import { parseTime as parseTimeString } from '@/lib/utils';
 
+const ACTIVE_STATUSES = new Set(['Pending', 'Confirmed']);
+const MAX_RESERVATION_ATTEMPTS = 5;
+const RESERVATION_CONFLICT_CODE = 'slot-reservation-conflict';
 
-interface TimeSlot {
-  from: string;
-  to: string;
+function isReservationConflict(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return (
+    error.message === RESERVATION_CONFLICT_CODE ||
+    (typeof (error as { code?: string }).code === 'string' &&
+      (error as { code?: string }).code === RESERVATION_CONFLICT_CODE)
+  );
 }
 
-/**
- * Calculate total slots across all sessions for a doctor on a specific date
- * Returns the total number of slots (e.g., if slots are 0-23, returns 24)
- * W tokens will start from (totalSlots + 1)
- */
-async function calculateTotalSlotsForDay(
+interface DailySlot {
+  index: number;
+  time: Date;
+  sessionIndex: number;
+}
+
+interface LoadedDoctor {
+  doctor: Doctor;
+  slots: DailySlot[];
+}
+
+async function loadDoctorAndSlots(
+  clinicId: string,
+  doctorName: string,
+  date: Date,
+  doctorId?: string
+): Promise<LoadedDoctor> {
+  let doctor: Doctor | null = null;
+
+  if (doctorId) {
+    const doctorRef = doc(db, 'doctors', doctorId);
+    const doctorSnap = await getDoc(doctorRef);
+    if (doctorSnap.exists()) {
+      doctor = { id: doctorSnap.id, ...doctorSnap.data() } as Doctor;
+    }
+  }
+
+  if (!doctor) {
+    const doctorsRef = collection(db, 'doctors');
+    const doctorQuery = query(
+      doctorsRef,
+      where('clinicId', '==', clinicId),
+      where('name', '==', doctorName)
+    );
+    const doctorSnapshot = await getDocs(doctorQuery);
+
+    if (!doctorSnapshot.empty) {
+      const doctorDoc = doctorSnapshot.docs[0];
+      doctor = { id: doctorDoc.id, ...doctorDoc.data() } as Doctor;
+    }
+  }
+
+  if (!doctor) {
+    throw new Error('Doctor not found.');
+  }
+
+  if (!doctor.availabilitySlots || doctor.availabilitySlots.length === 0) {
+    throw new Error('Doctor availability information is missing.');
+  }
+
+  const dayOfWeek = format(date, 'EEEE');
+  const availabilityForDay = doctor.availabilitySlots.find(slot => slot.day === dayOfWeek);
+
+  if (!availabilityForDay || !availabilityForDay.timeSlots?.length) {
+    throw new Error('Doctor is not available on the selected date.');
+  }
+
+  const slotDuration = doctor.averageConsultingTime || 15;
+  const slots: DailySlot[] = [];
+  let slotIndex = 0;
+
+  availabilityForDay.timeSlots.forEach((session, sessionIndex) => {
+    let currentTime = parseTimeString(session.from, date);
+    const endTime = parseTimeString(session.to, date);
+
+    while (isBefore(currentTime, endTime)) {
+      slots.push({ index: slotIndex, time: new Date(currentTime), sessionIndex });
+      currentTime = addMinutes(currentTime, slotDuration);
+      slotIndex += 1;
+    }
+  });
+
+  if (slots.length === 0) {
+    throw new Error('No slots could be generated for the selected date.');
+  }
+
+  return { doctor, slots };
+}
+
+async function fetchDayAppointments(
   clinicId: string,
   doctorName: string,
   date: Date
-): Promise<number> {
-  // Get doctor details
-  const doctorsRef = collection(db, 'doctors');
-  const doctorsQuery = query(
-    doctorsRef,
+): Promise<Appointment[]> {
+  const dateStr = format(date, 'd MMMM yyyy');
+  const appointmentsRef = collection(db, 'appointments');
+  const appointmentsQuery = query(
+    appointmentsRef,
     where('clinicId', '==', clinicId),
-    where('name', '==', doctorName)
+    where('doctor', '==', doctorName),
+    where('date', '==', dateStr)
   );
-  const doctorsSnapshot = await getDocs(doctorsQuery);
-  
-  if (doctorsSnapshot.empty) {
-    return 0;
-  }
-  
-  const doctor = doctorsSnapshot.docs[0].data() as Doctor;
-  const dayOfWeek = format(date, 'EEEE');
-  const availabilityForDay = doctor.availabilitySlots?.find(s => s.day === dayOfWeek);
-  
-  if (!availabilityForDay || !availabilityForDay.timeSlots || availabilityForDay.timeSlots.length === 0) {
-    return 0;
-  }
-  
-  const consultationTime = doctor.averageConsultingTime || 15;
-  let totalSlots = 0;
-  
-  // Calculate slots for each session
-  for (let sessionIndex = 0; sessionIndex < availabilityForDay.timeSlots.length; sessionIndex++) {
-    const session = availabilityForDay.timeSlots[sessionIndex];
-    const sessionStart = parseTimeString(session.from, date);
-    const sessionEnd = parseTimeString(session.to, date);
-    
-    let currentTime = sessionStart;
-    let sessionSlotCount = 0;
-    while (isBefore(currentTime, sessionEnd)) {
-      sessionSlotCount++;
-      currentTime = addMinutes(currentTime, consultationTime);
-    }
-    
-    // Add session slots to total (slots are 0-indexed, so totalSlots is the count)
-    totalSlots += sessionSlotCount;
-  }
-  
-  return totalSlots;
+  const snapshot = await getDocs(appointmentsQuery);
+  return snapshot.docs.map(docRef => ({ id: docRef.id, ...docRef.data() } as Appointment));
 }
 
-/**
- * Generates the next sequential token number for a given doctor and date.
- * 'A' for Advanced/Online/Admin, 'W' for Walk-in.
- * 
- * For A tokens: Uses a shared counter (A001, A002, A003...)
- * For W tokens: Starts from (total slots count + 1) and uses a separate counter (W025, W026, W027...)
- * 
- * Uses atomic counter documents to ensure thread-safe token generation, preventing
- * race conditions when multiple users book concurrently.
- */
+function buildOccupiedSlotSet(appointments: Appointment[]): Set<number> {
+  const occupied = new Set<number>();
+
+  appointments.forEach(appointment => {
+    const slotIndex = appointment.slotIndex;
+    if (typeof slotIndex === 'number' && ACTIVE_STATUSES.has(appointment.status)) {
+      occupied.add(slotIndex);
+    }
+  });
+
+  return occupied;
+}
+
+function getSlotTime(slots: DailySlot[], slotIndex: number): Date {
+  const slot = slots[slotIndex];
+  if (!slot) {
+    throw new Error('Selected slot is outside the doctor availability.');
+  }
+  return slot.time;
+}
+
+type CandidateOptions = {
+  appointments?: Appointment[];
+  walkInSpacing?: number;
+};
+
+function buildCandidateSlots(
+  type: 'A' | 'W',
+  slots: DailySlot[],
+  now: Date,
+  occupied: Set<number>,
+  preferredSlotIndex?: number,
+  options: CandidateOptions = {}
+): number[] {
+  const oneHourFromNow = addMinutes(now, 60);
+  const candidates: number[] = [];
+
+  const addCandidate = (slotIndex: number) => {
+    if (
+      slotIndex >= 0 &&
+      slotIndex < slots.length &&
+      !occupied.has(slotIndex) &&
+      !candidates.includes(slotIndex)
+    ) {
+      candidates.push(slotIndex);
+    }
+  };
+
+  if (type === 'A') {
+    if (typeof preferredSlotIndex === 'number') {
+      const slotTime = getSlotTime(slots, preferredSlotIndex);
+      if (isAfter(slotTime, oneHourFromNow)) {
+        addCandidate(preferredSlotIndex);
+      }
+    }
+
+    slots.forEach(slot => {
+      if (isAfter(slot.time, oneHourFromNow)) {
+        addCandidate(slot.index);
+      }
+    });
+  } else {
+    const activeAppointments =
+      options.appointments
+        ?.filter(
+          appointment =>
+            typeof appointment.slotIndex === 'number' && ACTIVE_STATUSES.has(appointment.status),
+        )
+        .sort((a, b) => (a.slotIndex! < b.slotIndex! ? -1 : 1)) ?? [];
+
+    const walkInSpacing =
+      typeof options.walkInSpacing === 'number' && options.walkInSpacing > 0
+        ? options.walkInSpacing
+        : Number.POSITIVE_INFINITY;
+
+    const getATokens = (filterFn?: (appointment: Appointment) => boolean) =>
+      activeAppointments.filter(
+        appointment =>
+          appointment.bookedVia !== 'Walk-in' &&
+          (typeof appointment.slotIndex === 'number') &&
+          (!filterFn || filterFn(appointment)),
+      );
+
+    const getSlotIndexAfterNthA = (afterSlotIndex: number, nth: number): number => {
+      let count = 0;
+      for (const appointment of activeAppointments) {
+        if (appointment.bookedVia === 'Walk-in') continue;
+        const slotIndex = appointment.slotIndex!;
+        if (slotIndex > afterSlotIndex) {
+          count += 1;
+          if (count === nth) {
+            return slotIndex;
+          }
+        }
+      }
+      return -1;
+    };
+
+    slots.forEach(slot => {
+      if (!isBefore(slot.time, now) && !isAfter(slot.time, oneHourFromNow)) {
+        addCandidate(slot.index);
+      }
+    });
+
+    if (candidates.length > 0) {
+      return candidates;
+    }
+
+    const availableAfterHour = slots.filter(
+      slot => isAfter(slot.time, oneHourFromNow) && !occupied.has(slot.index),
+    );
+
+    if (availableAfterHour.length === 0) {
+      return candidates;
+    }
+
+    if (walkInSpacing === Number.POSITIVE_INFINITY || activeAppointments.length === 0) {
+      availableAfterHour.forEach(slot => addCandidate(slot.index));
+      return candidates;
+    }
+
+    const walkInAppointments = activeAppointments.filter(appointment => appointment.bookedVia === 'Walk-in');
+    const lastWalkInSlotIndex =
+      walkInAppointments.length > 0
+        ? Math.max(...walkInAppointments.map(appointment => appointment.slotIndex!))
+        : null;
+
+    let minSlotIndex = -1;
+
+    if (lastWalkInSlotIndex === null) {
+      const aTokens = getATokens();
+      if (aTokens.length > walkInSpacing) {
+        const slotAfterNth = getSlotIndexAfterNthA(-1, walkInSpacing);
+        minSlotIndex =
+          slotAfterNth >= 0 ? slotAfterNth : aTokens[aTokens.length - 1]?.slotIndex ?? -1;
+      } else {
+        minSlotIndex = aTokens[aTokens.length - 1]?.slotIndex ?? -1;
+      }
+    } else {
+      const aTokensAfterLastWalkIn = getATokens(appointment => appointment.slotIndex! > lastWalkInSlotIndex);
+      if (aTokensAfterLastWalkIn.length > walkInSpacing) {
+        const slotAfterNth = getSlotIndexAfterNthA(lastWalkInSlotIndex, walkInSpacing);
+        if (slotAfterNth >= 0) {
+          minSlotIndex = slotAfterNth;
+        } else {
+          const allATokens = getATokens();
+          minSlotIndex = allATokens[allATokens.length - 1]?.slotIndex ?? lastWalkInSlotIndex;
+        }
+      } else {
+        const allATokens = getATokens();
+        const lastASlotIndex = allATokens[allATokens.length - 1]?.slotIndex ?? lastWalkInSlotIndex;
+        minSlotIndex = Math.max(lastWalkInSlotIndex, lastASlotIndex);
+      }
+    }
+
+    const filteredAfterHour = availableAfterHour.filter(slot => slot.index > minSlotIndex);
+
+    if (filteredAfterHour.length === 0) {
+      availableAfterHour.forEach(slot => addCandidate(slot.index));
+    } else {
+      filteredAfterHour.forEach(slot => addCandidate(slot.index));
+    }
+  }
+
+  return candidates;
+}
+
+interface TokenCounterState {
+  nextNumber: number;
+  exists: boolean;
+}
+
+async function prepareNextTokenNumber(
+  transaction: Transaction,
+  counterRef: DocumentReference
+): Promise<TokenCounterState> {
+  const counterDoc = await transaction.get(counterRef);
+
+  if (counterDoc.exists()) {
+    const currentCount = counterDoc.data()?.count || 0;
+    return {
+      nextNumber: currentCount + 1,
+      exists: true,
+    };
+  }
+
+  return { nextNumber: 1, exists: false };
+}
+
+function commitNextTokenNumber(
+  transaction: Transaction,
+  counterRef: DocumentReference,
+  state: TokenCounterState
+): void {
+  if (state.exists) {
+    transaction.update(counterRef, {
+      count: state.nextNumber,
+      lastUpdated: serverTimestamp(),
+    });
+    return;
+  }
+
+  transaction.set(counterRef, {
+    count: state.nextNumber,
+    lastUpdated: serverTimestamp(),
+    createdAt: serverTimestamp(),
+  });
+}
+
+function buildReservationDocId(
+  clinicId: string,
+  doctorName: string,
+  dateStr: string,
+  slotIndex: number
+): string {
+  return `${clinicId}_${doctorName}_${dateStr}_slot_${slotIndex}`
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zA-Z0-9_]/g, '');
+}
+
 export async function generateNextToken(
   clinicId: string,
   doctorName: string,
   date: Date,
   type: 'A' | 'W'
 ): Promise<string> {
-  const dateStr = format(date, "d MMMM yyyy");
-  
-  // Use transaction with atomic increment to ensure concurrent requests get unique sequential numbers
-  return await runTransaction(db, async (transaction) => {
-    let nextTokenNum: number;
-    let counterRef: any;
-    
-    if (type === 'A') {
-      // A tokens: Use shared counter (A001, A002, A003...)
-      const counterDocId = `${clinicId}_${doctorName}_${dateStr}_A`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-      counterRef = doc(db, 'token-counters', counterDocId);
-      const counterDoc = await transaction.get(counterRef);
-      
-      if (counterDoc.exists()) {
-        // Counter exists, increment atomically
-        const currentCount = counterDoc.data().count || 0;
-        transaction.update(counterRef, {
-          count: increment(1),
-          lastUpdated: serverTimestamp()
-        });
-        nextTokenNum = currentCount + 1;
-      } else {
-        // Counter doesn't exist, initialize it and check existing A tokens
-        const appointmentsRef = collection(db, 'appointments');
-        const q = query(
-          appointmentsRef,
-          where('clinicId', '==', clinicId),
-          where('doctor', '==', doctorName),
-          where('date', '==', dateStr)
-        );
-        const querySnapshot = await getDocs(q);
-        const tokenNumbers = querySnapshot.docs.map(doc => {
-          const token = doc.data().tokenNumber;
-          if (typeof token === 'string' && token.startsWith('A')) {
-            return parseInt(token.substring(1), 10);
-          }
-          return 0;
-        }).filter(num => !isNaN(num) && num > 0);
-        
-        const maxExistingToken = tokenNumbers.length > 0 ? Math.max(...tokenNumbers) : 0;
-        nextTokenNum = maxExistingToken + 1;
-        
-        // Create counter starting from next number
-        transaction.set(counterRef, {
-          count: nextTokenNum,
-          clinicId,
-          doctorName,
-          date: dateStr,
-          type: 'A',
-          lastUpdated: serverTimestamp(),
-          createdAt: serverTimestamp()
-        });
-      }
-    } else {
-      // W tokens: Start from (total slots count + 1)
-      const totalSlots = await calculateTotalSlotsForDay(clinicId, doctorName, date);
-      const wTokenStartNumber = totalSlots + 1;
-      
-      const counterDocId = `${clinicId}_${doctorName}_${dateStr}_W`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-      counterRef = doc(db, 'token-counters', counterDocId);
-      const counterDoc = await transaction.get(counterRef);
-      
-      if (counterDoc.exists()) {
-        // Counter exists, increment atomically
-        const currentCount = counterDoc.data().count || 0;
-        transaction.update(counterRef, {
-          count: increment(1),
-          lastUpdated: serverTimestamp()
-        });
-        // W tokens start from (total slots + 1), so add the start number
-        nextTokenNum = wTokenStartNumber + currentCount;
-      } else {
-        // Counter doesn't exist, initialize it and check existing W tokens
-        const appointmentsRef = collection(db, 'appointments');
-        const q = query(
-          appointmentsRef,
-          where('clinicId', '==', clinicId),
-          where('doctor', '==', doctorName),
-          where('date', '==', dateStr)
-        );
-        const querySnapshot = await getDocs(q);
-        const wTokenNumbers = querySnapshot.docs.map(doc => {
-          const token = doc.data().tokenNumber;
-          if (typeof token === 'string' && token.startsWith('W')) {
-            return parseInt(token.substring(1), 10);
-          }
-          return 0;
-        }).filter(num => !isNaN(num) && num >= wTokenStartNumber);
-        
-        if (wTokenNumbers.length > 0) {
-          // Find the highest W token number and increment from there
-          const maxExistingWToken = Math.max(...wTokenNumbers);
-          nextTokenNum = maxExistingWToken + 1;
-          // Set counter to the offset from start number
-          transaction.set(counterRef, {
-            count: nextTokenNum - wTokenStartNumber + 1,
-            clinicId,
-            doctorName,
-            date: dateStr,
-            type: 'W',
-            startNumber: wTokenStartNumber,
-            lastUpdated: serverTimestamp(),
-            createdAt: serverTimestamp()
-          });
-        } else {
-          // No existing W tokens, start from wTokenStartNumber
-          nextTokenNum = wTokenStartNumber;
-          transaction.set(counterRef, {
-            count: 1,
-            clinicId,
-            doctorName,
-            date: dateStr,
-            type: 'W',
-            startNumber: wTokenStartNumber,
-            lastUpdated: serverTimestamp(),
-            createdAt: serverTimestamp()
-          });
-        }
-      }
-    }
-    
-    return `${type}${String(nextTokenNum).padStart(3, '0')}`;
+  const dateStr = format(date, 'd MMMM yyyy');
+  const counterDocId = `${clinicId}_${doctorName}_${dateStr}${type === 'W' ? '_W' : ''}`
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zA-Z0-9_]/g, '');
+  const counterRef = doc(db, 'token-counters', counterDocId);
+
+  const tokenNumber = await runTransaction(db, async transaction => {
+    const counterState = await prepareNextTokenNumber(transaction, counterRef);
+    commitNextTokenNumber(transaction, counterRef, counterState);
+    return `${type}${String(counterState.nextNumber).padStart(3, '0')}`;
   });
+
+  return tokenNumber;
 }
 
-
-/**
- * Generates the next token and reserves the slot in a single atomic transaction.
- * This prevents race conditions where multiple bookings get the same token.
- * 
- * For A tokens: Checks if slot is already occupied by another A token (exclusive reservation)
- * For W tokens: No slot collision check (can share slots with A tokens)
- */
 export async function generateNextTokenAndReserveSlot(
   clinicId: string,
   doctorName: string,
   date: Date,
   type: 'A' | 'W',
   appointmentData: {
-    time: string;
-    slotIndex: number;
-    [key: string]: any;
+    time?: string;
+    slotIndex?: number;
+    doctorId?: string;
+    [key: string]: unknown;
+    existingAppointmentId?: string;
   }
-): Promise<{ tokenNumber: string; numericToken: number; slotIndex: number }> {
-  const dateStr = format(date, "d MMMM yyyy");
-  
-  console.log('🎯 [DEBUG] generateNextTokenAndReserveSlot called:', {
-    type,
-    slotIndex: appointmentData.slotIndex,
-    time: appointmentData.time,
+): Promise<{ tokenNumber: string; numericToken: number; slotIndex: number; time: string; reservationId: string }>
+{
+  const dateStr = format(date, 'd MMMM yyyy');
+  const now = new Date();
+  const counterDocId = `${clinicId}_${doctorName}_${dateStr}${type === 'W' ? '_W' : ''}`
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zA-Z0-9_]/g, '');
+  const counterRef = doc(db, 'token-counters', counterDocId);
+  let walkInSpacing: number | undefined;
+
+  if (type === 'W') {
+    const clinicSnap = await getDoc(doc(db, 'clinics', clinicId));
+    const rawSpacing = clinicSnap.exists() ? Number(clinicSnap.data()?.walkInTokenAllotment ?? 0) : 0;
+    walkInSpacing = Number.isFinite(rawSpacing) && rawSpacing > 0 ? rawSpacing : undefined;
+  }
+
+  const { slots } = await loadDoctorAndSlots(
     clinicId,
     doctorName,
-    date: dateStr
-  });
-  
-  // Step 0: For A tokens, prioritize empty slots first, then check for imaginary W slots
-  if (type === 'A' && typeof appointmentData.slotIndex === 'number') {
-    // Get clinic details to find walkInTokenAllotment
-    const clinicRef = doc(db, 'clinics', clinicId);
-    const clinicSnapshot = await getDoc(clinicRef);
-    const clinicData = clinicSnapshot.data();
-    const walkInTokenAllotment = clinicData?.walkInTokenAllotment || 7;
-    
-    // Get all appointments for the day to calculate imaginary W slot positions
-    const appointmentsRef = collection(db, 'appointments');
-    const allAppointmentsQuery = query(
-      appointmentsRef,
-      where('clinicId', '==', clinicId),
-      where('doctor', '==', doctorName),
-      where('date', '==', dateStr)
-    );
-    const allAppointmentsSnapshot = await getDocs(allAppointmentsQuery);
-    const allAppointments = allAppointmentsSnapshot.docs.map(doc => doc.data() as Appointment);
-    
-    // Get booked slot indices (Pending or Confirmed appointments)
-    const bookedSlotIndices = new Set(
-      allAppointments
-        .filter(a => (a.status === 'Pending' || a.status === 'Confirmed'))
-        .map(a => a.slotIndex ?? -1)
-        .filter(idx => idx >= 0)
-    );
-    
-    // Priority 1: A tokens should always fill the earliest available empty slot first
-    // Find all empty slots (not booked and not imaginary W slots)
-    // We'll calculate imaginary W slots first to exclude them
-    const requestedSlotIndex = appointmentData.slotIndex;
-    
-    // First, calculate imaginary W slot positions to exclude them
-    // CRITICAL: Account for the new A token we're about to create (+1)
-    const confirmedAppointments = allAppointments
-      .filter(a => (a.status === 'Pending' || a.status === 'Confirmed'))
-      .filter(a => a.bookedVia === 'Advanced Booking' || a.bookedVia === 'Online' || a.bookedVia === 'Advanced')
-      .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
-    
-    const existingWTokens = allAppointments
-      .filter(a => a.bookedVia === 'Walk-in' && (a.status === 'Pending' || a.status === 'Confirmed'))
-      .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
-    
-    const totalAAppointmentsAfterThis = confirmedAppointments.length + 1; // +1 for the appointment we're creating
-    const imaginaryWSlotPositions = new Set<number>();
-    
-    console.log('🔍 [CLINIC APP STEP 0] Calculating imaginary slots (accounting for +1 new A token):', {
-      confirmedAppointmentsCount: confirmedAppointments.length,
-      totalAAppointmentsAfterThis,
-      walkInTokenAllotment,
-      existingWTokensCount: existingWTokens.length,
-      timestamp: new Date().toISOString()
-    });
-    
-    if (confirmedAppointments.length === 0) {
-      // No confirmed appointments, but we're creating one
-      // After creation: 1 A appointment
-      // If walkInTokenAllotment is 7, we need 7 A appointments before first imaginary W slot
-      // So no imaginary slots yet (1 < 7)
-      if (totalAAppointmentsAfterThis >= walkInTokenAllotment) {
-        imaginaryWSlotPositions.add(walkInTokenAllotment);
-        console.log('🔍 [CLINIC APP STEP 0] No confirmed appointments but will have enough after creation - imaginary W slot:', walkInTokenAllotment);
+    date,
+    typeof appointmentData.doctorId === 'string' ? appointmentData.doctorId : undefined
+  );
+  const totalSlots = slots.length;
+  const minimumWalkInReserve = totalSlots > 0 ? Math.ceil(totalSlots * 0.15) : 0;
+  const maximumAdvanceTokens = Math.max(totalSlots - minimumWalkInReserve, 0);
+
+  for (let attempt = 0; attempt < MAX_RESERVATION_ATTEMPTS; attempt += 1) {
+    const appointments = await fetchDayAppointments(clinicId, doctorName, date);
+    const excludeAppointmentId =
+      typeof appointmentData.existingAppointmentId === 'string' ? appointmentData.existingAppointmentId : undefined;
+    const effectiveAppointments = excludeAppointmentId
+      ? appointments.filter(appointment => appointment.id !== excludeAppointmentId)
+      : appointments;
+
+    if (type === 'A' && maximumAdvanceTokens >= 0) {
+      const activeAdvanceTokens = effectiveAppointments.filter(appointment => {
+        return (
+          appointment.bookedVia !== 'Walk-in' &&
+          typeof appointment.slotIndex === 'number' &&
+          ACTIVE_STATUSES.has(appointment.status)
+        );
+      }).length;
+
+      if (maximumAdvanceTokens === 0 || activeAdvanceTokens >= maximumAdvanceTokens) {
+        const capacityError = new Error('Advance booking capacity for the day has been reached.');
+        (capacityError as { code?: string }).code = 'A_CAPACITY_REACHED';
+        throw capacityError;
       }
-    } else if (existingWTokens.length === 0) {
-      // First W token: only add imaginary W slots if we have at least walkInTokenAllotment confirmed appointments AFTER creating this one
-      // CRITICAL: Account for +1 new appointment we're creating
-      if (totalAAppointmentsAfterThis >= walkInTokenAllotment) {
-        const sortedBySlotIndex = [...confirmedAppointments].sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
-        const targetSlotIndex = walkInTokenAllotment - 1;
-        const targetAppointment = sortedBySlotIndex.find(a => (a.slotIndex ?? Infinity) === targetSlotIndex) || sortedBySlotIndex[walkInTokenAllotment - 1];
-        const firstWSlot = targetAppointment ? (targetAppointment.slotIndex ?? 0) + 1 : walkInTokenAllotment;
-        imaginaryWSlotPositions.add(firstWSlot);
-        
-        let currentWSlot = firstWSlot;
-        const maxSlotIndex = Math.max(...confirmedAppointments.map(a => a.slotIndex ?? 0), 0);
-        while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
-          currentWSlot += walkInTokenAllotment;
-          imaginaryWSlotPositions.add(currentWSlot);
-        }
-      }
-      // If fewer than walkInTokenAllotment confirmed appointments, don't add any imaginary W slots
-      // All slots should be available for A tokens to fill
-    } else {
-      const lastWToken = existingWTokens[existingWTokens.length - 1];
-      const lastWTokenSlotIndex = lastWToken?.slotIndex ?? -1;
-      
-      const appointmentsAfterLastW = confirmedAppointments.filter(a => {
-        const aptSlotIndex = a.slotIndex ?? 0;
-        return aptSlotIndex > lastWTokenSlotIndex;
-      });
-      
-      if (appointmentsAfterLastW.length >= walkInTokenAllotment) {
-        const targetAppointment = appointmentsAfterLastW[walkInTokenAllotment - 1];
-        const nextWSlot = (targetAppointment.slotIndex ?? 0) + 1;
-        imaginaryWSlotPositions.add(nextWSlot);
-        
-        let currentWSlot = nextWSlot;
-        const maxSlotIndex = Math.max(...confirmedAppointments.map(a => a.slotIndex ?? 0), lastWTokenSlotIndex);
-        while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
-          currentWSlot += walkInTokenAllotment;
-          imaginaryWSlotPositions.add(currentWSlot);
-        }
-      }
-      // If fewer than walkInTokenAllotment appointments after last W, don't add any imaginary W slots yet
-      // All slots should be available for A tokens to fill
     }
-    
-    // Find the maximum slot index to search up to
-    const maxSlotIndex = Math.max(
-      ...allAppointments.map(a => a.slotIndex ?? -1).filter(idx => idx >= 0),
-      requestedSlotIndex,
-      0
-    );
-    
-    // Find all available empty slots (not booked, not imaginary W slots, not in past, not within 1 hour)
-    // CRITICAL: A tokens must follow these rules:
-    // 1. Cannot book slots in the past
-    // 2. Cannot book slots within 1 hour from now (reserved for W tokens)
-    // 3. Cannot book imaginary W slots
-    const now = new Date();
-    const oneHourFromNow = addMinutes(now, 60);
-    
-    // Get doctor info to generate time slots for past/1-hour checks
-    const doctorsRef = collection(db, 'doctors');
-    const doctorQuery = query(
-      doctorsRef,
-      where('clinicId', '==', clinicId),
-      where('name', '==', doctorName)
-    );
-    const doctorSnapshot = await getDocs(doctorQuery);
-    let allSlotsWithIndicesForStep0: Array<{ time: Date; sessionIndex: number }> = [];
-    
-    if (!doctorSnapshot.empty) {
-      const doctorData = { id: doctorSnapshot.docs[0].id, ...doctorSnapshot.docs[0].data() } as Doctor;
-      const dayOfWeek = format(date, 'EEEE');
-      const availabilityForDay = doctorData.availabilitySlots?.find(s => s.day === dayOfWeek);
-      const slotDuration = doctorData.averageConsultingTime || 15;
-      
-      if (availabilityForDay) {
-        // Generate all time slots for the day
-        availabilityForDay.timeSlots.forEach((session, sessionIndex) => {
-          const startTime = parseTimeString(session.from, date);
-          const endTime = parseTimeString(session.to, date);
-          let currentTime = startTime;
-          
-          while (isBefore(currentTime, endTime)) {
-            allSlotsWithIndicesForStep0.push({ time: currentTime, sessionIndex });
-            currentTime = addMinutes(currentTime, slotDuration);
+
+    const occupiedSlots = buildOccupiedSlotSet(appointments);
+    const candidates = buildCandidateSlots(type, slots, now, occupiedSlots, appointmentData.slotIndex, {
+      appointments: effectiveAppointments,
+      walkInSpacing,
+    });
+
+    if (candidates.length === 0) {
+      throw new Error('No available slots match the booking rules.');
+    }
+
+    try {
+      const result = await runTransaction(db, async transaction => {
+        const counterState = await prepareNextTokenNumber(transaction, counterRef);
+
+        let chosenSlotIndex = -1;
+        let reservationRef: DocumentReference | null = null;
+
+        for (const slotIndex of candidates) {
+          if (occupiedSlots.has(slotIndex)) {
+            continue;
           }
-        });
-      }
-    }
-    
-    const availableEmptySlots: number[] = [];
-    
-    console.log('🔍 [CLINIC APP STEP 0] Starting slot filtering:', {
-      requestedSlotIndex,
-      bookedSlots: Array.from(bookedSlotIndices).sort((a, b) => a - b),
-      imaginarySlots: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-      totalSlots: allSlotsWithIndicesForStep0.length,
-      currentTime: format(now, 'hh:mm a'),
-      oneHourFromNow: format(oneHourFromNow, 'hh:mm a')
-    });
-    
-    for (let i = 0; i <= Math.max(maxSlotIndex, requestedSlotIndex) + 10; i++) {
-      // Skip if slot is booked
-      if (bookedSlotIndices.has(i)) {
-        console.log('🚫 [CLINIC APP STEP 0] Skipping booked slot:', i);
-        continue;
-      }
-      
-      // Skip if slot is an imaginary W slot
-      if (imaginaryWSlotPositions.has(i)) {
-        console.log('🚫 [CLINIC APP STEP 0] Skipping imaginary W slot:', {
-          slotIndex: i,
-          imaginarySlots: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b)
-        });
-        continue;
-      }
-      
-      // CRITICAL: Skip if slot is in the past
-      if (allSlotsWithIndicesForStep0.length > i) {
-        const slotTime = allSlotsWithIndicesForStep0[i].time;
-        if (isBefore(slotTime, now)) {
-          console.log('🚫 [CLINIC APP STEP 0] Skipping past slot:', {
-            slotIndex: i,
-            slotTime: format(slotTime, 'hh:mm a'),
-            currentTime: format(now, 'hh:mm a')
-          });
-          continue;
-        }
-        
-        // CRITICAL: Skip if slot is within 1-hour window (reserved for W tokens)
-        if (isBefore(slotTime, oneHourFromNow)) {
-          console.log('🚫 [CLINIC APP STEP 0] Skipping slot within 1-hour window:', {
-            slotIndex: i,
-            slotTime: format(slotTime, 'hh:mm a'),
-            oneHourFromNow: format(oneHourFromNow, 'hh:mm a')
-          });
-          continue;
-        }
-      }
-      
-      // Slot is available (not booked, not imaginary, not past, not within 1 hour)
-      availableEmptySlots.push(i);
-      console.log('✅ [CLINIC APP STEP 0] Slot is available:', {
-        slotIndex: i,
-        slotTime: allSlotsWithIndicesForStep0.length > i ? format(allSlotsWithIndicesForStep0[i].time, 'hh:mm a') : 'N/A'
-      });
-    }
-    
-    // If there are available empty slots, use the earliest one
-    if (availableEmptySlots.length > 0) {
-      const earliestEmptySlot = Math.min(...availableEmptySlots);
-      console.log('✅ [CLINIC APP STEP 0] Found available empty slot, using earliest empty slot:', {
-        requestedSlotIndex,
-        earliestEmptySlot,
-        availableEmptySlots: availableEmptySlots.sort((a, b) => a - b).slice(0, 10), // Show first 10 for debugging
-        slotTime: allSlotsWithIndicesForStep0.length > earliestEmptySlot ? format(allSlotsWithIndicesForStep0[earliestEmptySlot].time, 'hh:mm a') : 'N/A',
-        isPast: false,
-        isWithinOneHour: false,
-        isImaginary: false,
-        isBooked: false
-      });
-      appointmentData.slotIndex = earliestEmptySlot;
-      // Update the time to match the selected slot
-      if (allSlotsWithIndicesForStep0.length > earliestEmptySlot) {
-        appointmentData.time = format(allSlotsWithIndicesForStep0[earliestEmptySlot].time, 'hh:mm a');
-      }
-    } else {
-      // No available slots found - this will be caught by the transaction validation
-      console.warn('⚠️ [CLINIC APP STEP 0] No available empty slots found (all are booked, imaginary, past, or within 1 hour):', {
-        requestedSlotIndex,
-        bookedSlots: Array.from(bookedSlotIndices).sort((a, b) => a - b),
-        imaginarySlots: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-        maxSlotIndex
-      });
-    }
-    
-    // Check if the selected slotIndex (after potentially being changed to earliest empty slot) matches ANY imaginary W slot position
-    // A tokens should NEVER be able to book imaginary W slots, regardless of 1-hour window
-    // Imaginary W slots are always reserved for W tokens
-    const isImaginaryWSlot = imaginaryWSlotPositions.has(appointmentData.slotIndex);
-    
-    console.log('🔍 [CLINIC APP STEP 0] Final Validation Check:', {
-      app: 'CLINIC_APP',
-      requestedSlotIndex: appointmentData.slotIndex,
-      selectedSlotIndex: appointmentData.slotIndex,
-      imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-      walkInTokenAllotment,
-      confirmedAppointmentsCount: confirmedAppointments.length,
-      existingWTokensCount: existingWTokens.length,
-      isImaginaryWSlot,
-      confirmedAppointments: confirmedAppointments.map(a => ({
-        tokenNumber: a.tokenNumber,
-        slotIndex: a.slotIndex,
-        status: a.status,
-        bookedVia: a.bookedVia
-      })),
-      bookedSlots: Array.from(bookedSlotIndices).sort((a, b) => a - b),
-      timestamp: new Date().toISOString()
-    });
-    
-    if (isImaginaryWSlot) {
-      // Find the next available slot that is not an imaginary W slot
-      const bookedSlotIndices = new Set(
-        allAppointments
-          .filter(a => (a.status === 'Pending' || a.status === 'Confirmed'))
-          .map(a => a.slotIndex ?? -1)
-          .filter(idx => idx >= 0)
-      );
-      
-      // Find the maximum slot index to know the upper bound
-      const maxSlotIndex = Math.max(
-        ...allAppointments.map(a => a.slotIndex ?? -1).filter(idx => idx >= 0),
-        appointmentData.slotIndex,
-        0
-      );
-      
-      // Start searching from the requested slot + 1
-      let nextAvailableSlot = appointmentData.slotIndex + 1;
-      let found = false;
-      
-      // Search up to maxSlotIndex + 20 to find an available slot
-      while (nextAvailableSlot <= maxSlotIndex + 20 && !found) {
-        // Check if this slot is:
-        // 1. Not an imaginary W slot
-        // 2. Not already booked
-        if (!imaginaryWSlotPositions.has(nextAvailableSlot) && !bookedSlotIndices.has(nextAvailableSlot)) {
-          found = true;
+
+          const reservationId = buildReservationDocId(clinicId, doctorName, dateStr, slotIndex);
+          const reservationDocRef = doc(db, 'slot-reservations', reservationId);
+          const reservationSnapshot = await transaction.get(reservationDocRef);
+
+          if (reservationSnapshot.exists()) {
+            continue;
+          }
+
+          chosenSlotIndex = slotIndex;
+          reservationRef = reservationDocRef;
           break;
         }
-        nextAvailableSlot++;
-      }
-      
-      if (found) {
-        console.log('✅ [DEBUG] Auto-selecting next available slot:', {
-          originalSlotIndex: appointmentData.slotIndex,
-          newSlotIndex: nextAvailableSlot,
-          reason: 'Original slot is reserved for walk-in tokens'
-        });
-        // Update the slotIndex to the next available slot
-        appointmentData.slotIndex = nextAvailableSlot;
-      } else {
-        console.error('❌ [ERROR] Could not find next available slot:', {
-          requestedSlotIndex: appointmentData.slotIndex,
-          imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-          bookedSlotIndices: Array.from(bookedSlotIndices).sort((a, b) => a - b),
-          maxSlotIndex,
-          walkInTokenAllotment
-        });
-        const error = new Error('SLOT_RESERVED_FOR_WALKIN') as Error & { code?: string };
-        error.code = 'SLOT_RESERVED_FOR_WALKIN';
-        error.message = `Slot ${appointmentData.slotIndex} is reserved for walk-in tokens. No available slots found.`;
-        throw error;
-      }
-    }
-    
-    console.log('✅ [DEBUG] Validation passed - slot is available for A token');
-  }
-  
-  // Step 0.1: REMOVED - Pre-transaction slot check is no longer needed
-  // Both A and W tokens now handle slot selection atomically inside the transaction
-  // This prevents race conditions and ensures consistent slot assignment
-  // Slot selection, reservation, and validation all happen atomically in Step 1.1 (A tokens) and Step 1.2 (W tokens)
-  
-  // Legacy pre-transaction slot conflict checking code has been removed (previously lines 445-793)
-  // All slot selection is now handled atomically inside transactions to prevent race conditions
 
-  // Step 0.5: For W tokens, appointmentsToShift will be calculated inside transaction after slot selection
-  // This ensures we use the atomically selected slot index
-  let appointmentsToShift: Array<{ id: string; slotIndex: number; currentTime: string; newTime: string; newCutOffTime: Date; newNoShowTime: Date; newDelay: number }> = [];
-  // Note: For W tokens, appointmentsToShift is now calculated inside the transaction after slot selection
+        if (chosenSlotIndex < 0 || !reservationRef) {
+          const conflictError = new Error(RESERVATION_CONFLICT_CODE);
+          (conflictError as { code?: string }).code = RESERVATION_CONFLICT_CODE;
+          throw conflictError;
+        }
 
-  // Step 0.6: Prepare counter references based on token type
-  let counterRef: any;
-  let initialNextTokenNum: number | null = null;
-  let needsCounterInitialization = false;
-  
-  if (type === 'A') {
-    // A tokens: Use shared counter (A001, A002, A003...)
-    const counterDocId = `${clinicId}_${doctorName}_${dateStr}_A`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-    counterRef = doc(db, 'token-counters', counterDocId);
-    const counterDocSnapshot = await getDoc(counterRef);
-    
-    if (!counterDocSnapshot.exists()) {
-      // Counter doesn't exist, fetch existing A tokens to calculate next token
-      needsCounterInitialization = true;
-      const appointmentsRef = collection(db, 'appointments');
-      const appointmentsQuery = query(
-        appointmentsRef,
-        where('clinicId', '==', clinicId),
-        where('doctor', '==', doctorName),
-        where('date', '==', dateStr)
-      );
-      const tokenSnapshot = await getDocs(appointmentsQuery);
-      const tokenNumbers = tokenSnapshot.docs.map(doc => {
-        const token = doc.data().tokenNumber;
-        if (typeof token === 'string' && token.startsWith('A')) {
-          return parseInt(token.substring(1), 10);
-        }
-        return 0;
-      }).filter(num => !isNaN(num) && num > 0);
-      
-      const maxExistingToken = tokenNumbers.length > 0 ? Math.max(...tokenNumbers) : 0;
-      initialNextTokenNum = maxExistingToken + 1;
-    }
-  } else {
-    // W tokens: Start from (total slots count + 1)
-    const totalSlots = await calculateTotalSlotsForDay(clinicId, doctorName, date);
-    const wTokenStartNumber = totalSlots + 1;
-    const counterDocId = `${clinicId}_${doctorName}_${dateStr}_W`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-    counterRef = doc(db, 'token-counters', counterDocId);
-    const counterDocSnapshot = await getDoc(counterRef);
-    
-    if (!counterDocSnapshot.exists()) {
-      // Counter doesn't exist, fetch existing W tokens to calculate next token
-      needsCounterInitialization = true;
-      const appointmentsRef = collection(db, 'appointments');
-      const appointmentsQuery = query(
-        appointmentsRef,
-        where('clinicId', '==', clinicId),
-        where('doctor', '==', doctorName),
-        where('date', '==', dateStr)
-      );
-      const tokenSnapshot = await getDocs(appointmentsQuery);
-      const wTokenNumbers = tokenSnapshot.docs.map(doc => {
-        const token = doc.data().tokenNumber;
-        if (typeof token === 'string' && token.startsWith('W')) {
-          return parseInt(token.substring(1), 10);
-        }
-        return 0;
-      }).filter(num => !isNaN(num) && num >= wTokenStartNumber);
-      
-      if (wTokenNumbers.length > 0) {
-        const maxExistingWToken = Math.max(...wTokenNumbers);
-        initialNextTokenNum = maxExistingWToken + 1;
-      } else {
-        initialNextTokenNum = wTokenStartNumber;
-      }
-    }
-  }
-  
-  // Store wTokenStartNumber for use in transaction (for W tokens)
-  // Calculate it once before the transaction
-  // NEW APPROACH: W tokens start from (totalSlots - imaginarySlotsCount + 1)
-  // Example: 18 total slots, 3 imaginary slots → W tokens start from 16 (18-3+1)
-  let wTokenStartNumber: number | null = null;
-  if (type === 'W') {
-    const totalSlots = await calculateTotalSlotsForDay(clinicId, doctorName, date);
-    const imaginaryWSlotsCount = Math.ceil(totalSlots * 0.15); // 15% rounded up
-    wTokenStartNumber = totalSlots - imaginaryWSlotsCount + 1;
-  }
+        const reservedSlot = slots[chosenSlotIndex];
+        const resolvedTimeString = format(reservedSlot.time, 'hh:mm a');
 
-  // Step 0.7: For A and W tokens, fetch all appointments for the day BEFORE transaction
-  // We'll verify slot availability and select slot atomically inside the transaction
-  let allAppointmentRefs: Array<{ id: string; ref: any; slotIndex?: number; status?: string }> = [];
-  let clinicData: any = null;
-  let requestedSlotIndex: number | undefined = undefined;
-  let allSlotsWithIndices: Array<{ time: Date; sessionIndex: number }> = [];
-  let oneHourFromNow: Date | null = null;
-  let doctorData: Doctor | null = null;
-  
-  // For both A and W tokens, we need clinic and doctor data
-  if ((type === 'A' || type === 'W') && typeof appointmentData.slotIndex === 'number') {
-    // Store the requested slot index (might be changed inside transaction)
-    requestedSlotIndex = appointmentData.slotIndex;
-    
-    // Get clinic details
-    const clinicRef = doc(db, 'clinics', clinicId);
-    const clinicSnapshot = await getDoc(clinicRef);
-    clinicData = clinicSnapshot.data();
-    
-    // Get doctor info to generate time slots for 1-hour cutoff check
-    const doctorsRef = collection(db, 'doctors');
-    const doctorQuery = query(
-      doctorsRef,
-      where('clinicId', '==', clinicId),
-      where('name', '==', doctorName)
-    );
-    const doctorSnapshot = await getDocs(doctorQuery);
-    
-    if (!doctorSnapshot.empty) {
-      doctorData = { id: doctorSnapshot.docs[0].id, ...doctorSnapshot.docs[0].data() } as Doctor;
-      const dayOfWeek = format(date, 'EEEE');
-      const availabilityForDay = doctorData.availabilitySlots?.find(s => s.day === dayOfWeek);
-      const slotDuration = doctorData.averageConsultingTime || 15;
-      
-      if (availabilityForDay) {
-        // Generate all time slots for the day
-        availabilityForDay.timeSlots.forEach((session, sessionIndex) => {
-          const startTime = parseTimeString(session.from, date);
-          const endTime = parseTimeString(session.to, date);
-          let currentTime = startTime;
-          
-          while (isBefore(currentTime, endTime)) {
-            allSlotsWithIndices.push({ time: currentTime, sessionIndex });
-            currentTime = addMinutes(currentTime, slotDuration);
-          }
-        });
-      }
-      
-      // Calculate 1-hour cutoff time
-      const now = new Date();
-      oneHourFromNow = addMinutes(now, 60);
-    }
-    
-    // Fetch all appointments for the day (for both A and W tokens)
-    const appointmentsRef = collection(db, 'appointments');
-    const allAppointmentsQuery = query(
-      appointmentsRef,
-      where('clinicId', '==', clinicId),
-      where('doctor', '==', doctorName),
-      where('date', '==', dateStr)
-    );
-    
-    const allAppointmentsSnapshot = await getDocs(allAppointmentsQuery);
-    allAppointmentRefs = allAppointmentsSnapshot.docs.map(docSnap => {
-      const data = docSnap.data();
-      return {
-        id: docSnap.id,
-        ref: doc(db, 'appointments', docSnap.id),
-        slotIndex: data.slotIndex,
-        status: data.status
-      };
-    });
-  }
-
-  // CRITICAL: Final conflict check right before transaction - do a fresh query to catch concurrent bookings
-  // This prevents race conditions where Step 0 selected a slot that was just booked by another concurrent request
-  if (type === 'A' && typeof appointmentData.slotIndex === 'number') {
-    const appointmentsRefForCheck = collection(db, 'appointments');
-    const finalConflictCheckQuery = query(
-      appointmentsRefForCheck,
-      where('clinicId', '==', clinicId),
-      where('doctor', '==', doctorName),
-      where('date', '==', dateStr),
-      where('slotIndex', '==', appointmentData.slotIndex),
-      where('status', 'in', ['Pending', 'Confirmed'])
-    );
-    const finalConflictSnapshot = await getDocs(finalConflictCheckQuery);
-    
-    if (!finalConflictSnapshot.empty) {
-      console.warn('⚠️ [CLINIC APP] Step 0 selected slot is now booked (concurrent booking detected), will let transaction handle slot selection:', {
-        slotIndex: appointmentData.slotIndex,
-        conflictingAppointments: finalConflictSnapshot.docs.map(doc => ({
-          id: doc.id,
-          tokenNumber: doc.data().tokenNumber,
-          slotIndex: doc.data().slotIndex,
-          status: doc.data().status
-        }))
-      });
-      // Reset to requested slot index - let transaction find the next available slot
-      appointmentData.slotIndex = typeof requestedSlotIndex === 'number' ? requestedSlotIndex : -1;
-    } else {
-      console.log('✅ [CLINIC APP] Final conflict check passed - slot is still available:', {
-        slotIndex: appointmentData.slotIndex
-      });
-    }
-  }
-
-  const transactionStartTime = new Date();
-  console.log('🚀 [CLINIC APP] ========== TRANSACTION START ==========', {
-    type,
-    requestedSlotIndex: appointmentData.slotIndex,
-    time: appointmentData.time,
-    clinicId,
-    doctorName,
-    date: dateStr,
-    transactionStartTime: transactionStartTime.toISOString(),
-    timestamp: Date.now()
-  });
-  
-  return await runTransaction(db, async (transaction) => {
-    const transactionAttemptTime = new Date();
-    console.log('🔄 [CLINIC APP] ========== TRANSACTION ATTEMPT ==========', {
-      type,
-      requestedSlotIndex: appointmentData.slotIndex,
-      timeSinceStart: transactionAttemptTime.getTime() - transactionStartTime.getTime(),
-      transactionAttemptTime: transactionAttemptTime.toISOString(),
-      timestamp: Date.now()
-    });
-    
-    // Step 1: Read all documents first (all reads before writes)
-    
-    // Read counter document
-    const counterDoc = await transaction.get(counterRef);
-    
-    // Declare variables for slot selection (used for A tokens)
-    let selectedSlotIndex = -1;
-    let selectedSlotReservationRef: any = null;
-    
-    // Declare verifiedAppointments at transaction scope so it can be used in writes phase
-    let verifiedAppointments: Array<{ slotIndex?: number; bookedVia?: string; status?: string }> = [];
-    
-    // Declare imaginaryWSlotPositions at transaction scope so it can be used in Step 2 (writes phase)
-    let imaginaryWSlotPositions: Set<number> = new Set<number>();
-    
-    // For A tokens, atomically select the earliest available slot inside transaction
-    if (type === 'A' && typeof requestedSlotIndex === 'number') {
-      // First, verify all appointments inside transaction to get current state
-      const verifiedBookedSlots = new Set<number>();
-      verifiedAppointments = [];
-      
-      for (const aptRef of allAppointmentRefs) {
-        const aptDoc = await transaction.get(aptRef.ref);
-        if (aptDoc.exists()) {
-          const data = aptDoc.data();
-          if ((data.status === 'Pending' || data.status === 'Confirmed')) {
-            const slotIdx = data.slotIndex ?? -1;
-            if (slotIdx >= 0) {
-              verifiedBookedSlots.add(slotIdx);
-            }
-            verifiedAppointments.push({
-              slotIndex: data.slotIndex,
-              bookedVia: data.bookedVia,
-              status: data.status
-            });
-          }
-        }
-      }
-      
-      // Calculate imaginary W slot positions
-      // CRITICAL: Account for the fact that we're about to create a new A token
-      // If there are N confirmed A appointments, after we create this one, there will be N+1
-      // The first imaginary W slot is after walkInTokenAllotment confirmed A appointments
-      const walkInTokenAllotment = clinicData?.walkInTokenAllotment || 7;
-      const confirmedAppointments = verifiedAppointments
-        .filter(a => a.status === 'Pending' || a.status === 'Confirmed')
-        .filter(a => a.bookedVia === 'Advanced Booking' || a.bookedVia === 'Online' || a.bookedVia === 'Advanced')
-        .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
-      
-      const existingWTokens = verifiedAppointments
-        .filter(a => a.bookedVia === 'Walk-in' && (a.status === 'Pending' || a.status === 'Confirmed'))
-        .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
-      
-      // CRITICAL FIX: Account for the new A token we're about to create
-      // If we have 6 confirmed A appointments and we're creating the 7th,
-      // after creation there will be 7, so the first imaginary W slot is at position 7
-      // But we need to calculate this BEFORE we know which slot we'll select
-      // So we use: if confirmedAppointments.length + 1 >= walkInTokenAllotment, then slot at position walkInTokenAllotment is imaginary
-      const totalAAppointmentsAfterThis = confirmedAppointments.length + 1; // +1 for the appointment we're creating
-      
-      // Use the transaction-scoped variable (already declared above)
-      imaginaryWSlotPositions = new Set<number>();
-      console.log('🔍 [DEBUG] Calculating imaginary W slots (accounting for new A token):', {
-        confirmedAppointmentsCount: confirmedAppointments.length,
-        totalAAppointmentsAfterThis,
-        existingWTokensCount: existingWTokens.length,
-        walkInTokenAllotment,
-        confirmedAppointments: confirmedAppointments.map(a => ({ slotIndex: a.slotIndex, bookedVia: a.bookedVia })),
-        existingWTokens: existingWTokens.map(a => ({ slotIndex: a.slotIndex, bookedVia: a.bookedVia }))
-      });
-      
-      if (confirmedAppointments.length === 0) {
-        // No existing A appointments, but we're creating one
-        // After creation: 1 A appointment
-        // If walkInTokenAllotment is 7, we need 7 A appointments before first imaginary W slot
-        // So no imaginary slots yet
-        // But wait, if walkInTokenAllotment is 7 and we have 0, after creating 1, we still have less than 7
-        // So no imaginary slots
-        if (totalAAppointmentsAfterThis >= walkInTokenAllotment) {
-          // After creating this appointment, we'll have exactly walkInTokenAllotment A appointments
-          // So the first imaginary W slot is at position walkInTokenAllotment
-          imaginaryWSlotPositions.add(walkInTokenAllotment);
-        }
-      } else if (existingWTokens.length === 0) {
-        console.log('🔍 [DEBUG] Branch: existingWTokens.length === 0', {
-          totalAAppointmentsAfterThis,
-          walkInTokenAllotment,
-          conditionMet: totalAAppointmentsAfterThis >= walkInTokenAllotment
-        });
-        
-        if (totalAAppointmentsAfterThis >= walkInTokenAllotment) {
-          // After creating this appointment, we'll have at least walkInTokenAllotment A appointments
-          // The first imaginary W slot is after the walkInTokenAllotment-th A appointment
-          // Since we're creating the (confirmedAppointments.length + 1)-th appointment,
-          // if confirmedAppointments.length + 1 == walkInTokenAllotment, then slot at position walkInTokenAllotment is imaginary
-          // If confirmedAppointments.length + 1 > walkInTokenAllotment, we need to find the slot after the walkInTokenAllotment-th appointment
-          
-          const sortedBySlotIndex = [...confirmedAppointments].sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
-          
-          console.log('🔍 [DEBUG] Checking if totalAAppointmentsAfterThis === walkInTokenAllotment', {
-            totalAAppointmentsAfterThis,
-            walkInTokenAllotment,
-            areEqual: totalAAppointmentsAfterThis === walkInTokenAllotment
-          });
-          
-          if (totalAAppointmentsAfterThis === walkInTokenAllotment) {
-            // After creating this appointment, we'll have exactly walkInTokenAllotment A appointments
-            // The first imaginary W slot is at slot index walkInTokenAllotment (e.g., slot 7 for walkInTokenAllotment 7)
-            // CRITICAL: Mark slot walkInTokenAllotment as imaginary to prevent A tokens from using it
-            // This ensures that when we have 6 appointments and create the 7th, slot 7 is reserved for W tokens
-            console.log('🚨 [CRITICAL] ADDING IMAGINARY SLOT:', walkInTokenAllotment);
-            imaginaryWSlotPositions.add(walkInTokenAllotment);
-            
-            console.log('✅ [DEBUG] Marking slot as imaginary (will have exactly walkInTokenAllotment A appointments):', {
-              walkInTokenAllotment,
-              totalAAppointmentsAfterThis,
-              imaginarySlot: walkInTokenAllotment,
-              existingAppointments: sortedBySlotIndex.map(a => a.slotIndex),
-              imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions)
-            });
-          } else if (totalAAppointmentsAfterThis > walkInTokenAllotment) {
-            console.log('🔍 [DEBUG] totalAAppointmentsAfterThis > walkInTokenAllotment', {
-              totalAAppointmentsAfterThis,
-              walkInTokenAllotment
-            });
-            // We'll have more than walkInTokenAllotment appointments after creation
-            // Find the appointment at position (walkInTokenAllotment - 1) in the sorted list
-            const targetAppointment = sortedBySlotIndex[walkInTokenAllotment - 1];
-            // First W slot is right after this appointment
-            const firstWSlot = (targetAppointment?.slotIndex ?? 0) + 1;
-            imaginaryWSlotPositions.add(firstWSlot);
-            
-            // Calculate additional imaginary W slots at intervals
-            const maxSlotIndex = Math.max(...confirmedAppointments.map(a => a.slotIndex ?? 0), 0);
-            let currentWSlot = firstWSlot;
-            while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
-              currentWSlot += walkInTokenAllotment;
-              imaginaryWSlotPositions.add(currentWSlot);
-            }
-          }
-        }
-      } else {
-        const lastWToken = existingWTokens[existingWTokens.length - 1];
-        const lastWTokenSlotIndex = lastWToken?.slotIndex ?? -1;
-        
-        const appointmentsAfterLastW = confirmedAppointments.filter(a => {
-          const aptSlotIndex = a.slotIndex ?? 0;
-          return aptSlotIndex > lastWTokenSlotIndex;
-        });
-        
-        // Account for the new A token we're creating
-        // If it will be after the last W token, it counts toward appointmentsAfterLastW
-        // But we don't know its slot index yet, so we need to be conservative
-        // For now, assume it might be after the last W token
-        const appointmentsAfterLastWAfterCreation = appointmentsAfterLastW.length + 1; // +1 for the new appointment
-        
-        if (appointmentsAfterLastWAfterCreation >= walkInTokenAllotment) {
-          if (appointmentsAfterLastW.length < walkInTokenAllotment) {
-            // After creating this appointment, we'll have exactly walkInTokenAllotment appointments after last W
-            // So the first imaginary W slot is right after the last appointment after last W
-            // But we don't know which slot that will be, so we need to consider all slots after the max slot
-            const maxSlotAfterLastW = appointmentsAfterLastW.length > 0 
-              ? Math.max(...appointmentsAfterLastW.map(a => a.slotIndex ?? 0))
-              : lastWTokenSlotIndex;
-            // The new appointment will be at some slot after maxSlotAfterLastW
-            // The first imaginary W slot is at maxSlotAfterLastW + 1 (or later, depending on where we place the new appointment)
-            // To be safe, we mark maxSlotAfterLastW + 1 as potentially imaginary
-            // Actually, we can't know for sure, so we need to recalculate after slot selection
-            // For now, use the same logic as before but account for +1 appointment
-            const targetAppointment = appointmentsAfterLastW[walkInTokenAllotment - 2]; // -2 because we're adding 1
-            if (targetAppointment) {
-              const nextWSlot = (targetAppointment.slotIndex ?? 0) + 1;
-              imaginaryWSlotPositions.add(nextWSlot);
-            } else {
-              // Fallback: if we don't have enough appointments yet, use slot after last W + walkInTokenAllotment
-            imaginaryWSlotPositions.add(lastWTokenSlotIndex + walkInTokenAllotment);
-            }
-          } else {
-            // We already have enough appointments after last W
-            const targetAppointment = appointmentsAfterLastW[walkInTokenAllotment - 1];
-            const nextWSlot = (targetAppointment.slotIndex ?? 0) + 1;
-            imaginaryWSlotPositions.add(nextWSlot);
-          }
-          
-          // Calculate additional imaginary W slots at intervals
-          const maxSlotIndex = Math.max(...confirmedAppointments.map(a => a.slotIndex ?? 0), lastWTokenSlotIndex);
-          const firstWSlot = Array.from(imaginaryWSlotPositions)[0] || (lastWTokenSlotIndex + 1);
-          let currentWSlot = firstWSlot;
-            while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
-              currentWSlot += walkInTokenAllotment;
-              imaginaryWSlotPositions.add(currentWSlot);
-            }
-        }
-      }
-      
-      // CRITICAL: Final verification that imaginary slots are set correctly
-      const finalImaginarySlots = Array.from(imaginaryWSlotPositions).sort((a, b) => a - b);
-      console.log('🔍 [DEBUG] Calculated imaginary W slots (accounting for new A token):', {
-        imaginaryWSlotPositions: finalImaginarySlots,
-        walkInTokenAllotment,
-        totalAAppointmentsAfterThis,
-        confirmedAppointmentsCount: confirmedAppointments.length,
-        existingWTokensCount: existingWTokens.length,
-        confirmedAppointmentSlots: confirmedAppointments.map(a => a.slotIndex).sort((a, b) => (a ?? 0) - (b ?? 0)),
-        shouldHaveSlot7: totalAAppointmentsAfterThis === walkInTokenAllotment && walkInTokenAllotment === 7,
-        hasSlot7: finalImaginarySlots.includes(7),
-        conditionMet: totalAAppointmentsAfterThis >= walkInTokenAllotment,
-        branch: confirmedAppointments.length === 0 ? 'no-appointments' : existingWTokens.length === 0 ? 'no-w-tokens' : 'has-w-tokens'
-      });
-      
-      // CRITICAL DEBUG: Log the exact calculation path taken
-      if (confirmedAppointments.length === 0) {
-        console.log('🔍 [CLINIC APP DEBUG] Calculation path: confirmedAppointments.length === 0', {
-          totalAAppointmentsAfterThis,
-          walkInTokenAllotment,
-          willAddSlot: totalAAppointmentsAfterThis >= walkInTokenAllotment,
-          slotToAdd: totalAAppointmentsAfterThis >= walkInTokenAllotment ? walkInTokenAllotment : 'none'
-        });
-      } else if (existingWTokens.length === 0) {
-        console.log('🔍 [CLINIC APP DEBUG] Calculation path: existingWTokens.length === 0', {
-          totalAAppointmentsAfterThis,
-          walkInTokenAllotment,
-          conditionMet: totalAAppointmentsAfterThis >= walkInTokenAllotment,
-          sortedAppointments: confirmedAppointments.map(a => a.slotIndex).sort((a, b) => (a ?? 0) - (b ?? 0)),
-          targetAppointmentIndex: totalAAppointmentsAfterThis > walkInTokenAllotment ? walkInTokenAllotment - 1 : 'N/A',
-          targetAppointmentSlot: totalAAppointmentsAfterThis > walkInTokenAllotment 
-            ? confirmedAppointments.sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity))[walkInTokenAllotment - 1]?.slotIndex 
-            : 'N/A'
-        });
-      } else {
-        console.log('🔍 [CLINIC APP DEBUG] Calculation path: has existing W tokens', {
-          lastWTokenSlot: existingWTokens[existingWTokens.length - 1]?.slotIndex,
-          appointmentsAfterLastW: confirmedAppointments.filter(a => (a.slotIndex ?? 0) > (existingWTokens[existingWTokens.length - 1]?.slotIndex ?? -1)).map(a => a.slotIndex)
-        });
-      }
-      
-      // CRITICAL: If we should have slot walkInTokenAllotment as imaginary but don't, this is a bug!
-      // When totalAAppointmentsAfterThis === walkInTokenAllotment, slot walkInTokenAllotment MUST be imaginary
-      if (totalAAppointmentsAfterThis === walkInTokenAllotment && existingWTokens.length === 0 && !finalImaginarySlots.includes(walkInTokenAllotment)) {
-        console.error('🚨 [CRITICAL BUG] Slot walkInTokenAllotment should be imaginary but is not in the set!', {
-          totalAAppointmentsAfterThis,
-          walkInTokenAllotment,
-          expectedImaginarySlot: walkInTokenAllotment,
-          imaginaryWSlotPositions: finalImaginarySlots,
-          confirmedAppointmentsCount: confirmedAppointments.length
-        });
-        // Force add it as a safety measure
-        imaginaryWSlotPositions.add(walkInTokenAllotment);
-        console.log('🔧 [FIX] Force-added slot', walkInTokenAllotment, 'to imaginary slots');
-      }
-      
-      // Find the maximum slot index to search up to
-      const maxSlotIndex = Math.max(
-        ...verifiedAppointments.map(a => a.slotIndex ?? -1).filter(idx => idx >= 0),
-        requestedSlotIndex,
-        0
-      );
-      
-      // STEP 1: ALL READS FIRST - Firestore transactions require all reads before all writes
-      
-      // Step 1.1: Read slot reservations inside transaction to prevent concurrent conflicts
-      // We'll read reservations as we check slots, but ensure all reads happen before writes
-      const reservedSlotIndices = new Set<number>();
-      const slotReservationRefs = new Map<number, any>();
-      
-      // Helper function to read a slot reservation (caches results)
-      const readSlotReservation = async (slotIdx: number): Promise<{ reserved: boolean; reservationRef?: any }> => {
-        const readStartTime = Date.now();
-        
-        // If we've already read this slot, return cached result
-        if (reservedSlotIndices.has(slotIdx)) {
-          console.log('📋 [CLINIC APP] Reservation read (cached - already reserved):', {
-            slotIdx,
-            timestamp: new Date().toISOString()
-          });
-          return { reserved: true };
-        }
-        if (slotReservationRefs.has(slotIdx)) {
-          console.log('📋 [CLINIC APP] Reservation read (cached - available):', {
-            slotIdx,
-            timestamp: new Date().toISOString()
-          });
-          return { reserved: false, reservationRef: slotReservationRefs.get(slotIdx) };
-        }
-        
-        // Read the reservation document inside transaction
-        const slotReservationId = `${clinicId}_${doctorName}_${dateStr}_slot_${slotIdx}`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-        const slotReservationRef = doc(db, 'slot-reservations', slotReservationId);
-        
-        console.log('📖 [CLINIC APP] Reading reservation document:', {
-          slotIdx,
-          reservationId: slotReservationId,
-          reservationPath: slotReservationRef.path,
-          timestamp: new Date().toISOString(),
-          readStartTime
-        });
-        
-        const reservationDoc = await transaction.get(slotReservationRef);
-        const readEndTime = Date.now();
-        
-        if (reservationDoc.exists()) {
-          const reservationData = reservationDoc.data();
-          console.error('🚫 [CLINIC APP] Reservation EXISTS (slot is reserved):', {
-            slotIdx,
-            reservationId: slotReservationId,
-            reservationData: {
-              clinicId: reservationData?.clinicId,
-              doctorName: reservationData?.doctorName,
-              date: reservationData?.date,
-              slotIndex: reservationData?.slotIndex,
-              reservedAt: reservationData?.reservedAt,
-              reservedBy: reservationData?.reservedBy
-            },
-            readDuration: readEndTime - readStartTime,
-            timestamp: new Date().toISOString()
-          });
-          reservedSlotIndices.add(slotIdx);
-          return { reserved: true };
-        } else {
-          console.log('✅ [CLINIC APP] Reservation does NOT exist (slot is available):', {
-            slotIdx,
-            reservationId: slotReservationId,
-            readDuration: readEndTime - readStartTime,
-            timestamp: new Date().toISOString()
-          });
-          slotReservationRefs.set(slotIdx, slotReservationRef);
-          return { reserved: false, reservationRef: slotReservationRef };
-        }
-      };
-      
-      // Helper function to check if a slot is available for A tokens (reads reservation inside transaction)
-      // CRITICAL: A tokens CANNOT use imaginary W slots - these are reserved exclusively for W tokens
-      const isSlotAvailable = async (slotIdx: number): Promise<{ available: boolean; reservationRef?: any }> => {
-        // STEP 1: CRITICAL - Check if slot is an imaginary W slot FIRST (A tokens must skip these)
-        // Imaginary slots are specifically reserved for W tokens and A tokens can NEVER use them
-        console.log('🔍 [CLINIC APP DEBUG] Checking if slot is imaginary:', {
-          slotIdx,
-          imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-          isImaginary: imaginaryWSlotPositions.has(slotIdx),
-          timestamp: new Date().toISOString()
-        });
-        if (imaginaryWSlotPositions.has(slotIdx)) {
-          console.error('🚫 [CLINIC APP] ❌ IMAGINARY SLOT DETECTED - A tokens cannot use this slot:', {
-            slotIdx,
-            imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-            reason: 'Imaginary slots are reserved exclusively for W tokens',
-            timestamp: new Date().toISOString()
-          });
-          return { available: false };
-        }
-        console.log('✅ [CLINIC APP DEBUG] Slot is NOT imaginary, continuing checks:', {
-          slotIdx,
-          timestamp: new Date().toISOString()
-        });
-        
-        // STEP 2: Check if slot is already booked by an existing appointment
-        if (verifiedBookedSlots.has(slotIdx)) {
-          console.log('🚫 [A TOKEN] Slot is already booked by an existing appointment:', slotIdx);
-          return { available: false };
-        }
-        
-        // STEP 3: Check 1-hour cutoff: A tokens can only book slots that are at least 1 hour in the future
-        // Slots within 1 hour are reserved for W tokens only
-        // CRITICAL: Recalculate oneHourFromNow inside transaction to ensure it's current
-        if (allSlotsWithIndices.length > slotIdx) {
-          const now = new Date();
-          const oneHourFromNowCurrent = addMinutes(now, 60);
-          const slotTime = allSlotsWithIndices[slotIdx].time;
-          // Skip slots that are within 1 hour from now (these are reserved for W tokens)
-          // Using !isAfter - covers both past slots and slots within 1 hour
-          if (!isAfter(slotTime, oneHourFromNowCurrent)) {
-            console.log('🚫 [CLINIC APP] A TOKEN rejected - slot is past or within 1-hour window:', {
-              slotIdx,
-              slotTime: format(slotTime, 'hh:mm a'),
-              currentTime: format(now, 'hh:mm a'),
-              oneHourFromNow: format(oneHourFromNowCurrent, 'hh:mm a'),
-              isPast: isBefore(slotTime, now),
-              isWithinOneHour: !isAfter(slotTime, oneHourFromNowCurrent)
-            });
-            return { available: false }; // Slot is in past or within 1 hour window
-          }
-        }
-        
-        // STEP 4: Check if slot is reserved by another concurrent booking (reads reservation inside transaction)
-        // This prevents concurrent A token bookings from selecting the same slot
-        const reservationCheck = await readSlotReservation(slotIdx);
-        if (reservationCheck.reserved) {
-          console.log('🚫 [A TOKEN] Slot is reserved by another concurrent booking:', {
-            slotIdx,
-            reason: 'Concurrent booking conflict detected'
-          });
-          return { available: false };
-        }
-        
-        // Slot is available for A token booking
-        console.log('✅ [A TOKEN] Slot is available:', {
-          slotIdx,
-          isImaginary: false,
-          isBooked: false,
-          isReserved: false,
-          reservationRef: reservationCheck.reservationRef ? 'exists' : 'null'
-        });
-        return { available: true, reservationRef: reservationCheck.reservationRef };
-      };
-      
-      // First, try the requested slotIndex (if provided)
-      if (typeof requestedSlotIndex === 'number' && requestedSlotIndex >= 0) {
-        // CRITICAL: Recalculate current time and 1-hour cutoff INSIDE transaction to ensure accuracy
-        const now = new Date();
-        const oneHourFromNowForCheck = addMinutes(now, 60);
-        
-        // CRITICAL: Check if requested slot is past, within 1-hour window, or imaginary BEFORE checking availability
-        let skipRequestedSlot = false;
-        
-        // Check if slot is in the past or within 1-hour window
-        if (allSlotsWithIndices.length > requestedSlotIndex) {
-          const slotTime = allSlotsWithIndices[requestedSlotIndex].time;
-          const isPast = isBefore(slotTime, now);
-          const isWithinOneHour = !isAfter(slotTime, oneHourFromNowForCheck);
-          
-          if (isPast) {
-            skipRequestedSlot = true;
-            console.log('🚫 [CLINIC APP] Requested slot is in the past, skipping:', {
-              requestedSlotIndex,
-              slotTime: format(slotTime, 'hh:mm a'),
-              currentTime: format(now, 'hh:mm a')
-            });
-          } else if (isWithinOneHour) {
-            skipRequestedSlot = true;
-            console.log('🚫 [CLINIC APP] Requested slot is within 1-hour window, skipping:', {
-              requestedSlotIndex,
-              slotTime: format(slotTime, 'hh:mm a'),
-              oneHourFromNow: format(oneHourFromNowForCheck, 'hh:mm a'),
-              currentTime: format(now, 'hh:mm a')
-            });
-          }
-        }
-        
-        // Check if requested slot is an imaginary W slot
-        if (!skipRequestedSlot) {
-          console.log('🔍 [CLINIC APP DEBUG] Checking requested slot for imaginary status:', {
-            requestedSlotIndex,
-            imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-            isImaginary: imaginaryWSlotPositions.has(requestedSlotIndex),
-            timestamp: new Date().toISOString()
-          });
-          if (imaginaryWSlotPositions.has(requestedSlotIndex)) {
-            skipRequestedSlot = true;
-            console.error('🚫 [CLINIC APP] ❌ REQUESTED SLOT IS IMAGINARY - cannot use:', {
-              requestedSlotIndex,
-              imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-              reason: 'A tokens cannot use imaginary W slots',
-              timestamp: new Date().toISOString()
-            });
-          }
-        }
-        
-        // If slot passed all checks, verify availability
-        if (!skipRequestedSlot) {
-          console.log('✅ [CLINIC APP DEBUG] Requested slot passed all pre-checks (not past, not within 1-hour, not imaginary), checking availability:', {
-            requestedSlotIndex,
-            timestamp: new Date().toISOString()
-          });
-          const requestedSlotCheck = await isSlotAvailable(requestedSlotIndex);
-          if (requestedSlotCheck.available && requestedSlotCheck.reservationRef) {
-            selectedSlotIndex = requestedSlotIndex;
-            selectedSlotReservationRef = requestedSlotCheck.reservationRef;
-            console.log('✅ [CLINIC APP TRANSACTION] Using requested slot:', {
-              app: 'CLINIC_APP',
-              requestedSlotIndex,
-              selectedSlotIndex,
-              slotTime: allSlotsWithIndices.length > selectedSlotIndex ? format(allSlotsWithIndices[selectedSlotIndex].time, 'hh:mm a') : 'N/A',
-              isImaginary: imaginaryWSlotPositions.has(selectedSlotIndex),
-              imaginarySlots: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-              reason: 'Requested slot is available and not an imaginary W slot',
-              timestamp: new Date().toISOString()
-            });
-          }
-        }
-      }
-      
-      // If requested slot is not available, search for the next available slot
-      // CRITICAL: Skip all imaginary W slots, past slots, and slots within 1-hour window during search
-      // ALIGNED WITH PATIENT APP: Skip past slots and 1-hour window slots early for performance
-      if (selectedSlotIndex === -1) {
-        // CRITICAL: Recalculate current time and 1-hour cutoff INSIDE transaction to ensure accuracy
-        const now = new Date();
-        const oneHourFromNowForSearch = addMinutes(now, 60);
-        
-        for (let slotIdx = 0; slotIdx <= maxSlotIndex + 20; slotIdx++) {
-          // Skip the requested slot if we already checked it
-          if (typeof requestedSlotIndex === 'number' && slotIdx === requestedSlotIndex) {
-            continue;
-          }
-          
-          // CRITICAL: Skip past slots early (before calling isSlotAvailable for performance)
-          if (allSlotsWithIndices.length > slotIdx) {
-            const slotTime = allSlotsWithIndices[slotIdx].time;
-            if (isBefore(slotTime, now)) {
-              console.log('🚫 [CLINIC APP] Skipping past slot during search:', {
-                slotIdx,
-                slotTime: format(slotTime, 'hh:mm a'),
-                currentTime: format(now, 'hh:mm a')
-              });
-              continue;
-            }
-            
-            // CRITICAL: Skip slots within 1-hour window early (reserved for W tokens)
-            if (!isAfter(slotTime, oneHourFromNowForSearch)) {
-              console.log('🚫 [CLINIC APP] Skipping slot within 1-hour window during search:', {
-                slotIdx,
-                slotTime: format(slotTime, 'hh:mm a'),
-                oneHourFromNow: format(oneHourFromNowForSearch, 'hh:mm a'),
-                currentTime: format(now, 'hh:mm a')
-              });
-              continue;
-            }
-          }
-          
-          // CRITICAL: Skip imaginary W slots early - A tokens cannot use them
-          console.log('🔍 [CLINIC APP DEBUG] Checking slot in search loop for imaginary status:', {
-            slotIdx,
-            imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-            isImaginary: imaginaryWSlotPositions.has(slotIdx),
-            timestamp: new Date().toISOString()
-          });
-          if (imaginaryWSlotPositions.has(slotIdx)) {
-            console.error('🚫 [CLINIC APP] ❌ SKIPPING IMAGINARY SLOT IN SEARCH LOOP:', {
-              slotIdx,
-              imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-              reason: 'A tokens cannot use imaginary W slots',
-              timestamp: new Date().toISOString()
-            });
-            continue;
-          }
-          console.log('✅ [CLINIC APP DEBUG] Slot is NOT imaginary, past, or within 1-hour window, calling isSlotAvailable:', {
-            slotIdx,
-            timestamp: new Date().toISOString()
-          });
-          
-          const slotCheck = await isSlotAvailable(slotIdx);
-          if (slotCheck.available && slotCheck.reservationRef) {
-            selectedSlotIndex = slotIdx;
-            selectedSlotReservationRef = slotCheck.reservationRef;
-            console.log('✅ [CLINIC APP TRANSACTION] Using next available slot (skipped imaginary W slots):', {
-              app: 'CLINIC_APP',
-              requestedSlotIndex: requestedSlotIndex ?? undefined,
-              selectedSlotIndex,
-              slotTime: allSlotsWithIndices.length > selectedSlotIndex ? format(allSlotsWithIndices[selectedSlotIndex].time, 'hh:mm a') : 'N/A',
-              skippedImaginarySlots: Array.from(imaginaryWSlotPositions).filter(s => s < slotIdx).sort((a, b) => a - b),
-              imaginarySlots: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-              isImaginary: false,
-              reason: 'Requested slot not available, using next available non-imaginary slot',
-              timestamp: new Date().toISOString()
-            });
-            break; // Found the next available slot
-          }
-        }
-      }
-      
-      if (selectedSlotIndex === -1) {
-        const error = new Error('SLOT_ALREADY_BOOKED') as Error & { code?: string };
-        error.code = 'SLOT_OCCUPIED';
-        error.message = `No available slots found. All slots are either booked, reserved, or reserved for walk-in tokens.`;
-        throw error;
-      }
-      
-      // Final validation: A tokens should NEVER book imaginary W slots
-      // This is a critical safety check to ensure imaginary W slots are never used for A tokens
-      // This should never happen if the above logic is correct, but serves as a safety net
-      console.log('🔍 [CLINIC APP DEBUG] Final validation - checking selected slot for imaginary status:', {
-        selectedSlotIndex,
-        imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-        isImaginary: imaginaryWSlotPositions.has(selectedSlotIndex),
-        walkInTokenAllotment,
-        totalAAppointmentsAfterThis,
-        confirmedAppointmentsCount: confirmedAppointments.length,
-        timestamp: new Date().toISOString()
-      });
-      if (imaginaryWSlotPositions.has(selectedSlotIndex)) {
-        console.error('❌ [CLINIC APP] ❌❌❌ CRITICAL ERROR - SELECTED SLOT IS IMAGINARY - THIS SHOULD NEVER HAPPEN:', {
-          selectedSlotIndex,
-          imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-          walkInTokenAllotment,
-          totalAAppointmentsAfterThis,
-          confirmedAppointmentsCount: confirmedAppointments.length,
-          timestamp: new Date().toISOString()
-        });
-        const error = new Error('SLOT_RESERVED_FOR_WALKIN') as Error & { code?: string };
-        error.code = 'SLOT_RESERVED_FOR_WALKIN';
-        error.message = `Slot ${selectedSlotIndex} is reserved for walk-in tokens. No available slots found.`;
-        throw error;
-      }
-      console.log('✅ [CLINIC APP DEBUG] Final validation passed - selected slot is NOT imaginary:', {
-        selectedSlotIndex,
-        timestamp: new Date().toISOString()
-      });
-      
-      // CRITICAL: Final read of reservation document - THIS MUST BE THE ABSOLUTE LAST READ IN STEP 1
-      // This ensures we catch any concurrent bookings immediately before writing
-      // If another transaction creates this reservation, we'll detect it here and throw an error
-      // This error will cause the transaction to fail and retry, forcing slot reselection
-      if (selectedSlotReservationRef) {
-        const finalCheckStartTime = Date.now();
-        console.log('🔍 [CLINIC APP] ========== FINAL RESERVATION CHECK (LAST READ IN STEP 1) ==========', {
-          selectedSlotIndex,
-          reservationId: selectedSlotReservationRef.id,
-          reservationPath: selectedSlotReservationRef.path,
-          imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-          isImaginary: imaginaryWSlotPositions.has(selectedSlotIndex),
-          timestamp: new Date().toISOString(),
-          checkStartTime: finalCheckStartTime
-        });
-        
-        // CRITICAL: Double-check that selected slot is NOT imaginary before final reservation check
-        if (imaginaryWSlotPositions.has(selectedSlotIndex)) {
-          console.error('❌ [CLINIC APP] ========== CRITICAL ERROR - SELECTED SLOT IS IMAGINARY ==========', {
-            selectedSlotIndex,
-            imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-            walkInTokenAllotment,
-            totalAAppointmentsAfterThis,
-            confirmedAppointmentsCount: confirmedAppointments.length,
-            timestamp: new Date().toISOString(),
-            action: 'THROWING ERROR - Cannot book imaginary W slot'
-          });
-          const error = new Error('SLOT_RESERVED_FOR_WALKIN') as Error & { code?: string };
-          error.code = 'SLOT_RESERVED_FOR_WALKIN';
-          error.message = `Slot ${selectedSlotIndex} is reserved for walk-in tokens. No available slots found.`;
-          throw error;
-        }
-        
-        const finalReservationRead = await transaction.get(selectedSlotReservationRef);
-        const finalCheckEndTime = Date.now();
-        
-        if (finalReservationRead.exists()) {
-          const reservationData = finalReservationRead.data();
-          console.error('❌ [CLINIC APP] ========== CRITICAL CONFLICT DETECTED ==========', {
-            selectedSlotIndex,
-            reservationId: selectedSlotReservationRef.id,
-            reservationData: {
-              clinicId: reservationData?.clinicId,
-              doctorName: reservationData?.doctorName,
-              date: reservationData?.date,
-              slotIndex: reservationData?.slotIndex,
-              reservedAt: reservationData?.reservedAt,
-              reservedBy: reservationData?.reservedBy
-            },
-            checkDuration: finalCheckEndTime - finalCheckStartTime,
-            timestamp: new Date().toISOString(),
-            reason: 'Another transaction created this reservation - need to select different slot',
-            action: 'THROWING ERROR TO TRIGGER TRANSACTION RETRY'
-          });
-          const error = new Error('SLOT_ALREADY_BOOKED') as Error & { code?: string };
-          error.code = 'SLOT_OCCUPIED';
-          error.message = `Slot ${selectedSlotIndex} was just booked by another concurrent request. Please try again.`;
-          throw error; // This will cause transaction to fail and retry with slot reselection
-        }
-        console.log('✅ [CLINIC APP] ========== FINAL RESERVATION CHECK PASSED ==========', {
-          selectedSlotIndex,
-          reservationId: selectedSlotReservationRef.id,
-          isImaginary: false,
-          checkDuration: finalCheckEndTime - finalCheckStartTime,
-          timestamp: new Date().toISOString(),
-          note: 'Slot is available and NOT imaginary - proceeding to Step 2 (writes)'
-        });
-      }
-      
-      console.log('✅ [CLINIC APP] A token slot selected (reservation will be created IMMEDIATELY in Step 2):', {
-        requestedSlotIndex,
-        selectedSlotIndex,
-        timestamp: new Date().toISOString(),
-        reason: 'Atomic slot selection inside transaction - ready to create reservation'
-      });
-    }
-    
-    // STEP 2: ALL WRITES AFTER ALL READS
-    
-    // Step 2.1: Create slot reservation document to lock the slot (only for A tokens)
-    // CRITICAL: The reservation was already checked at the end of Step 1 (reads phase)
-    // Firestore will detect if another transaction creates this reservation between our read and write
-    // If that happens, this transaction will fail and retry
-    if (type === 'A' && selectedSlotReservationRef) {
-      const reservationCreateStartTime = Date.now();
-      console.log('✍️ [CLINIC APP] ========== CREATING RESERVATION (STEP 2 - WRITE) ==========', {
-        selectedSlotIndex,
-        reservationId: selectedSlotReservationRef.id,
-        reservationPath: selectedSlotReservationRef.path,
-        timestamp: new Date().toISOString(),
-        createStartTime: reservationCreateStartTime,
-        note: 'Reservation was checked at end of Step 1 - Firestore will detect conflicts and retry if needed'
-      });
-      
-      // CRITICAL: Final safety check before creating reservation - ensure slot is NOT imaginary
-      // This is a last-ditch safety check in case something went wrong
-      // NOTE: imaginaryWSlotPositions is declared at transaction scope (line 799) and assigned in A token block
-      if (imaginaryWSlotPositions && imaginaryWSlotPositions.size > 0) {
-        const isImaginary = imaginaryWSlotPositions.has(selectedSlotIndex);
-        console.log('🔍 [CLINIC APP] Final safety check before creating reservation:', {
-          selectedSlotIndex,
-          imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-          isImaginary,
-          timestamp: new Date().toISOString()
-        });
-        
-        if (isImaginary) {
-          console.error('❌ [CLINIC APP] ========== CRITICAL ERROR - ABOUT TO CREATE RESERVATION FOR IMAGINARY SLOT ==========', {
-            selectedSlotIndex,
-            imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-            timestamp: new Date().toISOString(),
-            action: 'THROWING ERROR - Cannot create reservation for imaginary W slot'
-          });
-          const error = new Error('SLOT_RESERVED_FOR_WALKIN') as Error & { code?: string };
-          error.code = 'SLOT_RESERVED_FOR_WALKIN';
-          error.message = `Slot ${selectedSlotIndex} is reserved for walk-in tokens. Cannot create reservation.`;
-          throw error;
-        }
-      } else {
-        console.warn('⚠️ [CLINIC APP] imaginaryWSlotPositions is empty or undefined in Step 2:', {
-          selectedSlotIndex,
-          imaginaryWSlotPositionsExists: !!imaginaryWSlotPositions,
-          imaginaryWSlotPositionsSize: imaginaryWSlotPositions?.size ?? 0,
-          timestamp: new Date().toISOString(),
-          note: 'This should not happen - imaginary slots should be calculated in Step 1'
-        });
-      }
-      
-      // Create the reservation atomically
-      // NOTE: Final validation for imaginary slots was already done at end of Step 1
-      // CRITICAL: The reservation was already checked at the end of Step 1 (reads phase)
-      // Firestore will detect if another transaction creates this reservation between our read and write
-      // If that happens, this transaction will fail and retry
-      transaction.set(selectedSlotReservationRef, {
-        clinicId,
-        doctorName,
-        date: dateStr,
-        slotIndex: selectedSlotIndex,
-        reservedAt: serverTimestamp(),
-        reservedBy: 'appointment-booking'
-      });
-      
-      const reservationCreateEndTime = Date.now();
-      console.log('✅ [CLINIC APP] ========== RESERVATION CREATED (transaction.set() called) ==========', {
-        selectedSlotIndex,
-        reservationId: selectedSlotReservationRef.id,
-        createDuration: reservationCreateEndTime - reservationCreateStartTime,
-        timestamp: new Date().toISOString(),
-        note: 'Reservation write queued - Firestore will commit after all writes complete'
-      });
-      
-      // Update appointmentData with the atomically selected slot
-      appointmentData.slotIndex = selectedSlotIndex;
-      console.log('✅ [TRANSACTION] Atomically selected slot:', {
-        requestedSlotIndex: requestedSlotIndex ?? undefined,
-        selectedSlotIndex,
-        reason: 'Atomic slot selection inside transaction'
-      });
-    }
-    
-    // Declare appointmentDocsToShift array (will be populated for W tokens after slot selection)
-    const appointmentDocsToShift: Array<{ ref: any; data: any; newTime: string; newCutOffTime: Date; newNoShowTime: Date; newDelay: number }> = [];
-    
-    // Declare appointmentsToShift array for W tokens (will be calculated inside transaction)
-    let appointmentsToShiftInTransaction: Array<{ id: string; slotIndex: number; currentTime: string; newTime: string; newCutOffTime: Date; newNoShowTime: Date; newDelay: number }> = [];
-    
-    // Step 1.2: For W tokens, atomically select slot and create reservation inside transaction
-    if (type === 'W' && doctorData && clinicData && allSlotsWithIndices.length > 0) {
-      console.log('🔍 [TRANSACTION] Starting W token slot selection with slot reservations');
-      
-      // Read all appointments inside transaction to get current state
-      const verifiedBookedSlots = new Set<number>();
-      verifiedAppointments = []; // Reset and populate for W tokens
-      
-      for (const aptRef of allAppointmentRefs) {
-        const aptDoc = await transaction.get(aptRef.ref);
-        if (aptDoc.exists()) {
-          const data = aptDoc.data();
-          if ((data.status === 'Pending' || data.status === 'Confirmed')) {
-            const slotIdx = data.slotIndex ?? -1;
-            if (slotIdx >= 0) {
-              verifiedBookedSlots.add(slotIdx);
-            }
-            verifiedAppointments.push({
-              slotIndex: data.slotIndex,
-              bookedVia: data.bookedVia,
-              status: data.status
-            });
-          }
-        }
-      }
-      
-      // Calculate imaginary W slot positions
-      const walkInTokenAllotment = clinicData?.walkInTokenAllotment || 7;
-      const confirmedAppointments = verifiedAppointments
-        .filter(a => a.status === 'Pending' || a.status === 'Confirmed')
-        .filter(a => a.bookedVia === 'Advanced Booking' || a.bookedVia === 'Online' || a.bookedVia === 'Advanced')
-        .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
-      
-      const existingWTokens = verifiedAppointments
-        .filter(a => a.bookedVia === 'Walk-in' && (a.status === 'Pending' || a.status === 'Confirmed'))
-        .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
-      
-      // Calculate imaginary W slot positions (same logic as calculateWalkInDetails)
-      const imaginaryWSlotPositions = new Set<number>();
-      
-      if (confirmedAppointments.length === 0) {
-        // No confirmed appointments - first imaginary slot is at walkInTokenAllotment
-        imaginaryWSlotPositions.add(walkInTokenAllotment);
-      } else if (existingWTokens.length === 0) {
-        // First W token: place after walkInTokenAllotment confirmed appointments
-        if (confirmedAppointments.length >= walkInTokenAllotment) {
-          const targetAppointment = confirmedAppointments[walkInTokenAllotment - 1];
-          const firstWSlot = (targetAppointment.slotIndex ?? 0) + 1;
-          imaginaryWSlotPositions.add(firstWSlot);
-          
-          // Calculate additional imaginary W slots at intervals
-          let currentWSlot = firstWSlot;
-          const maxSlotIndex = Math.max(...confirmedAppointments.map(a => a.slotIndex ?? 0), 0);
-          while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
-            currentWSlot += walkInTokenAllotment;
-            imaginaryWSlotPositions.add(currentWSlot);
-          }
-        }
-      } else {
-        // Subsequent W tokens: place after walkInTokenAllotment appointments from last W token
-        const lastWToken = existingWTokens[existingWTokens.length - 1];
-        const lastWTokenSlotIndex = lastWToken?.slotIndex ?? -1;
-        
-        const appointmentsAfterLastW = confirmedAppointments.filter(a => {
-          const aptSlotIndex = a.slotIndex ?? 0;
-          return aptSlotIndex > lastWTokenSlotIndex;
-        });
-        
-        if (appointmentsAfterLastW.length >= walkInTokenAllotment) {
-          const targetAppointment = appointmentsAfterLastW[walkInTokenAllotment - 1];
-          const nextWSlot = (targetAppointment.slotIndex ?? 0) + 1;
-          imaginaryWSlotPositions.add(nextWSlot);
-          
-          // Calculate additional imaginary W slots at intervals
-          let currentWSlot = nextWSlot;
-          const maxSlotIndex = Math.max(...confirmedAppointments.map(a => a.slotIndex ?? 0), 0);
-          while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
-            currentWSlot += walkInTokenAllotment;
-            imaginaryWSlotPositions.add(currentWSlot);
-          }
-        }
-      }
-      
-      const sortedImaginaryWSlots = Array.from(imaginaryWSlotPositions).sort((a, b) => a - b);
-      console.log('🔍 [TRANSACTION] Calculated imaginary W slots:', {
-        imaginaryWSlotPositions: sortedImaginaryWSlots,
-        walkInTokenAllotment,
-        confirmedAppointmentsCount: confirmedAppointments.length,
-        existingWTokensCount: existingWTokens.length
-      });
-      
-      // Helper function to read slot reservation (cached)
-      const reservedSlotIndices = new Set<number>();
-      const slotReservationRefs = new Map<number, any>();
-      
-      const readSlotReservation = async (slotIdx: number): Promise<{ reserved: boolean; reservationRef?: any }> => {
-        if (reservedSlotIndices.has(slotIdx)) {
-          return { reserved: true };
-        }
-        if (slotReservationRefs.has(slotIdx)) {
-          return { reserved: false, reservationRef: slotReservationRefs.get(slotIdx) };
-        }
-        
-        const slotReservationId = `${clinicId}_${doctorName}_${dateStr}_slot_${slotIdx}`.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-        const slotReservationRef = doc(db, 'slot-reservations', slotReservationId);
-        const reservationDoc = await transaction.get(slotReservationRef);
-        
-        if (reservationDoc.exists()) {
-          reservedSlotIndices.add(slotIdx);
-          return { reserved: true };
-        } else {
-          slotReservationRefs.set(slotIdx, slotReservationRef);
-          return { reserved: false, reservationRef: slotReservationRef };
-        }
-      };
-      
-      // Helper function to check if a slot is available for W token
-      const isSlotAvailableForW = async (slotIdx: number): Promise<{ available: boolean; reservationRef?: any }> => {
-        // Check if slot is already booked by an appointment
-        const slotAppointment = verifiedAppointments.find(a => a.slotIndex === slotIdx);
-        const isBookedByA = slotAppointment && 
-          (slotAppointment.bookedVia === 'Advanced Booking' || 
-           slotAppointment.bookedVia === 'Online' || 
-           slotAppointment.bookedVia === 'Advanced') &&
-          (slotAppointment.status === 'Pending' || slotAppointment.status === 'Confirmed');
-        
-        const isBookedByW = slotAppointment && 
-          slotAppointment.bookedVia === 'Walk-in' &&
-          (slotAppointment.status === 'Pending' || slotAppointment.status === 'Confirmed');
-        
-        // Skip if booked by A token (should never happen for imaginary slots, but safety check)
-        if (isBookedByA) {
-          return { available: false };
-        }
-        
-        // Skip if booked by W token (NO SHARING - each W token gets its own slot)
-        if (isBookedByW) {
-          return { available: false };
-        }
-        
-        // Check slot reservation
-        const reservationCheck = await readSlotReservation(slotIdx);
-        if (reservationCheck.reserved) {
-          return { available: false };
-        }
-        
-        // Slot is available
-        return { available: true, reservationRef: reservationCheck.reservationRef };
-      };
-      
-      // Priority 1: Check available slots within 1-hour window
-      const now = new Date();
-      const oneHourFromNowForW = addMinutes(now, 60);
-      const availableSlotsWithinOneHour: number[] = [];
-      
-      for (let i = 0; i < allSlotsWithIndices.length; i++) {
-        const slot = allSlotsWithIndices[i];
-        const isWithinOneHour = !isBefore(slot.time, now) && !isAfter(slot.time, oneHourFromNowForW);
-        
-        if (isWithinOneHour) {
-          const slotCheck = await isSlotAvailableForW(i);
-          if (slotCheck.available) {
-            availableSlotsWithinOneHour.push(i);
-          }
-        }
-      }
-      
-      availableSlotsWithinOneHour.sort((a, b) => a - b);
-      
-      // Priority 3: Check imaginary W slots
-      let selectedWSlot = -1;
-      let selectedWSlotReservationRef: any = null;
-      
-      // Try Priority 1 first
-      if (availableSlotsWithinOneHour.length > 0) {
-        selectedWSlot = availableSlotsWithinOneHour[0];
-        const slotCheck = await isSlotAvailableForW(selectedWSlot);
-        if (slotCheck.available && slotCheck.reservationRef) {
-          selectedWSlotReservationRef = slotCheck.reservationRef;
-          console.log('✅ [TRANSACTION] Priority 1: Selected slot within 1-hour window:', {
-            slotIndex: selectedWSlot,
-            slotTime: format(allSlotsWithIndices[selectedWSlot].time, 'hh:mm a')
-          });
-        } else {
-          selectedWSlot = -1;
-        }
-      }
-      
-      // If Priority 1 didn't find a slot, try Priority 3 (imaginary W slots)
-      if (selectedWSlot === -1 && sortedImaginaryWSlots.length > 0) {
-        for (const imaginarySlot of sortedImaginaryWSlots) {
-          const slotCheck = await isSlotAvailableForW(imaginarySlot);
-          if (slotCheck.available && slotCheck.reservationRef) {
-            selectedWSlot = imaginarySlot;
-            selectedWSlotReservationRef = slotCheck.reservationRef;
-            console.log('✅ [TRANSACTION] Priority 3: Selected imaginary W slot:', {
-              slotIndex: selectedWSlot
-            });
-            break;
-          }
-        }
-      }
-      
-      // Fallback: Use interval-based logic if no slot found
-      if (selectedWSlot === -1) {
-        if (confirmedAppointments.length === 0) {
-          // No confirmed appointments - place at first slot
-          const now = new Date();
-          const availabilityStart = allSlotsWithIndices[0]?.time;
-          if (availabilityStart && isBefore(now, availabilityStart)) {
-            selectedWSlot = 0;
-          } else {
-            // Find next immediate slot
-            for (let i = 0; i < allSlotsWithIndices.length; i++) {
-              if (!isBefore(allSlotsWithIndices[i].time, now)) {
-                const slotCheck = await isSlotAvailableForW(i);
-                if (slotCheck.available && slotCheck.reservationRef) {
-                  selectedWSlot = i;
-                  selectedWSlotReservationRef = slotCheck.reservationRef;
-                  break;
-                }
-              }
-            }
-          }
-        } else if (existingWTokens.length === 0) {
-          // First W token: place after walkInTokenAllotment confirmed appointments
-          if (confirmedAppointments.length >= walkInTokenAllotment) {
-            const targetAppointment = confirmedAppointments[walkInTokenAllotment - 1];
-            selectedWSlot = (targetAppointment.slotIndex ?? 0) + 1;
-          } else {
-            const lastAppointment = confirmedAppointments[confirmedAppointments.length - 1];
-            selectedWSlot = (lastAppointment.slotIndex ?? 0) + 1;
-          }
-        } else {
-          // Subsequent W tokens: place after walkInTokenAllotment appointments from last W token
-          const lastWToken = existingWTokens[existingWTokens.length - 1];
-          const lastWTokenSlotIndex = lastWToken?.slotIndex ?? -1;
-          
-          const appointmentsAfterLastW = confirmedAppointments.filter(a => {
-            const aptSlotIndex = a.slotIndex ?? 0;
-            return aptSlotIndex > lastWTokenSlotIndex;
-          });
-          
-          if (appointmentsAfterLastW.length >= walkInTokenAllotment) {
-            const targetAppointment = appointmentsAfterLastW[walkInTokenAllotment - 1];
-            selectedWSlot = (targetAppointment.slotIndex ?? 0) + 1;
-          } else if (appointmentsAfterLastW.length > 0) {
-            const lastAppointment = appointmentsAfterLastW[appointmentsAfterLastW.length - 1];
-            selectedWSlot = (lastAppointment.slotIndex ?? 0) + 1;
-          } else {
-            selectedWSlot = lastWTokenSlotIndex + 1;
-          }
-        }
-        
-        // Verify fallback slot is available
-        if (selectedWSlot >= 0) {
-          const slotCheck = await isSlotAvailableForW(selectedWSlot);
-          if (slotCheck.available && slotCheck.reservationRef) {
-            selectedWSlotReservationRef = slotCheck.reservationRef;
-          } else {
-            // Fallback slot is not available, search for next available
-            selectedWSlot = -1;
-            for (let i = 0; i < allSlotsWithIndices.length; i++) {
-              const slotCheck = await isSlotAvailableForW(i);
-              if (slotCheck.available && slotCheck.reservationRef) {
-                selectedWSlot = i;
-                selectedWSlotReservationRef = slotCheck.reservationRef;
-                break;
-              }
-            }
-          }
-        }
-      }
-      
-      if (selectedWSlot === -1 || !selectedWSlotReservationRef) {
-        throw new Error('No available slots for walk-in today.');
-      }
-      
-      // Store selected slot and reservation ref for Step 2 (writes)
-      selectedSlotIndex = selectedWSlot;
-      selectedSlotReservationRef = selectedWSlotReservationRef;
-      
-      console.log('✅ [TRANSACTION] W token slot selected (reservation will be created in Step 2):', {
-        selectedSlotIndex: selectedWSlot,
-        reason: 'Atomic slot selection inside transaction'
-      });
-      
-      // Calculate appointmentsToShift for W tokens inside transaction using the selected slot
-      const slotDuration = doctorData.averageConsultingTime || 15;
-      const targetSlotIndex = selectedWSlot;
-      
-      // Find all appointments (A tokens) that come after the W token insertion point
-      const appointmentsAfterW = verifiedAppointments
-        .filter(a => {
-          const aptSlotIndex = a.slotIndex ?? -1;
-          // Only shift A tokens (not W tokens) that come after the insertion point
-          const isAToken = a.bookedVia === 'Advanced Booking' || a.bookedVia === 'Online' || a.bookedVia === 'Advanced';
-          return isAToken && aptSlotIndex >= targetSlotIndex && (a.status === 'Pending' || a.status === 'Confirmed');
-        })
-        .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
-      
-      // Calculate delay for each appointment that needs to be shifted
-      for (const aptRef of allAppointmentRefs) {
-        const aptDoc = await transaction.get(aptRef.ref);
-        if (aptDoc.exists()) {
-          const appointment = aptDoc.data();
-          const aptSlotIndex = appointment.slotIndex ?? -1;
-          const isAToken = appointment.bookedVia === 'Advanced Booking' || appointment.bookedVia === 'Online' || appointment.bookedVia === 'Advanced';
-          
-          if (isAToken && aptSlotIndex >= targetSlotIndex && (appointment.status === 'Pending' || appointment.status === 'Confirmed')) {
-            try {
-              const appointmentDate = parse(appointment.date, "d MMMM yyyy", new Date());
-              const currentAppointmentTime = parseTimeString(appointment.time, appointmentDate);
-              
-              // Keep the original appointment time unchanged
-              const originalTime = appointment.time;
-              
-              // Get original cutOffTime and noShowTime
-              let originalCutOffTime: Date;
-              let originalNoShowTime: Date;
-              
-              if (appointment.cutOffTime) {
-                originalCutOffTime = appointment.cutOffTime.toDate ? appointment.cutOffTime.toDate() : new Date(appointment.cutOffTime);
-              } else {
-                originalCutOffTime = subMinutes(currentAppointmentTime, 15);
-              }
-              
-              if (appointment.noShowTime) {
-                originalNoShowTime = appointment.noShowTime.toDate ? appointment.noShowTime.toDate() : new Date(appointment.noShowTime);
-              } else {
-                originalNoShowTime = addMinutes(currentAppointmentTime, 15);
-              }
-              
-              // Delay should NOT change cutOffTime or time, only noShowTime
-              const newCutOffTime = originalCutOffTime; // Keep cutOffTime unchanged (no delay)
-              const newNoShowTime = addMinutes(originalNoShowTime, slotDuration); // Add delay to noShowTime only
-              
-              // Get existing delay or default to 0
-              const existingDelay = appointment.delay || 0;
-              const newDelay = existingDelay + slotDuration;
-              
-              appointmentsToShiftInTransaction.push({
-                id: aptRef.id,
-                slotIndex: aptSlotIndex,
-                currentTime: originalTime,
-                newTime: originalTime, // Keep original time unchanged
-                newCutOffTime,
-                newNoShowTime,
-                newDelay
-              });
-            } catch (error) {
-              console.error('Error calculating delay for appointment:', aptRef.id, error);
-            }
-          }
-        }
-      }
-      
-      // Convert appointmentsToShiftInTransaction to appointmentDocsToShift for delay application
-      // This happens after slot selection so we use the correct selected slot
-      for (const appointmentToShift of appointmentsToShiftInTransaction) {
-        const appointmentRef = doc(db, 'appointments', appointmentToShift.id);
-        const appointmentDoc = await transaction.get(appointmentRef);
-        if (appointmentDoc.exists()) {
-          appointmentDocsToShift.push({
-            ref: appointmentRef,
-            data: appointmentDoc.data(),
-            newTime: appointmentToShift.newTime,
-            newCutOffTime: appointmentToShift.newCutOffTime,
-            newNoShowTime: appointmentToShift.newNoShowTime,
-            newDelay: appointmentToShift.newDelay
-          });
-        }
-      }
-    }
-    
-    // STEP 2: ALL WRITES AFTER ALL READS
-    
-    // Step 2.1: Create slot reservation document to lock the slot (for A tokens)
-    // CRITICAL: The slot availability check was already done in Step 1 (reads phase)
-    // We use the data from Step 1 to verify the slot is still valid before creating reservation
-    if (type === 'A' && selectedSlotReservationRef) {
-      // Final validation: A tokens should NEVER book imaginary W slots
-      // This check uses the imaginaryWSlotPositions calculated in Step 1 (reads phase)
-      // No additional reads needed - we already have all the data from Step 1
-      if (type === 'A' && typeof appointmentData.slotIndex === 'number') {
-        // Use the imaginaryWSlotPositions calculated during slot selection (Step 1)
-        // This was already calculated using verifiedAppointments from Step 1 reads
-        const walkInTokenAllotment = clinicData?.walkInTokenAllotment || 7;
-        
-        // Recalculate imaginary slots using the data we already read in Step 1
-        // We use verifiedAppointments which was populated during Step 1 reads
-        const confirmedAppointmentsForCheck = verifiedAppointments
-          .filter(a => a.status === 'Pending' || a.status === 'Confirmed')
-          .filter(a => a.bookedVia === 'Advanced Booking' || a.bookedVia === 'Online' || a.bookedVia === 'Advanced')
-          .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
-        
-        const existingWTokensForCheck = verifiedAppointments
-          .filter(a => a.bookedVia === 'Walk-in' && (a.status === 'Pending' || a.status === 'Confirmed'))
-          .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
-        
-        const totalAAppointmentsAfterThisCheck = confirmedAppointmentsForCheck.length + 1;
-        
-        const imaginaryWSlotPositionsForCheck = new Set<number>();
-        if (confirmedAppointmentsForCheck.length === 0) {
-          if (totalAAppointmentsAfterThisCheck >= walkInTokenAllotment) {
-            imaginaryWSlotPositionsForCheck.add(walkInTokenAllotment);
-          }
-        } else if (existingWTokensForCheck.length === 0) {
-          if (totalAAppointmentsAfterThisCheck >= walkInTokenAllotment) {
-            const sortedBySlotIndex = [...confirmedAppointmentsForCheck].sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
-            
-            if (totalAAppointmentsAfterThisCheck === walkInTokenAllotment) {
-              imaginaryWSlotPositionsForCheck.add(walkInTokenAllotment);
-            } else if (totalAAppointmentsAfterThisCheck > walkInTokenAllotment) {
-              const targetAppointment = sortedBySlotIndex[walkInTokenAllotment - 1];
-              const firstWSlot = (targetAppointment?.slotIndex ?? 0) + 1;
-              imaginaryWSlotPositionsForCheck.add(firstWSlot);
-              
-              let currentWSlot = firstWSlot;
-              const maxSlotIndex = Math.max(...confirmedAppointmentsForCheck.map(a => a.slotIndex ?? 0), 0);
-              while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
-                currentWSlot += walkInTokenAllotment;
-                imaginaryWSlotPositionsForCheck.add(currentWSlot);
-              }
-            }
-          }
-        } else {
-          const lastWToken = existingWTokensForCheck[existingWTokensForCheck.length - 1];
-          const lastWTokenSlotIndex = lastWToken?.slotIndex ?? -1;
-          
-          const appointmentsAfterLastW = confirmedAppointmentsForCheck.filter(a => {
-            const aptSlotIndex = a.slotIndex ?? 0;
-            return aptSlotIndex > lastWTokenSlotIndex;
-          });
-          
-          const appointmentsAfterLastWAfterCreation = appointmentsAfterLastW.length + 1;
-          
-          if (appointmentsAfterLastWAfterCreation >= walkInTokenAllotment) {
-            if (appointmentsAfterLastW.length < walkInTokenAllotment) {
-              const targetAppointment = appointmentsAfterLastW[walkInTokenAllotment - 2];
-              if (targetAppointment) {
-                const nextWSlot = (targetAppointment.slotIndex ?? 0) + 1;
-                imaginaryWSlotPositionsForCheck.add(nextWSlot);
-              } else {
-                imaginaryWSlotPositionsForCheck.add(lastWTokenSlotIndex + walkInTokenAllotment);
-              }
-            } else {
-              const targetAppointment = appointmentsAfterLastW[walkInTokenAllotment - 1];
-              const nextWSlot = (targetAppointment.slotIndex ?? 0) + 1;
-              imaginaryWSlotPositionsForCheck.add(nextWSlot);
-            }
-            
-            const maxSlotIndex = Math.max(...confirmedAppointmentsForCheck.map(a => a.slotIndex ?? 0), lastWTokenSlotIndex);
-            const firstWSlot = Array.from(imaginaryWSlotPositionsForCheck)[0] || (lastWTokenSlotIndex + 1);
-            let currentWSlot = firstWSlot;
-            while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
-              currentWSlot += walkInTokenAllotment;
-              imaginaryWSlotPositionsForCheck.add(currentWSlot);
-            }
-          }
-        }
-        
-        // Final safety check: A tokens should NEVER book imaginary W slots
-        if (imaginaryWSlotPositionsForCheck.has(selectedSlotIndex)) {
-          console.error('❌ [ERROR] Attempted to assign imaginary W slot to A token:', {
-            selectedSlotIndex,
-            imaginaryWSlotPositions: Array.from(imaginaryWSlotPositionsForCheck).sort((a, b) => a - b),
-            walkInTokenAllotment,
-            totalAAppointmentsAfterThisCheck,
-            confirmedAppointmentsCount: confirmedAppointmentsForCheck.length
-          });
-          const error = new Error('SLOT_RESERVED_FOR_WALKIN') as Error & { code?: string };
-          error.code = 'SLOT_RESERVED_FOR_WALKIN';
-          error.message = `Slot ${selectedSlotIndex} is reserved for walk-in tokens. No available slots found.`;
-          throw error;
-        }
-      }
-      
-      // Create the reservation atomically
-      // Note: Firestore transactions ensure atomicity - if two transactions both try to create
-      // the same reservation, only one will succeed. The slot availability was already checked
-      // during the reads phase, so we can safely create the reservation here.
-      transaction.set(selectedSlotReservationRef, {
-        clinicId,
-        doctorName,
-        date: dateStr,
-        slotIndex: selectedSlotIndex,
-        reservedAt: serverTimestamp(),
-        reservedBy: 'appointment-booking'
-      });
-      
-      // Update appointmentData with the atomically selected slot
-      appointmentData.slotIndex = selectedSlotIndex;
-      console.log('✅ [TRANSACTION] Atomically selected slot:', {
-        requestedSlotIndex: requestedSlotIndex ?? undefined,
-        selectedSlotIndex,
-        reason: 'Atomic slot selection inside transaction'
-      });
-    }
-    
-    // Step 2.1b: Create slot reservation for W tokens
-    if (type === 'W' && selectedSlotReservationRef && selectedSlotIndex >= 0) {
-      // Create the reservation atomically
-      transaction.set(selectedSlotReservationRef, {
-        clinicId,
-        doctorName,
-        date: dateStr,
-        slotIndex: selectedSlotIndex,
-        reservedAt: serverTimestamp(),
-        reservedBy: 'walk-in-booking'
-      });
-      
-      // Update appointmentData with the atomically selected slot
-      appointmentData.slotIndex = selectedSlotIndex;
-      console.log('✅ [TRANSACTION] W token slot reservation created:', {
-        selectedSlotIndex,
-        reason: 'Atomic slot reservation inside transaction'
-      });
-    }
-    
-    // Step 2.2: For W tokens, add delay to subsequent A tokens (keep original time and cutOffTime unchanged, only update noShowTime and delay)
-    if (type === 'W' && appointmentDocsToShift.length > 0) {
-      for (const { ref, data, newTime, newCutOffTime, newNoShowTime, newDelay } of appointmentDocsToShift) {
-        // Keep original time and cutOffTime unchanged, only update no-show time and delay field
-        transaction.update(ref, {
-          // time: newTime, // Don't update time - keep original appointment time
-          // cutOffTime: newCutOffTime, // Don't update cutOffTime - keep original (appointment time - 15 minutes, no delay)
-          noShowTime: newNoShowTime, // Update noShowTime with delay (appointment time + 15 minutes + delay)
-          delay: newDelay, // Store the delay in minutes
-          updatedAt: serverTimestamp()
-        });
-      }
-    }
-    
-    // Step 2.3: Generate next sequential token using atomic counter
-    
-    let nextTokenNum: number;
-    
-    if (type === 'A') {
-      // A tokens: Use slotIndex + 1 for token number
-      if (typeof appointmentData.slotIndex === 'number') {
-        nextTokenNum = appointmentData.slotIndex + 1;
-      } else {
-        // Fallback: use counter
-        if (counterDoc.exists()) {
-          const currentCount = counterDoc.data().count || 0;
-          transaction.update(counterRef, {
-            count: increment(1),
-            lastUpdated: serverTimestamp()
-          });
-          nextTokenNum = currentCount + 1;
-        } else {
-          nextTokenNum = initialNextTokenNum ?? 1;
-          transaction.set(counterRef, {
-            count: nextTokenNum,
-            clinicId,
-            doctorName,
-            date: dateStr,
-            type: 'A',
-            lastUpdated: serverTimestamp(),
-            createdAt: serverTimestamp()
-          });
-        }
-      }
-    } else {
-      // W tokens: Start from (total slots count + 1)
-      // Use pre-calculated wTokenStartNumber (calculated before transaction)
-      if (!wTokenStartNumber) {
-        throw new Error('wTokenStartNumber must be calculated before transaction');
-      }
-      
-      if (counterDoc.exists()) {
-        // Counter exists, increment atomically
-        const currentCount = counterDoc.data().count || 0;
-        transaction.update(counterRef, {
-          count: increment(1),
-          lastUpdated: serverTimestamp()
-        });
-        // W tokens start from (total slots + 1), so add the start number
-        nextTokenNum = wTokenStartNumber + currentCount;
-      } else {
-        // Counter doesn't exist, use pre-calculated value
-        nextTokenNum = initialNextTokenNum ?? wTokenStartNumber;
-        const counterOffset = nextTokenNum - wTokenStartNumber + 1;
-        transaction.set(counterRef, {
-          count: counterOffset,
+        transaction.set(reservationRef, {
           clinicId,
           doctorName,
           date: dateStr,
-          type: 'W',
-          startNumber: wTokenStartNumber,
-          lastUpdated: serverTimestamp(),
-          createdAt: serverTimestamp()
+          slotIndex: chosenSlotIndex,
+          reservedAt: serverTimestamp(),
+          reservedBy: type === 'W' ? 'walk-in-booking' : 'appointment-booking',
         });
+        commitNextTokenNumber(transaction, counterRef, counterState);
+
+        return {
+          tokenNumber: `${type}${String(counterState.nextNumber).padStart(3, '0')}`,
+          numericToken: counterState.nextNumber,
+          slotIndex: chosenSlotIndex,
+          time: resolvedTimeString,
+          reservationId: reservationRef.id,
+        };
+      });
+
+      return result;
+    } catch (error) {
+      if (isReservationConflict(error) && attempt < MAX_RESERVATION_ATTEMPTS - 1) {
+        continue;
       }
-    }
-    
-    // Generate token number
-    const tokenNumber = `${type}${String(nextTokenNum).padStart(3, '0')}`;
-    const numericToken = (typeof appointmentData.slotIndex === 'number') ? (appointmentData.slotIndex + 1) : nextTokenNum;
-    
-    const finalSlotIndex = appointmentData.slotIndex;
-    
-    console.log('✅ [DEBUG] generateNextTokenAndReserveSlot returning:', {
-      type,
-      tokenNumber,
-      numericToken,
-      finalSlotIndex,
-      originalSlotIndex: type === 'W' ? 'N/A (W token)' : 'N/A (A token)'
-    });
-    
-    return { 
-      tokenNumber, 
-      numericToken, 
-      slotIndex: finalSlotIndex 
-    };
-  });
-}
-
-
-/**
- * Helper function to check if a slot is vacant and available for walk-in placement
- */
-function isSlotVacant(
-  slotTime: Date,
-  currentTime: Date,
-  appointment: Appointment | null
-): boolean {
-  // Rule 1: Slot must be in the future
-  if (isBefore(slotTime, currentTime)) {
-    return false;
-  }
-
-  // Rule 2: No appointment = vacant
-  if (!appointment) {
-    return true;
-  }
-
-  // Rule 3: Check appointment status
-  const vacantStatuses = ['Skipped', 'Completed', 'No-show', 'Cancelled'];
-  if (vacantStatuses.includes(appointment.status)) {
-    return true;
-  }
-
-  // Rule 4: Active appointments (Pending/Confirmed) = Reserved
-  return false;
-}
-
-/**
- * Helper function to find next immediate slot (first slot where slotTime >= currentTime)
- */
-function findNextImmediateSlot(
-  allSlots: { time: Date; sessionIndex: number }[],
-  currentTime: Date
-): number {
-  for (let i = 0; i < allSlots.length; i++) {
-    if (isAfter(allSlots[i].time, currentTime) || allSlots[i].time.getTime() === currentTime.getTime()) {
-      return i;
+      throw error;
     }
   }
-  // If all slots are in the past, return length (next slot would be after the last)
-  return allSlots.length;
+
+  throw new Error('No available slots match the booking rules.');
 }
 
-/**
- * Calculates walk-in token details including estimated time and queue position
- *
- * New Logic:
- * - walkInTokenAllotment defines how many SLOTS to skip (default 5)
- * - Reference point: Previous W token OR next immediate slot OR slotIndex 0 (before start)
- * - Count walkInTokenAllotment slots from reference → Place at 6th position
- * - Check for vacant slots before calculated position → Use earliest vacant if found
- * - Transition: If calculated position > last A token → Place consecutively (last A + 1)
- *
- * Features:
- * ✅ Walk-in opens 2 hours before the first session starts.
- * ✅ Walk-in closes 15 min before consultation end.
- * ✅ Vacancy filling before calculated position.
- * ✅ Transition to consecutive slots after last A token.
- */
 export async function calculateWalkInDetails(
+  clinicId: string,
+  doctorName: string,
   doctor: Doctor,
-  walkInTokenAllotment: number = 5
+  walkInTokenAllotment: number = 0,
+  walkInCapacityThreshold: number = 0
 ): Promise<{
   estimatedTime: Date;
   patientsAhead: number;
   numericToken: number;
   slotIndex: number;
   sessionIndex: number;
+  actualSlotTime: Date;
 }> {
   const now = new Date();
-  const todayDate = format(now, 'd MMMM yyyy');
-  const todayDay = format(now, 'EEEE');
-  const slotDuration = doctor.averageConsultingTime || 15;
+  const date = now;
 
-  // Walk-ins are only available for the same day (today)
-  // This function should only be called for today's date
-
-  // Step 1: Doctor's availability & Walk-in Window Check
-  const todaysAvailability = doctor.availabilitySlots?.find(s => s.day === todayDay);
-  if (!todaysAvailability || !todaysAvailability.timeSlots?.length) {
-    throw new Error('Doctor not available today');
-  }
-  const availabilityStart = parseTimeString(todaysAvailability.timeSlots[0].from, now);
-  const availabilityEnd = parseTimeString(
-    todaysAvailability.timeSlots[todaysAvailability.timeSlots.length - 1].to,
-    now
+  const { slots } = await loadDoctorAndSlots(
+    clinicId,
+    doctorName,
+    date,
+    doctor.id
   );
-  
-  // Walk-in opens 2 hours before the first session starts
-  const walkInOpenTime = subMinutes(availabilityStart, 120); // 120 minutes = 2 hours
-  
-  // Walk-in closes 15 minutes before consultation end
-  const walkInCloseTime = addMinutes(availabilityEnd, -15);
-
-  if (isBefore(now, walkInOpenTime)) {
-    const openTimeFormatted = format(walkInOpenTime, 'hh:mm a');
-    throw new Error(`Walk-in registration opens at ${openTimeFormatted} (2 hours before the first session).`);
-  }
-
-  if (isAfter(now, walkInCloseTime)) {
-    throw new Error('Walk-in registration is closed for the day.');
-  }
-
-  // Step 2: Generate Time Slots (these represent the doctor's available consultation slots)
-  const allSlots = generateTimeSlotsWithSession(todaysAvailability.timeSlots, now, slotDuration);
-  if (allSlots.length === 0) {
-      throw new Error('No consultation slots could be generated for today.');
-  }
-
-  // Step 3: Fetch today's appointments
-  const appointmentsRef = collection(db, 'appointments');
-  const appointmentsQuery = query(
-    appointmentsRef,
-    where('doctor', '==', doctor.name),
-    where('date', '==', todayDate),
-    orderBy('numericToken', 'asc')
-  );
-  const appointmentsSnapshot = await getDocs(appointmentsQuery);
-  const appointments = appointmentsSnapshot.docs.map(doc => doc.data() as Appointment);
-
-  // Step 4: Get confirmed appointments (Pending or Confirmed) sorted by slotIndex
-  const confirmedAppointments = appointments
-    .filter(a => a.status === 'Pending' || a.status === 'Confirmed')
-    .filter(a => a.bookedVia === 'Advanced Booking' || a.bookedVia === 'Online' || a.bookedVia === 'Advanced')
-    .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
-
-  // Step 5: Get existing W tokens sorted by slotIndex
-  const existingWTokens = appointments
-    .filter(a => a.bookedVia === 'Walk-in' && (a.status === 'Pending' || a.status === 'Confirmed'))
-    .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
-
-  // Step 5.5: Priority 1 - Check for available slots within 1-hour window (W Priority slots)
-  // These are slots that are available/vacant and within 1 hour from now (where A tokens can't book)
-  const oneHourFromNow = addMinutes(now, 60);
-  const bookedSlotIndices = new Set(
-    appointments
-      .filter(a => (a.status === 'Pending' || a.status === 'Confirmed'))
-      .map(a => a.slotIndex ?? -1)
-      .filter(idx => idx >= 0)
-  );
-  
-  // Find available slots within 1-hour window
-  // Priority 1: W tokens should fill available slots in 1-hour time frame first
-  const availableSlotsWithinOneHour: number[] = [];
-  for (let i = 0; i < allSlots.length; i++) {
-    const slot = allSlots[i];
-    const isWithinOneHour = !isBefore(slot.time, now) && !isAfter(slot.time, oneHourFromNow);
-    
-    if (isWithinOneHour) {
-      // Check if slot is available (vacant - not booked by any Pending/Confirmed appointment)
-      // W tokens should fill available slots in 1-hour time frame first
-      // Each W token gets its own slot (W tokens don't share slots)
-      const slotAppointment = appointments.find(a => a.slotIndex === i);
-      const isEmpty = !slotAppointment;
-      const isVacant = isEmpty || (slotAppointment && ['Skipped', 'Cancelled', 'Completed', 'No-show'].includes(slotAppointment.status));
-      
-      // Slot is available if it's vacant (not booked by any Pending/Confirmed appointment)
-      // W tokens don't share slots, so we exclude slots already booked by W tokens
-      if (isVacant && !bookedSlotIndices.has(i)) {
-        availableSlotsWithinOneHour.push(i);
-      }
-    }
-  }
-  
-  // Sort by slot index to get the earliest available slot
-  availableSlotsWithinOneHour.sort((a, b) => a - b);
-
-  // Step 5.5: Calculate imaginary W slot positions - NEW APPROACH
-  // Imaginary W slots are the LAST 15% of total slots (rounded up)
-  // Example: 18 total slots → 15% = 2.7 → rounded up = 3 slots
-  // These 3 slots are the LAST 3 slots: 16, 17, 18 (0-indexed: 15, 16, 17)
-  // Token numbers will be: W17, W18, W19 (totalSlots - imaginarySlotsCount + 1, +2, +3)
-  const totalSlots = allSlots.length;
-  const imaginaryWSlotsCount = Math.ceil(totalSlots * 0.15); // 15% rounded up
-  const imaginaryWSlotPositions = new Set<number>();
-  
-  // The last N slots are imaginary W slots (where N = imaginaryWSlotsCount)
-  // If totalSlots = 18 and imaginaryWSlotsCount = 3, then slots 15, 16, 17 are imaginary
-  for (let i = totalSlots - imaginaryWSlotsCount; i < totalSlots; i++) {
-    if (i >= 0) {
-      imaginaryWSlotPositions.add(i);
-    }
-  }
-  
-  console.log('🔍 [DEBUG] Calculating imaginary W slots (NEW APPROACH - Last 15%):', {
-    totalSlots,
-    imaginaryWSlotsCount,
-    imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-    lastSlots: Array.from(imaginaryWSlotPositions).map(s => `Slot ${s}`)
+  const appointments = await fetchDayAppointments(clinicId, doctorName, date);
+  const occupiedSlots = buildOccupiedSlotSet(appointments);
+  const candidates = buildCandidateSlots('W', slots, now, occupiedSlots, undefined, {
+    appointments,
+    walkInSpacing: walkInTokenAllotment > 0 ? walkInTokenAllotment : undefined,
   });
-  
-  // Old complex calculation logic removed - now using simple last 15% approach
-  
-  // Step 6: Calculate target slot - UPDATED LOGIC
-  // Priority 1: W tokens fill empty slots within 1-hour window (where A tokens can't book)
-  // Priority 3: W tokens use imaginary W slots (exclusive - no sharing)
-  const sortedImaginaryWSlots = Array.from(imaginaryWSlotPositions).sort((a, b) => a - b);
-  let finalSlotIndex: number | undefined = undefined;
-  // totalSlots is already declared above in Step 5.5
-  
-  // Priority 1: Use earliest available slot within 1-hour window if available
-  if (availableSlotsWithinOneHour.length > 0) {
-    finalSlotIndex = availableSlotsWithinOneHour[0];
-    console.log('✅ [DEBUG] Priority 1: Using available slot within 1-hour window:', {
-      slotIndex: finalSlotIndex,
-      slotTime: format(allSlots[finalSlotIndex].time, 'hh:mm a'),
-      availableSlots: availableSlotsWithinOneHour
-    });
-  }
-  
-  // Priority 3: Use imaginary W slots (only if Priority 1 didn't find a slot)
-  // IMPORTANT: Imaginary W slots CANNOT be shared - each W token gets its own slot
-  if (finalSlotIndex === undefined && sortedImaginaryWSlots.length > 0) {
-    console.log('🔍 [DEBUG] Priority 3: Checking imaginary W slots:', {
-      sortedImaginaryWSlots,
-      totalAppointments: appointments.length
-    });
-    
-    let selectedImaginarySlot = -1;
-    
-    // Find first empty imaginary W slot (NO SHARING - only empty slots can be used)
-    for (const imaginarySlot of sortedImaginaryWSlots) {
-      // Check if this imaginary slot is booked by an A token (not available for W)
-      const slotAppointment = appointments.find(a => a.slotIndex === imaginarySlot);
-      const isBookedByA = slotAppointment && 
-        (slotAppointment.bookedVia === 'Advanced Booking' || 
-         slotAppointment.bookedVia === 'Online' || 
-         slotAppointment.bookedVia === 'Advanced') &&
-        (slotAppointment.status === 'Pending' || slotAppointment.status === 'Confirmed');
-      
-      const isBookedByW = slotAppointment && 
-        slotAppointment.bookedVia === 'Walk-in' &&
-        (slotAppointment.status === 'Pending' || slotAppointment.status === 'Confirmed');
-      
-      const isEmpty = !slotAppointment;
-      
-      console.log('🔍 [DEBUG] Checking imaginary W slot:', {
-        slotIndex: imaginarySlot,
-        hasAppointment: !!slotAppointment,
-        appointmentBookedVia: slotAppointment?.bookedVia,
-        appointmentStatus: slotAppointment?.status,
-        isBookedByA,
-        isBookedByW,
-        isEmpty
-      });
-      
-      // Skip if booked by A token (should never happen, but safety check)
-      if (isBookedByA) {
-        console.log('⚠️ [DEBUG] Skipping imaginary W slot (booked by A token):', {
-          slotIndex: imaginarySlot,
-          appointmentBookedVia: slotAppointment?.bookedVia
-        });
-        continue;
-      }
-      
-      // Skip if booked by W token (NO SHARING - each W token gets its own slot)
-      if (isBookedByW) {
-        console.log('⚠️ [DEBUG] Skipping imaginary W slot (already booked by W token - no sharing):', {
-          slotIndex: imaginarySlot,
-          existingToken: slotAppointment?.tokenNumber
-        });
-        continue;
-      }
-      
-      // Use empty imaginary W slot (first available empty slot)
-      if (isEmpty && selectedImaginarySlot === -1) {
-        selectedImaginarySlot = imaginarySlot;
-        console.log('✅ [DEBUG] Found empty imaginary W slot:', {
-          slotIndex: selectedImaginarySlot
-        });
-        break; // Use first empty slot found
-      }
-    }
-    
-    if (selectedImaginarySlot >= 0) {
-      finalSlotIndex = selectedImaginarySlot;
-      console.log('✅ [DEBUG] Priority 3: Using empty imaginary W slot:', {
-        slotIndex: finalSlotIndex,
-        availableImaginaryWSlots: sortedImaginaryWSlots,
-        reason: 'Empty imaginary W slot (no sharing allowed)'
-      });
-    } else {
-      console.log('⚠️ [DEBUG] Priority 3: No available imaginary W slots (all booked by W tokens or A tokens)');
-    }
-  }
-  
-  // Fallback: Use interval-based logic only if no slot was found
-  if (finalSlotIndex === undefined) {
-    // Use interval-based logic to place W token after walkInTokenAllotment appointments
-    if (confirmedAppointments.length === 0) {
-      // No confirmed appointments - place at first slot
-      if (isBefore(now, availabilityStart)) {
-        finalSlotIndex = 0;
-      } else {
-        finalSlotIndex = findNextImmediateSlot(allSlots, now);
-        if (finalSlotIndex >= allSlots.length) {
-          throw new Error('No available slots for walk-in today.');
-        }
-      }
-    } else if (existingWTokens.length === 0) {
-      // First W token: place after walkInTokenAllotment confirmed appointments
-      if (confirmedAppointments.length >= walkInTokenAllotment) {
-        const targetAppointment = confirmedAppointments[walkInTokenAllotment - 1];
-        finalSlotIndex = (targetAppointment.slotIndex ?? 0) + 1;
-      } else {
-        // If fewer than walkInTokenAllotment confirmed appointments, place after the last one
-        const lastAppointment = confirmedAppointments[confirmedAppointments.length - 1];
-        finalSlotIndex = (lastAppointment.slotIndex ?? 0) + 1;
-      }
-    } else {
-      // Subsequent W tokens: place after walkInTokenAllotment appointments from last W token
-      const lastWToken = existingWTokens[existingWTokens.length - 1];
-      const lastWTokenSlotIndex = lastWToken?.slotIndex ?? -1;
-      
-      // Find appointments after the last W token
-      const appointmentsAfterLastW = confirmedAppointments.filter(a => {
-        const aptSlotIndex = a.slotIndex ?? 0;
-        return aptSlotIndex > lastWTokenSlotIndex;
-      });
-      
-      if (appointmentsAfterLastW.length >= walkInTokenAllotment) {
-        // Place after walkInTokenAllotment-th appointment after last W
-        const targetAppointment = appointmentsAfterLastW[walkInTokenAllotment - 1];
-        finalSlotIndex = (targetAppointment.slotIndex ?? 0) + 1;
-      } else {
-        // If fewer than walkInTokenAllotment appointments after last W, place after the last one
-        if (appointmentsAfterLastW.length > 0) {
-          const lastAppointment = appointmentsAfterLastW[appointmentsAfterLastW.length - 1];
-          finalSlotIndex = (lastAppointment.slotIndex ?? 0) + 1;
-        } else {
-          // No appointments after last W, place right after last W
-          finalSlotIndex = lastWTokenSlotIndex + 1;
-        }
-      }
-    }
+
+  if (candidates.length === 0) {
+    throw new Error('No walk-in slots are available at this time.');
   }
 
-  // Step 7: Validate slot is within bounds
-  if (finalSlotIndex === undefined) {
-    console.error('❌ [ERROR] No slot was selected!', {
-      availableSlotsWithinOneHour: availableSlotsWithinOneHour.length,
-      sortedImaginaryWSlots: sortedImaginaryWSlots.length,
-      confirmedAppointmentsCount: confirmedAppointments.length,
-      existingWTokensCount: existingWTokens.length,
-      walkInTokenAllotment
-    });
-    throw new Error('No available slots for walk-in today.');
-  }
-  
-  if (finalSlotIndex >= allSlots.length) {
-    console.error('❌ [ERROR] Selected slot is out of bounds:', {
-      finalSlotIndex,
-      totalSlots: allSlots.length
-    });
-    throw new Error('No available slots for walk-in today.');
-  }
-  
-  console.log('✅ [DEBUG] Final slot selection:', {
-    finalSlotIndex,
-    slotTime: format(allSlots[finalSlotIndex].time, 'hh:mm a'),
-    isImaginaryWSlot: imaginaryWSlotPositions.has(finalSlotIndex),
-    isInOneHourWindow: availableSlotsWithinOneHour.includes(finalSlotIndex),
-    imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-    selectedFromPriority: availableSlotsWithinOneHour.includes(finalSlotIndex) ? 'Priority 1' : 
-                          imaginaryWSlotPositions.has(finalSlotIndex) ? 'Priority 3' : 'Fallback'
-  });
-  
-  let finalSessionIndex = -1;
+  const chosenSlotIndex = candidates[0];
+  const chosenSlot = slots[chosenSlotIndex];
+  const patientsAhead = appointments.filter(appointment => {
+    return (
+      typeof appointment.slotIndex === 'number' &&
+      ACTIVE_STATUSES.has(appointment.status) &&
+      appointment.slotIndex < chosenSlotIndex
+    );
+  }).length;
 
-  // Step 8: Calculate patients ahead
-  // Count all confirmed appointments (A and W) before the final slot
-  // Note: W tokens do NOT share slots, so we don't count W tokens at the same slot index
-  const allConfirmedAppointments = appointments.filter(a =>
-    a.status === 'Pending' || a.status === 'Confirmed'
-  );
-  
-  // Count appointments before the final slot
-  const appointmentsBeforeSlot = allConfirmedAppointments.filter(a => {
-    const aptSlotIndex = a.slotIndex ?? 0;
-    return aptSlotIndex < finalSlotIndex;
-  });
-  
-  // Note: W tokens do NOT share slots, so wTokensAtSameSlot will be 0 (no other W token at this slot)
-  // We only count appointments before the final slot
-  const totalAhead = appointmentsBeforeSlot.length;
-  
-  // Don't cap patients ahead - show the actual count
-  const patientsAhead = totalAhead;
-
-  // Step 6: Calculate estimated time for display
-  // Always use: (number of people ahead * average consultation time)
-  // This is for display only, placement logic remains unchanged
-  let estimatedTime: Date;
-  const consultationStarted = !isBefore(now, availabilityStart);
-  
-  if (!consultationStarted) {
-    // Before consultation starts: Use patientsAhead * averageConsultationTime from consultation start
-    estimatedTime = addMinutes(availabilityStart, patientsAhead * slotDuration);
-  } else {
-    // After consultation starts: Use patientsAhead * averageConsultationTime from current time
-    estimatedTime = addMinutes(now, patientsAhead * slotDuration);
-  }
-
-  // Step 10: W tokens don't have a fixed time - they're inserted between A tokens
-  // Use the time of the appointment before this slot (if exists) or the slot time
-  let actualSlotTime: Date;
-  if (finalSlotIndex > 0 && confirmedAppointments.length > 0) {
-    // Find the appointment that comes before this slot
-    const appointmentsBeforeSlot = confirmedAppointments.filter(a => {
-      const aptSlotIndex = a.slotIndex ?? 0;
-      return aptSlotIndex < finalSlotIndex;
-    });
-    
-    if (appointmentsBeforeSlot.length > 0) {
-      // Use the time of the last appointment before this slot
-      const lastAppointmentBeforeSlot = appointmentsBeforeSlot[appointmentsBeforeSlot.length - 1];
-      try {
-        const appointmentDate = parse(lastAppointmentBeforeSlot.date, "d MMMM yyyy", new Date());
-        const appointmentTime = parseTimeString(lastAppointmentBeforeSlot.time, appointmentDate);
-        // W token is placed "between" appointments, so use the same time as the previous appointment
-        // The actual time will be calculated when shifting subsequent appointments
-        actualSlotTime = appointmentTime;
-      } catch {
-        // Fallback to slot time if parsing fails
-        actualSlotTime = allSlots[finalSlotIndex].time;
-      }
-    } else {
-      // No appointments before, use slot time
-      actualSlotTime = allSlots[finalSlotIndex].time;
-    }
-  } else {
-    // Use slot time if no appointments before
-    actualSlotTime = allSlots[finalSlotIndex].time;
-  }
-  
-  // Step 11: Get session index from final slot
-  finalSessionIndex = allSlots[finalSlotIndex].sessionIndex;
-
-  // Step 12: Check if walk-in time goes beyond consultation hours
-  const consultationEndTime = parseTimeString(
-    todaysAvailability.timeSlots[todaysAvailability.timeSlots.length - 1].to,
-    now
-  );
-  
-  // Add buffer time (e.g., 30 minutes) beyond consultation end
-  const maxAllowedTime = addMinutes(consultationEndTime, 30);
-  
-  if (isAfter(actualSlotTime, maxAllowedTime)) {
-    const consultationEndFormatted = format(consultationEndTime, 'hh:mm a');
-    const actualTimeFormatted = format(actualSlotTime, 'hh:mm a');
-    throw new Error(`Walk-ins cannot be accommodated today. The estimated consultation time (${actualTimeFormatted}) would extend beyond the doctor's consultation hours (ends at ${consultationEndFormatted}). Please book an advanced appointment for tomorrow or try again earlier in the day.`);
-  }
-
-  // Step 13: Generate numeric token (sequential across all appointments)
-  // numeric token should align with slot order across sessions -> slotIndex + 1
-  const newNumericToken = finalSlotIndex + 1;
+  const existingWalkIns = appointments.filter(appointment => appointment.bookedVia === 'Walk-in');
 
   return {
-    estimatedTime, // For display purposes
+    estimatedTime: chosenSlot.time,
     patientsAhead,
-    numericToken: newNumericToken,
-    slotIndex: finalSlotIndex,
-    sessionIndex: finalSessionIndex,
+    numericToken: existingWalkIns.length + 1,
+    slotIndex: chosenSlotIndex,
+    sessionIndex: chosenSlot.sessionIndex,
+    actualSlotTime: chosenSlot.time,
   };
 }
 
-
-/**
- * Generates all time slots for the given time ranges with session index
- */
-function generateTimeSlotsWithSession(timeSlots: TimeSlot[], referenceDate: Date, slotDuration: number): { time: Date, sessionIndex: number }[] {
-  const slots: { time: Date, sessionIndex: number }[] = [];
-  timeSlots.forEach((slot, sessionIndex) => {
-    const startTime = parseTimeString(slot.from, referenceDate);
-    const endTime = parseTimeString(slot.to, referenceDate);
-    let current = startTime;
-    while (isBefore(current, endTime)) {
-      slots.push({ time: current, sessionIndex });
-      current = addMinutes(current, slotDuration);
-    }
-  });
-  return slots;
-}
-
-
-/**
- * Finds the index of the current or next slot after the given time
- */
-function findCurrentSlotIndex(slots: Date[], now: Date): number {
-  for (let i = 0; i < slots.length; i++) {
-    if (isAfter(slots[i], now) || slots[i].getTime() === now.getTime()) {
-      return i;
-    }
-  }
-  // If all slots are in the past, return length (next slot would be after the last)
-  return slots.length;
-}
-
-/**
- * Calculates slot details for a skipped token to rejoin the queue
- * 
- * Logic:
- * - Uses slotIndex-based placement (consistent with walk-in logic)
- * - Places token after N active patients (N = skippedTokenRecurrence)
- * - Updates both slotIndex and time field to keep in sync
- * - Shows error if target slot is conflicted (no auto-resolve)
- * 
- * @param skippedAppointment - The skipped appointment that needs to rejoin
- * @param activeAppointments - Active appointments (Pending/Confirmed) for same doctor and date, sorted by slotIndex
- * @param doctor - Doctor details
- * @param recurrence - Number of patients to skip ahead (from clinicDetails.skippedTokenRecurrence)
- * @param date - The appointment date
- * @returns Object with slotIndex, time, sessionIndex, or throws error on conflict
- */
 export async function calculateSkippedTokenRejoinSlot(
-  skippedAppointment: Appointment,
+  appointment: Appointment,
   activeAppointments: Appointment[],
   doctor: Doctor,
-  recurrence: number,
-  date: Date
-): Promise<{
-  slotIndex: number;
-  time: string;
-  sessionIndex: number;
-}> {
-  const dateStr = format(date, 'd MMMM yyyy');
-  const dayOfWeek = format(date, 'EEEE');
-  const slotDuration = doctor.averageConsultingTime || 15;
-
-  // Step 1: Get doctor's availability for the day
-  const todaysAvailability = doctor.availabilitySlots?.find(s => s.day === dayOfWeek);
-  if (!todaysAvailability || !todaysAvailability.timeSlots?.length) {
-    throw new Error('Doctor not available on this date');
-  }
-
-  // Step 2: Generate all time slots for the day
-  const allSlots = generateTimeSlotsWithSession(todaysAvailability.timeSlots, date, slotDuration);
-  if (allSlots.length === 0) {
-    throw new Error('No consultation slots available for this date');
-  }
-
-  // Step 3: Get confirmed appointments (Pending or Confirmed) sorted by slotIndex
-  const confirmedAppointments = activeAppointments
-    .filter(a => a.doctor === skippedAppointment.doctor && a.date === dateStr)
-    .filter(a => (a.status === 'Pending' || a.status === 'Confirmed'))
-    .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
-
-  // Step 4: Calculate target position based on confirmed appointments
-  let targetSlotIndex: number;
-  const now = new Date();
-  
-  if (confirmedAppointments.length === 0) {
-    // No confirmed appointments - place at next immediate slot
-    const nextImmediateSlotIndex = findNextImmediateSlot(allSlots, now);
-    if (nextImmediateSlotIndex >= allSlots.length) {
-      // All slots are in the past
-      const lastSlot = allSlots[allSlots.length - 1];
-      return {
-        slotIndex: allSlots.length - 1,
-        time: format(lastSlot.time, 'hh:mm a'),
-        sessionIndex: lastSlot.sessionIndex,
-      };
-    }
-    targetSlotIndex = nextImmediateSlotIndex;
-  } else if (confirmedAppointments.length >= recurrence) {
-    // If there are >= recurrence confirmed appointments, place after the recurrence-th one
-    const targetAppointment = confirmedAppointments[recurrence - 1];
-    targetSlotIndex = (targetAppointment.slotIndex ?? 0) + 1;
-  } else {
-    // If there are < recurrence confirmed appointments, place after the last one
-    const lastAppointment = confirmedAppointments[confirmedAppointments.length - 1];
-    targetSlotIndex = (lastAppointment.slotIndex ?? 0) + 1;
-  }
-
-  // Step 6: Validate slot availability
-  // Check if target slot is within available slots
-  if (targetSlotIndex >= allSlots.length) {
-    // Beyond scheduled hours - use last slot
-    const lastSlot = allSlots[allSlots.length - 1];
-    return {
-      slotIndex: allSlots.length - 1,
-      time: format(lastSlot.time, 'hh:mm a'),
-      sessionIndex: lastSlot.sessionIndex,
-    };
-  }
-
-  // Step 7: Check for slot conflict (occupied by any active appointment - A or W token)
-  // We already have activeAppointments passed in, but we need to check ALL active appointments (including W tokens)
-  // The activeAppointments parameter might only include A tokens, so we use it plus check for any other conflicts
-  // Check if target slot is occupied by any appointment in the activeAppointments list
-  const isOccupiedByActive = confirmedAppointments.some(apt => 
-    apt.slotIndex === targetSlotIndex
+  _recurrence: number = 0,
+  referenceDate: Date = new Date()
+): Promise<{ slotIndex: number; time: string; sessionIndex: number }>
+{
+  const clinicId = appointment.clinicId || doctor.clinicId || '';
+  const doctorName = appointment.doctor || doctor.name;
+  const { slots } = await loadDoctorAndSlots(
+    clinicId,
+    doctorName,
+    referenceDate,
+    doctor.id ?? appointment.doctorId
   );
 
-  // Also check all appointments for the day to catch W tokens that might not be in activeAppointments
-  const appointmentsRef = collection(db, 'appointments');
-  const allActiveQuery = query(
-    appointmentsRef,
-    where('doctor', '==', skippedAppointment.doctor),
-    where('date', '==', dateStr),
-    where('slotIndex', '==', targetSlotIndex),
-    where('status', 'in', ['Pending', 'Confirmed'])
-  );
-  const allActiveSnapshot = await getDocs(allActiveQuery);
-  const slotOccupied = allActiveSnapshot.docs.some(doc => {
-    const apt = doc.data() as Appointment;
-    return apt.id !== skippedAppointment.id; // Exclude the skipped appointment itself
-  });
+  const filteredAppointments = activeAppointments.filter(a => a.id !== appointment.id);
+  const occupiedSlots = buildOccupiedSlotSet(filteredAppointments);
+  const candidates = buildCandidateSlots('W', slots, referenceDate, occupiedSlots);
 
-  const isOccupied = isOccupiedByActive || slotOccupied;
-
-  if (isOccupied) {
-    throw new Error(`Slot ${targetSlotIndex} is already occupied. Cannot rejoin at this position.`);
-  }
-
-  // Step 8: Get slot time and session index
-  const targetSlot = allSlots[targetSlotIndex];
-  if (!targetSlot) {
-    throw new Error(`Invalid slot index: ${targetSlotIndex}`);
-  }
+  const slotIndex = candidates[0] ?? slots[slots.length - 1].index;
+  const slot = slots.find(s => s.index === slotIndex) ?? slots[slots.length - 1];
 
   return {
-    slotIndex: targetSlotIndex,
-    time: format(targetSlot.time, 'hh:mm a'),
-    sessionIndex: targetSlot.sessionIndex,
+    slotIndex: slot.index,
+    time: format(slot.time, 'hh:mm a'),
+    sessionIndex: slot.sessionIndex,
   };
 }

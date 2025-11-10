@@ -144,82 +144,8 @@ async function updateAppointmentStatuses(clinicId: string): Promise<void> {
     await batch.commit();
     console.log(`Successfully updated ${appointmentsToMarkNoShow.length} appointments to No-show`);
     
-    // Reduce delays for subsequent appointments when slots become vacant (no-show)
-    for (const { id, appointment } of appointmentsToMarkNoShow) {
-      try {
-        // Get doctor info to get slot duration
-        const doctorsRef = collection(db, 'doctors');
-        const doctorQuery = query(
-          doctorsRef,
-          where('clinicId', '==', appointment.clinicId),
-          where('name', '==', appointment.doctor)
-        );
-        const doctorSnapshot = await getDocs(doctorQuery);
-        if (!doctorSnapshot.empty) {
-          const doctor = { id: doctorSnapshot.docs[0].id, ...doctorSnapshot.docs[0].data() } as Doctor;
-          const slotDuration = doctor.averageConsultingTime || 15;
-          
-          const { reduceDelayOnSlotVacancy } = await import('@/lib/delay-propagation-service');
-          await reduceDelayOnSlotVacancy(
-            appointment.clinicId,
-            appointment.doctor,
-            appointment.date,
-            id,
-            slotDuration
-          );
-        }
-      } catch (delayError) {
-        console.error('Error reducing delay on no-show:', delayError);
-        // Don't fail the status update if delay reduction fails
-      }
-    }
-    
-    // Trigger automatic reassignment of arrived patients to empty slots
-    // Group by doctor and session to avoid duplicate calls
-    const reassignmentMap = new Map<string, { appointment: Appointment; doctor: Doctor | null }[]>();
-    
-    for (const { id, appointment } of appointmentsToMarkNoShow) {
-      if (appointment.sessionIndex === undefined) continue;
-      
-      const key = `${appointment.clinicId}_${appointment.doctor}_${appointment.sessionIndex}`;
-      if (!reassignmentMap.has(key)) {
-        reassignmentMap.set(key, []);
-      }
-      
-      // Get doctor info
-      const doctorsRef = collection(db, 'doctors');
-      const doctorQuery = query(
-        doctorsRef,
-        where('clinicId', '==', appointment.clinicId),
-        where('name', '==', appointment.doctor)
-      );
-      const doctorSnapshot = await getDocs(doctorQuery);
-      const doctor = doctorSnapshot.empty ? null : ({ id: doctorSnapshot.docs[0].id, ...doctorSnapshot.docs[0].data() } as Doctor);
-      
-      reassignmentMap.get(key)!.push({ appointment, doctor });
-    }
-    
-    // Trigger reassignment for each unique doctor/session combination
-    for (const [key, appointments] of reassignmentMap.entries()) {
-      if (appointments.length === 0 || !appointments[0].doctor) continue;
-      
-      const { appointment, doctor } = appointments[0];
-      const appointmentDate = parse(appointment.date, 'd MMMM yyyy', new Date());
-      
-      try {
-        const { triggerReassignmentOnSlotVacancy } = await import('@/lib/slot-reassignment-service');
-        await triggerReassignmentOnSlotVacancy(
-          appointment.clinicId,
-          appointment.doctor,
-          appointmentDate,
-          appointment.sessionIndex!,
-          doctor
-        );
-      } catch (reassignError) {
-        console.error('Error triggering reassignment after No-show:', reassignError);
-        // Don't fail the status update if reassignment fails
-      }
-    }
+    // Delay reduction and slot reassignment removed in simplified flow
+    // Send No-show notifications
   }
 }
 
