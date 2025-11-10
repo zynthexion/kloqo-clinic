@@ -323,7 +323,7 @@ export async function generateNextTokenAndReserveSlot(
         let currentWSlot = firstWSlot;
         const maxSlotIndex = Math.max(...confirmedAppointments.map(a => a.slotIndex ?? 0), 0);
         while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
-          currentWSlot += walkInTokenAllotment + 1; // Fixed: should be +1, not just walkInTokenAllotment
+          currentWSlot += walkInTokenAllotment;
           imaginaryWSlotPositions.add(currentWSlot);
         }
       }
@@ -346,7 +346,7 @@ export async function generateNextTokenAndReserveSlot(
         let currentWSlot = nextWSlot;
         const maxSlotIndex = Math.max(...confirmedAppointments.map(a => a.slotIndex ?? 0), lastWTokenSlotIndex);
         while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
-          currentWSlot += walkInTokenAllotment + 1; // Fixed: should be +1, not just walkInTokenAllotment
+          currentWSlot += walkInTokenAllotment;
           imaginaryWSlotPositions.add(currentWSlot);
         }
       }
@@ -652,7 +652,14 @@ export async function generateNextTokenAndReserveSlot(
   
   // Store wTokenStartNumber for use in transaction (for W tokens)
   // Calculate it once before the transaction
-  const wTokenStartNumber = type === 'W' ? (await calculateTotalSlotsForDay(clinicId, doctorName, date)) + 1 : null;
+  // NEW APPROACH: W tokens start from (totalSlots - imaginarySlotsCount + 1)
+  // Example: 18 total slots, 3 imaginary slots → W tokens start from 16 (18-3+1)
+  let wTokenStartNumber: number | null = null;
+  if (type === 'W') {
+    const totalSlots = await calculateTotalSlotsForDay(clinicId, doctorName, date);
+    const imaginaryWSlotsCount = Math.ceil(totalSlots * 0.15); // 15% rounded up
+    wTokenStartNumber = totalSlots - imaginaryWSlotsCount + 1;
+  }
 
   // Step 0.7: For A and W tokens, fetch all appointments for the day BEFORE transaction
   // We'll verify slot availability and select slot atomically inside the transaction
@@ -919,7 +926,7 @@ export async function generateNextTokenAndReserveSlot(
             const maxSlotIndex = Math.max(...confirmedAppointments.map(a => a.slotIndex ?? 0), 0);
             let currentWSlot = firstWSlot;
             while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
-              currentWSlot += walkInTokenAllotment + 1;
+              currentWSlot += walkInTokenAllotment;
               imaginaryWSlotPositions.add(currentWSlot);
             }
           }
@@ -958,7 +965,7 @@ export async function generateNextTokenAndReserveSlot(
               imaginaryWSlotPositions.add(nextWSlot);
             } else {
               // Fallback: if we don't have enough appointments yet, use slot after last W + walkInTokenAllotment
-              imaginaryWSlotPositions.add(lastWTokenSlotIndex + walkInTokenAllotment + 1);
+            imaginaryWSlotPositions.add(lastWTokenSlotIndex + walkInTokenAllotment);
             }
           } else {
             // We already have enough appointments after last W
@@ -971,10 +978,10 @@ export async function generateNextTokenAndReserveSlot(
           const maxSlotIndex = Math.max(...confirmedAppointments.map(a => a.slotIndex ?? 0), lastWTokenSlotIndex);
           const firstWSlot = Array.from(imaginaryWSlotPositions)[0] || (lastWTokenSlotIndex + 1);
           let currentWSlot = firstWSlot;
-          while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
-            currentWSlot += walkInTokenAllotment + 1;
-            imaginaryWSlotPositions.add(currentWSlot);
-          }
+            while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
+              currentWSlot += walkInTokenAllotment;
+              imaginaryWSlotPositions.add(currentWSlot);
+            }
         }
       }
       
@@ -1601,7 +1608,7 @@ export async function generateNextTokenAndReserveSlot(
           let currentWSlot = firstWSlot;
           const maxSlotIndex = Math.max(...confirmedAppointments.map(a => a.slotIndex ?? 0), 0);
           while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
-            currentWSlot += walkInTokenAllotment + 1;
+            currentWSlot += walkInTokenAllotment;
             imaginaryWSlotPositions.add(currentWSlot);
           }
         }
@@ -1624,7 +1631,7 @@ export async function generateNextTokenAndReserveSlot(
           let currentWSlot = nextWSlot;
           const maxSlotIndex = Math.max(...confirmedAppointments.map(a => a.slotIndex ?? 0), 0);
           while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
-            currentWSlot += walkInTokenAllotment + 1;
+            currentWSlot += walkInTokenAllotment;
             imaginaryWSlotPositions.add(currentWSlot);
           }
         }
@@ -1968,7 +1975,7 @@ export async function generateNextTokenAndReserveSlot(
               let currentWSlot = firstWSlot;
               const maxSlotIndex = Math.max(...confirmedAppointmentsForCheck.map(a => a.slotIndex ?? 0), 0);
               while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
-                currentWSlot += walkInTokenAllotment + 1;
+                currentWSlot += walkInTokenAllotment;
                 imaginaryWSlotPositionsForCheck.add(currentWSlot);
               }
             }
@@ -1991,7 +1998,7 @@ export async function generateNextTokenAndReserveSlot(
                 const nextWSlot = (targetAppointment.slotIndex ?? 0) + 1;
                 imaginaryWSlotPositionsForCheck.add(nextWSlot);
               } else {
-                imaginaryWSlotPositionsForCheck.add(lastWTokenSlotIndex + walkInTokenAllotment + 1);
+                imaginaryWSlotPositionsForCheck.add(lastWTokenSlotIndex + walkInTokenAllotment);
               }
             } else {
               const targetAppointment = appointmentsAfterLastW[walkInTokenAllotment - 1];
@@ -2003,7 +2010,7 @@ export async function generateNextTokenAndReserveSlot(
             const firstWSlot = Array.from(imaginaryWSlotPositionsForCheck)[0] || (lastWTokenSlotIndex + 1);
             let currentWSlot = firstWSlot;
             while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
-              currentWSlot += walkInTokenAllotment + 1;
+              currentWSlot += walkInTokenAllotment;
               imaginaryWSlotPositionsForCheck.add(currentWSlot);
             }
           }
@@ -2335,207 +2342,38 @@ export async function calculateWalkInDetails(
   // Sort by slot index to get the earliest available slot
   availableSlotsWithinOneHour.sort((a, b) => a - b);
 
-  // Step 5.5: Calculate imaginary W slot positions for Priority 3 check
-  // Imaginary W slots are slots that should be reserved for W tokens based on the walkInTokenAllotment
-  // These slots are calculated based on confirmed A appointments and should be used in Priority 3
+  // Step 5.5: Calculate imaginary W slot positions - NEW APPROACH
+  // Imaginary W slots are the LAST 15% of total slots (rounded up)
+  // Example: 18 total slots → 15% = 2.7 → rounded up = 3 slots
+  // These 3 slots are the LAST 3 slots: 16, 17, 18 (0-indexed: 15, 16, 17)
+  // Token numbers will be: W17, W18, W19 (totalSlots - imaginarySlotsCount + 1, +2, +3)
+  const totalSlots = allSlots.length;
+  const imaginaryWSlotsCount = Math.ceil(totalSlots * 0.15); // 15% rounded up
   const imaginaryWSlotPositions = new Set<number>();
   
-  console.log('🔍 [DEBUG] Calculating imaginary W slots:', {
-    confirmedAppointmentsCount: confirmedAppointments.length,
-    existingWTokensCount: existingWTokens.length,
-    walkInTokenAllotment,
-    confirmedAppointments: confirmedAppointments.map(a => ({ slotIndex: a.slotIndex, bookedVia: a.bookedVia })),
-    existingWTokens: existingWTokens.map(a => ({ slotIndex: a.slotIndex, bookedVia: a.bookedVia }))
-  });
-  
-  if (confirmedAppointments.length === 0) {
-    // No confirmed appointments - first W would be at slot 0 + walkInTokenAllotment
-    imaginaryWSlotPositions.add(walkInTokenAllotment);
-    console.log('🔍 [DEBUG] No confirmed appointments - imaginary W slot:', walkInTokenAllotment);
-  } else if (existingWTokens.length === 0) {
-    // First W token: after walkInTokenAllotment confirmed appointments
-    if (confirmedAppointments.length >= walkInTokenAllotment) {
-      const targetAppointment = confirmedAppointments[walkInTokenAllotment - 1];
-      const firstWSlot = (targetAppointment.slotIndex ?? 0) + 1;
-      imaginaryWSlotPositions.add(firstWSlot);
-      
-      console.log('🔍 [DEBUG] First W token - calculated first imaginary W slot:', {
-        targetAppointmentSlotIndex: targetAppointment.slotIndex,
-        firstWSlot,
-        walkInTokenAllotment
-      });
-      
-      // Calculate additional imaginary W slots at intervals
-      let currentWSlot = firstWSlot;
-      const maxSlotIndex = Math.max(...confirmedAppointments.map(a => a.slotIndex ?? 0), 0);
-      while (currentWSlot <= maxSlotIndex + walkInTokenAllotment) {
-        currentWSlot += walkInTokenAllotment + 1;
-        imaginaryWSlotPositions.add(currentWSlot);
-      }
+  // The last N slots are imaginary W slots (where N = imaginaryWSlotsCount)
+  // If totalSlots = 18 and imaginaryWSlotsCount = 3, then slots 15, 16, 17 are imaginary
+  for (let i = totalSlots - imaginaryWSlotsCount; i < totalSlots; i++) {
+    if (i >= 0) {
+      imaginaryWSlotPositions.add(i);
     }
-    // If fewer than walkInTokenAllotment confirmed appointments, don't add any imaginary W slots yet
-    // All slots should be available for A tokens to fill
-    } else {
-    // Subsequent W tokens: Calculate imaginary W slots based on the pattern from the first W token
-    // The first imaginary W slot should be calculated as if there were no W tokens yet
-    // We need to reconstruct the original pattern by considering all confirmed appointments (A tokens only)
-    // and calculating where the first imaginary W slot would be
-    
-    // Get the first W token to understand the pattern
-    const firstWToken = existingWTokens[0];
-    const firstWTokenSlotIndex = firstWToken?.slotIndex ?? -1;
-    
-    // Calculate the first imaginary W slot based on the original pattern
-    // The first imaginary W slot should be after walkInTokenAllotment confirmed appointments
-    // But we need to account for the fact that appointments might have shifted after the first W token
-    
-    // Sort confirmed appointments by slotIndex to get the order
-    const sortedConfirmedAppointments = [...confirmedAppointments].sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
-    
-    let firstImaginaryWSlot: number | null = null;
-    
-    if (sortedConfirmedAppointments.length >= walkInTokenAllotment) {
-      // The first imaginary W slot should be after the walkInTokenAllotment-th confirmed appointment
-      // We need to find the appointment that would have been the walkInTokenAllotment-th in the ORIGINAL order
-      // (before any W tokens were inserted)
-      
-      // The pattern is: after walkInTokenAllotment confirmed appointments, place the first imaginary W slot
-      // If the first W token is at slot 1, and there are 7 confirmed appointments, they should be at slots 0, 2, 3, 4, 5, 6, 7
-      // The 7th appointment (index 6) would be at slot 6, so the first imaginary W slot should be at slot 7
-      
-      // Count how many confirmed appointments come before the first W token
-      const appointmentsBeforeFirstW = sortedConfirmedAppointments.filter(a => {
-        const aptSlotIndex = a.slotIndex ?? 0;
-        return aptSlotIndex < firstWTokenSlotIndex;
-      });
-      
-      console.log('🔍 [DEBUG] Calculating first imaginary W slot:', {
-        firstWTokenSlotIndex,
-        appointmentsBeforeFirstWCount: appointmentsBeforeFirstW.length,
-        appointmentsBeforeFirstW: appointmentsBeforeFirstW.map(a => ({ slotIndex: a.slotIndex })),
-        walkInTokenAllotment,
-        totalConfirmedAppointments: sortedConfirmedAppointments.length
-      });
-      
-      if (appointmentsBeforeFirstW.length >= walkInTokenAllotment) {
-        // If we have enough appointments before the first W token, use that pattern
-        // This means the first W token was placed after walkInTokenAllotment appointments
-        const targetAppointment = appointmentsBeforeFirstW[walkInTokenAllotment - 1];
-        firstImaginaryWSlot = (targetAppointment.slotIndex ?? 0) + 1;
-        console.log('🔍 [DEBUG] Using appointments before first W token:', {
-          targetAppointmentSlotIndex: targetAppointment.slotIndex,
-          firstImaginaryWSlot
-        });
-      } else {
-        // If we don't have enough appointments before the first W token,
-        // the first imaginary W slot should be calculated based on the pattern
-        // The first imaginary W slot should be at slot 7 if there are 7 confirmed appointments
-        // But we need to account for the fact that the first W token might have shifted appointments
-        
-        // The simplest approach: use the walkInTokenAllotment-th appointment in the sorted list
-        // This should give us slot 6 (if appointments are at 0, 2, 3, 4, 5, 6, 7), so firstImaginaryWSlot = 7
-        const targetAppointment = sortedConfirmedAppointments[walkInTokenAllotment - 1];
-        const targetSlotIndex = targetAppointment.slotIndex ?? 0;
-        
-        // If the target appointment is at slot 6, the first imaginary W slot should be at slot 7
-        // But if it's at slot 8 (because appointments shifted), we need to adjust
-        // Actually, the first imaginary W slot should always be at slot 7 if there are 7 confirmed appointments
-        // So we should use slot 7 directly, or calculate it based on the pattern
-        
-        // Let's use a simpler approach: the first imaginary W slot should be at slot 7
-        // if there are 7 confirmed appointments, regardless of where they are
-        // But we need to make sure it's not before the first W token
-        
-        // Actually, let's calculate it based on the pattern: after walkInTokenAllotment appointments
-        // If the appointments are at slots 0, 2, 3, 4, 5, 6, 7, then the 7th is at slot 7
-        // So firstImaginaryWSlot should be at slot 8? No, that's wrong.
-        
-        // The correct logic: the first imaginary W slot should be at slot 7
-        // if the 7th confirmed appointment (in original order) would have been at slot 6
-        // But since appointments might have shifted, we need to find the right slot
-        
-        // Let's use the target appointment's slot index + 1, but ensure it's at least slot 7
-        firstImaginaryWSlot = Math.max((targetSlotIndex ?? 0) + 1, walkInTokenAllotment);
-        
-        // But wait, if the target appointment is at slot 8, then firstImaginaryWSlot = 9, which is wrong
-        // We need to ensure it's at slot 7
-        
-        // Actually, I think the issue is that we need to use the ORIGINAL slot indices
-        // But we don't have that information. So let's use a different approach:
-        // The first imaginary W slot should be at slot 7 if there are 7 confirmed appointments
-        // So let's just use slot 7 directly if we have 7 confirmed appointments
-        
-        if (sortedConfirmedAppointments.length === walkInTokenAllotment) {
-          // If we have exactly walkInTokenAllotment confirmed appointments, 
-          // the first imaginary W slot should be at slot walkInTokenAllotment (7)
-          firstImaginaryWSlot = walkInTokenAllotment;
-        } else {
-          // Otherwise, use the target appointment's slot + 1
-          firstImaginaryWSlot = (targetSlotIndex ?? 0) + 1;
-        }
-        
-        console.log('🔍 [DEBUG] Using walkInTokenAllotment-th appointment:', {
-          targetAppointmentSlotIndex: targetSlotIndex,
-          firstImaginaryWSlot,
-          totalConfirmedAppointments: sortedConfirmedAppointments.length
-        });
-      }
-    } else if (sortedConfirmedAppointments.length > 0) {
-      // If fewer than walkInTokenAllotment confirmed appointments, use the last one
-      const lastAppointment = sortedConfirmedAppointments[sortedConfirmedAppointments.length - 1];
-      firstImaginaryWSlot = (lastAppointment.slotIndex ?? 0) + 1;
-  } else {
-      // No confirmed appointments, first imaginary W slot is at walkInTokenAllotment
-      firstImaginaryWSlot = walkInTokenAllotment;
-    }
-    
-    // Add all imaginary W slots at intervals of (walkInTokenAllotment + 1) starting from firstImaginaryWSlot
-    if (firstImaginaryWSlot !== null) {
-      let currentWSlot = firstImaginaryWSlot;
-      const maxSlotIndex = Math.max(...confirmedAppointments.map(a => a.slotIndex ?? 0), 0);
-      while (currentWSlot <= maxSlotIndex + walkInTokenAllotment + 10) { // Add buffer for future slots
-        imaginaryWSlotPositions.add(currentWSlot);
-        currentWSlot += walkInTokenAllotment + 1;
-      }
-      
-      console.log('🔍 [DEBUG] Subsequent W token - calculated imaginary W slots from pattern:', {
-        firstWTokenSlotIndex,
-        firstImaginaryWSlot,
-        walkInTokenAllotment,
-        confirmedAppointmentsCount: confirmedAppointments.length,
-        sortedConfirmedAppointments: sortedConfirmedAppointments.map(a => ({ slotIndex: a.slotIndex, bookedVia: a.bookedVia })),
-        imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b)
-      });
-    }
-    
-    // Also check appointments after the last W token to see if we need additional imaginary W slots
-    const lastWToken = existingWTokens[existingWTokens.length - 1];
-    const lastWTokenSlotIndex = lastWToken?.slotIndex ?? -1;
-    
-    const appointmentsAfterLastW = confirmedAppointments.filter(a => {
-      const aptSlotIndex = a.slotIndex ?? 0;
-      return aptSlotIndex > lastWTokenSlotIndex;
-    });
-    
-    console.log('🔍 [DEBUG] Subsequent W token - checking appointments after last W:', {
-      lastWTokenSlotIndex,
-      appointmentsAfterLastWCount: appointmentsAfterLastW.length,
-      appointmentsAfterLastW: appointmentsAfterLastW.map(a => ({ slotIndex: a.slotIndex, bookedVia: a.bookedVia })),
-      walkInTokenAllotment
-    });
   }
   
-  console.log('🔍 [DEBUG] Calculated imaginary W slots:', {
+  console.log('🔍 [DEBUG] Calculating imaginary W slots (NEW APPROACH - Last 15%):', {
+    totalSlots,
+    imaginaryWSlotsCount,
     imaginaryWSlotPositions: Array.from(imaginaryWSlotPositions).sort((a, b) => a - b),
-    walkInTokenAllotment
+    lastSlots: Array.from(imaginaryWSlotPositions).map(s => `Slot ${s}`)
   });
+  
+  // Old complex calculation logic removed - now using simple last 15% approach
   
   // Step 6: Calculate target slot - UPDATED LOGIC
   // Priority 1: W tokens fill empty slots within 1-hour window (where A tokens can't book)
   // Priority 3: W tokens use imaginary W slots (exclusive - no sharing)
   const sortedImaginaryWSlots = Array.from(imaginaryWSlotPositions).sort((a, b) => a - b);
   let finalSlotIndex: number | undefined = undefined;
-  const totalSlots = allSlots.length;
+  // totalSlots is already declared above in Step 5.5
   
   // Priority 1: Use earliest available slot within 1-hour window if available
   if (availableSlotsWithinOneHour.length > 0) {

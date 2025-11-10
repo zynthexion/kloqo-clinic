@@ -484,7 +484,7 @@ export default function SlotVisualizerPage() {
                         fallbackApplied: adjustedPosition !== basePosition
                       });
                       
-                      nextImaginarySlotPosition = adjustedPosition + walkInTokenAllotment + 1;
+                      nextImaginarySlotPosition = adjustedPosition + walkInTokenAllotment;
                     }
                   }
                   
