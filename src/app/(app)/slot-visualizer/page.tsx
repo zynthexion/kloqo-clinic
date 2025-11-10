@@ -426,35 +426,119 @@ export default function SlotVisualizerPage() {
                     .filter(a => a.bookedVia === 'Walk-in' && (a.status === 'Pending' || a.status === 'Confirmed'))
                     .sort((a, b) => (a.slotIndex ?? Infinity) - (b.slotIndex ?? Infinity));
                   
-                  // Calculate W token positions at intervals (spread within regular slots)
-                  // All imaginary W slots should move together and keep the interval of walkInTokenAllotment
-                  // As time passes, the reference point moves forward, so all W slots move together by the same amount
-                  // W slots are always 15% of the remaining (future) slots, not total slots
-                  const wSlotPositions = new Set<number>();
-                  const maxSlotIndex = allSlots.length > 0 ? Math.max(...allSlots.map(s => s.slotIndex)) : 0;
-                  const remainingSlots = futureSlots.length; // Remaining future slots
+                  // NEW APPROACH: Imaginary W slots are the LAST 15% of total slots
+                  // They are displayed at floating positions (intervals of walkInTokenAllotment) for visualization
+                  // Their visual slot numbers are their 0-indexed positions matching the base slot list
+                  const totalSlots = allSlots.length;
+                  const imaginaryWSlotsCount = Math.ceil(totalSlots * 0.15); // 15% rounded up
+                  const sessionSlotIndices = allSlots.map(slot => slot.slotIndex).sort((a, b) => a - b);
                   
-                  // Calculate total W slots needed (15% of remaining slots, rounded up)
-                  const totalWSlotsNeeded = Math.ceil(remainingSlots * 0.15);
-                  
-                  // Calculate W slots relative to reference point (which moves forward as time passes)
-                  // All W slots move together as a group, maintaining the interval of walkInTokenAllotment
-                  // First W slot is after walkInTokenAllotment A slots from reference point
-                  let currentWSlot = referenceSlotIndex + walkInTokenAllotment;
-                  let wSlotsPlaced = 0;
-                  
-                  // Place W slots at intervals from reference point
-                  // All W slots maintain the same interval spacing (walkInTokenAllotment + 1)
-                  // Only place W slots that fit within the interval pattern - don't place extra ones at the end
-                  while (wSlotsPlaced < totalWSlotsNeeded && currentWSlot <= maxSlotIndex) {
-                    wSlotPositions.add(currentWSlot);
-                    wSlotsPlaced++;
-                    // Next W slot: current position + walkInTokenAllotment + 1 (to account for the W slot itself)
-                    // This maintains the interval spacing between W slots
-                    currentWSlot += walkInTokenAllotment + 1;
+                  // Actual imaginary W slot indices (last N slots)
+                  const actualImaginaryWSlotIndices = new Set<number>();
+                  if (imaginaryWSlotsCount > 0) {
+                    const lastSlots = allSlots.slice(-imaginaryWSlotsCount);
+                    lastSlots.forEach(slot => {
+                      if (slot?.slotIndex !== undefined) {
+                        actualImaginaryWSlotIndices.add(slot.slotIndex);
+                      }
+                    });
                   }
                   
-                  // Don't place extra W slots at the end - only place them at intervals
+                  // Floating positions for visualization (intervals of walkInTokenAllotment from clinic collection)
+                  // These are where the imaginary W slots appear visually, but they keep their last slot numbers
+                  // Pattern: Each imaginary slot is placed after walkInTokenAllotment A slots within this session
+                  // - First imaginary slot appears before the slot that comes immediately after the first walkInTokenAllotment A slots
+                  // - Subsequent imaginary slots follow the same spacing based on A slots only
+                  const wSlotPositions = new Set<number>(); // Visual positions (actual slot indices)
+                  const maxSlotIndex = sessionSlotIndices.length > 0 ? sessionSlotIndices[sessionSlotIndices.length - 1] : -1;
+                  
+                  console.log('🔍 [DEBUG] Starting imaginary slot position calculation:', {
+                    walkInTokenAllotment,
+                    imaginaryWSlotsCount,
+                    totalSlots,
+                    maxSlotIndex,
+                    sessionStartSlotIndex,
+                    sessionSlotIndices
+                  });
+                  
+                  const calculationDetails: Array<{
+                    index: number;
+                    basePosition: number;
+                    adjustedPosition: number;
+                    fallbackApplied: boolean;
+                  }> = [];
+                  
+                  if (sessionSlotIndices.length > 0 && walkInTokenAllotment > 0) {
+                    let nextImaginarySlotPosition = sessionStartSlotIndex + walkInTokenAllotment;
+                    
+                    for (let i = 0; i < imaginaryWSlotsCount; i++) {
+                      const basePosition = nextImaginarySlotPosition;
+                      const fallbackPosition = maxSlotIndex - (imaginaryWSlotsCount - 1 - i);
+                      const adjustedPosition = Math.min(basePosition, fallbackPosition);
+                      
+                      wSlotPositions.add(adjustedPosition);
+                      calculationDetails.push({
+                        index: i,
+                        basePosition,
+                        adjustedPosition,
+                        fallbackApplied: adjustedPosition !== basePosition
+                      });
+                      
+                      nextImaginarySlotPosition = adjustedPosition + walkInTokenAllotment + 1;
+                    }
+                  }
+                  
+                  console.log('🔍 [DEBUG] Imaginary slot placement details:', calculationDetails);
+                  
+                  const finalPositions = Array.from(wSlotPositions).sort((a, b) => a - b);
+                  const sortedDetails = [...calculationDetails]
+                    .sort((a, b) => a.adjustedPosition - b.adjustedPosition)
+                    .slice(0, finalPositions.length);
+                  const expectedPositions = sortedDetails.map(detail => detail.adjustedPosition);
+                  console.log('🔍 [DEBUG] Final wSlotPositions:', {
+                    walkInTokenAllotment,
+                    imaginaryWSlotsCount,
+                    positions: finalPositions,
+                    expected: expectedPositions,
+                    match: JSON.stringify(finalPositions) === JSON.stringify(expectedPositions),
+                    details: finalPositions.map((pos, idx) => {
+                      const detail = sortedDetails[idx];
+                      const calculation = detail
+                        ? `${detail.basePosition} (base)${detail.fallbackApplied ? ` → adjusted to ${detail.adjustedPosition}` : ''}`
+                        : `sessionStart + walkInTokenAllotment * (${idx + 1})`;
+                      const fallbackCalculation = `${maxSlotIndex} - (${imaginaryWSlotsCount} - 1 - ${idx})`;
+                      return {
+                        index: idx,
+                        position: pos,
+                        expected: expectedPositions[idx],
+                        afterSlot: pos - 1,
+                        calculation: pos === expectedPositions[idx] ? calculation : `min(${calculation}, ${fallbackCalculation})`,
+                        match: pos === expectedPositions[idx]
+                      };
+                    }),
+                    allPositionsInSet: Array.from(wSlotPositions)
+                  });
+                  
+                  // Create mapping: visual position -> actual slot index (last slots)
+                  const visualToActualSlotMap = new Map<number, number>();
+                  const sortedVisualPositions = Array.from(wSlotPositions).sort((a, b) => a - b);
+                  const sortedActualIndices = Array.from(actualImaginaryWSlotIndices).sort((a, b) => a - b);
+                  sortedVisualPositions.forEach((visualPos, index) => {
+                    if (index < sortedActualIndices.length) {
+                      visualToActualSlotMap.set(visualPos, sortedActualIndices[index]);
+                    }
+                  });
+                  
+                  console.log('🔍 [DEBUG] Imaginary W Slot Mapping:', {
+                    walkInTokenAllotment,
+                    totalSlots,
+                    imaginaryWSlotsCount,
+                    actualImaginaryWSlotIndices: Array.from(actualImaginaryWSlotIndices).sort((a, b) => a - b),
+                    visualPositions: sortedVisualPositions,
+                    wSlotPositionsArray: Array.from(wSlotPositions).sort((a, b) => a - b),
+                    mapping: Array.from(visualToActualSlotMap.entries()).map(([v, a]) => `Visual ${v} → Actual ${a}`),
+                    calculatedPositions: expectedPositions
+                  });
                   
                   // Identify empty slots within 1-hour window (where A tokens can't book)
                   // W tokens should fill these empty slots first, before taking imaginary slots
@@ -694,7 +778,7 @@ export default function SlotVisualizerPage() {
                             // W slots are inserted between A slots at intervals
                             // After each W slot (actual or imaginary), A slots continue from the previous A slot's time + consultation time
                             // Filter out past slots or mark them as passed
-                            const allSlotsWithW: Array<{ time: Date | null; slotIndex: number; isWSlot: boolean; originalSlotIndex?: number; isPast?: boolean; wTokenAppointment?: Appointment }> = [];
+                            const allSlotsWithW: Array<{ time: Date | null; slotIndex: number; displaySlotIndex: number; isWSlot: boolean; originalSlotIndex?: number; isPast?: boolean; wTokenAppointment?: Appointment }> = [];
                             
                             // Track which regular slots have been used and current time for A slots
                             let regularSlotIndex = 0;
@@ -704,6 +788,48 @@ export default function SlotVisualizerPage() {
                             // Calculate how many total slots we need (regular slots + W slots)
                             const totalSlotsNeeded = allSlots.length + wSlotPositions.size;
                             const now = currentTime; // Use component's currentTime state
+                            
+                            // Calculate total slots across ALL sessions for the day to avoid conflicts
+                            const dayOfWeek = daysOfWeek[getDay(selectedDate)];
+                            const availabilityForDay = selectedDoctor.availabilitySlots?.find(s => s.day === dayOfWeek);
+                            let totalSlotsForDay = 0;
+                            if (availabilityForDay?.timeSlots) {
+                              const consultationTime = selectedDoctor.averageConsultingTime || 15;
+                              availabilityForDay.timeSlots.forEach(timeSlot => {
+                                const sessionStart = parseTime(timeSlot.from, selectedDate);
+                                const sessionEnd = parseTime(timeSlot.to, selectedDate);
+                                let currentTime = sessionStart;
+                                let sessionSlotCount = 0;
+                                while (isBefore(currentTime, sessionEnd)) {
+                                  sessionSlotCount++;
+                                  currentTime = addMinutes(currentTime, consultationTime);
+                                }
+                                totalSlotsForDay += sessionSlotCount;
+                              });
+                            }
+                            
+                            // Calculate how many A slots exist in previous sessions (before current session)
+                            // This ensures continuous numbering across all sessions
+                            let aSlotsInPreviousSessions = 0;
+                            if (availabilityForDay && selectedSessionIndex > 0) {
+                              const consultationTime = selectedDoctor.averageConsultingTime || 15;
+                              for (let i = 0; i < selectedSessionIndex; i++) {
+                                const timeSlot = availabilityForDay.timeSlots[i];
+                                const sessionStart = parseTime(timeSlot.from, selectedDate);
+                                const sessionEnd = parseTime(timeSlot.to, selectedDate);
+                                let currentTime = sessionStart;
+                                while (isBefore(currentTime, sessionEnd)) {
+                                  aSlotsInPreviousSessions++;
+                                  currentTime = addMinutes(currentTime, consultationTime);
+                                }
+                              }
+                            }
+                            
+                            // Start imaginary W slot counter from total slots for the day (to avoid conflicts across sessions)
+                            let imaginaryWSlotCounter = totalSlotsForDay; // Start from total slots (0-indexed, so this is correct)
+                            
+                            // Counter for continuous A slot numbering - start from previous sessions count
+                            let continuousASlotCounter = aSlotsInPreviousSessions;
                             
                             // Create a map of slot index to W token appointments
                             // W tokens can be in empty slots (within 1-hour window) or imaginary W slots
@@ -741,21 +867,85 @@ export default function SlotVisualizerPage() {
                             // Sort all slot indices
                             const sortedSlotIndices = Array.from(allSlotIndices).sort((a, b) => a - b);
                             
+                            const sortedWSlotPositions = Array.from(wSlotPositions).sort((a, b) => a - b);
+                            console.log('🔍 [DEBUG] Slot Processing:', {
+                              wSlotPositions: sortedWSlotPositions,
+                              wSlotPositionsDetails: sortedWSlotPositions.map(pos => ({
+                                position: pos,
+                                afterSlot: pos - 1,
+                                isInSet: wSlotPositions.has(pos)
+                              })),
+                              sortedSlotIndices,
+                              allSlotsLength: allSlots.length,
+                              totalSlots,
+                              allSlotsSlotIndices: allSlots.map(s => s.slotIndex),
+                              hasSlot13: allSlots.some(s => s.slotIndex === 13),
+                              hasSlot14: allSlots.some(s => s.slotIndex === 14)
+                            });
+                            
                             // Process each slot index in order
                             for (const actualSlotIndex of sortedSlotIndices) {
+                              console.log(`🔍 [DEBUG] Processing slot index ${actualSlotIndex}, isImaginaryW: ${wSlotPositions.has(actualSlotIndex)}`);
+                              // Check if there's an A token appointment at this position (regardless of whether it's an imaginary W position)
+                              const aTokenAtThisPosition = slotToAppointment.get(actualSlotIndex);
+                              const isAToken = aTokenAtThisPosition && 
+                                (aTokenAtThisPosition.bookedVia === 'Advanced Booking' || 
+                                 aTokenAtThisPosition.bookedVia === 'Online' || 
+                                 aTokenAtThisPosition.bookedVia === 'Advanced') &&
+                                (aTokenAtThisPosition.status === 'Pending' || aTokenAtThisPosition.status === 'Confirmed');
+                              
                               // Check if this is an imaginary W slot position
                               if (wSlotPositions.has(actualSlotIndex)) {
                                 // This is an imaginary W slot position
                                 // Check if there's an actual W token at this imaginary slot position
                                 const wTokenAtThisPosition = wTokenAtSlotIndex.get(actualSlotIndex);
                                 
-                                if (wTokenAtThisPosition) {
+                                // IMPORTANT: If there's an A token at this position, we still need to show:
+                                // 1. The empty imaginary W slot with final slot number (appears first, right after slot index 6)
+                                // 2. The A token with continuous slot number (appears after the imaginary W slot)
+                                if (isAToken) {
+                                  // IMPORTANT: Add the empty imaginary W slot FIRST - it should appear right after slot index 6
+                                  // The imaginary W slot appears at its calculated position (after walkInTokenAllotment positions)
+                                  // Use a small offset (actualSlotIndex - 0.001) to ensure it appears BEFORE the A token when sorted
+                                  // Get the actual slot index from the mapping (last 15% of slots)
+                                  const actualSlotIndexForW = visualToActualSlotMap.get(actualSlotIndex) ?? actualSlotIndex;
+                                  const finalSlotNumber = actualSlotIndexForW; // Keep zero-based numbering to match A slots
+                                  allSlotsWithW.push({
+                                    time: null,
+                                    slotIndex: actualSlotIndex - 0.001, // Small offset to appear BEFORE A token when sorted
+                                    displaySlotIndex: finalSlotNumber, // Use actual slot number from last 15%
+                                    isWSlot: true,
+                                    isPast: false
+                                  });
+                                  
+                                  // A token is at an imaginary W slot position - treat it as a regular A slot
+                                  const regularSlot = allSlots.find(s => s.slotIndex === actualSlotIndex);
+                                  if (regularSlot) {
+                                    const slotTime = new Date(currentASlotTime);
+                                    const isPast = isBefore(slotTime, now) && !isSameMinute(slotTime, now);
+                                    
+                                    // Assign continuous slot number to A slots (0, 1, 2, 3, 4, 5, 6, 7, 8, 9...)
+                                    const continuousASlotNumber = continuousASlotCounter++;
+                                    
+                                    allSlotsWithW.push({
+                                      time: slotTime,
+                                      slotIndex: actualSlotIndex, // Keep visual position for sorting
+                                      displaySlotIndex: continuousASlotNumber, // Continuous numbering for A slots
+                                      isWSlot: false,
+                                      originalSlotIndex: regularSlot.slotIndex,
+                                      isPast: isPast
+                                    });
+                                    // Move to next A slot time (add consultation time)
+                                    currentASlotTime = addMinutes(currentASlotTime, consultationTime);
+                                  }
+                                } else if (wTokenAtThisPosition) {
                                   // There's an actual W token at this imaginary slot position
                                   // Use the actual slotIndex from the W token appointment
                                   const wTokenSlotIndex = wTokenAtThisPosition.slotIndex ?? actualSlotIndex;
                                   allSlotsWithW.push({
                                     time: null,
-                                    slotIndex: wTokenSlotIndex, // Use actual slotIndex from W token appointment
+                                    slotIndex: actualSlotIndex, // Keep visual position for sorting
+                                    displaySlotIndex: wTokenSlotIndex, // Use actual slotIndex from W token appointment for display
                                     isWSlot: true,
                                     isPast: false,
                                     wTokenAppointment: wTokenAtThisPosition
@@ -765,9 +955,21 @@ export default function SlotVisualizerPage() {
                                 } else {
                                   // This is an imaginary W slot - no actual token yet
                                   // Imaginary W slots don't take time, so they don't increment time for subsequent slots
+                                  // Get the actual slot index from the mapping (last 15% of slots)
+                                  const actualSlotIndexForW = visualToActualSlotMap.get(actualSlotIndex) ?? actualSlotIndex;
+                                  const finalSlotNumber = actualSlotIndexForW; // Keep zero-based numbering to match A slots
+                                  
+                                  console.log(`🔍 [DEBUG] Adding imaginary W slot:`, {
+                                    visualPosition: actualSlotIndex,
+                                    actualSlotIndexForW,
+                                    finalSlotNumber,
+                                    mapping: visualToActualSlotMap.has(actualSlotIndex) ? `Visual ${actualSlotIndex} → Actual ${actualSlotIndexForW}` : 'No mapping found'
+                                  });
+                                  
                                   allSlotsWithW.push({
                                     time: null,
-                                    slotIndex: actualSlotIndex, // Use actual slot index
+                                    slotIndex: actualSlotIndex, // Keep visual position for sorting
+                                    displaySlotIndex: finalSlotNumber, // Use actual slot number from last 15%
                                     isWSlot: true,
                                     isPast: false
                                   });
@@ -777,6 +979,23 @@ export default function SlotVisualizerPage() {
                               } else {
                                 // This is a regular A slot
                                 const regularSlot = allSlots.find(s => s.slotIndex === actualSlotIndex);
+                                
+                                if (actualSlotIndex === 13) {
+                                  const slotTimeFor13 = new Date(currentASlotTime);
+                                  const isPastFor13 = isBefore(slotTimeFor13, now) && !isSameMinute(slotTimeFor13, now);
+                                  console.log(`🔍 [DEBUG] Position 13 check:`, {
+                                    actualSlotIndex,
+                                    regularSlotFound: !!regularSlot,
+                                    regularSlot,
+                                    allSlotsHas13: allSlots.some(s => s.slotIndex === 13),
+                                    allSlotsIndices: allSlots.map(s => s.slotIndex),
+                                    currentASlotTime: currentASlotTime.toLocaleTimeString(),
+                                    slotTimeFor13: slotTimeFor13.toLocaleTimeString(),
+                                    now: now.toLocaleTimeString(),
+                                    isPastFor13,
+                                    willBeFiltered: isPastFor13
+                                  });
+                                }
                                 
                                 if (regularSlot) {
                                   // Check if there's a W token in this regular slot (empty slot within 1-hour window)
@@ -788,7 +1007,8 @@ export default function SlotVisualizerPage() {
                                     const wTokenSlotIndex = wTokenAtThisRegularSlot.slotIndex ?? regularSlot.slotIndex;
                                     allSlotsWithW.push({
                                       time: null,
-                                      slotIndex: wTokenSlotIndex, // Use actual slotIndex from W token appointment
+                                      slotIndex: actualSlotIndex, // Keep visual position for sorting
+                                      displaySlotIndex: wTokenSlotIndex, // Use actual slotIndex from W token appointment for display
                                       isWSlot: true,
                                       originalSlotIndex: regularSlot.slotIndex,
                                       isPast: false,
@@ -801,10 +1021,14 @@ export default function SlotVisualizerPage() {
                                     const slotTime = new Date(currentASlotTime);
                                     const isPast = isBefore(slotTime, now) && !isSameMinute(slotTime, now);
                                     
+                                    // Assign continuous slot number to A slots (0, 1, 2, 3, 4, 5, 6, 7, 8, 9...)
+                                    const continuousASlotNumber = continuousASlotCounter++;
+                                    
                                     // Use the actual slotIndex from the original slot
                                     allSlotsWithW.push({
                                       time: slotTime,
-                                      slotIndex: regularSlot.slotIndex, // Use actual slotIndex from original slot
+                                      slotIndex: actualSlotIndex, // Keep visual position for sorting
+                                      displaySlotIndex: continuousASlotNumber, // Continuous numbering for A slots
                                       isWSlot: false,
                                       originalSlotIndex: regularSlot.slotIndex,
                                       isPast: isPast
@@ -812,15 +1036,84 @@ export default function SlotVisualizerPage() {
                                     // Move to next A slot time (add consultation time)
                                     currentASlotTime = addMinutes(currentASlotTime, consultationTime);
                                   }
+                                } else {
+                                  // Position exists in sortedSlotIndices but not in allSlots
+                                  // This shouldn't happen, but if it does, add an empty slot to maintain visual order
+                                  // Calculate time based on currentASlotTime
+                                  const slotTime = new Date(currentASlotTime);
+                                  const isPast = isBefore(slotTime, now) && !isSameMinute(slotTime, now);
+                                  
+                                  // Assign continuous slot number to A slots
+                                  const continuousASlotNumber = continuousASlotCounter++;
+                                  
+                                  allSlotsWithW.push({
+                                    time: slotTime,
+                                    slotIndex: actualSlotIndex, // Keep visual position for sorting
+                                    displaySlotIndex: continuousASlotNumber, // Continuous numbering for A slots
+                                    isWSlot: false,
+                                    isPast: isPast
+                                  });
+                                  // Move to next A slot time (add consultation time)
+                                  currentASlotTime = addMinutes(currentASlotTime, consultationTime);
                                 }
                               }
                             }
                             
-                            // Sort by slotIndex (should already be sorted, but just in case)
+                            // Sort by slotIndex (visual position) to maintain correct order
                             allSlotsWithW.sort((a, b) => a.slotIndex - b.slotIndex);
                             
+                            console.log('🔍 [DEBUG] After sorting allSlotsWithW:', {
+                              totalSlots: allSlotsWithW.length,
+                              imaginaryWSlots: allSlotsWithW.filter(s => s.isWSlot && !s.wTokenAppointment).map(s => ({
+                                slotIndex: s.slotIndex,
+                                displaySlotIndex: s.displaySlotIndex,
+                                afterSlot: s.slotIndex - 1
+                              })),
+                              allSlots: allSlotsWithW.map(s => ({
+                                slotIndex: s.slotIndex,
+                                displaySlotIndex: s.displaySlotIndex,
+                                isWSlot: s.isWSlot,
+                                hasTime: s.time !== null,
+                                isPast: s.isPast
+                              })),
+                              slotsAround14: allSlotsWithW.filter(s => s.slotIndex >= 12 && s.slotIndex <= 15).map(s => ({
+                                slotIndex: s.slotIndex,
+                                displaySlotIndex: s.displaySlotIndex,
+                                isWSlot: s.isWSlot,
+                                hasTime: s.time !== null,
+                                isPast: s.isPast,
+                                time: s.time ? s.time.toLocaleTimeString() : null
+                              })),
+                              hasSlot13: allSlotsWithW.some(s => s.slotIndex === 13),
+                              slot13Details: allSlotsWithW.find(s => s.slotIndex === 13)
+                            });
+                            
                             // Filter out past slots (only show future and current slots)
-                            const visibleSlots = allSlotsWithW.filter(slot => !slot.isPast);
+                            // BUT: If an imaginary W slot is at a position, ensure the slot before it is visible
+                            // (even if it's in the past) to maintain visual continuity
+                            const visibleSlots = allSlotsWithW.filter(slot => {
+                              if (!slot.isPast) return true;
+                              
+                              // If this is a past slot, check if there's an imaginary W slot immediately after it
+                              const nextSlot = allSlotsWithW.find(s => s.slotIndex === slot.slotIndex + 1);
+                              if (nextSlot && nextSlot.isWSlot && !nextSlot.wTokenAppointment) {
+                                // There's an imaginary W slot after this past slot, so show this slot too
+                                return true;
+                              }
+                              
+                              return false;
+                            });
+                            
+                            console.log('🔍 [DEBUG] After filtering past slots:', {
+                              totalVisible: visibleSlots.length,
+                              hasSlot13: visibleSlots.some(s => s.slotIndex === 13),
+                              slotsAround14: visibleSlots.filter(s => s.slotIndex >= 12 && s.slotIndex <= 15).map(s => ({
+                                slotIndex: s.slotIndex,
+                                displaySlotIndex: s.displaySlotIndex,
+                                isWSlot: s.isWSlot,
+                                isPast: s.isPast
+                              }))
+                            });
                             
                             return visibleSlots.map((slot, index) => {
                               // For appointments, check the original slot index if this slot was shifted
@@ -847,11 +1140,11 @@ export default function SlotVisualizerPage() {
                               // For imaginary W slots, never show time - they don't take time
                               const shouldShowTime = !isImaginaryWSlot && slot.time !== null;
                               
-                              // Use the slotIndex from the slot object, which is now set correctly:
-                              // - For A tokens: actual slotIndex from the original slot
+                              // Use displaySlotIndex for display:
+                              // - For A tokens: actual slotIndex from the original slot (continuous numbering)
                               // - For W tokens: actual slotIndex from the appointment
-                              // - For imaginary W slots: position in the combined array (for placeholders)
-                              const displaySlotIndex = slot.slotIndex;
+                              // - For imaginary W slots: final slot number starting from maxRegularSlotIndex + 1
+                              const displaySlotIndex = slot.displaySlotIndex;
                               
                               return (
                                 <div
@@ -1102,30 +1395,11 @@ export default function SlotVisualizerPage() {
                           .map(slot => slot.slotIndex)
                           .sort((a, b) => a - b);
                         
-                        // Recalculate imaginary W slot positions for comparison (same logic as in the slot visualization)
-                        const wSlotPositionsForInfo = new Set<number>();
-                        const maxSlotIndexForInfo = allSlots.length > 0 ? Math.max(...allSlots.map(s => s.slotIndex)) : 0;
-                        const futureSlotsForInfo = allSlots.filter(slot => {
-                          const isPast = isBefore(slot.time, now) && !isSameMinute(slot.time, now);
-                          return !isPast;
-                        });
-                        const remainingSlotsForInfo = futureSlotsForInfo.length;
-                        const totalWSlotsNeededForInfo = Math.ceil(remainingSlotsForInfo * 0.15);
-                        
-                        // Find reference slot index (first future slot)
-                        let referenceSlotIndexForInfo = 0;
-                        if (futureSlotsForInfo.length > 0) {
-                          referenceSlotIndexForInfo = futureSlotsForInfo[0].slotIndex;
-                        }
-                        
-                        let currentWSlotForInfo = referenceSlotIndexForInfo + walkInTokenAllotment;
-                        let wSlotsPlacedForInfo = 0;
-                        
-                        while (wSlotsPlacedForInfo < totalWSlotsNeededForInfo && currentWSlotForInfo <= maxSlotIndexForInfo) {
-                          wSlotPositionsForInfo.add(currentWSlotForInfo);
-                          wSlotsPlacedForInfo++;
-                          currentWSlotForInfo += walkInTokenAllotment + 1;
-                        }
+                        // Use the same imaginary slot positions calculated for the visualization
+                        const wSlotPositionsForInfo = new Set<number>(finalPositions);
+                        const totalSlotsForInfo = sessionSlotIndices.length;
+                        const maxSlotIndexForInfo = maxSlotIndex;
+                        const imaginaryWSlotsCountForInfo = wSlotPositionsForInfo.size;
                         
                         // Calculate imaginary W slot positions for comparison
                         const sortedImaginaryWSlots = Array.from(wSlotPositionsForInfo).sort((a, b) => a - b);
@@ -1245,6 +1519,118 @@ export default function SlotVisualizerPage() {
                           }
                         }
                         
+                        // Create mapping from visual position to display slot number
+                        // This matches the logic used in the slot visualization above
+                        // Calculate total slots across ALL sessions for the day
+                        const dayOfWeekForInfo = daysOfWeek[getDay(selectedDate)];
+                        const availabilityForDayForInfo = selectedDoctor.availabilitySlots?.find(s => s.day === dayOfWeekForInfo);
+                        let totalSlotsForDayForInfo = 0;
+                        if (availabilityForDayForInfo?.timeSlots) {
+                          const consultationTimeForInfo = selectedDoctor.averageConsultingTime || 15;
+                          availabilityForDayForInfo.timeSlots.forEach(timeSlot => {
+                            const sessionStart = parseTime(timeSlot.from, selectedDate);
+                            const sessionEnd = parseTime(timeSlot.to, selectedDate);
+                            let currentTime = sessionStart;
+                            let sessionSlotCount = 0;
+                            while (isBefore(currentTime, sessionEnd)) {
+                              sessionSlotCount++;
+                              currentTime = addMinutes(currentTime, consultationTimeForInfo);
+                            }
+                            totalSlotsForDayForInfo += sessionSlotCount;
+                          });
+                        }
+                        
+                        // Calculate how many A slots exist in previous sessions (before current session)
+                        let aSlotsInPreviousSessionsForInfo = 0;
+                        if (availabilityForDayForInfo && selectedSessionIndex > 0) {
+                          const consultationTimeForInfo = selectedDoctor.averageConsultingTime || 15;
+                          for (let i = 0; i < selectedSessionIndex; i++) {
+                            const timeSlot = availabilityForDayForInfo.timeSlots[i];
+                            const sessionStart = parseTime(timeSlot.from, selectedDate);
+                            const sessionEnd = parseTime(timeSlot.to, selectedDate);
+                            let currentTime = sessionStart;
+                            while (isBefore(currentTime, sessionEnd)) {
+                              aSlotsInPreviousSessionsForInfo++;
+                              currentTime = addMinutes(currentTime, consultationTimeForInfo);
+                            }
+                          }
+                        }
+                        
+                        const maxRegularSlotIndex = allSlots.length > 0 ? Math.max(...allSlots.map(s => s.slotIndex)) : -1;
+                        let imaginaryWSlotCounter = totalSlotsForDayForInfo; // Start from total slots for the day
+                        let continuousASlotCounter = aSlotsInPreviousSessionsForInfo; // Start from previous sessions count
+                        const visualToDisplaySlotMap = new Map<number, number>();
+                        
+                        // Create a map of slot index to W token appointments (for this section)
+                        const wTokenAtSlotIndexForInfo = new Map<number, Appointment>();
+                        existingWTokensForPlacement.forEach(wToken => {
+                          const wTokenSlotIndex = wToken.slotIndex ?? -1;
+                          if (wTokenSlotIndex >= 0) {
+                            wTokenAtSlotIndexForInfo.set(wTokenSlotIndex, wToken);
+                          }
+                        });
+                        
+                        // Build the same combined list to create the mapping
+                        const allSlotIndicesForMap = new Set<number>();
+                        allSlots.forEach(slot => allSlotIndicesForMap.add(slot.slotIndex));
+                        wSlotPositionsForInfo.forEach(slotIndex => allSlotIndicesForMap.add(slotIndex));
+                        const sortedSlotIndicesForMap = Array.from(allSlotIndicesForMap).sort((a, b) => a - b);
+                        
+                        for (const actualSlotIndex of sortedSlotIndicesForMap) {
+                          // Check if there's an A token appointment at this position
+                          const aTokenAtThisPosition = slotToAppointment.get(actualSlotIndex);
+                          const isAToken = aTokenAtThisPosition && 
+                            (aTokenAtThisPosition.bookedVia === 'Advanced Booking' || 
+                             aTokenAtThisPosition.bookedVia === 'Online' || 
+                             aTokenAtThisPosition.bookedVia === 'Advanced') &&
+                            (aTokenAtThisPosition.status === 'Pending' || aTokenAtThisPosition.status === 'Confirmed');
+                          
+                          if (wSlotPositionsForInfo.has(actualSlotIndex)) {
+                            // This is an imaginary W slot position
+                            const wTokenAtThisPosition = wTokenAtSlotIndexForInfo.get(actualSlotIndex);
+                            
+                            // IMPORTANT: If there's an A token at this position, treat it as a regular A slot
+                            // A tokens should NEVER use imaginary W slot numbers - they always get continuous A slot numbers
+                            if (isAToken) {
+                              // A token is at an imaginary W slot position - treat it as a regular A slot
+                              const regularSlot = allSlots.find(s => s.slotIndex === actualSlotIndex);
+                              if (regularSlot) {
+                                // Regular A slot - assign continuous number
+                                const continuousASlotNumber = continuousASlotCounter++;
+                                visualToDisplaySlotMap.set(actualSlotIndex, continuousASlotNumber);
+                              }
+                            } else if (wTokenAtThisPosition) {
+                              // Actual W token - use its slotIndex
+                              const wTokenSlotIndex = wTokenAtThisPosition.slotIndex ?? actualSlotIndex;
+                              visualToDisplaySlotMap.set(actualSlotIndex, wTokenSlotIndex);
+                            } else {
+                              // Imaginary W slot - assign final slot number
+                              const finalSlotNumber = imaginaryWSlotCounter++;
+                              visualToDisplaySlotMap.set(actualSlotIndex, finalSlotNumber);
+                            }
+                          } else {
+                            // This is a regular A slot
+                            const regularSlot = allSlots.find(s => s.slotIndex === actualSlotIndex);
+                            if (regularSlot) {
+                              const wTokenAtThisRegularSlot = wTokenAtSlotIndexForInfo.get(regularSlot.slotIndex);
+                              if (wTokenAtThisRegularSlot) {
+                                // W token in regular slot - use its slotIndex
+                                const wTokenSlotIndex = wTokenAtThisRegularSlot.slotIndex ?? regularSlot.slotIndex;
+                                visualToDisplaySlotMap.set(actualSlotIndex, wTokenSlotIndex);
+                              } else {
+                                // Regular A slot - assign continuous number
+                                const continuousASlotNumber = continuousASlotCounter++;
+                                visualToDisplaySlotMap.set(actualSlotIndex, continuousASlotNumber);
+                              }
+                            }
+                          }
+                        }
+                        
+                        // Convert visual position to display slot number
+                        const nextWSlotDisplayNumber = nextWSlotPosition !== null 
+                          ? (visualToDisplaySlotMap.get(nextWSlotPosition) ?? nextWSlotPosition)
+                          : null;
+                        
                         return (
                           <div className="mt-4 p-4 bg-green-50 dark:bg-green-950/20 border-2 border-green-300 rounded-lg">
                             <h4 className="text-sm font-semibold mb-2 text-green-800 dark:text-green-200">
@@ -1260,20 +1646,20 @@ export default function SlotVisualizerPage() {
                               <div className="flex items-center justify-between">
                                 <span className="text-muted-foreground">Will be placed at:</span>
                                 <span className="font-bold text-green-700 dark:text-green-300">
-                                  {nextWSlotPosition !== null ? (
+                                  {nextWSlotDisplayNumber !== null ? (
                                     <>
-                                      Slot #{nextWSlotPosition}
-                                      {emptySlotsWithinOneHour.includes(nextWSlotPosition) && (
+                                      Slot #{nextWSlotDisplayNumber}
+                                      {emptySlotsWithinOneHour.includes(nextWSlotPosition!) && (
                                         <Badge variant="outline" className="ml-2 bg-green-200 text-green-900 border-green-400">
                                           Priority 1: Empty slot (1-hour window)
                                         </Badge>
                                       )}
-                                      {availableImaginaryWSlots.includes(nextWSlotPosition) && (
+                                      {availableImaginaryWSlots.includes(nextWSlotPosition!) && (
                                         <Badge variant="outline" className="ml-2 bg-green-200 text-green-900 border-green-400">
                                           Priority 2: Imaginary W slot
                                         </Badge>
                                       )}
-                                      {emptySlotsBeforeImaginaryW.includes(nextWSlotPosition) && !sortedImaginaryWSlots.includes(nextWSlotPosition) && (
+                                      {emptySlotsBeforeImaginaryW.includes(nextWSlotPosition!) && !sortedImaginaryWSlots.includes(nextWSlotPosition!) && (
                                         <Badge variant="outline" className="ml-2 bg-green-200 text-green-900 border-green-400">
                                           Priority 3: Empty slot (before imaginary W)
                                         </Badge>
