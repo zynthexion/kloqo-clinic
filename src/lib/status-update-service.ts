@@ -3,6 +3,7 @@ import { db } from '@/lib/firebase';
 import { format, parse, addHours, addMinutes, subMinutes, isAfter, isBefore, isWithinInterval } from 'date-fns';
 import type { Appointment, Doctor } from '@/lib/types';
 import { sendAppointmentSkippedNotification } from '@/lib/notification-service';
+import { rebalanceWalkInSchedule } from '@/lib/appointment-service';
 
 /**
  * Updates appointment statuses and doctor consultation statuses when the app opens
@@ -146,6 +147,33 @@ async function updateAppointmentStatuses(clinicId: string): Promise<void> {
     
     // Delay reduction and slot reassignment removed in simplified flow
     // Send No-show notifications
+
+    const rebalanceGroups = new Map<string, { clinicId: string; doctorName: string; doctorId?: string | undefined; date: string }>();
+    appointmentsToMarkNoShow.forEach(({ appointment }) => {
+      if (!appointment.clinicId || !appointment.doctor || !appointment.date) return;
+      const key = `${appointment.clinicId}|${appointment.doctor}|${appointment.date}`;
+      if (!rebalanceGroups.has(key)) {
+        rebalanceGroups.set(key, {
+          clinicId: appointment.clinicId,
+          doctorName: appointment.doctor,
+          doctorId: appointment.doctorId,
+          date: appointment.date,
+        });
+      }
+    });
+
+    for (const group of rebalanceGroups.values()) {
+      try {
+        await rebalanceWalkInSchedule(
+          group.clinicId,
+          group.doctorName,
+          parse(group.date, 'd MMMM yyyy', new Date()),
+          group.doctorId
+        );
+      } catch (rebalanceError) {
+        console.error('Failed to rebalance walk-in schedule after marking no-show:', rebalanceError, group);
+      }
+    }
   }
 }
 

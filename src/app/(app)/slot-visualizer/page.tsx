@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { addMinutes, format, getDay, isAfter, isBefore, startOfDay } from "date-fns";
+import { addMinutes, format, getDay, isAfter, isBefore, isSameDay, startOfDay } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,8 +16,53 @@ import { Loader2, Calendar as CalendarIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn, parseTime } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
+import { computeWalkInSchedule } from "@/lib/walk-in-scheduler";
 
 const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const ACTIVE_STATUSES = new Set(["Pending", "Confirmed"]);
+
+function coerceDate(value: unknown): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === "number") {
+    return new Date(value);
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (!Number.isNaN(parsed)) {
+      return new Date(parsed);
+    }
+    const fromString = new Date(value);
+    if (!Number.isNaN(fromString.valueOf())) {
+      return fromString;
+    }
+  }
+  if (typeof value === "object" && value !== null) {
+    if ("toDate" in value && typeof (value as { toDate?: () => Date }).toDate === "function") {
+      try {
+        return (value as { toDate: () => Date }).toDate();
+      } catch {
+        return null;
+      }
+    }
+    if ("seconds" in value && typeof (value as { seconds?: number }).seconds === "number") {
+      const seconds = (value as { seconds: number }).seconds;
+      const nanos = Number((value as { nanoseconds?: number }).nanoseconds ?? 0);
+      return new Date(seconds * 1000 + Math.floor(nanos / 1_000_000));
+    }
+  }
+  return null;
+}
+
+function formatTimeDisplay(value: unknown): string {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value;
+  }
+  const date = coerceDate(value);
+  if (!date) return "—";
+  return format(date, "hh:mm a");
+}
+
 type SessionOption = {
   index: number;
   label: string;
@@ -236,11 +281,26 @@ const futureSessionSlots = useMemo(() => {
   return sessionSlots.filter(slot => !isBefore(slot.time, current));
 }, [sessionSlots]);
 
+const scheduleReferenceTime = useMemo(() => {
+  const todayStart = startOfDay(new Date());
+  const selectedStart = startOfDay(selectedDate);
+  if (selectedStart.getTime() === todayStart.getTime()) {
+    return new Date();
+  }
+  if (selectedStart.getTime() > todayStart.getTime()) {
+    return selectedStart;
+  }
+  return new Date();
+}, [selectedDate]);
+
 const sessionSummary = useMemo(() => {
   let walkIn = 0;
   let advanced = 0;
   futureSessionSlots.forEach(slot => {
     if (!slot.appointment) return;
+    if (!ACTIVE_STATUSES.has(slot.appointment.status ?? "")) {
+      return;
+    }
     if (slot.appointment.bookedVia === "Walk-in") {
       walkIn += 1;
     } else {
@@ -276,6 +336,145 @@ const capacityInfo = useMemo(() => {
     limitReached,
   };
 }, [sessionSummary]);
+
+const walkInSchedule = useMemo(() => {
+  const result = {
+    assignmentById: new Map<string, { slotIndex: number; slotTime: Date; sessionIndex: number }>(),
+    placeholderAssignment: null as { slotIndex: number; slotTime: Date; sessionIndex: number } | null,
+  };
+
+  if (!selectedDoctor || fullDaySlots.length === 0) {
+    return result;
+  }
+
+  const spacingValue =
+    walkInSpacing && Number.isFinite(walkInSpacing) && walkInSpacing > 0
+      ? Math.floor(walkInSpacing)
+      : 0;
+
+  const schedulerSlots = fullDaySlots.map(slot => ({
+    index: slot.slotIndex,
+    time: slot.time,
+    sessionIndex: slot.sessionIndex,
+  }));
+
+  const activeAdvanceAppointments = appointments.filter(appointment => {
+    return (
+      appointment.bookedVia !== "Walk-in" &&
+      typeof appointment.slotIndex === "number" &&
+      ACTIVE_STATUSES.has(appointment.status ?? "")
+    );
+  });
+
+  const activeWalkIns = appointments.filter(appointment => {
+    return (
+      appointment.bookedVia === "Walk-in" &&
+      typeof appointment.slotIndex === "number" &&
+      ACTIVE_STATUSES.has(appointment.status ?? "")
+    );
+  });
+
+  const walkInCandidates = activeWalkIns.map(appointment => ({
+    id: appointment.id,
+    numericToken:
+      typeof appointment.numericToken === "number"
+        ? appointment.numericToken
+        : Number(appointment.numericToken ?? 0) || 0,
+    createdAt: coerceDate(appointment.createdAt) ?? undefined,
+  currentSlotIndex: typeof appointment.slotIndex === "number" ? appointment.slotIndex : undefined,
+  }));
+
+  const placeholderId = "__next_walk_in__";
+  const existingNumericTokens = walkInCandidates
+    .map(candidate => candidate.numericToken)
+    .filter(token => Number.isFinite(token) && token > 0);
+  const placeholderNumericToken =
+    (existingNumericTokens.length > 0 ? Math.max(...existingNumericTokens) : fullDaySlots.length) + 1;
+
+  const candidates = [
+    ...walkInCandidates,
+    {
+      id: placeholderId,
+      numericToken: placeholderNumericToken,
+      createdAt: new Date(),
+    },
+  ];
+
+  try {
+    const schedule = computeWalkInSchedule({
+      slots: schedulerSlots,
+      now: scheduleReferenceTime,
+      walkInTokenAllotment: spacingValue,
+      advanceAppointments: activeAdvanceAppointments.map(entry => ({
+        id: entry.id,
+        slotIndex: typeof entry.slotIndex === "number" ? entry.slotIndex : -1,
+      })),
+      walkInCandidates: candidates,
+    });
+
+    schedule.assignments.forEach(assignment => {
+      result.assignmentById.set(assignment.id, {
+        slotIndex: assignment.slotIndex,
+        slotTime: assignment.slotTime,
+        sessionIndex: assignment.sessionIndex,
+      });
+    });
+
+    const placeholderAssignment = result.assignmentById.get(placeholderId);
+    if (placeholderAssignment) {
+      result.placeholderAssignment = placeholderAssignment;
+    }
+  } catch (error) {
+    console.error("Failed to compute walk-in assignments:", error);
+  }
+
+  return result;
+}, [appointments, fullDaySlots, scheduleReferenceTime, selectedDoctor, walkInSpacing]);
+
+const nextWalkInPreview = walkInSchedule.placeholderAssignment
+  ? {
+      slotIndex: walkInSchedule.placeholderAssignment.slotIndex,
+      time: walkInSchedule.placeholderAssignment.slotTime,
+    }
+  : null;
+
+const nextAdvancePreview = useMemo(() => {
+  if (!selectedDoctor) return null;
+  if (fullDaySlots.length === 0) return null;
+
+  const occupiedSlots = new Set<number>();
+  appointments.forEach(appointment => {
+    if (
+      typeof appointment.slotIndex === "number" &&
+      ACTIVE_STATUSES.has(appointment.status ?? "")
+    ) {
+      occupiedSlots.add(appointment.slotIndex);
+    }
+  });
+
+  const selectedDayStart = startOfDay(selectedDate);
+  const todayStart = startOfDay(new Date());
+  const isSelectedToday = isSameDay(selectedDayStart, todayStart);
+  const minimumTime = isSelectedToday ? addMinutes(scheduleReferenceTime, 60) : scheduleReferenceTime;
+
+  for (const slot of fullDaySlots) {
+    if (isBefore(slot.time, scheduleReferenceTime)) {
+      continue;
+    }
+    if (isSelectedToday && isBefore(slot.time, minimumTime)) {
+      continue;
+    }
+    if (occupiedSlots.has(slot.slotIndex)) {
+      continue;
+    }
+    return {
+      slotIndex: slot.slotIndex,
+      time: slot.time,
+    };
+  }
+
+  return null;
+}, [appointments, fullDaySlots, scheduleReferenceTime, selectedDate, selectedDoctor]);
 
   if (loading) {
     return (
@@ -452,76 +651,159 @@ const capacityInfo = useMemo(() => {
                     </p>
                                     </div>
                                       </div>
+                {nextWalkInPreview ? (
+                  <div className="border-b bg-emerald-50/60 px-4 py-3 text-sm text-emerald-900">
+                    Next walk-in token will target{" "}
+                    <span className="font-semibold">
+                      slot #{nextWalkInPreview.slotIndex + 1} · {format(nextWalkInPreview.time, "hh:mm a")}
+                    </span>
+                                  </div>
+                                ) : (
+                  <div className="border-b bg-muted/15 px-4 py-3 text-sm text-muted-foreground">
+                    Unable to determine the next walk-in slot based on the current data.
+                                  </div>
+                                )}
+                {nextAdvancePreview ? (
+                  <div className="border-b bg-sky-50/60 px-4 py-3 text-sm text-sky-900">
+                    Next advance booking will target{" "}
+                    <span className="font-semibold">
+                      slot #{nextAdvancePreview.slotIndex + 1} · {format(nextAdvancePreview.time, "hh:mm a")}
+                                </span>
+                              </div>
+                                ) : (
+                  <div className="border-b bg-muted/15 px-4 py-3 text-sm text-muted-foreground">
+                    Unable to determine the next advance slot based on the current data.
+                              </div>
+                                )}
                 {futureSessionSlots.length === 0 ? (
                   <div className="px-4 py-6 text-center text-sm text-muted-foreground">
                     No slots found for this session.
-                                  </div>
+                                </div>
                                 ) : (
                   <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
                     {futureSessionSlots.map(slot => {
                       const appointment = slot.appointment;
-                      const isBooked = Boolean(appointment);
-                      const isWalkIn = appointment?.bookedVia === "Walk-in";
+                      const isCancelled = appointment?.status === "Cancelled";
+                      const hasActiveAppointment =
+                        Boolean(appointment) && ACTIVE_STATUSES.has(appointment?.status ?? "");
+                      const isWalkIn = appointment?.bookedVia === "Walk-in" && hasActiveAppointment;
+                      const isNextWalkInTarget = nextWalkInPreview?.slotIndex === slot.slotIndex;
+                      const isNextAdvanceTarget = nextAdvancePreview?.slotIndex === slot.slotIndex;
                       const cardStyles = cn(
                         "relative flex flex-col gap-2 rounded-lg border p-3 text-xs shadow-sm transition md:text-sm",
-                        isBooked
+                        isCancelled
+                          ? "border-destructive bg-red-50 hover:border-destructive/80 hover:bg-red-50/80"
+                          : hasActiveAppointment
                           ? isWalkIn
                             ? "border-emerald-300 bg-emerald-50 hover:border-emerald-400 hover:bg-emerald-50/80"
                             : "border-sky-300 bg-sky-50 hover:border-sky-400 hover:bg-sky-50/80"
                           : "border-muted bg-background hover:border-muted-foreground/40",
+                        {
+                          "ring-2 ring-emerald-500 ring-offset-2": isNextWalkInTarget,
+                          "ring-2 ring-sky-500 ring-offset-2": !isCancelled && isNextAdvanceTarget,
+                        }
                       );
-                        
-                        return (
+
+                      return (
                         <div key={slot.slotIndex} className={cardStyles}>
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex flex-col">
                               <span className="text-xs uppercase text-muted-foreground">Slot</span>
                               <span className="text-lg font-semibold">#{slot.slotIndex + 1}</span>
-                              </div>
+            </div>
                             <Badge variant="outline">{format(slot.time, "hh:mm a")}</Badge>
-                              </div>
-                      
+                          </div>
+                          {isNextWalkInTarget && (
+                            <div className="flex items-center gap-2 rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-700">
+                              Next walk-in target
+                            </div>
+                          )}
+                          {isNextAdvanceTarget && !isCancelled && (
+                            <div className="flex items-center gap-2 rounded-full bg-sky-500/10 px-2 py-1 text-[11px] font-medium text-sky-700">
+                              Next advance target
+                            </div>
+                          )}
+                          {isCancelled && isNextAdvanceTarget && (
+                            <div className="flex items-center gap-2 rounded-full bg-destructive/10 px-2 py-1 text-[11px] font-medium text-destructive">
+                              Cancelled – reserved for next advance booking
+                      </div>
+                    )}
+
                           <div className="flex items-center justify-between text-xs">
                             <span
-                              className={cn(
+                            className={cn(
                                 "font-medium",
-                                isBooked ? "text-foreground" : "text-muted-foreground",
+                                hasActiveAppointment
+                                  ? "text-foreground"
+                                  : isCancelled
+                                  ? "text-destructive"
+                                  : "text-muted-foreground",
                               )}
                             >
-                              {isBooked ? "Booked" : "Available"}
-                                </span>
+                              {isCancelled
+                                ? "Cancelled"
+                                : hasActiveAppointment
+                                ? "Booked"
+                                : "Available"}
+                            </span>
                             {appointment?.tokenNumber && (
                               <span className="rounded-full bg-foreground/10 px-2 py-0.5 font-medium text-foreground">
                                 {appointment.tokenNumber}
-                                </span>
+                              </span>
                               )}
-                                </div>
+                            </div>
 
                           <div className="min-h-[2.5rem] text-sm">
-                            {isBooked ? (
-                              <div className="flex flex-col gap-1">
+                            {appointment ? (
+                              <div className="flex flex-col gap-2">
                                 <p className="font-medium leading-tight">
-                                  {appointment?.patientName ?? "Unknown patient"}
+                                  {appointment.patientName ?? "Unknown patient"}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                  {appointment?.communicationPhone ?? "—"}
+                                  {appointment.communicationPhone ?? "—"}
                                 </p>
-            </div>
-          ) : (
+                                <div className="space-y-1 text-[11px] text-muted-foreground">
+                                  <p>
+                                    <span className="font-semibold text-foreground/80">Appointment:</span>{" "}
+                                    {formatTimeDisplay(appointment.time)}
+                                  </p>
+                                  <p>
+                                    <span className="font-semibold text-foreground/80">Cut-off:</span>{" "}
+                                    {formatTimeDisplay(appointment.cutOffTime)}
+                                  </p>
+                                  <p>
+                                    <span className="font-semibold text-foreground/80">No-show:</span>{" "}
+                                    {formatTimeDisplay(appointment.noShowTime)}
+                                  </p>
+                              </div>
+                      </div>
+                    ) : (
                               <p className="text-xs text-muted-foreground">No patient assigned</p>
                             )}
-                          </div>
+              </div>
 
                           <div>
                             <div className="flex flex-wrap items-center gap-2">
                               {appointment ? (
-                                <Badge variant={isWalkIn ? "success" : "secondary"}>
-                                  {isWalkIn ? "Walk-in booking" : "Advanced booking"}
+                                isCancelled ? (
+                                  <Badge variant="destructive">Cancelled</Badge>
+                                ) : (
+                                  <Badge variant={isWalkIn ? "success" : "secondary"}>
+                                    {isWalkIn ? "Walk-in booking" : "Advanced booking"}
                       </Badge>
+                                )
                               ) : (
                                 <Badge variant="outline">Available</Badge>
                               )}
-              </div>
+                              {isNextAdvanceTarget && !isCancelled && (
+                                <Badge variant="secondary">Next advance target</Badge>
+                              )}
+                              {isCancelled && isNextAdvanceTarget && (
+                                <Badge variant="outline" className="border-destructive text-destructive">
+                                  Next advance target
+                                </Badge>
+                              )}
+                            </div>
                               </div>
                             </div>
                           );

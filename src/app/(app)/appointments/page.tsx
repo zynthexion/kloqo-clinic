@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useCallback, useTransition } from "react";
@@ -68,7 +67,13 @@ import Link from "next/link";
 import { Label } from "@/components/ui/label";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { calculateWalkInDetails, calculateSkippedTokenRejoinSlot, generateNextTokenAndReserveSlot } from '@/lib/appointment-service';
+import {
+  calculateWalkInDetails,
+  calculateSkippedTokenRejoinSlot,
+  generateNextTokenAndReserveSlot,
+  rebalanceWalkInSchedule,
+  previewWalkInPlacement,
+} from '@/lib/appointment-service';
 import { sendAppointmentCancelledNotification, sendTokenCalledNotification, sendAppointmentBookedByStaffNotification } from '@/lib/notification-service';
 import { computeQueues, type QueueState } from '@/lib/queue-management-service';
 
@@ -179,6 +184,8 @@ export default function AppointmentsPage() {
   const [showVisualView, setShowVisualView] = useState(false);
   
   const [linkChannel, setLinkChannel] = useState<'sms' | 'whatsapp'>('sms');
+  const [isPreviewingWalkIn, setIsPreviewingWalkIn] = useState(false);
+  const isWalkInDebugEnabled = process.env.NEXT_PUBLIC_DEBUG_WALK_IN === 'true';
 
   // Update current time every minute
   useEffect(() => {
@@ -393,14 +400,113 @@ export default function AppointmentsPage() {
       phone: "",
       age: undefined,
       sex: undefined,
-      doctor: doctors.length > 0 ? doctors[0].id : "",
-      department: doctors.length > 0 ? doctors[0].department || "" : "",
+      doctor: "",
+      department: "",
       date: undefined,
       time: undefined,
       place: "",
       bookedVia: "Advanced Booking",
     });
-  }, [form, doctors]);
+  }, [form]);
+
+  const watchedDoctorId = useWatch({
+    control: form.control,
+    name: "doctor"
+  });
+
+  const selectedDoctor = useMemo(() => {
+    if (!watchedDoctorId) return doctors.length > 0 ? doctors[0] : null;
+    return doctors.find(d => d.id === watchedDoctorId) || null;
+  }, [doctors, watchedDoctorId]);
+
+  const selectedDate = form.watch("date");
+  const appointmentType = form.watch("bookedVia");
+
+  const handlePreviewWalkIn = useCallback(async () => {
+    if (!isWalkInDebugEnabled) {
+      return;
+    }
+
+    if (!clinicId || !selectedDoctor) {
+      toast({
+        variant: 'destructive',
+        title: 'Walk-in preview unavailable',
+        description: 'Select a doctor and clinic before previewing.',
+      });
+      return;
+    }
+
+    if (!selectedDate) {
+      toast({
+        variant: 'destructive',
+        title: 'Walk-in preview unavailable',
+        description: 'Pick a date to preview walk-in placement.',
+      });
+      return;
+    }
+
+    try {
+      setIsPreviewingWalkIn(true);
+      const spacingRaw = clinicDetails?.walkInTokenAllotment ?? 0;
+      const walkInSpacingValue = Number.isFinite(Number(spacingRaw)) ? Math.max(0, Math.floor(Number(spacingRaw))) : 0;
+
+      const preview = await previewWalkInPlacement(
+        clinicId,
+        selectedDoctor.name,
+        selectedDate,
+        walkInSpacingValue,
+        selectedDoctor.id
+      );
+
+      console.group(`[clinic-admin walk-in preview] ${selectedDoctor.name}`);
+      if (preview.placeholderAssignment) {
+        console.info('Next walk-in target', {
+          slotIndex: preview.placeholderAssignment.slotIndex,
+          time: format(preview.placeholderAssignment.slotTime, 'hh:mm a'),
+        });
+      } else {
+        console.warn('No walk-in placement available.');
+      }
+
+      if (preview.advanceShifts.length === 0) {
+        console.info('No advance appointments need to move.');
+      } else {
+        preview.advanceShifts.forEach(shift => {
+          console.info('Advance shift', {
+            appointmentId: shift.id,
+            tokenNumber: shift.tokenNumber,
+            fromSlot: shift.fromSlot,
+            toSlot: shift.toSlot,
+            fromTime: shift.fromTime ? format(shift.fromTime, 'hh:mm a') : null,
+            toTime: format(shift.toTime, 'hh:mm a'),
+          });
+        });
+      }
+
+      preview.walkInAssignments.forEach(assignment => {
+        console.info('Walk-in assignment', {
+          id: assignment.id,
+          slotIndex: assignment.slotIndex,
+          time: format(assignment.slotTime, 'hh:mm a'),
+        });
+      });
+      console.groupEnd();
+
+      toast({
+        title: 'Walk-in preview complete',
+        description: 'Check the console for placement details.',
+      });
+    } catch (error) {
+      console.error('[clinic-admin walk-in preview] failed', error);
+      toast({
+        variant: 'destructive',
+        title: 'Unable to preview walk-in placement.',
+        description: (error as Error)?.message ?? 'See console for details.',
+      });
+    } finally {
+      setIsPreviewingWalkIn(false);
+    }
+  }, [clinicDetails?.walkInTokenAllotment, clinicId, isWalkInDebugEnabled, selectedDate, selectedDoctor, toast]);
 
   useEffect(() => {
     if (editingAppointment) {
@@ -433,20 +539,6 @@ export default function AppointmentsPage() {
       resetForm();
     }
   }, [editingAppointment, form, doctors, resetForm]);
-
-  const watchedDoctorId = useWatch({
-    control: form.control,
-    name: "doctor"
-  });
-
-  const selectedDoctor = useMemo(() => {
-    if (!watchedDoctorId) return doctors.length > 0 ? doctors[0] : null;
-    return doctors.find(d => d.id === watchedDoctorId) || null;
-  }, [doctors, watchedDoctorId]);
-
-  const selectedDate = form.watch("date");
-  const appointmentType = form.watch("bookedVia");
-
 
   const isWithinBookingWindow = (doctor: Doctor | null): boolean => {
     if (!doctor || !doctor.availabilitySlots) return false;
@@ -779,22 +871,28 @@ export default function AppointmentsPage() {
           }
           const date = new Date();
           
-          // Create appointment directly (no pool needed)
-          const { tokenNumber, numericToken, slotIndex: actualSlotIndex } = await generateNextTokenAndReserveSlot(
+        // Create appointment directly (no pool needed)
+        const {
+          tokenNumber,
+          numericToken,
+          slotIndex: actualSlotIndex,
+          sessionIndex: actualSessionIndex,
+          time: actualTimeString,
+        } = await generateNextTokenAndReserveSlot(
             clinicId,
             selectedDoctor.name,
             date,
             'W',
             {
-              time: format(walkInEstimate.estimatedTime, "hh:mm a"),
-              slotIndex: walkInEstimate.slotIndex,
-              doctorId: selectedDoctor.id,
+            time: format(walkInEstimate.estimatedTime, "hh:mm a"),
+            slotIndex: walkInEstimate.slotIndex,
+            doctorId: selectedDoctor.id,
             }
           );
           
           // Calculate cut-off time and no-show time
           const appointmentDate = parse(format(date, "d MMMM yyyy"), "d MMMM yyyy", new Date());
-          const appointmentTime = walkInEstimate.estimatedTime;
+        const appointmentTime = parse(actualTimeString, "hh:mm a", appointmentDate);
           const cutOffTime = subMinutes(appointmentTime, 15);
           const noShowTime = addMinutes(appointmentTime, 15);
           
@@ -812,11 +910,11 @@ export default function AppointmentsPage() {
             communicationPhone: communicationPhone,
             place: values.place,
             status: 'Confirmed', // Walk-ins are physically present at clinic
-            time: format(walkInEstimate.estimatedTime, "hh:mm a"),
+            time: actualTimeString,
             tokenNumber: tokenNumber,
             numericToken: numericToken,
             slotIndex: actualSlotIndex, // Use the actual slotIndex returned from the function
-            sessionIndex: walkInEstimate.sessionIndex,
+            sessionIndex: actualSessionIndex,
             treatment: "General Consultation",
             createdAt: serverTimestamp(),
             cutOffTime: cutOffTime,
@@ -901,7 +999,14 @@ export default function AppointmentsPage() {
 
           // Generate token and reserve slot atomically (for both new and rescheduled appointments)
           // For rescheduling, regenerate token using same logic as new appointment
-          let tokenData: { tokenNumber: string; numericToken: number; slotIndex: number };
+          let tokenData: {
+            tokenNumber: string;
+            numericToken: number;
+            slotIndex: number;
+            sessionIndex: number;
+            time: string;
+            reservationId: string;
+          };
           try {
             tokenData = await generateNextTokenAndReserveSlot(
               clinicId,
@@ -1291,6 +1396,30 @@ export default function AppointmentsPage() {
         } catch (notifError) {
             console.error('Failed to send cancellation notification:', notifError);
             // Don't fail the cancellation if notification fails
+        }
+
+        const appointmentDateObj = parse(appointment.date, 'd MMMM yyyy', new Date());
+        const appointmentSlotTime = parseTime(appointment.time, appointmentDateObj);
+        const now = new Date();
+        const withinWalkInWindow = !isAfter(appointmentSlotTime, addMinutes(now, 60));
+
+        const hasActiveWalkIns = appointments.some(existing => {
+          if (existing.id === appointment.id) return false;
+          if (existing.bookedVia !== "Walk-in") return false;
+          return existing.status === "Pending" || existing.status === "Confirmed";
+        });
+
+        if (hasActiveWalkIns && withinWalkInWindow) {
+          try {
+            await rebalanceWalkInSchedule(
+              appointment.clinicId,
+              appointment.doctor,
+              appointmentDateObj,
+              appointment.doctorId
+            );
+          } catch (rebalanceError) {
+            console.error('Failed to rebalance walk-in schedule after cancellation:', rebalanceError);
+          }
         }
         
         toast({ title: "Appointment Cancelled" });
@@ -1821,14 +1950,31 @@ export default function AppointmentsPage() {
 
         // Only show the first available slot, skip booked and leave slots
         if (status === 'available') {
-            // Show only the first (earliest) available slot per session for A tokens
-            if (!foundFirstAvailable) {
-                slots.push({ time: slotTime, status });
-                foundFirstAvailable = true;
-            }
+          const slotTimeString = format(slotTimeIterator, 'hh:mm a');
+          const slotIndex = otherAppointments.find(appointment => appointment.time === slotTimeString)?.slotIndex;
+          const isCancelledSlot =
+            typeof slotIndex === 'number' &&
+            otherAppointments.some(appointment => appointment.slotIndex === slotIndex && appointment.status === 'Cancelled');
+
+          if (isCancelledSlot) {
+            slots.push({
+              time: slotTime,
+              status,
+              slotIndex,
+              isCancelled: true,
+            });
+          } else if (!foundFirstAvailable) {
+            slots.push({
+              time: slotTime,
+              status,
+              slotIndex,
+              isCancelled: false,
+            });
+            foundFirstAvailable = true;
+          }
+
         }
-        // Don't show booked or leave slots - they are filtered out
-        
+
         slotTimeIterator = new Date(slotTimeIterator.getTime() + selectedDoctor.averageConsultingTime! * 60000);
       }
       
