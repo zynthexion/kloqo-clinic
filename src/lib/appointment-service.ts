@@ -442,10 +442,7 @@ export async function generateNextTokenAndReserveSlot(
 
     try {
       const result = await runTransaction(db, async transaction => {
-        let counterState: TokenCounterState | null = null;
-        if (type === 'W') {
-          counterState = await prepareNextTokenNumber(transaction, counterRef);
-        }
+        const counterState = await prepareNextTokenNumber(transaction, counterRef);
 
         let chosenSlotIndex = -1;
         let reservationRef: DocumentReference | null = null;
@@ -478,11 +475,8 @@ export async function generateNextTokenAndReserveSlot(
         const resolvedTimeString = format(reservedSlot.time, 'hh:mm a');
         let numericToken: number;
         if (type === 'A') {
-          numericToken = chosenSlotIndex + 1;
+          numericToken = counterState.nextNumber;
         } else {
-          if (!counterState) {
-            throw new Error('Unable to allocate walk-in token number.');
-          }
           numericToken = totalSlots + counterState.nextNumber;
         }
         const tokenNumber =
@@ -498,9 +492,7 @@ export async function generateNextTokenAndReserveSlot(
           reservedAt: serverTimestamp(),
           reservedBy: type === 'W' ? 'walk-in-booking' : 'appointment-booking',
         });
-        if (type === 'W' && counterState) {
-          commitNextTokenNumber(transaction, counterRef, counterState);
-        }
+        commitNextTokenNumber(transaction, counterRef, counterState);
 
         return {
           tokenNumber,
