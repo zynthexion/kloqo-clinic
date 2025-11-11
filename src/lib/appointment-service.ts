@@ -442,7 +442,10 @@ export async function generateNextTokenAndReserveSlot(
 
     try {
       const result = await runTransaction(db, async transaction => {
-        const counterState = await prepareNextTokenNumber(transaction, counterRef);
+        let counterState: TokenCounterState | null = null;
+        if (type === 'W') {
+          counterState = await prepareNextTokenNumber(transaction, counterRef);
+        }
 
         let chosenSlotIndex = -1;
         let reservationRef: DocumentReference | null = null;
@@ -473,6 +476,16 @@ export async function generateNextTokenAndReserveSlot(
 
         const reservedSlot = slots[chosenSlotIndex];
         const resolvedTimeString = format(reservedSlot.time, 'hh:mm a');
+        let numericToken: number;
+        if (type === 'A') {
+          numericToken = chosenSlotIndex + 1;
+        } else {
+          if (!counterState) {
+            throw new Error('Unable to allocate walk-in token number.');
+          }
+          numericToken = totalSlots + counterState.nextNumber;
+        }
+        const tokenNumber = `${numericToken}${type}`;
 
         transaction.set(reservationRef, {
           clinicId,
@@ -482,11 +495,13 @@ export async function generateNextTokenAndReserveSlot(
           reservedAt: serverTimestamp(),
           reservedBy: type === 'W' ? 'walk-in-booking' : 'appointment-booking',
         });
-        commitNextTokenNumber(transaction, counterRef, counterState);
+        if (type === 'W' && counterState) {
+          commitNextTokenNumber(transaction, counterRef, counterState);
+        }
 
         return {
-          tokenNumber: `${type}${String(counterState.nextNumber).padStart(3, '0')}`,
-          numericToken: counterState.nextNumber,
+          tokenNumber,
+          numericToken,
           slotIndex: chosenSlotIndex,
           time: resolvedTimeString,
           reservationId: reservationRef.id,
@@ -550,11 +565,12 @@ export async function calculateWalkInDetails(
   }).length;
 
   const existingWalkIns = appointments.filter(appointment => appointment.bookedVia === 'Walk-in');
+  const numericToken = slots.length + existingWalkIns.length + 1;
 
   return {
     estimatedTime: chosenSlot.time,
     patientsAhead,
-    numericToken: existingWalkIns.length + 1,
+    numericToken,
     slotIndex: chosenSlotIndex,
     sessionIndex: chosenSlot.sessionIndex,
     actualSlotTime: chosenSlot.time,
