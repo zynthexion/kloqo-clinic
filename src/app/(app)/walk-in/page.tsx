@@ -88,6 +88,18 @@ function WalkInRegistrationContent() {
     defaultValues: { patientName: '', age: undefined, place: '', sex: '', phone: '' },
   });
 
+  const releaseReservation = async (reservationId?: string | null, delayMs: number = 0) => {
+    if (!reservationId) return;
+    if (delayMs > 0) {
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+    try {
+      await deleteDoc(doc(db, 'slot-reservations', reservationId));
+    } catch (error) {
+      console.warn('[Walk-in] Failed to release reservation', { reservationId, error });
+    }
+  };
+
   useEffect(() => {
     const id = localStorage.getItem('clinicId');
     if (!id) {
@@ -384,11 +396,7 @@ function WalkInRegistrationContent() {
             await setDoc(newDocRef, {...updatedAppointmentData, id: newDocRef.id});
         } catch (serverError) {
             if (reservationId) {
-                try {
-                    await deleteDoc(doc(db, 'slot-reservations', reservationId));
-                } catch (cleanupError) {
-                    console.warn('⚠️ [WALK-IN] Failed to release reservation after error:', cleanupError);
-                }
+                await releaseReservation(reservationId);
             }
             console.error('🎯 DEBUG: Failed to save appointment');
             const permissionError = new FirestorePermissionError({
@@ -400,11 +408,7 @@ function WalkInRegistrationContent() {
             throw serverError;
         }
         if (reservationId) {
-            try {
-                await deleteDoc(doc(db, 'slot-reservations', reservationId));
-            } catch (cleanupError) {
-                console.warn('⚠️ [WALK-IN] Failed to release reservation after success:', cleanupError);
-            }
+            await releaseReservation(reservationId, 2000);
         }
         console.log('🎯 DEBUG: Appointment saved successfully:', newDocRef.id);
 
@@ -453,7 +457,10 @@ function WalkInRegistrationContent() {
         }, 5000);
 
     } catch (error) {
-         if((error as any).name !== 'FirestorePermissionError') {
+        if (reservationId && (error as any).name !== 'FirestorePermissionError') {
+            await releaseReservation(reservationId);
+        }
+        if((error as any).name !== 'FirestorePermissionError') {
             console.error('Failed to save walk-in appointment:', error);
             toast({ variant: 'destructive', title: 'Error', description: "Could not save the appointment." });
         }
