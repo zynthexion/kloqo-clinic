@@ -245,7 +245,12 @@ function WalkInRegistrationContent() {
         const clinicData = clinicSnap.data();
         const walkInTokenAllotment = clinicData?.walkInTokenAllotment || 5;
 
-        const { estimatedTime, patientsAhead, numericToken, slotIndex } = await calculateWalkInDetails(clinicId, doctor.name, doctor, walkInTokenAllotment);
+        const { estimatedTime, patientsAhead, numericToken, slotIndex } = await calculateWalkInDetails(
+          clinicId,
+          doctor.name,
+          doctor,
+          walkInTokenAllotment
+        );
         
         // Clean phone: remove +91 if user entered it, remove any non-digits, then ensure exactly 10 digits
         let fullPhoneNumber = "";
@@ -272,9 +277,8 @@ function WalkInRegistrationContent() {
             bookingFor: selectedPatientId ? 'self' : 'new_related',
         });
 
-        // Use generateNextToken service for walk-ins to ensure sequential numbering
-        const tokenNumber = await generateNextToken(clinicId, doctor.name, new Date(), 'W');
-        const numericTokenFromService = parseInt(tokenNumber.substring(1), 10);
+        const numericTokenFromService = numericToken;
+        const tokenNumber = `${numericTokenFromService}W`;
       
         // Calculate cut-off time and no-show time
         const appointmentDate = parse(format(new Date(), "d MMMM yyyy"), "d MMMM yyyy", new Date());

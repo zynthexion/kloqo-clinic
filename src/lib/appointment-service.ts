@@ -485,7 +485,10 @@ export async function generateNextTokenAndReserveSlot(
           }
           numericToken = totalSlots + counterState.nextNumber;
         }
-        const tokenNumber = `${numericToken}${type}`;
+        const tokenNumber =
+          type === 'A'
+            ? `A${String(numericToken).padStart(3, '0')}`
+            : `${numericToken}W`;
 
         transaction.set(reservationRef, {
           clinicId,
