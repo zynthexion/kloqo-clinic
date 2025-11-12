@@ -449,10 +449,10 @@ export async function generateNextTokenAndReserveSlot(
         );
         const appointments = appointmentSnapshots
           .filter(snapshot => snapshot.exists())
-          .map(snapshot => ({
-            id: snapshot.id,
-            ...(snapshot.data() as Appointment),
-          }));
+          .map(snapshot => {
+            const data = snapshot.data() as Appointment;
+            return { ...data, id: snapshot.id };
+          });
 
         const excludeAppointmentId =
           typeof appointmentData.existingAppointmentId === 'string' ? appointmentData.existingAppointmentId : undefined;
@@ -519,7 +519,8 @@ export async function generateNextTokenAndReserveSlot(
 
           const prepareAdvanceShift = async (
             targetSlotIndex: number,
-            blockedSlots: Set<number>
+            blockedSlots: Set<number>,
+            advanceAssignments: Map<string, SchedulerAssignment>
           ): Promise<{
             reservationDeletes: DocumentReference[];
             appointmentUpdates: Array<{
@@ -600,53 +601,76 @@ export async function generateNextTokenAndReserveSlot(
 
             const blockedIndices = new Set<number>(blockedSlots);
             blockedIndices.add(targetSlotIndex);
+            const assignedTargets = new Set<number>();
 
-            const availableSlots: Array<{
+            const availableQueue: Array<{
               index: number;
               sessionIndex: number;
               time: Date;
             }> = [];
 
-            for (let idx = targetSlotIndex; idx < totalSlots; idx += 1) {
-              if (blockedIndices.has(idx) || idx === targetSlotIndex) {
-                continue;
-              }
-              if (advanceOccupancy[idx] !== null) {
+            for (let idx = targetSlotIndex + 1; idx < totalSlots; idx += 1) {
+              if (blockedIndices.has(idx)) {
                 continue;
               }
               const slotMeta = slots[idx];
-              if (!slotMeta) {
+              if (!slotMeta || isBefore(slotMeta.time, now)) {
                 continue;
               }
-              if (isBefore(slotMeta.time, now)) {
-                continue;
-              }
-              const reservationRefForSlot = doc(
-                db,
-                'slot-reservations',
-                buildReservationDocId(clinicId, doctorName, dateStr, idx)
-              );
-              const reservationSnapshotForSlot = await transaction.get(reservationRefForSlot);
-              if (reservationSnapshotForSlot.exists()) {
-                reservationDeletes.push(reservationRefForSlot);
-              }
-              availableSlots.push({
+              availableQueue.push({
                 index: idx,
                 sessionIndex: slotMeta.sessionIndex,
                 time: slotMeta.time,
               });
             }
 
-            if (availableSlots.length < appointmentsToReassign.length) {
-              throw new Error('No available slots match the booking rules.');
-            }
-
-            let availableIndex = 0;
             for (const appointmentToMove of appointmentsToReassign) {
-              const destination = availableSlots[availableIndex];
-              availableIndex += 1;
+              const assignment = advanceAssignments.get(appointmentToMove.id);
+              let destination:
+                | { index: number; sessionIndex: number; time: Date; fromAssignment: boolean }
+                | null = null;
+
+              if (assignment) {
+                if (
+                  assignment.slotIndex !== targetSlotIndex &&
+                  !blockedIndices.has(assignment.slotIndex) &&
+                  !assignedTargets.has(assignment.slotIndex)
+                ) {
+                  const slotMeta = slots[assignment.slotIndex];
+                  if (slotMeta && !isBefore(slotMeta.time, now)) {
+                    destination = {
+                      index: assignment.slotIndex,
+                      sessionIndex: slotMeta.sessionIndex,
+                      time: slotMeta.time,
+                      fromAssignment: true,
+                    };
+                  }
+                }
+              }
+
               if (!destination) {
-                throw new Error('No available slots match the booking rules.');
+                while (
+                  availableQueue.length > 0 &&
+                  (assignedTargets.has(availableQueue[0].index) ||
+                    blockedIndices.has(availableQueue[0].index))
+                ) {
+                  availableQueue.shift();
+                }
+                const fallback = availableQueue.shift();
+                if (!fallback) {
+                  throw new Error('No available slots match the booking rules.');
+                }
+                destination = { ...fallback, fromAssignment: false };
+              }
+
+              const reservationRefForSlot = doc(
+                db,
+                'slot-reservations',
+                buildReservationDocId(clinicId, doctorName, dateStr, destination.index)
+              );
+              const reservationSnapshotForSlot = await transaction.get(reservationRefForSlot);
+              if (reservationSnapshotForSlot.exists()) {
+                reservationDeletes.push(reservationRefForSlot);
               }
 
               const timeString = format(destination.time, 'hh:mm a');
@@ -671,6 +695,7 @@ export async function generateNextTokenAndReserveSlot(
               }
 
               advanceOccupancy[destination.index] = appointmentToMove;
+              assignedTargets.add(destination.index);
             }
 
             return {
@@ -698,15 +723,24 @@ export async function generateNextTokenAndReserveSlot(
             throw new Error('Unable to schedule walk-in token.');
           }
 
+          const advanceIds = new Set(activeAdvanceAppointments.map(appointment => appointment.id));
           const plannedWalkInSlots = new Set<number>(
             schedule.assignments
+              .filter(assignment => !advanceIds.has(assignment.id))
               .map(assignment => assignment.slotIndex)
               .filter(slotIndex => typeof slotIndex === 'number' && slotIndex >= 0)
           );
+          const advanceAssignments = new Map<string, SchedulerAssignment>();
+          for (const assignment of schedule.assignments) {
+            if (advanceIds.has(assignment.id)) {
+              advanceAssignments.set(assignment.id, assignment);
+            }
+          }
 
           const shiftPlan = await prepareAdvanceShift(
             newAssignment.slotIndex,
-            new Set<number>(plannedWalkInSlots)
+            new Set<number>(plannedWalkInSlots),
+            advanceAssignments
           );
 
           activeAdvanceAppointments = shiftPlan.updatedAdvanceAppointments;
@@ -879,12 +913,34 @@ export async function rebalanceWalkInSchedule(
   }
 
   await runTransaction(db, async transaction => {
+    const advanceRefs = activeAdvanceAppointments.map(appointment => doc(db, 'appointments', appointment.id));
     const walkInRefs = activeWalkIns.map(appointment => doc(db, 'appointments', appointment.id));
-    const walkInSnapshots = await Promise.all(walkInRefs.map(ref => transaction.get(ref)));
+
+    const [advanceSnapshots, walkInSnapshots] = await Promise.all([
+      Promise.all(advanceRefs.map(ref => transaction.get(ref))),
+      Promise.all(walkInRefs.map(ref => transaction.get(ref))),
+    ]);
+
+    const freshAdvanceAppointments = advanceSnapshots
+      .filter(snapshot => snapshot.exists())
+      .map(snapshot => {
+        const data = snapshot.data() as Appointment;
+        return { ...data, id: snapshot.id };
+      })
+      .filter(appointment => {
+        return (
+          appointment.bookedVia !== 'Walk-in' &&
+          typeof appointment.slotIndex === 'number' &&
+          ACTIVE_STATUSES.has(appointment.status)
+        );
+      });
 
     const freshWalkIns = walkInSnapshots
       .filter(snapshot => snapshot.exists())
-      .map(snapshot => ({ id: snapshot.id, ...(snapshot.data() as Appointment) }))
+      .map(snapshot => {
+        const data = snapshot.data() as Appointment;
+        return { ...data, id: snapshot.id };
+      })
       .filter(appointment => {
         return (
           appointment.bookedVia === 'Walk-in' &&
@@ -908,7 +964,7 @@ export async function rebalanceWalkInSchedule(
       slots,
       now,
       walkInTokenAllotment: walkInSpacingValue,
-      advanceAppointments: activeAdvanceAppointments.map(entry => ({
+      advanceAppointments: freshAdvanceAppointments.map(entry => ({
         id: entry.id,
         slotIndex: typeof entry.slotIndex === 'number' ? entry.slotIndex : -1,
       })),
@@ -916,6 +972,28 @@ export async function rebalanceWalkInSchedule(
     });
 
     const assignmentById = new Map(schedule.assignments.map(assignment => [assignment.id, assignment]));
+
+    for (const appointment of freshAdvanceAppointments) {
+      const assignment = assignmentById.get(appointment.id);
+      if (!assignment) continue;
+
+      const currentSlotIndex = typeof appointment.slotIndex === 'number' ? appointment.slotIndex : -1;
+      const newSlotIndex = assignment.slotIndex;
+      const newTimeString = format(assignment.slotTime, 'hh:mm a');
+
+      if (currentSlotIndex === newSlotIndex && appointment.time === newTimeString) {
+        continue;
+      }
+
+      const appointmentRef = doc(db, 'appointments', appointment.id);
+      transaction.update(appointmentRef, {
+        slotIndex: newSlotIndex,
+        sessionIndex: assignment.sessionIndex,
+        time: newTimeString,
+        cutOffTime: addMinutes(assignment.slotTime, -15),
+        noShowTime: addMinutes(assignment.slotTime, 15),
+      });
+    }
 
     for (const appointment of freshWalkIns) {
       const assignment = assignmentById.get(appointment.id);
@@ -934,6 +1012,7 @@ export async function rebalanceWalkInSchedule(
         slotIndex: newSlotIndex,
         sessionIndex: assignment.sessionIndex,
         time: newTimeString,
+        cutOffTime: addMinutes(assignment.slotTime, -15),
         noShowTime: addMinutes(assignment.slotTime, 15),
       });
     }

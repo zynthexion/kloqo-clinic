@@ -226,11 +226,39 @@ export default function SlotVisualizerPage() {
 
   const appointmentsBySlot = useMemo(() => {
     const map = new Map<number, Appointment>();
+
     appointments.forEach(appointment => {
-      if (typeof appointment.slotIndex === "number" && !map.has(appointment.slotIndex)) {
+      if (typeof appointment.slotIndex !== "number") {
+        return;
+      }
+
+      const existing = map.get(appointment.slotIndex);
+      const isCurrentActive = ACTIVE_STATUSES.has(appointment.status ?? "");
+      const isExistingActive = existing ? ACTIVE_STATUSES.has(existing.status ?? "") : false;
+
+      if (!existing) {
         map.set(appointment.slotIndex, appointment);
+        return;
+      }
+
+      if (!isExistingActive && isCurrentActive) {
+        map.set(appointment.slotIndex, appointment);
+        return;
+      }
+
+      if (isExistingActive && !isCurrentActive) {
+        return;
+      }
+
+      if (!isExistingActive && !isCurrentActive) {
+        const existingCreatedAt = coerceDate(existing.createdAt)?.getTime() ?? 0;
+        const currentCreatedAt = coerceDate(appointment.createdAt)?.getTime() ?? 0;
+        if (currentCreatedAt >= existingCreatedAt) {
+          map.set(appointment.slotIndex, appointment);
+        }
       }
     });
+
     return map;
   }, [appointments]);
 

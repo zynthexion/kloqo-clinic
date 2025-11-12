@@ -81,10 +81,17 @@ export function computeWalkInSchedule({
       : 0;
 
   const occupancy: (Occupant | null)[] = new Array(positionCount).fill(null);
+  const overflowAdvance: { id: string; sourcePosition: number }[] = [];
   advanceAppointments.forEach(entry => {
     const position = indexToPosition.get(entry.slotIndex);
     if (typeof position === "number") {
-      occupancy[position] = { type: 'A', id: entry.id };
+      if (occupancy[position] === null) {
+        occupancy[position] = { type: 'A', id: entry.id };
+      } else {
+        overflowAdvance.push({ id: entry.id, sourcePosition: position });
+      }
+    } else {
+      overflowAdvance.push({ id: entry.id, sourcePosition: -1 });
     }
   });
 
@@ -192,6 +199,48 @@ export function computeWalkInSchedule({
     return -1;
   };
 
+  const findEarliestWindowEmptyPosition = (): number => {
+    for (
+      let pos = Math.max(effectiveFirstFuturePosition, 0);
+      pos < positionCount;
+      pos += 1
+    ) {
+      const slotMeta = orderedSlots[pos];
+      if (isBefore(slotMeta.time, now)) {
+        continue;
+      }
+      if (isAfter(slotMeta.time, oneHourFromNow)) {
+        break;
+      }
+      if (occupancy[pos] === null) {
+        return pos;
+      }
+    }
+    return -1;
+  };
+
+  if (overflowAdvance.length > 0) {
+    const sortedOverflow = [...overflowAdvance].sort(
+      (a, b) => a.sourcePosition - b.sourcePosition
+    );
+    for (const entry of sortedOverflow) {
+      const startPosition =
+        entry.sourcePosition >= 0
+          ? Math.max(entry.sourcePosition + 1, effectiveFirstFuturePosition)
+          : effectiveFirstFuturePosition;
+      let emptyPosition = findFirstEmptyPosition(startPosition);
+      if (emptyPosition === -1) {
+        emptyPosition = findFirstEmptyPosition(effectiveFirstFuturePosition);
+      }
+      if (emptyPosition === -1) {
+        continue;
+      }
+
+      occupancy[emptyPosition] = { type: 'A', id: entry.id };
+      applyAssignment(entry.id, emptyPosition);
+    }
+  }
+
   const makeSpaceForWalkIn = (
     targetPosition: number,
     isExistingWalkIn: boolean
@@ -216,53 +265,53 @@ export function computeWalkInSchedule({
       return { position: candidatePosition, shifts: [] };
     }
 
-    const shifts: AdvanceShift[] = [];
-    let destination = candidatePosition + 1;
-
-    const moveToNextDestination = (sourcePosition: number, id: string): boolean => {
-      let newDestination = destination;
-      while (
-        newDestination < positionCount &&
-        (occupancy[newDestination] !== null || isBefore(orderedSlots[newDestination].time, now))
-      ) {
-        if (occupancy[newDestination]?.type === 'W') {
-          return false;
-        }
-        newDestination += 1;
+    const blockPositions: number[] = [];
+    for (let pos = candidatePosition; pos < positionCount; pos += 1) {
+      const occupant = occupancy[pos];
+      if (occupant === null) {
+        break;
       }
-
-      if (newDestination >= positionCount) {
-        return false;
+      if (occupant.type === 'W') {
+        break;
       }
-
-      occupancy[sourcePosition] = null;
-      occupancy[newDestination] = { type: 'A', id };
-      shifts.push({ id, position: newDestination });
-      destination = newDestination + 1;
-      return true;
-    };
-
-    if (occupantAtCandidate?.type === 'A') {
-      if (!moveToNextDestination(candidatePosition, occupantAtCandidate.id)) {
-        return { position: -1, shifts: [] };
+      if (occupant.type === 'A') {
+        blockPositions.push(pos);
       }
     }
 
-    for (let pos = candidatePosition + 1; pos < positionCount; pos += 1) {
-      const occupant = occupancy[pos];
+    if (blockPositions.length === 0) {
+      return { position: candidatePosition, shifts: [] };
+    }
 
-      if (occupant?.type === 'W') {
-        break;
-      }
+    const tailPosition = blockPositions[blockPositions.length - 1];
+    let emptyPosition = findFirstEmptyPosition(tailPosition + 1);
+    if (emptyPosition === -1) {
+      return { position: -1, shifts: [] };
+    }
 
-      if (occupant?.type !== 'A') {
+    const shifts: AdvanceShift[] = [];
+
+    for (let index = blockPositions.length - 1; index >= 0; index -= 1) {
+      const fromPosition = blockPositions[index];
+      const occupant = occupancy[fromPosition];
+      if (!occupant || occupant.type !== 'A') {
         continue;
       }
 
-      if (!moveToNextDestination(pos, occupant.id)) {
-        break;
+      if (emptyPosition <= fromPosition) {
+        emptyPosition = findFirstEmptyPosition(fromPosition + 1);
+        if (emptyPosition === -1) {
+          return { position: -1, shifts: [] };
+        }
       }
+
+      occupancy[fromPosition] = null;
+      occupancy[emptyPosition] = { type: 'A', id: occupant.id };
+      shifts.push({ id: occupant.id, position: emptyPosition });
+      emptyPosition = fromPosition;
     }
+
+    shifts.reverse();
 
     return { position: candidatePosition, shifts };
   };
@@ -271,6 +320,30 @@ export function computeWalkInSchedule({
     let assignedPosition: number | null = null;
 
     const preferredPosition = preferredPositions.get(candidate.id);
+    const earliestWindowPosition = findEarliestWindowEmptyPosition();
+    const preferredThreshold =
+      typeof preferredPosition === 'number' ? preferredPosition : Number.POSITIVE_INFINITY;
+
+    if (
+      earliestWindowPosition !== -1 &&
+      earliestWindowPosition < preferredThreshold
+    ) {
+      const prepared = makeSpaceForWalkIn(earliestWindowPosition, true);
+      if (prepared.position !== -1) {
+        prepared.shifts.forEach(shift => {
+          applyAssignment(shift.id, shift.position);
+        });
+        occupancy[prepared.position] = { type: 'W', id: candidate.id };
+        applyAssignment(candidate.id, prepared.position);
+        if (DEBUG) {
+          console.info('[walk-in scheduler] bubbled walk-in into 1-hour window', {
+            candidateId: candidate.id,
+            position: prepared.position,
+          });
+        }
+        continue;
+      }
+    }
 
     if (DEBUG) {
       console.info('[walk-in scheduler] processing walk-in', {
