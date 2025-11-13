@@ -257,12 +257,35 @@ function WalkInRegistrationContent() {
         const clinicData = clinicSnap.data();
         const walkInTokenAllotment = clinicData?.walkInTokenAllotment || 5;
 
-        const { estimatedTime, patientsAhead, numericToken, slotIndex } = await calculateWalkInDetails(
-          clinicId,
-          doctor.name,
-          doctor,
-          walkInTokenAllotment
-        );
+        let estimatedTime: Date;
+        let patientsAhead: number;
+        let numericToken: number;
+        let slotIndex: number;
+        
+        try {
+          const details = await calculateWalkInDetails(
+            clinicId,
+            doctor.name,
+            doctor,
+            walkInTokenAllotment
+          );
+          estimatedTime = details.estimatedTime;
+          patientsAhead = details.patientsAhead;
+          numericToken = details.numericToken;
+          slotIndex = details.slotIndex;
+        } catch (err: any) {
+          console.error("Error calculating walk-in details:", err);
+          const errorMessage = err.message || "";
+          const isSlotUnavailable = errorMessage.includes("Unable to allocate walk-in slot") || 
+                                    errorMessage.includes("No walk-in slots are available");
+          toast({
+            variant: "destructive",
+            title: "Walk-in Unavailable",
+            description: isSlotUnavailable ? "Walk-in slot not available." : (err.message || "Could not calculate walk-in details."),
+          });
+          setIsSubmitting(false);
+          return;
+        }
         
         // Clean phone: remove +91 if user entered it, remove any non-digits, then ensure exactly 10 digits
         let fullPhoneNumber = "";
@@ -354,7 +377,22 @@ function WalkInRegistrationContent() {
         const clinicSnap = await getDoc(clinicDocRef);
         const clinicData = clinicSnap.data();
         const walkInTokenAllotment = clinicData?.walkInTokenAllotment || 5;
-        const recalculatedDetails = await calculateWalkInDetails(clinicId, doctor.name, doctor, walkInTokenAllotment);
+        let recalculatedDetails;
+        try {
+          recalculatedDetails = await calculateWalkInDetails(clinicId, doctor.name, doctor, walkInTokenAllotment);
+        } catch (err: any) {
+          console.error("Error calculating walk-in details:", err);
+          const errorMessage = err.message || "";
+          const isSlotUnavailable = errorMessage.includes("Unable to allocate walk-in slot") || 
+                                    errorMessage.includes("No walk-in slots are available");
+          toast({
+            variant: "destructive",
+            title: "Walk-in Unavailable",
+            description: isSlotUnavailable ? "Walk-in slot not available." : (err.message || "Could not calculate walk-in details."),
+          });
+          setIsSubmitting(false);
+          return;
+        }
         
         // Use generateNextTokenAndReserveSlot to ensure sequential numbering and shift subsequent appointments
         const { tokenNumber: walkInTokenNumber, numericToken: walkInNumericToken, slotIndex: actualSlotIndex, reservationId } = await generateNextTokenAndReserveSlot(

@@ -9,6 +9,7 @@ export type SchedulerSlot = {
 export type SchedulerAdvance = {
   id: string;
   slotIndex: number;
+  status?: 'Confirmed' | 'Pending';
 };
 
 export type SchedulerWalkInCandidate = {
@@ -60,7 +61,8 @@ export function computeWalkInSchedule({
       slots: slots.length,
       walkInTokenAllotment,
       now,
-      advanceAppointments,
+      advanceAppointmentsCount: advanceAppointments.length,
+      advanceAppointments: advanceAppointments.map(a => ({ id: a.id, slotIndex: a.slotIndex })),
       walkInCandidates,
     });
   }
@@ -81,19 +83,37 @@ export function computeWalkInSchedule({
       : 0;
 
   const occupancy: (Occupant | null)[] = new Array(positionCount).fill(null);
-  const overflowAdvance: { id: string; sourcePosition: number }[] = [];
+  const advanceStatusMap = new Map<string, 'Confirmed' | 'Pending'>();
+  const overflowAdvance: { id: string; sourcePosition: number; status?: 'Confirmed' | 'Pending' }[] = [];
   advanceAppointments.forEach(entry => {
+    if (entry.status) {
+      advanceStatusMap.set(entry.id, entry.status);
+    }
     const position = indexToPosition.get(entry.slotIndex);
     if (typeof position === "number") {
       if (occupancy[position] === null) {
         occupancy[position] = { type: 'A', id: entry.id };
+        if (DEBUG && entry.id.startsWith('__blocked_cancelled_')) {
+          console.info('[walk-in scheduler] Blocked cancelled slot at position', position, 'slotIndex', entry.slotIndex);
+        }
       } else {
-        overflowAdvance.push({ id: entry.id, sourcePosition: position });
+        overflowAdvance.push({ id: entry.id, sourcePosition: position, status: entry.status });
       }
     } else {
-      overflowAdvance.push({ id: entry.id, sourcePosition: -1 });
+      overflowAdvance.push({ id: entry.id, sourcePosition: -1, status: entry.status });
+      if (DEBUG && entry.id.startsWith('__blocked_cancelled_')) {
+        console.warn('[walk-in scheduler] Blocked cancelled slot not found in slots:', entry.slotIndex);
+      }
     }
   });
+  
+  if (DEBUG) {
+    const blockedSlots = advanceAppointments.filter(a => a.id.startsWith('__blocked_cancelled_'));
+    if (blockedSlots.length > 0) {
+      console.info('[walk-in scheduler] Blocked cancelled slots:', blockedSlots.map(a => a.slotIndex));
+      console.info('[walk-in scheduler] Occupancy after blocking:', occupancy.map((occ, idx) => ({ position: idx, occupant: occ })));
+    }
+  }
 
   const sortedWalkIns = [...walkInCandidates].sort((a, b) => {
     if (a.numericToken !== b.numericToken) {
@@ -345,6 +365,33 @@ export function computeWalkInSchedule({
       }
     }
 
+    if (typeof preferredPosition === 'number') {
+      const anchorPosition = getLastWalkInPosition();
+      if (anchorPosition !== -1) {
+        const sequentialPosition = findFirstEmptyPosition(anchorPosition + 1);
+        if (
+          sequentialPosition !== -1 &&
+          sequentialPosition < preferredPosition
+        ) {
+          const prepared = makeSpaceForWalkIn(sequentialPosition, true);
+          if (prepared.position !== -1) {
+            prepared.shifts.forEach(shift => {
+              applyAssignment(shift.id, shift.position);
+            });
+            occupancy[prepared.position] = { type: 'W', id: candidate.id };
+            applyAssignment(candidate.id, prepared.position);
+            if (DEBUG) {
+              console.info('[walk-in scheduler] tightened walk-in sequence', {
+                candidateId: candidate.id,
+                position: prepared.position,
+              });
+            }
+            continue;
+          }
+        }
+      }
+    }
+
     if (DEBUG) {
       console.info('[walk-in scheduler] processing walk-in', {
         candidate,
@@ -438,6 +485,233 @@ export function computeWalkInSchedule({
         candidateId: candidate.id,
         assignedPosition,
       });
+    }
+  }
+
+  // Propagation: Move Confirmed A tokens forward to fill empty slots, then move W tokens forward
+  const findFirstWalkInPosition = (): number => {
+    for (let pos = 0; pos < positionCount; pos += 1) {
+      if (occupancy[pos]?.type === 'W') {
+        return pos;
+      }
+    }
+    return -1;
+  };
+
+  let firstWalkInPos = findFirstWalkInPosition();
+  if (firstWalkInPos !== -1) {
+    let propagationActive = true;
+    let maxIterations = 100; // Safety limit
+    while (propagationActive && maxIterations > 0) {
+      maxIterations -= 1;
+      propagationActive = false;
+
+      // Find all empty slots within one-hour window (not just before first W position)
+      // This allows proper cascading even when W tokens move forward
+      const emptySlots: number[] = [];
+      for (let pos = effectiveFirstFuturePosition; pos < positionCount; pos += 1) {
+        const slotMeta = orderedSlots[pos];
+        if (isBefore(slotMeta.time, now)) {
+          continue;
+        }
+        if (isAfter(slotMeta.time, oneHourFromNow)) {
+          break;
+        }
+        if (occupancy[pos] === null) {
+          emptySlots.push(pos);
+        }
+      }
+
+      if (emptySlots.length === 0) {
+        break;
+      }
+
+      // Find Confirmed A tokens that are before the first W token
+      const confirmedAdvanceBeforeWalkIn: { id: string; position: number }[] = [];
+      for (let pos = effectiveFirstFuturePosition; pos < firstWalkInPos && pos < positionCount; pos += 1) {
+        const occupant = occupancy[pos];
+        if (occupant?.type === 'A') {
+          const status = advanceStatusMap.get(occupant.id);
+          if (status === 'Confirmed') {
+            confirmedAdvanceBeforeWalkIn.push({ id: occupant.id, position: pos });
+          }
+        }
+      }
+
+      // Sort by position (earliest first)
+      confirmedAdvanceBeforeWalkIn.sort((a, b) => a.position - b.position);
+      emptySlots.sort((a, b) => a.position - b.position);
+
+      // First, try to move Confirmed A tokens to fill empty slots that are before or at first W position
+      if (confirmedAdvanceBeforeWalkIn.length > 0) {
+        // Filter empty slots to only those before or at first W position (where A tokens can move)
+        const emptySlotsForAdvance = emptySlots.filter(slot => slot <= firstWalkInPos);
+        
+        // Move Confirmed A tokens to fill empty slots (one at a time to allow proper propagation)
+        for (const emptySlot of emptySlotsForAdvance) {
+          // Find the earliest Confirmed A token that is before this empty slot
+          let bestAdvance: { id: string; position: number } | null = null;
+          for (const advanceEntry of confirmedAdvanceBeforeWalkIn) {
+            const occupant = occupancy[advanceEntry.position];
+            if (occupant?.type === 'A' && occupant.id === advanceEntry.id && advanceEntry.position < emptySlot) {
+              bestAdvance = advanceEntry;
+              break;
+            }
+          }
+
+          if (!bestAdvance) {
+            continue;
+          }
+
+          const fromPosition = bestAdvance.position;
+          const occupant = occupancy[fromPosition];
+          if (occupant?.type === 'A' && occupant.id === bestAdvance.id) {
+            // Move A token forward
+            occupancy[fromPosition] = null;
+            occupancy[emptySlot] = occupant;
+            applyAssignment(occupant.id, emptySlot);
+            propagationActive = true;
+
+            if (DEBUG) {
+              console.info('[walk-in scheduler] propagation: moved Confirmed A token forward', {
+                id: occupant.id,
+                from: fromPosition,
+                to: emptySlot,
+              });
+            }
+
+            // Cascade W tokens forward to fill gaps left by A tokens
+            let currentGap = fromPosition;
+            while (true) {
+              // Find the earliest W token that comes after the current gap
+              let earliestWalkInAfter: { id: string; position: number } | null = null;
+              for (let pos = Math.max(currentGap + 1, firstWalkInPos); pos < positionCount; pos += 1) {
+                const occupantAtPos = occupancy[pos];
+                if (occupantAtPos?.type === 'W') {
+                  earliestWalkInAfter = { id: occupantAtPos.id, position: pos };
+                  break;
+                }
+              }
+
+              if (!earliestWalkInAfter) {
+                break;
+              }
+
+              // Move this W token to fill the gap
+              const walkInOccupant = occupancy[earliestWalkInAfter.position];
+              if (walkInOccupant?.type === 'W' && walkInOccupant.id === earliestWalkInAfter.id) {
+                occupancy[earliestWalkInAfter.position] = null;
+                occupancy[currentGap] = walkInOccupant;
+                applyAssignment(walkInOccupant.id, currentGap);
+
+                // Update firstWalkInPos if this W token moved earlier
+                if (currentGap < firstWalkInPos) {
+                  firstWalkInPos = currentGap;
+                }
+
+                if (DEBUG) {
+                  console.info('[walk-in scheduler] propagation: cascaded W token forward after A move', {
+                    id: walkInOccupant.id,
+                    from: earliestWalkInAfter.position,
+                    to: currentGap,
+                  });
+                }
+
+                // Update the gap to the position where this W token was
+                currentGap = earliestWalkInAfter.position;
+              } else {
+                break;
+              }
+            }
+
+            // Break to recalculate empty slots and confirmed advances
+            break;
+          }
+        }
+      } else {
+        // No Confirmed A tokens to move, so move W tokens forward to fill empty slots
+        // Process empty slots one at a time to allow cascading
+        for (const emptySlot of emptySlots) {
+          // Find the earliest W token that is after this empty slot
+          let earliestWalkInAfter: { id: string; position: number } | null = null;
+          for (let pos = Math.max(emptySlot + 1, firstWalkInPos); pos < positionCount; pos += 1) {
+            const occupant = occupancy[pos];
+            if (occupant?.type === 'W') {
+              earliestWalkInAfter = { id: occupant.id, position: pos };
+              break;
+            }
+          }
+
+          if (!earliestWalkInAfter) {
+            continue;
+          }
+
+          const fromPosition = earliestWalkInAfter.position;
+          const occupant = occupancy[fromPosition];
+          if (occupant?.type === 'W' && occupant.id === earliestWalkInAfter.id) {
+            // Move W token forward to fill empty slot
+            occupancy[fromPosition] = null;
+            occupancy[emptySlot] = occupant;
+            applyAssignment(occupant.id, emptySlot);
+            propagationActive = true;
+
+            // Update firstWalkInPos if this W token moved earlier
+            if (emptySlot < firstWalkInPos) {
+              firstWalkInPos = emptySlot;
+            }
+
+            if (DEBUG) {
+              console.info('[walk-in scheduler] propagation: moved W token forward to fill empty slot', {
+                id: occupant.id,
+                from: fromPosition,
+                to: emptySlot,
+              });
+            }
+
+            // Now cascade: continue moving W tokens forward to fill gaps
+            let currentGap = fromPosition;
+            while (true) {
+              // Find the next W token after the current gap
+              let nextWalkInAfter: { id: string; position: number } | null = null;
+              for (let pos = currentGap + 1; pos < positionCount; pos += 1) {
+                const occupantAtPos = occupancy[pos];
+                if (occupantAtPos?.type === 'W') {
+                  nextWalkInAfter = { id: occupantAtPos.id, position: pos };
+                  break;
+                }
+              }
+
+              if (!nextWalkInAfter) {
+                break;
+              }
+
+              // Move the next W token to fill the gap
+              const nextWalkInOccupant = occupancy[nextWalkInAfter.position];
+              if (nextWalkInOccupant?.type === 'W' && nextWalkInOccupant.id === nextWalkInAfter.id) {
+                occupancy[nextWalkInAfter.position] = null;
+                occupancy[currentGap] = nextWalkInOccupant;
+                applyAssignment(nextWalkInOccupant.id, currentGap);
+
+                if (DEBUG) {
+                  console.info('[walk-in scheduler] propagation: cascaded W token forward', {
+                    id: nextWalkInOccupant.id,
+                    from: nextWalkInAfter.position,
+                    to: currentGap,
+                  });
+                }
+
+                // Update the gap to the position where this W token was
+                currentGap = nextWalkInAfter.position;
+              } else {
+                break;
+              }
+            }
+
+            // Break to recalculate empty slots and allow next iteration
+            break;
+          }
+        }
+      }
     }
   }
 

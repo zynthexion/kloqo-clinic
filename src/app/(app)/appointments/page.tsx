@@ -71,7 +71,6 @@ import {
   calculateWalkInDetails,
   calculateSkippedTokenRejoinSlot,
   generateNextTokenAndReserveSlot,
-  rebalanceWalkInSchedule,
   previewWalkInPlacement,
 } from '@/lib/appointment-service';
 import { sendAppointmentCancelledNotification, sendTokenCalledNotification, sendAppointmentBookedByStaffNotification } from '@/lib/notification-service';
@@ -610,10 +609,13 @@ export default function AppointmentsPage() {
         console.error("Error calculating walk-in details:", err);
         setWalkInEstimate(null);
         setIsCalculatingEstimate(false);
+        const errorMessage = err.message || "";
+        const isSlotUnavailable = errorMessage.includes("Unable to allocate walk-in slot") || 
+                                  errorMessage.includes("No walk-in slots are available");
         toast({
           variant: "destructive",
           title: "Walk-in Unavailable",
-          description: err.message || "Could not calculate walk-in estimate.",
+          description: isSlotUnavailable ? "Walk-in slot not available." : (err.message || "Could not calculate walk-in estimate."),
         });
       });
     } else {
@@ -1031,8 +1033,8 @@ export default function AppointmentsPage() {
             } else if (error.code === 'A_CAPACITY_REACHED') {
               toast({
                 variant: "destructive",
-                title: "Advance Booking Full",
-                description: "Advanced bookings have reached the 85% limit for this doctor today. Please choose another day or add as a walk-in.",
+                title: "No Slots Available",
+                description: "Advance booking capacity has been reached for this doctor today. Please choose another day.",
               });
               return;
             }
@@ -1375,7 +1377,12 @@ export default function AppointmentsPage() {
       try {
         const appointmentRef = doc(db, "appointments", appointment.id);
         await updateDoc(appointmentRef, { status: 'Cancelled' });
-        setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'Cancelled' as const } : a));
+        const updatedAppointment = { ...appointment, status: 'Cancelled' as const };
+        setAppointments(prev => prev.map(a => a.id === appointment.id ? updatedAppointment : a));
+        
+        // Note: Bucket count is now calculated on-the-fly from appointments
+        // No need to update Firestore - the bucket count will be automatically recalculated
+        // when the next walk-in booking happens
         
         // Send cancellation notification
         try {
@@ -1398,30 +1405,6 @@ export default function AppointmentsPage() {
             // Don't fail the cancellation if notification fails
         }
 
-        const appointmentDateObj = parse(appointment.date, 'd MMMM yyyy', new Date());
-        const appointmentSlotTime = parseTime(appointment.time, appointmentDateObj);
-        const now = new Date();
-        const withinWalkInWindow = !isAfter(appointmentSlotTime, addMinutes(now, 60));
-
-        const hasActiveWalkIns = appointments.some(existing => {
-          if (existing.id === appointment.id) return false;
-          if (existing.bookedVia !== "Walk-in") return false;
-          return existing.status === "Pending" || existing.status === "Confirmed";
-        });
-
-        if (hasActiveWalkIns && withinWalkInWindow) {
-          try {
-            await rebalanceWalkInSchedule(
-              appointment.clinicId,
-              appointment.doctor,
-              appointmentDateObj,
-              appointment.doctorId
-            );
-          } catch (rebalanceError) {
-            console.error('Failed to rebalance walk-in schedule after cancellation:', rebalanceError);
-          }
-        }
-        
         toast({ title: "Appointment Cancelled" });
       } catch (error) {
         console.error("Error cancelling appointment:", error);
@@ -1863,8 +1846,67 @@ export default function AppointmentsPage() {
     .filter((date): date is Date => date !== null);
   }, [selectedDoctor?.leaveSlots]);
 
+  const { isAdvanceCapacityReached } = useMemo(() => {
+    if (!selectedDoctor || appointmentType !== 'Advanced Booking') {
+      return { isAdvanceCapacityReached: false };
+    }
+
+    const dayOfWeek = daysOfWeek[getDay(selectedDate)];
+    const availabilityForDay = selectedDoctor.availabilitySlots?.find(slot => slot.day === dayOfWeek);
+    if (!availabilityForDay?.timeSlots?.length) {
+      return { isAdvanceCapacityReached: false };
+    }
+
+    const slotDuration = selectedDoctor.averageConsultingTime || 15;
+    let totalSlotsForDay = 0;
+    availabilityForDay.timeSlots.forEach(session => {
+      let currentTime = parseDateFns(session.from, 'hh:mm a', selectedDate);
+      const sessionEnd = parseDateFns(session.to, 'hh:mm a', selectedDate);
+      while (isBefore(currentTime, sessionEnd)) {
+        totalSlotsForDay += 1;
+        currentTime = addMinutes(currentTime, slotDuration);
+      }
+    });
+
+    if (totalSlotsForDay === 0) {
+      return { isAdvanceCapacityReached: false };
+    }
+
+    const formattedDate = format(selectedDate, 'd MMMM yyyy');
+    let activeAdvanceCount = appointments.filter(appointment => {
+      return (
+        appointment.bookedVia !== 'Walk-in' &&
+        appointment.date === formattedDate &&
+        (appointment.status === 'Pending' || appointment.status === 'Confirmed')
+      );
+    }).length;
+
+    if (
+      isEditing &&
+      editingAppointment &&
+      editingAppointment.bookedVia !== 'Walk-in' &&
+      (editingAppointment.status === 'Pending' || editingAppointment.status === 'Confirmed') &&
+      editingAppointment.date === formattedDate
+    ) {
+      activeAdvanceCount = Math.max(0, activeAdvanceCount - 1);
+    }
+
+    const maximumAdvanceTokens = Math.max(totalSlotsForDay - Math.ceil(totalSlotsForDay * 0.15), 0);
+    return {
+      isAdvanceCapacityReached: maximumAdvanceTokens > 0 && activeAdvanceCount >= maximumAdvanceTokens,
+    };
+  }, [selectedDoctor, selectedDate, appointments, appointmentType, isEditing, editingAppointment]);
+
+  useEffect(() => {
+    if (appointmentType === 'Advanced Booking' && isAdvanceCapacityReached) {
+      form.setValue('time', '', { shouldValidate: true });
+    }
+  }, [appointmentType, isAdvanceCapacityReached, form]);
 
   const sessionSlots = useMemo(() => {
+    if (appointmentType === 'Advanced Booking' && isAdvanceCapacityReached) {
+      return [];
+    }
     if (!selectedDate || !selectedDoctor || !selectedDoctor.averageConsultingTime) {
         return [];
     }
@@ -1998,7 +2040,7 @@ export default function AppointmentsPage() {
     });
 
     return sessions.filter(s => s.slots.length > 0);
-  }, [selectedDate, selectedDoctor, appointments, isEditing, editingAppointment, appointmentType, currentTime]);
+  }, [selectedDate, selectedDoctor, appointments, isEditing, editingAppointment, appointmentType, currentTime, isAdvanceCapacityReached]);
 
   const isAppointmentOnLeave = (appointment: Appointment): boolean => {
       if (!doctors.length || !appointment) return false;
@@ -2215,7 +2257,6 @@ export default function AppointmentsPage() {
     }
     return !form.formState.isValid;
   }, [isPending, appointmentType, walkInEstimate, isCalculatingEstimate, form.formState.isValid, form.getValues('patientName')]);
-
 
   return (
     <>
@@ -2734,6 +2775,11 @@ export default function AppointmentsPage() {
                                 )} />
                                 {appointmentType === 'Advanced Booking' && selectedDoctor && selectedDate && (
                                     <div className="space-y-4 max-h-60 overflow-y-auto pr-2">
+                                        {isAdvanceCapacityReached && (
+                                          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                                            Advance booking capacity has been reached for this doctor today. No slots are available.
+                                          </div>
+                                        )}
                                         {sessionSlots.length > 0 ? (
                                             sessionSlots.map((session, index) => (
                                                 <div key={index}>
@@ -2772,7 +2818,13 @@ export default function AppointmentsPage() {
                                                     </div>
                                                 </div>
                                             ))
-                                        ) : <p className="text-sm text-muted-foreground col-span-2">No available slots for this day.</p>}
+                                        ) : (
+                                          <p className="text-sm text-muted-foreground col-span-2">
+                                            {isAdvanceCapacityReached
+                                              ? 'Advance booking capacity has been reached for this doctor today.'
+                                              : 'No available slots for this day.'}
+                                          </p>
+                                        )}
                                     </div>
                                 )}
                               </div>
@@ -2783,8 +2835,16 @@ export default function AppointmentsPage() {
                               {isEditing && <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>}
                               <Button
                                 type="submit"
-                                disabled={appointmentType === 'Walk-in' ? isBookingButtonDisabled : (isBookingButtonDisabled || !form.formState.isValid)}
-                               >
+                                disabled={
+                                  appointmentType === 'Walk-in'
+                                    ? isBookingButtonDisabled
+                                    : (
+                                        isBookingButtonDisabled ||
+                                        !form.formState.isValid ||
+                                        (appointmentType === 'Advanced Booking' && isAdvanceCapacityReached)
+                                      )
+                                }
+                              >
                                 {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                 {isEditing ? "Save Changes" : "Book Appointment"}
                               </Button>
