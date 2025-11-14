@@ -207,8 +207,13 @@ function buildCandidateSlots(
     if (typeof preferredSlotIndex === 'number') {
       const slotTime = getSlotTime(slots, preferredSlotIndex);
       // CRITICAL: Also check if preferred slot is not reserved for walk-ins
-      if (isAfter(slotTime, oneHourFromNow) && preferredSlotIndex < reservedWSlotsStart) {
+      // This prevents booking cancelled slots that are in the reserved walk-in range (last 15%)
+      if (preferredSlotIndex >= reservedWSlotsStart) {
+        console.log(`[SLOT FILTER] Rejecting preferred slot ${preferredSlotIndex} - reserved for walk-ins (reservedWSlotsStart: ${reservedWSlotsStart}, totalSlots: ${totalSlots})`);
+      } else if (isAfter(slotTime, oneHourFromNow)) {
         addCandidate(preferredSlotIndex);
+      } else {
+        console.log(`[SLOT FILTER] Rejecting preferred slot ${preferredSlotIndex} - within 1 hour from now`);
       }
     }
 
