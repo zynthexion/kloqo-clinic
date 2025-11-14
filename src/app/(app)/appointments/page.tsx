@@ -3191,7 +3191,8 @@ export default function AppointmentsPage() {
       </Dialog>
       <AlertDialog open={!!appointmentToCancel} onOpenChange={(open) => {
         if (!open) {
-          setAppointmentToCancel(null);
+          // Defer state clearing until after dialog animation completes
+          setTimeout(() => setAppointmentToCancel(null), 300);
         }
       }}>
         <AlertDialogContent>
@@ -3202,14 +3203,12 @@ export default function AppointmentsPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setAppointmentToCancel(null)}>No, Keep Appointment</AlertDialogCancel>
+            <AlertDialogCancel>No, Keep Appointment</AlertDialogCancel>
             <AlertDialogAction
               className="bg-red-500 hover:bg-red-600"
-              onClick={async () => {
+              onClick={() => {
                 const appointment = appointmentToCancel;
-                // Close modal immediately
                 setAppointmentToCancel(null);
-                // Then handle cancellation asynchronously
                 if (appointment) {
                   handleCancel(appointment);
                 }
@@ -3222,7 +3221,8 @@ export default function AppointmentsPage() {
       </AlertDialog>
       <AlertDialog open={!!appointmentToAddToQueue && appointmentToAddToQueue.status === 'Pending'} onOpenChange={(open) => {
         if (!open) {
-          setAppointmentToAddToQueue(null);
+          // Defer state clearing until after dialog animation completes
+          setTimeout(() => setAppointmentToAddToQueue(null), 200);
         }
       }}>
         <AlertDialogContent>
@@ -3233,14 +3233,12 @@ export default function AppointmentsPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setAppointmentToAddToQueue(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-blue-500 hover:bg-blue-600"
-              onClick={async () => {
+              onClick={() => {
                 const appointment = appointmentToAddToQueue;
-                // Close modal immediately
                 setAppointmentToAddToQueue(null);
-                // Then handle add to queue asynchronously
                 if (appointment && appointment.status === 'Pending') {
                   handleAddToQueue(appointment);
                 }
@@ -3253,7 +3251,8 @@ export default function AppointmentsPage() {
       </AlertDialog>
       <AlertDialog open={!!appointmentToComplete} onOpenChange={(open) => {
         if (!open) {
-          setAppointmentToComplete(null);
+          // Defer state clearing until after dialog animation completes
+          setTimeout(() => setAppointmentToComplete(null), 200);
         }
       }}>
         <AlertDialogContent>
@@ -3264,14 +3263,12 @@ export default function AppointmentsPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setAppointmentToComplete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-green-500 hover:bg-green-600"
-              onClick={async () => {
+              onClick={() => {
                 const appointment = appointmentToComplete;
-                // Close modal immediately
                 setAppointmentToComplete(null);
-                // Then handle completion asynchronously
                 if (appointment) {
                   handleComplete(appointment);
                 }
