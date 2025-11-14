@@ -12,7 +12,7 @@ import {
   type DocumentReference,
   type Transaction,
 } from 'firebase/firestore';
-import { format, addMinutes, differenceInMinutes, isAfter, isBefore } from 'date-fns';
+import { format, addMinutes, differenceInMinutes, isAfter, isBefore, parse } from 'date-fns';
 import type { Doctor, Appointment } from '@/lib/types';
 import { computeWalkInSchedule, type SchedulerAssignment } from '@/lib/walk-in-scheduler';
 import { parseTime as parseTimeString } from '@/lib/utils';
@@ -1067,10 +1067,46 @@ export async function generateNextTokenAndReserveSlot(
           const finalSchedule = scheduleAttempt.schedule;
           const walkInAssignment = scheduleAttempt.newAssignment;
 
+          // CRITICAL: Calculate walk-in time based on previous appointment instead of scheduler time
+          // Get the appointment before the walk-in slot
+          let calculatedWalkInTime: Date = walkInAssignment.slotTime;
+          if (walkInAssignment.slotIndex > 0) {
+            const appointmentBeforeWalkIn = effectiveAppointments
+              .filter(appointment => 
+                appointment.bookedVia !== 'Walk-in' &&
+                typeof appointment.slotIndex === 'number' &&
+                appointment.slotIndex === walkInAssignment.slotIndex - 1 &&
+                ACTIVE_STATUSES.has(appointment.status)
+              )
+              .sort((a, b) => {
+                const aIdx = typeof a.slotIndex === 'number' ? a.slotIndex : -1;
+                const bIdx = typeof b.slotIndex === 'number' ? b.slotIndex : -1;
+                return bIdx - aIdx; // Get the last one at that slot (should be only one)
+              })[0];
+            
+            if (appointmentBeforeWalkIn && appointmentBeforeWalkIn.time) {
+              try {
+                const appointmentDate = parse(dateStr, 'd MMMM yyyy', date);
+                const previousAppointmentTime = parse(
+                  appointmentBeforeWalkIn.time,
+                  'hh:mm a',
+                  appointmentDate
+                );
+                // Walk-in time = previous appointment time (same time as A004)
+                calculatedWalkInTime = previousAppointmentTime;
+              } catch (e) {
+                // If parsing fails, use scheduler's time
+                calculatedWalkInTime = walkInAssignment.slotTime;
+              }
+            }
+          }
+
           const prepareAdvanceShift = async (
             targetSlotIndex: number,
             blockedSlots: Set<number>,
-            advanceAssignments: Map<string, SchedulerAssignment>
+            advanceAssignments: Map<string, SchedulerAssignment>,
+            walkInTime: Date,
+            averageConsultingTime: number
           ): Promise<{
             reservationDeletes: DocumentReference[];
             appointmentUpdates: Array<{
@@ -1149,103 +1185,153 @@ export async function generateNextTokenAndReserveSlot(
               };
             }
 
-            const blockedIndices = new Set<number>(blockedSlots);
-            blockedIndices.add(targetSlotIndex);
-            const assignedTargets = new Set<number>();
-
-            const availableQueue: Array<{
-              index: number;
-              sessionIndex: number;
-              time: Date;
-            }> = [];
-
-            for (let idx = targetSlotIndex + 1; idx < totalSlots; idx += 1) {
-              if (blockedIndices.has(idx)) {
-                continue;
+            // Get the time of the appointment before the walk-in (or walk-in time if targetSlotIndex is 0)
+            // This will be used to calculate the first moved appointment's time
+            let previousAppointmentTime: Date;
+            if (targetSlotIndex > 0) {
+              const appointmentBeforeWalkIn = advanceOccupancy[targetSlotIndex - 1];
+              if (appointmentBeforeWalkIn && appointmentBeforeWalkIn.time) {
+                // Parse the appointment time string to Date using date-fns parse
+                try {
+                  previousAppointmentTime = parse(
+                    appointmentBeforeWalkIn.time,
+                    'hh:mm a',
+                    date
+                  );
+                } catch (e) {
+                  // If parsing fails, use walk-in time
+                  previousAppointmentTime = walkInTime;
+                }
+              } else {
+                // No appointment before, use walk-in time
+                previousAppointmentTime = walkInTime;
               }
-              const slotMeta = slots[idx];
-              if (!slotMeta || isBefore(slotMeta.time, now)) {
-                continue;
-              }
-              availableQueue.push({
-                index: idx,
-                sessionIndex: slotMeta.sessionIndex,
-                time: slotMeta.time,
-              });
+            } else {
+              // targetSlotIndex is 0, use walk-in time
+              previousAppointmentTime = walkInTime;
             }
 
-            for (const appointmentToMove of appointmentsToReassign) {
-              const assignment = advanceAssignments.get(appointmentToMove.id);
-              let destination:
-                | { index: number; sessionIndex: number; time: Date; fromAssignment: boolean }
-                | null = null;
+            // CRITICAL: For W booking, simply increment slotIndex by 1 for each appointment being shifted
+            // Sort appointments by their current slotIndex to process them in order
+            const sortedAppointmentsToReassign = appointmentsToReassign.sort((a, b) => {
+              const aIdx = typeof a.slotIndex === 'number' ? a.slotIndex : -1;
+              const bIdx = typeof b.slotIndex === 'number' ? b.slotIndex : -1;
+              return aIdx - bIdx;
+            });
 
-              if (assignment) {
-                if (
-                  assignment.slotIndex !== targetSlotIndex &&
-                  !blockedIndices.has(assignment.slotIndex) &&
-                  !assignedTargets.has(assignment.slotIndex)
-                ) {
-                  const slotMeta = slots[assignment.slotIndex];
-                  if (slotMeta && !isBefore(slotMeta.time, now)) {
-                    destination = {
-                      index: assignment.slotIndex,
-                      sessionIndex: slotMeta.sessionIndex,
-                      time: slotMeta.time,
-                      fromAssignment: true,
-                    };
-                  }
-                }
+            for (const appointmentToMove of sortedAppointmentsToReassign) {
+              const currentSlotIndex = typeof appointmentToMove.slotIndex === 'number' ? appointmentToMove.slotIndex : -1;
+              // CRITICAL: Increment slotIndex by 1 for each appointment being shifted
+              const newSlotIndex = currentSlotIndex + 1;
+              
+              // Find the sessionIndex for the new slotIndex
+              const newSlotMeta = slots[newSlotIndex];
+              if (!newSlotMeta) {
+                // If slot doesn't exist, skip this appointment (shouldn't happen, but safety check)
+                console.warn(`[BOOKING DEBUG] Slot ${newSlotIndex} does not exist, skipping appointment ${appointmentToMove.id}`);
+                continue;
               }
-
-              if (!destination) {
-                while (
-                  availableQueue.length > 0 &&
-                  (assignedTargets.has(availableQueue[0].index) ||
-                    blockedIndices.has(availableQueue[0].index))
-                ) {
-                  availableQueue.shift();
-                }
-                const fallback = availableQueue.shift();
-                if (!fallback) {
-                  throw new Error('No available slots match the booking rules.');
-                }
-                destination = { ...fallback, fromAssignment: false };
-              }
+              const newSessionIndex = newSlotMeta.sessionIndex;
 
               const reservationRefForSlot = doc(
                 db,
                 'slot-reservations',
-                buildReservationDocId(clinicId, doctorName, dateStr, destination.index)
+                buildReservationDocId(clinicId, doctorName, dateStr, newSlotIndex)
               );
               const reservationSnapshotForSlot = await transaction.get(reservationRefForSlot);
               if (reservationSnapshotForSlot.exists()) {
                 reservationDeletes.push(reservationRefForSlot);
               }
 
-              const timeString = format(destination.time, 'hh:mm a');
-              const noShowTime = addMinutes(destination.time, 15);
+              // CRITICAL: Calculate new time from appointment's current time field + averageConsultingTime
+              // Parse the appointment's current time field and add averageConsultingTime to it
+              let newAppointmentTime: Date;
+              if (appointmentToMove.time) {
+                try {
+                  const appointmentDate = parse(dateStr, 'd MMMM yyyy', new Date());
+                  const currentAppointmentTime = parse(appointmentToMove.time, 'hh:mm a', appointmentDate);
+                  // New time = current time + averageConsultingTime
+                  newAppointmentTime = addMinutes(currentAppointmentTime, averageConsultingTime);
+                } catch (e) {
+                  console.warn(`[BOOKING DEBUG] Failed to parse appointment time "${appointmentToMove.time}" for appointment ${appointmentToMove.id}, skipping time update`);
+                  continue;
+                }
+              } else {
+                console.warn(`[BOOKING DEBUG] Appointment ${appointmentToMove.id} has no time field, skipping time update`);
+                continue;
+              }
+              
+              const timeString = format(newAppointmentTime, 'hh:mm a');
+              
+              // CRITICAL: Calculate new noShowTime from appointment's current noShowTime field + averageConsultingTime
+              // Parse the appointment's current noShowTime field and add averageConsultingTime to it
+              let noShowTime: Date;
+              if (appointmentToMove.noShowTime) {
+                try {
+                  let currentNoShowTime: Date;
+                  if (appointmentToMove.noShowTime instanceof Date) {
+                    currentNoShowTime = appointmentToMove.noShowTime;
+                  } else if (typeof appointmentToMove.noShowTime === 'object' && appointmentToMove.noShowTime !== null) {
+                    const noShowTimeObj = appointmentToMove.noShowTime as { toDate?: () => Date; seconds?: number };
+                    if (typeof noShowTimeObj.toDate === 'function') {
+                      currentNoShowTime = noShowTimeObj.toDate();
+                    } else if (typeof noShowTimeObj.seconds === 'number') {
+                      currentNoShowTime = new Date(noShowTimeObj.seconds * 1000);
+                    } else {
+                      // Fallback to using new appointment time + averageConsultingTime
+                      currentNoShowTime = addMinutes(newAppointmentTime, averageConsultingTime);
+                    }
+                  } else {
+                    // Fallback to using new appointment time + averageConsultingTime
+                    currentNoShowTime = addMinutes(newAppointmentTime, averageConsultingTime);
+                  }
+                  // New noShowTime = current noShowTime + averageConsultingTime
+                  noShowTime = addMinutes(currentNoShowTime, averageConsultingTime);
+                } catch (e) {
+                  // If parsing fails, use new appointment time + averageConsultingTime
+                  noShowTime = addMinutes(newAppointmentTime, averageConsultingTime);
+                }
+              } else {
+                // No noShowTime available, use new appointment time + averageConsultingTime
+                noShowTime = addMinutes(newAppointmentTime, averageConsultingTime);
+              }
+
+              // CRITICAL: Always update if slotIndex changed OR time changed
+              // Don't skip updates when slotIndex changes, even if time happens to match
+              const slotIndexChanged = currentSlotIndex !== newSlotIndex;
+              const timeChanged = appointmentToMove.time !== timeString;
+              
+              if (!slotIndexChanged && !timeChanged) {
+                // Only skip if both slotIndex and time are unchanged
+                continue;
+              }
 
               const appointmentRef = doc(db, 'appointments', appointmentToMove.id);
               appointmentUpdates.push({
                 appointmentId: appointmentToMove.id,
                 docRef: appointmentRef,
-                slotIndex: destination.index,
-                sessionIndex: destination.sessionIndex,
+                slotIndex: newSlotIndex,
+                sessionIndex: newSessionIndex,
                 timeString,
                 noShowTime,
+              });
+              
+              console.info(`[BOOKING DEBUG] Updating appointment ${appointmentToMove.id}`, {
+                slotIndexChanged,
+                timeChanged,
+                oldSlotIndex: currentSlotIndex,
+                newSlotIndex,
+                oldTime: appointmentToMove.time,
+                newTime: timeString,
               });
 
               const cloned = updatedAdvanceMap.get(appointmentToMove.id);
               if (cloned) {
-                cloned.slotIndex = destination.index;
-                cloned.sessionIndex = destination.sessionIndex;
+                cloned.slotIndex = newSlotIndex;
+                cloned.sessionIndex = newSessionIndex;
                 cloned.time = timeString;
                 cloned.noShowTime = noShowTime;
               }
-
-              advanceOccupancy[destination.index] = appointmentToMove;
-              assignedTargets.add(destination.index);
             }
 
             return {
@@ -1299,7 +1385,9 @@ export async function generateNextTokenAndReserveSlot(
             shiftPlan = await prepareAdvanceShift(
               walkInAssignment.slotIndex,
               new Set<number>(plannedWalkInSlots),
-              advanceAssignments
+              advanceAssignments,
+              calculatedWalkInTime,
+              doctor.averageConsultingTime || 15
             );
 
             activeAdvanceAppointments = shiftPlan.updatedAdvanceAppointments;
@@ -1321,6 +1409,7 @@ export async function generateNextTokenAndReserveSlot(
               sessionIndex: updateOp.sessionIndex,
               time: updateOp.timeString,
               noShowTime: updateOp.noShowTime,
+              // CRITICAL: cutOffTime is NOT updated - it remains the same as the original appointment
             });
 
             const advanceRecord = activeAdvanceAppointments.find(item => item.id === updateOp.appointmentId);
@@ -1342,7 +1431,7 @@ export async function generateNextTokenAndReserveSlot(
               const currentSlotIndex = typeof appointment.slotIndex === 'number' ? appointment.slotIndex : -1;
               const newSlotIndex = assignment.slotIndex;
               const newTimeString = format(assignment.slotTime, 'hh:mm a');
-              const noShowTime = addMinutes(assignment.slotTime, 15);
+              const noShowTime = addMinutes(assignment.slotTime, averageConsultingTime);
 
               if (currentSlotIndex === newSlotIndex && appointment.time === newTimeString) {
                 continue;
@@ -1363,23 +1452,25 @@ export async function generateNextTokenAndReserveSlot(
           }
 
           // Handle slot assignment based on how we scheduled
+          // CRITICAL: Use calculated walk-in time (based on previous appointment) instead of scheduler time
           if (usedCancelledSlot !== null) {
             // Case 1: First walk-in using cancelled slot directly - reuse the slotIndex
             chosenSlotIndex = usedCancelledSlot;
             const cancelledSlot = slots[usedCancelledSlot];
             sessionIndexForNew = cancelledSlot?.sessionIndex ?? walkInAssignment.sessionIndex;
-            resolvedTimeString = format(cancelledSlot?.time ?? walkInAssignment.slotTime, 'hh:mm a');
+            // Use calculated time, but fallback to cancelled slot time if calculation failed
+            resolvedTimeString = format(calculatedWalkInTime, 'hh:mm a');
           } else if (usedBucket) {
             // Case 2: Bucket used (all slots filled) - use synthetic assignment
             // The synthetic assignment was already created with correct slotIndex and time
             chosenSlotIndex = walkInAssignment.slotIndex;
             sessionIndexForNew = walkInAssignment.sessionIndex;
-            resolvedTimeString = format(walkInAssignment.slotTime, 'hh:mm a');
+            resolvedTimeString = format(calculatedWalkInTime, 'hh:mm a');
           } else {
             // Case 3: Normal scheduling - use assigned slot
             chosenSlotIndex = walkInAssignment.slotIndex;
             sessionIndexForNew = walkInAssignment.sessionIndex;
-            resolvedTimeString = format(walkInAssignment.slotTime, 'hh:mm a');
+            resolvedTimeString = format(calculatedWalkInTime, 'hh:mm a');
           }
           
           // Create reservation using the final chosenSlotIndex
@@ -1441,7 +1532,7 @@ export async function generateNextTokenAndReserveSlot(
               let isStale = false;
               if (reservedAt) {
                 try {
-                  let reservedTime: Date;
+                  let reservedTime: Date | null = null;
                   // Handle Firestore Timestamp objects (has toDate method)
                   if (typeof reservedAt.toDate === 'function') {
                     reservedTime = reservedAt.toDate();
@@ -1450,9 +1541,6 @@ export async function generateNextTokenAndReserveSlot(
                   } else if (reservedAt.seconds) {
                     // Handle Timestamp-like object with seconds property
                     reservedTime = new Date(reservedAt.seconds * 1000);
-                  } else {
-                    // Can't determine age, assume not stale
-                    isStale = false;
                   }
                   
                   if (reservedTime) {
@@ -1706,8 +1794,9 @@ export async function rebalanceWalkInSchedule(
   const rawSpacing = clinicSnap.exists() ? Number(clinicSnap.data()?.walkInTokenAllotment ?? 0) : 0;
   const walkInSpacingValue = Number.isFinite(rawSpacing) && rawSpacing > 0 ? Math.floor(rawSpacing) : 0;
 
-  const { slots } = await loadDoctorAndSlots(clinicId, doctorName, date, doctorId);
+  const { doctor, slots } = await loadDoctorAndSlots(clinicId, doctorName, date, doctorId);
   const appointments = await fetchDayAppointments(clinicId, doctorName, date);
+  const averageConsultingTime = doctor.averageConsultingTime || 15;
 
   const activeAdvanceAppointments = appointments.filter(appointment => {
     return (
@@ -1808,8 +1897,8 @@ export async function rebalanceWalkInSchedule(
         slotIndex: newSlotIndex,
         sessionIndex: assignment.sessionIndex,
         time: newTimeString,
-        cutOffTime: addMinutes(assignment.slotTime, -15),
-        noShowTime: addMinutes(assignment.slotTime, 15),
+        cutOffTime: addMinutes(assignment.slotTime, -averageConsultingTime),
+        noShowTime: addMinutes(assignment.slotTime, averageConsultingTime),
       });
     }
 
@@ -1830,8 +1919,8 @@ export async function rebalanceWalkInSchedule(
         slotIndex: newSlotIndex,
         sessionIndex: assignment.sessionIndex,
         time: newTimeString,
-        cutOffTime: addMinutes(assignment.slotTime, -15),
-        noShowTime: addMinutes(assignment.slotTime, 15),
+        cutOffTime: addMinutes(assignment.slotTime, -averageConsultingTime),
+        noShowTime: addMinutes(assignment.slotTime, averageConsultingTime),
       });
     }
   });
