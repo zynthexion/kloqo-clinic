@@ -445,10 +445,12 @@ const bucketCount = useMemo(() => {
     ) {
       const slot = fullDaySlots.find(s => s.slotIndex === appointment.slotIndex);
       if (slot) {
-        const isInWindow = !isBefore(slot.time, now) && !isAfter(slot.time, oneHourAhead);
+        // For bucket count: Include past slots (within 1 hour window)
+        // Only check upper bound (1 hour ahead), don't filter out past slots
+        const isInBucketWindow = !isAfter(slot.time, oneHourAhead);
         const hasActiveAppt = slotsWithActiveAppointments.has(appointment.slotIndex);
         
-        if (isInWindow && !hasActiveAppt) {
+        if (isInBucketWindow && !hasActiveAppt) {
           if (appointment.status === "Cancelled") {
             // Check if there are walk-ins scheduled AFTER this cancelled slot's time
             const hasWalkInsAfter = activeWalkInsWithTimes.some(

@@ -618,37 +618,40 @@ export async function generateNextTokenAndReserveSlot(
               typeof appointment.slotIndex === 'number'
             ) {
               const slotMeta = slots[appointment.slotIndex];
-              if (
-                slotMeta &&
-                !isBefore(slotMeta.time, now) &&
-                !isAfter(slotMeta.time, oneHourAhead)
-              ) {
-                // Only process if there's no active appointment at this slot
-                if (!slotsWithActiveAppointments.has(appointment.slotIndex)) {
-                  // Check if there are walk-ins scheduled AFTER this cancelled slot's time
-                  const hasWalkInsAfter = activeWalkInsWithTimes.some(
-                    walkIn => walkIn.slotTime && isAfter(walkIn.slotTime, slotMeta.time)
-                  );
-                  
-                  if (hasWalkInsAfter) {
-                    // There are walk-ins after this cancelled slot - walk-ins cannot use it
-                    // Add to bucket count if walk-ins exist, or it's available only for A tokens
-                    if (hasExistingWalkIns) {
-                      bucketCount += 1;
+              if (slotMeta) {
+                // For bucket count: Include past slots (within 1 hour window)
+                // Only check upper bound (1 hour ahead), don't filter out past slots
+                const isInBucketWindow = !isAfter(slotMeta.time, oneHourAhead);
+                
+                if (isInBucketWindow) {
+                  // Only process if there's no active appointment at this slot
+                  if (!slotsWithActiveAppointments.has(appointment.slotIndex)) {
+                    // Check if there are walk-ins scheduled AFTER this cancelled slot's time
+                    const hasWalkInsAfter = activeWalkInsWithTimes.some(
+                      walkIn => walkIn.slotTime && isAfter(walkIn.slotTime, slotMeta.time)
+                    );
+                    
+                    if (hasWalkInsAfter) {
+                      // There are walk-ins after this cancelled slot - walk-ins cannot use it
+                      // Add to bucket count if walk-ins exist, or it's available only for A tokens
+                      if (hasExistingWalkIns) {
+                        bucketCount += 1;
+                      }
+                      // If no walk-ins exist but there are walk-ins after (shouldn't happen, but handle it),
+                      // it goes to bucket count
+                    } else {
+                      // No walk-ins after this cancelled slot - walk-ins CAN use it
+                      // Only add to cancelledSlotsInWindow if slot is not in the past (for direct use)
+                      if (!hasExistingWalkIns && !isBefore(slotMeta.time, now)) {
+                        // No walk-ins exist at all - first walk-in can use this cancelled slot (if not past)
+                        cancelledSlotsInWindow.push({
+                          slotIndex: appointment.slotIndex,
+                          slotTime: slotMeta.time,
+                        });
+                      }
+                      // If walk-ins exist but none after this slot, walk-ins can still use it
+                      // So we don't add it to bucket count - it's available for walk-ins
                     }
-                    // If no walk-ins exist but there are walk-ins after (shouldn't happen, but handle it),
-                    // it goes to bucket count
-          } else {
-                    // No walk-ins after this cancelled slot - walk-ins CAN use it
-                    if (!hasExistingWalkIns) {
-                      // No walk-ins exist at all - first walk-in can use this cancelled slot
-                      cancelledSlotsInWindow.push({
-                        slotIndex: appointment.slotIndex,
-                        slotTime: slotMeta.time,
-                      });
-                    }
-                    // If walk-ins exist but none after this slot, walk-ins can still use it
-                    // So we don't add it to bucket count - it's available for walk-ins
                   }
                 }
               }
@@ -709,18 +712,20 @@ export async function generateNextTokenAndReserveSlot(
               ) {
                 const slotMeta = slots[appointment.slotIndex];
                 if (slotMeta) {
-                  const isInWindow = !isBefore(slotMeta.time, now) && !isAfter(slotMeta.time, oneHourAhead);
+                  // For bucket: Include past slots (within 1 hour window)
+                  // Only check upper bound (1 hour ahead), don't filter out past slots
+                  const isInBucketWindow = !isAfter(slotMeta.time, oneHourAhead);
                   const hasActiveAppt = slotsWithActiveAppointments.has(appointment.slotIndex);
                   
                   console.warn(`[Walk-in Scheduling] Checking cancelled slot ${appointment.slotIndex}:`, {
                     time: slotMeta.time.toISOString(),
-                    isInWindow,
+                    isInBucketWindow,
                     hasActiveAppt,
                     status: appointment.status,
                   });
                   
                   if (
-                    isInWindow &&
+                    isInBucketWindow &&
                     !hasActiveAppt
                   ) {
                     // Check if there are walk-ins scheduled AFTER this cancelled slot's time
@@ -738,17 +743,17 @@ export async function generateNextTokenAndReserveSlot(
                       // It goes to bucket (only A tokens can use it, or bucket can use it when all slots filled)
                       cancelledSlotsInBucket.add(appointment.slotIndex);
                       console.warn(`[Walk-in Scheduling] ✅ BLOCKING cancelled slot ${appointment.slotIndex} (has walk-ins after)`);
-      } else {
+                    } else {
                       // If no walk-ins after this slot, it's NOT in bucket - walk-ins CAN use it
                       console.warn(`[Walk-in Scheduling] ❌ NOT blocking cancelled slot ${appointment.slotIndex} (no walk-ins after)`);
+                    }
+                  } else {
+                    console.warn(`[Walk-in Scheduling] Skipping cancelled slot ${appointment.slotIndex}: isInBucketWindow=${isInBucketWindow}, hasActiveAppt=${hasActiveAppt}`);
+                  }
+                }
+              }
             }
           } else {
-                    console.warn(`[Walk-in Scheduling] Skipping cancelled slot ${appointment.slotIndex}: isInWindow=${isInWindow}, hasActiveAppt=${hasActiveAppt}`);
-                  }
-            }
-          }
-        }
-      } else {
             console.warn('[Walk-in Scheduling] No existing walk-ins, skipping bucket logic');
           }
           
@@ -923,6 +928,7 @@ export async function generateNextTokenAndReserveSlot(
           let scheduleAttempt: ScheduleAttemptResult | null = null;
           let usedCancelledSlot: number | null = null;
           let usedBucket = false;
+          let bucketReservationRef: DocumentReference | null = null;
 
           // Strategy 1: If no walk-ins exist and cancelled slot in window, use it directly
           if (!hasExistingWalkIns && cancelledSlotsInWindow.length > 0) {
@@ -960,6 +966,31 @@ export async function generateNextTokenAndReserveSlot(
           // Strategy 4: If normal scheduling fails and all slots are filled, check bucket count
           // Bucket count is calculated on-the-fly, so we can use it directly
           if (!scheduleAttempt && allSlotsFilled && hasExistingWalkIns && firestoreBucketCount > 0) {
+            // CRITICAL: Re-calculate bucket count within transaction to prevent concurrent usage
+            // Count walk-ins placed outside availability (they're "using" bucket slots)
+            const walkInsOutsideAvailabilityInTx = effectiveAppointments.filter(appt => {
+              return (
+                appt.bookedVia === 'Walk-in' &&
+                typeof appt.slotIndex === 'number' &&
+                appt.slotIndex >= slots.length &&
+                ACTIVE_STATUSES.has(appt.status)
+              );
+            });
+            const usedBucketSlotsInTx = walkInsOutsideAvailabilityInTx.length;
+            const effectiveBucketCountInTx = Math.max(0, bucketCount - usedBucketSlotsInTx);
+            
+            // If bucket count is now 0, another concurrent request used it - fail and retry
+            if (effectiveBucketCountInTx <= 0) {
+              console.warn('[Walk-in Scheduling] Bucket count became 0 during transaction - concurrent request used it', {
+                originalBucketCount: firestoreBucketCount,
+                bucketCountInTx: effectiveBucketCountInTx,
+                usedBucketSlotsInTx,
+              });
+              const bucketError = new Error('Bucket slot was just used by another concurrent request. Retrying...');
+              (bucketError as { code?: string }).code = RESERVATION_CONFLICT_CODE;
+              throw bucketError;
+            }
+            
             // All slots in availability are filled - create new slot at end (outside availability)
             // This will create a slot beyond the availability time
             usedBucket = true;
@@ -986,6 +1017,38 @@ export async function generateNextTokenAndReserveSlot(
             // New slotIndex is one more than the maximum found
             // This ensures it's after all existing slots/appointments across all sessions
             const newSlotIndex = maxSlotIndex + 1;
+            
+            // CRITICAL: Check if this slotIndex is already reserved or occupied by another concurrent request
+            // Check for existing reservation
+            const bucketReservationId = buildReservationDocId(clinicId, doctorName, dateStr, newSlotIndex);
+            bucketReservationRef = doc(db, 'slot-reservations', bucketReservationId);
+            const bucketReservationSnapshot = await transaction.get(bucketReservationRef);
+            
+            // Check if there's already an appointment at this slotIndex
+            const existingAppointmentAtSlot = effectiveAppointments.find(
+              apt => typeof apt.slotIndex === 'number' && apt.slotIndex === newSlotIndex && ACTIVE_STATUSES.has(apt.status)
+            );
+            
+            if (bucketReservationSnapshot.exists() || existingAppointmentAtSlot) {
+              console.warn('[Walk-in Scheduling] SlotIndex already reserved or occupied - concurrent request conflict', {
+                newSlotIndex,
+                hasReservation: bucketReservationSnapshot.exists(),
+                hasAppointment: !!existingAppointmentAtSlot,
+              });
+              const slotError = new Error('Slot was just reserved by another concurrent request. Retrying...');
+              (slotError as { code?: string }).code = RESERVATION_CONFLICT_CODE;
+              throw slotError;
+            }
+            
+            // Create reservation for the new bucket slot to prevent concurrent usage
+            transaction.set(bucketReservationRef, {
+              clinicId,
+              doctorName,
+              date: dateStr,
+              slotIndex: newSlotIndex,
+              reservedAt: serverTimestamp(),
+              type: 'bucket',
+            });
             
             console.info('[Walk-in Scheduling] Bucket compensation - finding last slotIndex:', {
               maxSlotIndexFromAppointments,
@@ -1361,8 +1424,13 @@ export async function generateNextTokenAndReserveSlot(
           if (usedCancelledSlot !== null || usedBucket) {
             // Using cancelled slot directly or bucket - no shift needed
             // Create empty shift plan
+            // If bucket was used, add the bucket reservation to cleanup list
+            const reservationDeletes: DocumentReference[] = [];
+            if (usedBucket && bucketReservationRef) {
+              reservationDeletes.push(bucketReservationRef);
+            }
             shiftPlan = {
-              reservationDeletes: [],
+              reservationDeletes,
               appointmentUpdates: [],
               updatedAdvanceAppointments: activeAdvanceAppointments,
             };
