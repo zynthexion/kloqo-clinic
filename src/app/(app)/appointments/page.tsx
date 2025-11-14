@@ -182,7 +182,7 @@ export default function AppointmentsPage() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showVisualView, setShowVisualView] = useState(false);
   
-  const [linkChannel, setLinkChannel] = useState<'sms' | 'whatsapp'>('sms');
+  const [linkChannel, setLinkChannel] = useState<'sms' | 'whatsapp'>('whatsapp');
   const [isPreviewingWalkIn, setIsPreviewingWalkIn] = useState(false);
   const isWalkInDebugEnabled = process.env.NEXT_PUBLIC_DEBUG_WALK_IN === 'true';
 
@@ -1315,7 +1315,7 @@ export default function AppointmentsPage() {
             });
         }
 
-        // Send SMS with booking link
+        // Send WhatsApp message with booking link
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.kloqo.com';
         const clinicName = clinicDetails?.name || 'the clinic';
         const bookingLink = `${baseUrl}/clinics/${clinicId}`;
@@ -1350,13 +1350,13 @@ export default function AppointmentsPage() {
                 });
             }
         } catch (smsError) {
-            console.error("Error sending SMS:", smsError);
+            console.error("Error sending WhatsApp message:", smsError);
             const isNewUser = userSnapshot.empty;
             toast({
-                title: isNewUser ? "Records Created" : "SMS Failed",
+                title: isNewUser ? "Records Created" : "WhatsApp Failed",
                 description: isNewUser 
-                    ? `User and patient records created, but failed to send SMS to ${fullPhoneNumber}.`
-                    : `Failed to send SMS to ${fullPhoneNumber}.`
+                    ? `User and patient records created, but failed to send WhatsApp message to ${fullPhoneNumber}.`
+                    : `Failed to send WhatsApp message to ${fullPhoneNumber}.`
             });
         }
 
@@ -2381,69 +2381,15 @@ export default function AppointmentsPage() {
                               </Button>
                             </div>
                             
-                            {/* Channel Selection Cards */}
-                            <div className="grid grid-cols-2 gap-3">
-                              <div
-                                className={cn(
-                                  "p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 hover:shadow-md",
-                                  linkChannel === 'sms' 
-                                    ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20" 
-                                    : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
-                                )}
-                                onClick={() => setLinkChannel('sms')}
-                              >
+                            {/* WhatsApp Channel (SMS option removed) */}
+                            <div className="flex items-center justify-center">
+                              <div className="p-4 border-2 border-green-500 bg-green-50 dark:bg-green-950/20 rounded-lg">
                                 <div className="flex items-center space-x-3">
-                                  <div className={cn(
-                                    "w-5 h-5 rounded-full border-2 flex items-center justify-center",
-                                    linkChannel === 'sms' 
-                                      ? "border-blue-500 bg-blue-500" 
-                                      : "border-gray-300 dark:border-gray-600"
-                                  )}>
-                                    {linkChannel === 'sms' && (
-                                      <div className="w-2 h-2 rounded-full bg-white" />
-                                    )}
+                                  <div className="w-5 h-5 rounded-full border-2 border-green-500 bg-green-500 flex items-center justify-center">
+                                    <div className="w-2 h-2 rounded-full bg-white" />
                                   </div>
-                                  <MessageSquare className={cn(
-                                    "h-5 w-5",
-                                    linkChannel === 'sms' ? "text-blue-600" : "text-gray-500"
-                                  )} />
-                                  <span className={cn(
-                                    "font-medium",
-                                    linkChannel === 'sms' ? "text-blue-700 dark:text-blue-300" : "text-gray-700 dark:text-gray-300"
-                                  )}>
-                                    SMS
-                                  </span>
-                                </div>
-                              </div>
-                              
-                              <div
-                                className={cn(
-                                  "p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 hover:shadow-md",
-                                  linkChannel === 'whatsapp' 
-                                    ? "border-green-500 bg-green-50 dark:bg-green-950/20" 
-                                    : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
-                                )}
-                                onClick={() => setLinkChannel('whatsapp')}
-                              >
-                                <div className="flex items-center space-x-3">
-                                  <div className={cn(
-                                    "w-5 h-5 rounded-full border-2 flex items-center justify-center",
-                                    linkChannel === 'whatsapp' 
-                                      ? "border-green-500 bg-green-500" 
-                                      : "border-gray-300 dark:border-gray-600"
-                                  )}>
-                                    {linkChannel === 'whatsapp' && (
-                                      <div className="w-2 h-2 rounded-full bg-white" />
-                                    )}
-                                  </div>
-                                  <Smartphone className={cn(
-                                    "h-5 w-5",
-                                    linkChannel === 'whatsapp' ? "text-green-600" : "text-gray-500"
-                                  )} />
-                                  <span className={cn(
-                                    "font-medium",
-                                    linkChannel === 'whatsapp' ? "text-green-700 dark:text-green-300" : "text-gray-700 dark:text-gray-300"
-                                  )}>
+                                  <Smartphone className="h-5 w-5 text-green-600" />
+                                  <span className="font-medium text-green-700 dark:text-green-300">
                                     WhatsApp
                                   </span>
                                 </div>
