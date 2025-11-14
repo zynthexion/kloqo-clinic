@@ -3189,7 +3189,11 @@ export default function AppointmentsPage() {
           </DialogClose>
         </DialogContent>
       </Dialog>
-      <AlertDialog open={!!appointmentToCancel} onOpenChange={(open) => !open && setAppointmentToCancel(null)}>
+      <AlertDialog open={!!appointmentToCancel} onOpenChange={(open) => {
+        if (!open) {
+          setAppointmentToCancel(null);
+        }
+      }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure you want to cancel this appointment?</AlertDialogTitle>
@@ -3201,11 +3205,14 @@ export default function AppointmentsPage() {
             <AlertDialogCancel onClick={() => setAppointmentToCancel(null)}>No, Keep Appointment</AlertDialogCancel>
             <AlertDialogAction
               className="bg-red-500 hover:bg-red-600"
-              onClick={() => {
-                if (appointmentToCancel) {
-                  handleCancel(appointmentToCancel);
-                }
+              onClick={async () => {
+                const appointment = appointmentToCancel;
+                // Close modal immediately
                 setAppointmentToCancel(null);
+                // Then handle cancellation asynchronously
+                if (appointment) {
+                  handleCancel(appointment);
+                }
               }}
             >
               Yes, Cancel Appointment
@@ -3213,7 +3220,11 @@ export default function AppointmentsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <AlertDialog open={!!appointmentToAddToQueue && appointmentToAddToQueue.status === 'Pending'} onOpenChange={(open) => !open && setAppointmentToAddToQueue(null)}>
+      <AlertDialog open={!!appointmentToAddToQueue && appointmentToAddToQueue.status === 'Pending'} onOpenChange={(open) => {
+        if (!open) {
+          setAppointmentToAddToQueue(null);
+        }
+      }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Patient Arrived at Clinic?</AlertDialogTitle>
@@ -3225,11 +3236,14 @@ export default function AppointmentsPage() {
             <AlertDialogCancel onClick={() => setAppointmentToAddToQueue(null)}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-blue-500 hover:bg-blue-600"
-              onClick={() => {
-                if (appointmentToAddToQueue && appointmentToAddToQueue.status === 'Pending') {
-                  handleAddToQueue(appointmentToAddToQueue);
-                }
+              onClick={async () => {
+                const appointment = appointmentToAddToQueue;
+                // Close modal immediately
                 setAppointmentToAddToQueue(null);
+                // Then handle add to queue asynchronously
+                if (appointment && appointment.status === 'Pending') {
+                  handleAddToQueue(appointment);
+                }
               }}
             >
               Yes, Confirm Arrival
@@ -3237,7 +3251,11 @@ export default function AppointmentsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <AlertDialog open={!!appointmentToComplete} onOpenChange={(open) => !open && setAppointmentToComplete(null)}>
+      <AlertDialog open={!!appointmentToComplete} onOpenChange={(open) => {
+        if (!open) {
+          setAppointmentToComplete(null);
+        }
+      }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Mark Appointment as Completed?</AlertDialogTitle>
@@ -3249,11 +3267,14 @@ export default function AppointmentsPage() {
             <AlertDialogCancel onClick={() => setAppointmentToComplete(null)}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-green-500 hover:bg-green-600"
-              onClick={() => {
-                if (appointmentToComplete) {
-                  handleComplete(appointmentToComplete);
-                }
+              onClick={async () => {
+                const appointment = appointmentToComplete;
+                // Close modal immediately
                 setAppointmentToComplete(null);
+                // Then handle completion asynchronously
+                if (appointment) {
+                  handleComplete(appointment);
+                }
               }}
             >
               Yes, Mark as Completed
