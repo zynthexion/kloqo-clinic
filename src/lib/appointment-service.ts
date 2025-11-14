@@ -181,7 +181,12 @@ function buildCandidateSlots(
 ): number[] {
   const oneHourFromNow = addMinutes(now, 60);
   const candidates: number[] = [];
-
+  
+  // Calculate reserved walk-in slots (last 15%) for advance bookings
+  const totalSlots = slots.length;
+  const minimumWalkInReserve = totalSlots > 0 ? Math.ceil(totalSlots * 0.15) : 0;
+  const reservedWSlotsStart = totalSlots > 0 ? totalSlots - minimumWalkInReserve : totalSlots;
+  
   const addCandidate = (slotIndex: number) => {
     if (
       slotIndex >= 0 &&
@@ -189,6 +194,11 @@ function buildCandidateSlots(
       !occupied.has(slotIndex) &&
       !candidates.includes(slotIndex)
     ) {
+      // CRITICAL: For advance bookings, NEVER allow slots reserved for walk-ins (last 15%)
+      if (type === 'A' && slotIndex >= reservedWSlotsStart) {
+        console.log(`[SLOT FILTER] Rejecting slot ${slotIndex} - reserved for walk-ins (reservedWSlotsStart: ${reservedWSlotsStart}, totalSlots: ${totalSlots})`);
+        return; // Skip reserved walk-in slots
+      }
       candidates.push(slotIndex);
     }
   };
@@ -196,13 +206,15 @@ function buildCandidateSlots(
   if (type === 'A') {
     if (typeof preferredSlotIndex === 'number') {
       const slotTime = getSlotTime(slots, preferredSlotIndex);
-      if (isAfter(slotTime, oneHourFromNow)) {
+      // CRITICAL: Also check if preferred slot is not reserved for walk-ins
+      if (isAfter(slotTime, oneHourFromNow) && preferredSlotIndex < reservedWSlotsStart) {
         addCandidate(preferredSlotIndex);
       }
     }
 
     slots.forEach(slot => {
-      if (isAfter(slot.time, oneHourFromNow)) {
+      // CRITICAL: Only add slots that are after 1 hour AND not reserved for walk-ins
+      if (isAfter(slot.time, oneHourFromNow) && slot.index < reservedWSlotsStart) {
         addCandidate(slot.index);
       }
     });
@@ -1385,6 +1397,22 @@ export async function generateNextTokenAndReserveSlot(
               continue;
             }
 
+            // CRITICAL: Double-check that this slot is NOT reserved for walk-ins (last 15%)
+            // This check happens inside the transaction to prevent race conditions
+            // Even if buildCandidateSlots included it (shouldn't happen), we reject it here
+            const reservedWSlotsStart = totalSlots - minimumWalkInReserve;
+            if (type === 'A' && slotIndex >= reservedWSlotsStart) {
+              console.error(`[BOOKING DEBUG] Request ${requestId}: ⚠️ REJECTED - Slot ${slotIndex} is reserved for walk-ins`, {
+                slotIndex,
+                totalSlots,
+                minimumWalkInReserve,
+                reservedWSlotsStart,
+                type,
+                timestamp: new Date().toISOString()
+              });
+              continue; // NEVER allow advance bookings to use reserved walk-in slots
+            }
+
             const reservationId = buildReservationDocId(clinicId, doctorName, dateStr, slotIndex);
             const reservationDocRef = doc(db, 'slot-reservations', reservationId);
             
@@ -1400,12 +1428,59 @@ export async function generateNextTokenAndReserveSlot(
             const reservationSnapshot = await transaction.get(reservationDocRef);
 
             if (reservationSnapshot.exists()) {
-              // Reservation already exists - another transaction created it
-              console.log(`[BOOKING DEBUG] Slot ${slotIndex} reservation already exists - skipping`, {
-                reservationId,
-                existingData: reservationSnapshot.data()
-              });
-              continue;
+              const reservationData = reservationSnapshot.data();
+              const reservedAt = reservationData?.reservedAt;
+              
+              // Check if reservation is stale (older than 30 seconds)
+              // Stale reservations may be from failed booking attempts that didn't complete
+              let isStale = false;
+              if (reservedAt) {
+                try {
+                  let reservedTime: Date;
+                  // Handle Firestore Timestamp objects (has toDate method)
+                  if (typeof reservedAt.toDate === 'function') {
+                    reservedTime = reservedAt.toDate();
+                  } else if (reservedAt instanceof Date) {
+                    reservedTime = reservedAt;
+                  } else if (reservedAt.seconds) {
+                    // Handle Timestamp-like object with seconds property
+                    reservedTime = new Date(reservedAt.seconds * 1000);
+                  } else {
+                    // Can't determine age, assume not stale
+                    isStale = false;
+                  }
+                  
+                  if (reservedTime) {
+                    const now = new Date();
+                    const ageInSeconds = (now.getTime() - reservedTime.getTime()) / 1000;
+                    isStale = ageInSeconds > 30; // 30 second threshold for stale reservations
+                  }
+                } catch (e) {
+                  // If we can't parse the timestamp, assume it's not stale
+                  console.warn(`[BOOKING DEBUG] Could not parse reservedAt timestamp`, e);
+                  isStale = false;
+                }
+              }
+              
+              if (isStale) {
+                // Reservation is stale - clean it up and allow new booking
+                console.log(`[BOOKING DEBUG] Slot ${slotIndex} has STALE reservation - cleaning up`, {
+                  reservationId,
+                  reservedAt: reservedAt?.toDate?.()?.toISOString(),
+                  existingData: reservationData
+                });
+                // Delete the stale reservation within the transaction
+                transaction.delete(reservationDocRef);
+                // Continue to create new reservation below
+              } else {
+                // Reservation exists and is not stale - another active transaction has it
+                console.log(`[BOOKING DEBUG] Slot ${slotIndex} reservation already exists (not stale) - skipping`, {
+                  reservationId,
+                  reservedAt: reservedAt?.toDate?.()?.toISOString(),
+                  existingData: reservationData
+                });
+                continue;
+              }
             }
 
             // Double-check: Also verify no active appointment exists at this slotIndex
