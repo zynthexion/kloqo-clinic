@@ -2372,28 +2372,13 @@ export default function AppointmentsPage() {
                           </PopoverContent>
                         </Popover>
                          {!isDrawerExpanded && (
-                           <div className="border p-4 rounded-lg space-y-4">
+                           <div className="border p-4 rounded-lg">
                             <div className="flex justify-between items-center">
                               <Label>Send Patient Booking Link</Label>
                               <Button type="button" onClick={handleSendLink} disabled={isSendingLink || patientSearchTerm.length < 10}>
                                   {isSendingLink ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <LinkIcon className="mr-2 h-4 w-4" />}
-                                  Send Link
+                                  Send WhatsApp Link
                               </Button>
-                            </div>
-                            
-                            {/* WhatsApp Channel (SMS option removed) */}
-                            <div className="flex items-center justify-center">
-                              <div className="p-4 border-2 border-green-500 bg-green-50 dark:bg-green-950/20 rounded-lg">
-                                <div className="flex items-center space-x-3">
-                                  <div className="w-5 h-5 rounded-full border-2 border-green-500 bg-green-500 flex items-center justify-center">
-                                    <div className="w-2 h-2 rounded-full bg-white" />
-                                  </div>
-                                  <Smartphone className="h-5 w-5 text-green-600" />
-                                  <span className="font-medium text-green-700 dark:text-green-300">
-                                    WhatsApp
-                                  </span>
-                                </div>
-                              </div>
                             </div>
                           </div>
                          )}
