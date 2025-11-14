@@ -26,11 +26,28 @@ function isReservationConflict(error: unknown): boolean {
     return false;
   }
 
-  return (
+  // Check for custom reservation conflict code
+  if (
     error.message === RESERVATION_CONFLICT_CODE ||
     (typeof (error as { code?: string }).code === 'string' &&
       (error as { code?: string }).code === RESERVATION_CONFLICT_CODE)
-  );
+  ) {
+    return true;
+  }
+
+  // Firestore transaction conflicts occur when multiple transactions try to modify the same document
+  // These typically have code 'failed-precondition' or 'aborted'
+  const firestoreError = error as { code?: string; message?: string };
+  if (typeof firestoreError.code === 'string') {
+    return (
+      firestoreError.code === 'failed-precondition' ||
+      firestoreError.code === 'aborted' ||
+      firestoreError.code === 'already-exists' ||
+      (firestoreError.message?.includes('transaction') ?? false)
+    );
+  }
+
+  return false;
 }
 interface DailySlot {
   index: number;
@@ -436,13 +453,41 @@ export async function generateNextTokenAndReserveSlot(
     orderBy('slotIndex', 'asc')
   );
 
+  const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  console.log(`[BOOKING DEBUG] ====== NEW BOOKING REQUEST ======`, {
+    requestId,
+    clinicId,
+    doctorName,
+    date: dateStr,
+    type,
+    preferredSlotIndex: appointmentData.slotIndex,
+    timestamp: new Date().toISOString()
+  });
+
   for (let attempt = 0; attempt < MAX_TRANSACTION_ATTEMPTS; attempt += 1) {
+    // Fetch appointments fresh on each attempt to see latest state
+    // This is important because between attempts, other transactions may have created appointments
     const appointmentsSnapshot = await getDocs(appointmentsQuery);
     const appointmentDocRefs = appointmentsSnapshot.docs.map(docSnap => doc(db, 'appointments', docSnap.id));
 
+    console.log(`[BOOKING DEBUG] Request ${requestId}: Attempt ${attempt + 1}/${MAX_TRANSACTION_ATTEMPTS}`, {
+      existingAppointmentsCount: appointmentsSnapshot.docs.length,
+      timestamp: new Date().toISOString()
+    });
+
     try {
       return await runTransaction(db, async transaction => {
-        const counterState = await prepareNextTokenNumber(transaction, counterRef);
+        console.log(`[BOOKING DEBUG] Request ${requestId}: Transaction STARTED (attempt ${attempt + 1})`, {
+          timestamp: new Date().toISOString()
+        });
+        
+        // CRITICAL: Only prepare counter for walk-ins, not for advance bookings
+        // Advance bookings use slotIndex + 1 for tokens, so counter is not needed
+        let counterState: TokenCounterState | null = null;
+        
+        if (type === 'W') {
+          counterState = await prepareNextTokenNumber(transaction, counterRef);
+        }
 
         const appointmentSnapshots = await Promise.all(
           appointmentDocRefs.map(ref => transaction.get(ref))
@@ -476,14 +521,17 @@ export async function generateNextTokenAndReserveSlot(
           }
         }
 
-        let numericToken: number;
-        let tokenNumber: string;
+        let numericToken = 0;
+        let tokenNumber = '';
         let chosenSlotIndex = -1;
         let sessionIndexForNew = 0;
         let resolvedTimeString = '';
         let reservationRef: DocumentReference | null = null;
 
         if (type === 'W') {
+          if (!counterState) {
+            throw new Error('Counter state not prepared for walk-in booking');
+          }
           numericToken = totalSlots + counterState.nextNumber;
           tokenNumber = `W${String(numericToken).padStart(3, '0')}`;
 
@@ -680,9 +728,9 @@ export async function generateNextTokenAndReserveSlot(
           } else {
                     console.warn(`[Walk-in Scheduling] Skipping cancelled slot ${appointment.slotIndex}: isInWindow=${isInWindow}, hasActiveAppt=${hasActiveAppt}`);
                   }
-                }
-              }
             }
+          }
+        }
       } else {
             console.warn('[Walk-in Scheduling] No existing walk-ins, skipping bucket logic');
           }
@@ -1322,9 +1370,6 @@ export async function generateNextTokenAndReserveSlot(
           const reservationDocRef = doc(db, 'slot-reservations', reservationId);
           reservationRef = reservationDocRef;
         } else {
-          numericToken = counterState.nextNumber;
-          tokenNumber = `A${String(numericToken).padStart(3, '0')}`;
-
           const occupiedSlots = buildOccupiedSlotSet(effectiveAppointments);
           const candidates = buildCandidateSlots(type, slots, now, occupiedSlots, appointmentData.slotIndex, {
             appointments: effectiveAppointments,
@@ -1336,27 +1381,144 @@ export async function generateNextTokenAndReserveSlot(
 
           for (const slotIndex of candidates) {
             if (occupiedSlots.has(slotIndex)) {
+              console.log(`[BOOKING DEBUG] Slot ${slotIndex} already occupied in appointments list`);
               continue;
             }
 
             const reservationId = buildReservationDocId(clinicId, doctorName, dateStr, slotIndex);
             const reservationDocRef = doc(db, 'slot-reservations', reservationId);
+            
+            // CRITICAL: Check reservation inside transaction - this ensures we see the latest state
+            // We MUST read the reservation document as part of the transaction's read set
+            // so Firestore can detect conflicts when multiple transactions try to create it
+            console.log(`[BOOKING DEBUG] Attempt ${attempt + 1}: Checking reservation for slot ${slotIndex}`, {
+              reservationId,
+              timestamp: new Date().toISOString(),
+              transactionId: `txn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+            });
+            
             const reservationSnapshot = await transaction.get(reservationDocRef);
 
             if (reservationSnapshot.exists()) {
+              // Reservation already exists - another transaction created it
+              console.log(`[BOOKING DEBUG] Slot ${slotIndex} reservation already exists - skipping`, {
+                reservationId,
+                existingData: reservationSnapshot.data()
+              });
               continue;
             }
+
+            // Double-check: Also verify no active appointment exists at this slotIndex
+            // Re-check appointments inside transaction to see latest state
+            const hasActiveAppointmentAtSlot = effectiveAppointments.some(
+              apt => apt.slotIndex === slotIndex && ACTIVE_STATUSES.has(apt.status)
+            );
+            
+            if (hasActiveAppointmentAtSlot) {
+              console.log(`[BOOKING DEBUG] Slot ${slotIndex} has active appointment - skipping`);
+              continue;
+            }
+
+            console.log(`[BOOKING DEBUG] Attempt ${attempt + 1}: Attempting to CREATE reservation for slot ${slotIndex}`, {
+              reservationId,
+              timestamp: new Date().toISOString(),
+              candidatesCount: candidates.length,
+              currentSlotIndex: slotIndex
+            });
+
+            // CRITICAL: Reserve the slot atomically using transaction.set()
+            // By reading the document first with transaction.get(), we add it to the transaction's read set
+            // If another transaction also reads it (doesn't exist) and tries to set() it:
+            // - Firestore will detect the conflict (both read the same document)
+            // - One transaction will succeed, others will fail with "failed-precondition"
+            // - Failed transactions will be retried, and on retry they'll see the reservation exists
+            // This ensures only ONE reservation can be created per slot, even with concurrent requests
+            transaction.set(reservationDocRef, {
+        clinicId,
+        doctorName,
+        date: dateStr,
+              slotIndex: slotIndex,
+        reservedAt: serverTimestamp(),
+              reservedBy: 'appointment-booking',
+            });
+            
+            console.log(`[BOOKING DEBUG] Attempt ${attempt + 1}: Reservation SET in transaction for slot ${slotIndex}`, {
+              reservationId,
+              timestamp: new Date().toISOString()
+            });
+            
+            // Store the reservation reference - we've successfully reserved this slot
+            // If the transaction commits, this reservation will exist
+            // If it fails, it will be retried and try the next slot
 
             reservationRef = reservationDocRef;
             chosenSlotIndex = slotIndex;
             const reservedSlot = slots[chosenSlotIndex];
             sessionIndexForNew = reservedSlot?.sessionIndex ?? 0;
             resolvedTimeString = format(reservedSlot?.time ?? now, 'hh:mm a');
+            
+            // CRITICAL: Token number MUST be based on slotIndex + 1 (slotIndex is 0-based, tokens are 1-based)
+            // This ensures token A001 goes to slot #1 (slotIndex 0), A002 to slot #2 (slotIndex 1), etc.
+            // This makes token numbers correspond to slot positions, not sequential booking order
+            // DO NOT use counterState.nextNumber - always use slotIndex + 1
+            // Calculate token IMMEDIATELY after reserving slot to ensure atomicity
+            const calculatedNumericToken = chosenSlotIndex + 1;
+            const calculatedTokenNumber = `A${String(calculatedNumericToken).padStart(3, '0')}`;
+            
+            // Force assignment - don't allow any other value
+            numericToken = calculatedNumericToken;
+            tokenNumber = calculatedTokenNumber;
+            
+          console.log(`[BOOKING DEBUG] Request ${requestId}: Token assigned based on slotIndex`, {
+            slotIndex: chosenSlotIndex,
+            calculatedNumericToken,
+            calculatedTokenNumber,
+            assignedNumericToken: numericToken,
+            assignedTokenNumber: tokenNumber,
+            counterNextNumber: counterState?.nextNumber ?? 'N/A (not used for advance bookings)', // For debugging - should NOT be used
+            timestamp: new Date().toISOString()
+          });
+            
+            // Verify assignment was successful
+            if (numericToken !== calculatedNumericToken || tokenNumber !== calculatedTokenNumber) {
+              console.error(`[BOOKING DEBUG] Request ${requestId}: ⚠️ TOKEN ASSIGNMENT FAILED`, {
+                slotIndex: chosenSlotIndex,
+                expectedNumericToken: calculatedNumericToken,
+                actualNumericToken: numericToken,
+                expectedTokenNumber: calculatedTokenNumber,
+                actualTokenNumber: tokenNumber,
+                timestamp: new Date().toISOString()
+              });
+              // Force correct values
+              numericToken = calculatedNumericToken;
+              tokenNumber = calculatedTokenNumber;
+            }
+            
             break;
           }
 
           if (chosenSlotIndex < 0 || !reservationRef) {
             throw new Error('No available slots match the booking rules.');
+          }
+        }
+
+        // CRITICAL: Ensure token is ALWAYS assigned based on slotIndex for advance bookings
+        // This is a safety check in case the token wasn't assigned in the loop
+        if (type === 'A' && chosenSlotIndex >= 0) {
+          const expectedNumericToken = chosenSlotIndex + 1;
+          const expectedTokenNumber = `A${String(expectedNumericToken).padStart(3, '0')}`;
+          
+          if (numericToken !== expectedNumericToken || tokenNumber !== expectedTokenNumber) {
+            console.warn(`[BOOKING DEBUG] Request ${requestId}: Token not properly assigned in loop - fixing now`, {
+              slotIndex: chosenSlotIndex,
+              currentNumericToken: numericToken,
+              expectedNumericToken,
+              currentTokenNumber: tokenNumber,
+              expectedTokenNumber,
+              timestamp: new Date().toISOString()
+            });
+            numericToken = expectedNumericToken;
+            tokenNumber = expectedTokenNumber;
           }
         }
 
@@ -1372,7 +1534,42 @@ export async function generateNextTokenAndReserveSlot(
         reservedAt: serverTimestamp(),
           reservedBy: type === 'W' ? 'walk-in-booking' : 'appointment-booking',
         });
-        commitNextTokenNumber(transaction, counterRef, counterState);
+        
+        // CRITICAL: Only increment counter for walk-ins, not for advance bookings
+        // Advance bookings use slotIndex + 1 for tokens, so counter is not needed
+        // Incrementing counter for advance bookings causes counter drift and potential token mismatches
+        if (type === 'W' && counterState) {
+          commitNextTokenNumber(transaction, counterRef, counterState);
+        }
+
+        // CRITICAL: Ensure token matches slotIndex before returning
+        // This is a final safety check to prevent token/slotIndex mismatches
+        if (type === 'A' && chosenSlotIndex >= 0) {
+          const expectedNumericToken = chosenSlotIndex + 1;
+          const expectedTokenNumber = `A${String(expectedNumericToken).padStart(3, '0')}`;
+          
+          if (numericToken !== expectedNumericToken || tokenNumber !== expectedTokenNumber) {
+            console.error(`[BOOKING DEBUG] Request ${requestId}: ⚠️ TOKEN MISMATCH DETECTED - Correcting`, {
+              slotIndex: chosenSlotIndex,
+              currentNumericToken: numericToken,
+              expectedNumericToken,
+              currentTokenNumber: tokenNumber,
+              expectedTokenNumber,
+              timestamp: new Date().toISOString()
+            });
+            numericToken = expectedNumericToken;
+            tokenNumber = expectedTokenNumber;
+          }
+        }
+
+        console.log(`[BOOKING DEBUG] Request ${requestId}: Transaction SUCCESS - about to commit`, {
+          tokenNumber,
+          numericToken,
+          slotIndex: chosenSlotIndex,
+          reservationId: reservationRef.id,
+          tokenMatchesSlot: type === 'A' ? numericToken === chosenSlotIndex + 1 : true,
+          timestamp: new Date().toISOString()
+        });
     
     return { 
       tokenNumber, 
@@ -1384,12 +1581,33 @@ export async function generateNextTokenAndReserveSlot(
     };
   });
     } catch (error) {
-      if (isReservationConflict(error) && attempt < MAX_TRANSACTION_ATTEMPTS - 1) {
-        continue;
+      const errorDetails = {
+        requestId,
+        attempt: attempt + 1,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorCode: (error as { code?: string }).code,
+        errorName: error instanceof Error ? error.name : undefined,
+        timestamp: new Date().toISOString()
+      };
+
+      console.error(`[BOOKING DEBUG] Request ${requestId}: Transaction FAILED (attempt ${attempt + 1})`, errorDetails);
+
+      if (isReservationConflict(error)) {
+        console.log(`[BOOKING DEBUG] Request ${requestId}: Reservation conflict detected - will retry`, {
+          isReservationConflict: true,
+          attemptsRemaining: MAX_TRANSACTION_ATTEMPTS - attempt - 1
+        });
+        if (attempt < MAX_TRANSACTION_ATTEMPTS - 1) {
+          continue;
+        }
       }
+      
+      console.error(`[BOOKING DEBUG] Request ${requestId}: Transaction failed and will NOT retry`, errorDetails);
       throw error;
     }
   }
+
+  console.error(`[BOOKING DEBUG] Request ${requestId}: All ${MAX_TRANSACTION_ATTEMPTS} attempts exhausted`);
 
   throw new Error('No available slots match the booking rules.');
 }
@@ -1606,7 +1824,7 @@ export async function calculateWalkInDetails(
   const schedule = computeWalkInSchedule({
     slots,
     now,
-    walkInTokenAllotment,
+        walkInTokenAllotment,
     advanceAppointments: activeAdvanceAppointments.map(entry => ({
       id: entry.id,
       slotIndex: typeof entry.slotIndex === 'number' ? entry.slotIndex : -1,
