@@ -1858,18 +1858,36 @@ export default function AppointmentsPage() {
     }
 
     const slotDuration = selectedDoctor.averageConsultingTime || 15;
-    let totalSlotsForDay = 0;
-    availabilityForDay.timeSlots.forEach(session => {
+    
+    // Calculate total slots per session and maximum advance tokens per session (85% of each session)
+    const slotsBySession: Array<{ sessionIndex: number; slotCount: number }> = [];
+    availabilityForDay.timeSlots.forEach((session, sessionIndex) => {
       let currentTime = parseDateFns(session.from, 'hh:mm a', selectedDate);
       const sessionEnd = parseDateFns(session.to, 'hh:mm a', selectedDate);
+      let sessionSlotCount = 0;
       while (isBefore(currentTime, sessionEnd)) {
-        totalSlotsForDay += 1;
+        sessionSlotCount += 1;
         currentTime = addMinutes(currentTime, slotDuration);
+      }
+      if (sessionSlotCount > 0) {
+        slotsBySession.push({ sessionIndex, slotCount: sessionSlotCount });
       }
     });
 
-    if (totalSlotsForDay === 0) {
+    if (slotsBySession.length === 0) {
       return { isAdvanceCapacityReached: false };
+    }
+
+    // Calculate maximum advance tokens as sum of 85% capacity from each session
+    let maximumAdvanceTokens = 0;
+    slotsBySession.forEach(({ slotCount }) => {
+      const sessionMinimumWalkInReserve = slotCount > 0 ? Math.ceil(slotCount * 0.15) : 0;
+      const sessionAdvanceCapacity = Math.max(slotCount - sessionMinimumWalkInReserve, 0);
+      maximumAdvanceTokens += sessionAdvanceCapacity;
+    });
+
+    if (maximumAdvanceTokens === 0) {
+      return { isAdvanceCapacityReached: true };
     }
 
     const formattedDate = format(selectedDate, 'd MMMM yyyy');
@@ -1891,9 +1909,8 @@ export default function AppointmentsPage() {
       activeAdvanceCount = Math.max(0, activeAdvanceCount - 1);
     }
 
-    const maximumAdvanceTokens = Math.max(totalSlotsForDay - Math.ceil(totalSlotsForDay * 0.15), 0);
     return {
-      isAdvanceCapacityReached: maximumAdvanceTokens > 0 && activeAdvanceCount >= maximumAdvanceTokens,
+      isAdvanceCapacityReached: activeAdvanceCount >= maximumAdvanceTokens,
     };
   }, [selectedDoctor, selectedDate, appointments, appointmentType, isEditing, editingAppointment]);
 
@@ -1934,6 +1951,35 @@ export default function AppointmentsPage() {
     const leaveForDate = selectedDoctor.leaveSlots?.find(ls => typeof ls !== 'string' && ls.date && isSameDay(parse(ls.date, 'yyyy-MM-dd', new Date()), selectedDate));
     const leaveTimeSlots = leaveForDate && typeof leaveForDate !== 'string' ? leaveForDate.slots : [];
 
+    // Calculate per-session reserved slots (15% of each session) for advance bookings
+    const reservedSlotsBySession = new Map<number, Set<number>>();
+    const slotDuration = selectedDoctor.averageConsultingTime || 15;
+    let globalSlotIndex = 0;
+    
+    availabilityForDay.timeSlots.forEach((session, sessionIndex) => {
+      let currentTime = parseDateFns(session.from, 'hh:mm a', selectedDate);
+      const sessionEnd = parseDateFns(session.to, 'hh:mm a', selectedDate);
+      const sessionSlots: number[] = [];
+      
+      while (isBefore(currentTime, sessionEnd)) {
+        sessionSlots.push(globalSlotIndex);
+        globalSlotIndex++;
+        currentTime = addMinutes(currentTime, slotDuration);
+      }
+      
+      // Calculate reserved slots for this session (last 15%)
+      if (sessionSlots.length > 0) {
+        const sessionSlotCount = sessionSlots.length;
+        const sessionMinimumWalkInReserve = Math.ceil(sessionSlotCount * 0.15);
+        const reservedWSlotsStart = sessionSlotCount - sessionMinimumWalkInReserve;
+        const reservedSlots = new Set<number>();
+        for (let i = reservedWSlotsStart; i < sessionSlotCount; i++) {
+          reservedSlots.add(sessionSlots[i]);
+        }
+        reservedSlotsBySession.set(sessionIndex, reservedSlots);
+      }
+    });
+
     const sessions = availabilityForDay.timeSlots.map((session, sessionIndex) => {
       const slots = [];
       let foundFirstAvailable = false;
@@ -1948,6 +1994,22 @@ export default function AppointmentsPage() {
       let bookedSlotsCount = 0;
       let leaveSlotsCount = 0;
       let availableSlotsCount = 0;
+      let reservedSlotsSkipped = 0;
+      
+      // Get reserved slots for this session (these are global slot indices)
+      const sessionReservedSlots = reservedSlotsBySession.get(sessionIndex) || new Set<number>();
+      let currentSlotIndexInSession = 0;
+      
+      // Calculate the starting global slot index for this session
+      let sessionStartGlobalIndex = 0;
+      for (let i = 0; i < sessionIndex; i++) {
+        let sessionTime = parseDateFns(availabilityForDay.timeSlots[i].from, 'hh:mm a', selectedDate);
+        const sessionEnd = parseDateFns(availabilityForDay.timeSlots[i].to, 'hh:mm a', selectedDate);
+        while (isBefore(sessionTime, sessionEnd)) {
+          sessionStartGlobalIndex++;
+          sessionTime = addMinutes(sessionTime, slotDuration);
+        }
+      }
       
       while (slotTimeIterator < endTime) {
         totalSlotsGenerated++;
@@ -1957,8 +2019,23 @@ export default function AppointmentsPage() {
         // Skip past slots - don't show slots that are in the past
         if (isBefore(slotTimeIterator, now)) {
           pastSlotsSkipped++;
+          currentSlotIndexInSession++;
           slotTimeIterator = new Date(slotTimeIterator.getTime() + selectedDoctor.averageConsultingTime! * 60000);
           continue;
+        }
+        
+        // For advance bookings, skip slots reserved for walk-ins (last 15% of each session)
+        if (appointmentType === 'Advanced Booking') {
+          // Calculate the global slot index for this slot
+          const globalSlotIndexForThisSlot = sessionStartGlobalIndex + currentSlotIndexInSession;
+          
+          // Check if this slot is reserved for walk-ins in this session
+          if (sessionReservedSlots.has(globalSlotIndexForThisSlot)) {
+            reservedSlotsSkipped++;
+            currentSlotIndexInSession++;
+            slotTimeIterator = new Date(slotTimeIterator.getTime() + selectedDoctor.averageConsultingTime! * 60000);
+            continue;
+          }
         }
 
         // For same-day bookings, skip slots within 1-hour window from current time
@@ -2017,6 +2094,7 @@ export default function AppointmentsPage() {
 
         }
 
+        currentSlotIndexInSession++;
         slotTimeIterator = new Date(slotTimeIterator.getTime() + selectedDoctor.averageConsultingTime! * 60000);
       }
       
@@ -2024,6 +2102,7 @@ export default function AppointmentsPage() {
         totalSlotsGenerated,
         pastSlotsSkipped,
         oneHourWindowSlotsSkipped,
+        reservedSlotsSkipped,
         bookedSlotsCount,
         leaveSlotsCount,
         availableSlotsCount,

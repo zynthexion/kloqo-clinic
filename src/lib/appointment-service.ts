@@ -166,6 +166,39 @@ function getSlotTime(slots: DailySlot[], slotIndex: number): Date {
   return slot.time;
 }
 
+/**
+ * Calculate reserved walk-in slots per session (15% of each session)
+ * Returns a Set of slot indices that are reserved for walk-ins
+ */
+function calculatePerSessionReservedSlots(slots: DailySlot[]): Set<number> {
+  const reservedSlots = new Set<number>();
+  
+  // Group slots by sessionIndex
+  const slotsBySession = new Map<number, DailySlot[]>();
+  slots.forEach(slot => {
+    const sessionSlots = slotsBySession.get(slot.sessionIndex) || [];
+    sessionSlots.push(slot);
+    slotsBySession.set(slot.sessionIndex, sessionSlots);
+  });
+  
+  // For each session, calculate 15% reserve (last 15% of slots in that session)
+  slotsBySession.forEach((sessionSlots, sessionIndex) => {
+    // Sort slots by index to ensure correct order
+    sessionSlots.sort((a, b) => a.index - b.index);
+    
+    const sessionSlotCount = sessionSlots.length;
+    const minimumWalkInReserve = sessionSlotCount > 0 ? Math.ceil(sessionSlotCount * 0.15) : 0;
+    const reservedWSlotsStart = sessionSlotCount > 0 ? sessionSlotCount - minimumWalkInReserve : sessionSlotCount;
+    
+    // Mark the last 15% of slots in this session as reserved
+    for (let i = reservedWSlotsStart; i < sessionSlotCount; i++) {
+      reservedSlots.add(sessionSlots[i].index);
+    }
+  });
+  
+  return reservedSlots;
+}
+
 type CandidateOptions = {
   appointments?: Appointment[];
   walkInSpacing?: number;
@@ -182,10 +215,8 @@ function buildCandidateSlots(
   const oneHourFromNow = addMinutes(now, 60);
   const candidates: number[] = [];
   
-  // Calculate reserved walk-in slots (last 15%) for advance bookings
-  const totalSlots = slots.length;
-  const minimumWalkInReserve = totalSlots > 0 ? Math.ceil(totalSlots * 0.15) : 0;
-  const reservedWSlotsStart = totalSlots > 0 ? totalSlots - minimumWalkInReserve : totalSlots;
+  // Calculate reserved walk-in slots per session (15% of each session)
+  const reservedWSlots = calculatePerSessionReservedSlots(slots);
   
   const addCandidate = (slotIndex: number) => {
     if (
@@ -194,9 +225,10 @@ function buildCandidateSlots(
       !occupied.has(slotIndex) &&
       !candidates.includes(slotIndex)
     ) {
-      // CRITICAL: For advance bookings, NEVER allow slots reserved for walk-ins (last 15%)
-      if (type === 'A' && slotIndex >= reservedWSlotsStart) {
-        console.log(`[SLOT FILTER] Rejecting slot ${slotIndex} - reserved for walk-ins (reservedWSlotsStart: ${reservedWSlotsStart}, totalSlots: ${totalSlots})`);
+      // CRITICAL: For advance bookings, NEVER allow slots reserved for walk-ins (last 15% of each session)
+      if (type === 'A' && reservedWSlots.has(slotIndex)) {
+        const slot = slots[slotIndex];
+        console.log(`[SLOT FILTER] Rejecting slot ${slotIndex} - reserved for walk-ins in session ${slot?.sessionIndex}`);
         return; // Skip reserved walk-in slots
       }
       candidates.push(slotIndex);
@@ -206,10 +238,11 @@ function buildCandidateSlots(
   if (type === 'A') {
     if (typeof preferredSlotIndex === 'number') {
       const slotTime = getSlotTime(slots, preferredSlotIndex);
+      const slot = slots[preferredSlotIndex];
       // CRITICAL: Also check if preferred slot is not reserved for walk-ins
-      // This prevents booking cancelled slots that are in the reserved walk-in range (last 15%)
-      if (preferredSlotIndex >= reservedWSlotsStart) {
-        console.log(`[SLOT FILTER] Rejecting preferred slot ${preferredSlotIndex} - reserved for walk-ins (reservedWSlotsStart: ${reservedWSlotsStart}, totalSlots: ${totalSlots})`);
+      // This prevents booking cancelled slots that are in the reserved walk-in range (last 15% of session)
+      if (reservedWSlots.has(preferredSlotIndex)) {
+        console.log(`[SLOT FILTER] Rejecting preferred slot ${preferredSlotIndex} - reserved for walk-ins in session ${slot?.sessionIndex}`);
       } else if (isAfter(slotTime, oneHourFromNow)) {
         addCandidate(preferredSlotIndex);
       } else {
@@ -218,8 +251,8 @@ function buildCandidateSlots(
     }
 
     slots.forEach(slot => {
-      // CRITICAL: Only add slots that are after 1 hour AND not reserved for walk-ins
-      if (isAfter(slot.time, oneHourFromNow) && slot.index < reservedWSlotsStart) {
+      // CRITICAL: Only add slots that are after 1 hour AND not reserved for walk-ins (per session)
+      if (isAfter(slot.time, oneHourFromNow) && !reservedWSlots.has(slot.index)) {
         addCandidate(slot.index);
       }
     });
@@ -458,8 +491,23 @@ export async function generateNextTokenAndReserveSlot(
     typeof appointmentData.doctorId === 'string' ? appointmentData.doctorId : undefined
   );
   const totalSlots = slots.length;
-  const minimumWalkInReserve = totalSlots > 0 ? Math.ceil(totalSlots * 0.15) : 0;
-  const maximumAdvanceTokens = Math.max(totalSlots - minimumWalkInReserve, 0);
+  
+  // Calculate maximum advance tokens per session (85% of each session)
+  // Group slots by sessionIndex to calculate per-session capacity
+  const slotsBySession = new Map<number, DailySlot[]>();
+  slots.forEach(slot => {
+    const sessionSlots = slotsBySession.get(slot.sessionIndex) || [];
+    sessionSlots.push(slot);
+    slotsBySession.set(slot.sessionIndex, sessionSlots);
+  });
+  
+  let maximumAdvanceTokens = 0;
+  slotsBySession.forEach((sessionSlots) => {
+    const sessionSlotCount = sessionSlots.length;
+    const sessionMinimumWalkInReserve = sessionSlotCount > 0 ? Math.ceil(sessionSlotCount * 0.15) : 0;
+    const sessionAdvanceCapacity = Math.max(sessionSlotCount - sessionMinimumWalkInReserve, 0);
+    maximumAdvanceTokens += sessionAdvanceCapacity;
+  });
 
       const appointmentsRef = collection(db, 'appointments');
       const appointmentsQuery = query(
@@ -1561,16 +1609,15 @@ export async function generateNextTokenAndReserveSlot(
               continue;
             }
 
-            // CRITICAL: Double-check that this slot is NOT reserved for walk-ins (last 15%)
+            // CRITICAL: Double-check that this slot is NOT reserved for walk-ins (last 15% of its session)
             // This check happens inside the transaction to prevent race conditions
             // Even if buildCandidateSlots included it (shouldn't happen), we reject it here
-            const reservedWSlotsStart = totalSlots - minimumWalkInReserve;
-            if (type === 'A' && slotIndex >= reservedWSlotsStart) {
-              console.error(`[BOOKING DEBUG] Request ${requestId}: ⚠️ REJECTED - Slot ${slotIndex} is reserved for walk-ins`, {
+            const reservedWSlots = calculatePerSessionReservedSlots(slots);
+            if (type === 'A' && reservedWSlots.has(slotIndex)) {
+              const slot = slots[slotIndex];
+              console.error(`[BOOKING DEBUG] Request ${requestId}: ⚠️ REJECTED - Slot ${slotIndex} is reserved for walk-ins in session ${slot?.sessionIndex}`, {
                 slotIndex,
-                totalSlots,
-                minimumWalkInReserve,
-                reservedWSlotsStart,
+                sessionIndex: slot?.sessionIndex,
                 type,
                 timestamp: new Date().toISOString()
               });
