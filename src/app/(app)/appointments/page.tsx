@@ -1858,19 +1858,27 @@ export default function AppointmentsPage() {
     }
 
     const slotDuration = selectedDoctor.averageConsultingTime || 15;
+    const now = new Date(); // Use current time to calculate capacity based on future slots only
     
-    // Calculate total slots per session and maximum advance tokens per session (85% of each session)
+    // Calculate total FUTURE slots per session and maximum advance tokens per session (85% of future slots in each session)
+    // This dynamically adjusts as time passes - capacity is recalculated based on remaining future slots
     const slotsBySession: Array<{ sessionIndex: number; slotCount: number }> = [];
     availabilityForDay.timeSlots.forEach((session, sessionIndex) => {
       let currentTime = parseDateFns(session.from, 'hh:mm a', selectedDate);
       const sessionEnd = parseDateFns(session.to, 'hh:mm a', selectedDate);
-      let sessionSlotCount = 0;
+      let futureSlotCount = 0;
+      
+      // Only count future slots (including current time)
       while (isBefore(currentTime, sessionEnd)) {
-        sessionSlotCount += 1;
+        const slotTime = new Date(currentTime);
+        if (isAfter(slotTime, now) || slotTime.getTime() >= now.getTime()) {
+          futureSlotCount += 1;
+        }
         currentTime = addMinutes(currentTime, slotDuration);
       }
-      if (sessionSlotCount > 0) {
-        slotsBySession.push({ sessionIndex, slotCount: sessionSlotCount });
+      
+      if (futureSlotCount > 0) {
+        slotsBySession.push({ sessionIndex, slotCount: futureSlotCount });
       }
     });
 
@@ -1878,7 +1886,7 @@ export default function AppointmentsPage() {
       return { isAdvanceCapacityReached: false };
     }
 
-    // Calculate maximum advance tokens as sum of 85% capacity from each session
+    // Calculate maximum advance tokens as sum of 85% capacity from FUTURE slots in each session
     let maximumAdvanceTokens = 0;
     slotsBySession.forEach(({ slotCount }) => {
       const sessionMinimumWalkInReserve = slotCount > 0 ? Math.ceil(slotCount * 0.15) : 0;
@@ -1951,32 +1959,48 @@ export default function AppointmentsPage() {
     const leaveForDate = selectedDoctor.leaveSlots?.find(ls => typeof ls !== 'string' && ls.date && isSameDay(parse(ls.date, 'yyyy-MM-dd', new Date()), selectedDate));
     const leaveTimeSlots = leaveForDate && typeof leaveForDate !== 'string' ? leaveForDate.slots : [];
 
-    // Calculate per-session reserved slots (15% of each session) for advance bookings
+    // Calculate per-session reserved slots (15% of FUTURE slots only in each session)
+    // This dynamically adjusts as time passes - reserved slots are recalculated based on remaining future slots
     const reservedSlotsBySession = new Map<number, Set<number>>();
     const slotDuration = selectedDoctor.averageConsultingTime || 15;
+    const now = currentTime; // Use current time to filter past slots
     let globalSlotIndex = 0;
     
     availabilityForDay.timeSlots.forEach((session, sessionIndex) => {
       let currentTime = parseDateFns(session.from, 'hh:mm a', selectedDate);
       const sessionEnd = parseDateFns(session.to, 'hh:mm a', selectedDate);
-      const sessionSlots: number[] = [];
+      const allSessionSlots: Array<{ time: Date; globalIndex: number }> = [];
+      const futureSessionSlots: number[] = [];
       
+      // First, collect all slots with their times
       while (isBefore(currentTime, sessionEnd)) {
-        sessionSlots.push(globalSlotIndex);
+        const slotTime = new Date(currentTime);
+        allSessionSlots.push({ time: slotTime, globalIndex: globalSlotIndex });
+        
+        // Only include future slots (including current time) in the reserve calculation
+        if (isAfter(slotTime, now) || slotTime.getTime() >= now.getTime()) {
+          futureSessionSlots.push(globalSlotIndex);
+        }
+        
         globalSlotIndex++;
         currentTime = addMinutes(currentTime, slotDuration);
       }
       
-      // Calculate reserved slots for this session (last 15%)
-      if (sessionSlots.length > 0) {
-        const sessionSlotCount = sessionSlots.length;
-        const sessionMinimumWalkInReserve = Math.ceil(sessionSlotCount * 0.15);
-        const reservedWSlotsStart = sessionSlotCount - sessionMinimumWalkInReserve;
+      // Calculate reserved slots based on FUTURE slots only (last 15% of future slots)
+      if (futureSessionSlots.length > 0) {
+        const futureSlotCount = futureSessionSlots.length;
+        const sessionMinimumWalkInReserve = Math.ceil(futureSlotCount * 0.15);
+        const reservedWSlotsStart = futureSlotCount - sessionMinimumWalkInReserve;
         const reservedSlots = new Set<number>();
-        for (let i = reservedWSlotsStart; i < sessionSlotCount; i++) {
-          reservedSlots.add(sessionSlots[i]);
+        
+        // Mark the last 15% of FUTURE slots as reserved
+        for (let i = reservedWSlotsStart; i < futureSlotCount; i++) {
+          reservedSlots.add(futureSessionSlots[i]);
         }
         reservedSlotsBySession.set(sessionIndex, reservedSlots);
+      } else {
+        // No future slots, no reserved slots
+        reservedSlotsBySession.set(sessionIndex, new Set<number>());
       }
     });
 

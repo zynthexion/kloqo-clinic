@@ -167,10 +167,11 @@ function getSlotTime(slots: DailySlot[], slotIndex: number): Date {
 }
 
 /**
- * Calculate reserved walk-in slots per session (15% of each session)
+ * Calculate reserved walk-in slots per session (15% of FUTURE slots only in each session)
+ * This dynamically adjusts as time passes - reserved slots are recalculated based on remaining future slots
  * Returns a Set of slot indices that are reserved for walk-ins
  */
-function calculatePerSessionReservedSlots(slots: DailySlot[]): Set<number> {
+function calculatePerSessionReservedSlots(slots: DailySlot[], now: Date = new Date()): Set<number> {
   const reservedSlots = new Set<number>();
   
   // Group slots by sessionIndex
@@ -181,18 +182,27 @@ function calculatePerSessionReservedSlots(slots: DailySlot[]): Set<number> {
     slotsBySession.set(slot.sessionIndex, sessionSlots);
   });
   
-  // For each session, calculate 15% reserve (last 15% of slots in that session)
+  // For each session, calculate 15% reserve (last 15% of FUTURE slots in that session)
   slotsBySession.forEach((sessionSlots, sessionIndex) => {
     // Sort slots by index to ensure correct order
     sessionSlots.sort((a, b) => a.index - b.index);
     
-    const sessionSlotCount = sessionSlots.length;
-    const minimumWalkInReserve = sessionSlotCount > 0 ? Math.ceil(sessionSlotCount * 0.15) : 0;
-    const reservedWSlotsStart = sessionSlotCount > 0 ? sessionSlotCount - minimumWalkInReserve : sessionSlotCount;
+    // Filter to only future slots (including current time)
+    const futureSlots = sessionSlots.filter(slot => 
+      isAfter(slot.time, now) || slot.time.getTime() >= now.getTime()
+    );
     
-    // Mark the last 15% of slots in this session as reserved
-    for (let i = reservedWSlotsStart; i < sessionSlotCount; i++) {
-      reservedSlots.add(sessionSlots[i].index);
+    if (futureSlots.length === 0) {
+      return; // No future slots, no reserved slots
+    }
+    
+    const futureSlotCount = futureSlots.length;
+    const minimumWalkInReserve = Math.ceil(futureSlotCount * 0.15);
+    const reservedWSlotsStart = futureSlotCount - minimumWalkInReserve;
+    
+    // Mark the last 15% of FUTURE slots in this session as reserved
+    for (let i = reservedWSlotsStart; i < futureSlotCount; i++) {
+      reservedSlots.add(futureSlots[i].index);
     }
   });
   
@@ -215,9 +225,9 @@ function buildCandidateSlots(
   const oneHourFromNow = addMinutes(now, 60);
   const candidates: number[] = [];
   
-  // Calculate reserved walk-in slots per session (15% of each session)
-  const reservedWSlots = calculatePerSessionReservedSlots(slots);
-  
+  // Calculate reserved walk-in slots per session (15% of FUTURE slots only in each session)
+  const reservedWSlots = calculatePerSessionReservedSlots(slots, now);
+
   const addCandidate = (slotIndex: number) => {
     if (
       slotIndex >= 0 &&
@@ -491,8 +501,10 @@ export async function generateNextTokenAndReserveSlot(
     typeof appointmentData.doctorId === 'string' ? appointmentData.doctorId : undefined
   );
   const totalSlots = slots.length;
+  // Use current time (already defined above) to calculate capacity based on future slots only
   
-  // Calculate maximum advance tokens per session (85% of each session)
+  // Calculate maximum advance tokens per session (85% of FUTURE slots in each session)
+  // This dynamically adjusts as time passes - capacity is recalculated based on remaining future slots
   // Group slots by sessionIndex to calculate per-session capacity
   const slotsBySession = new Map<number, DailySlot[]>();
   slots.forEach(slot => {
@@ -503,9 +515,14 @@ export async function generateNextTokenAndReserveSlot(
   
   let maximumAdvanceTokens = 0;
   slotsBySession.forEach((sessionSlots) => {
-    const sessionSlotCount = sessionSlots.length;
-    const sessionMinimumWalkInReserve = sessionSlotCount > 0 ? Math.ceil(sessionSlotCount * 0.15) : 0;
-    const sessionAdvanceCapacity = Math.max(sessionSlotCount - sessionMinimumWalkInReserve, 0);
+    // Filter to only future slots (including current time)
+    const futureSlots = sessionSlots.filter(slot => 
+      isAfter(slot.time, now) || slot.time.getTime() >= now.getTime()
+    );
+    
+    const futureSlotCount = futureSlots.length;
+    const sessionMinimumWalkInReserve = futureSlotCount > 0 ? Math.ceil(futureSlotCount * 0.15) : 0;
+    const sessionAdvanceCapacity = Math.max(futureSlotCount - sessionMinimumWalkInReserve, 0);
     maximumAdvanceTokens += sessionAdvanceCapacity;
   });
 
@@ -672,33 +689,33 @@ export async function generateNextTokenAndReserveSlot(
                 const isInBucketWindow = !isAfter(slotMeta.time, oneHourAhead);
                 
                 if (isInBucketWindow) {
-                  // Only process if there's no active appointment at this slot
-                  if (!slotsWithActiveAppointments.has(appointment.slotIndex)) {
-                    // Check if there are walk-ins scheduled AFTER this cancelled slot's time
-                    const hasWalkInsAfter = activeWalkInsWithTimes.some(
-                      walkIn => walkIn.slotTime && isAfter(walkIn.slotTime, slotMeta.time)
-                    );
-                    
-                    if (hasWalkInsAfter) {
-                      // There are walk-ins after this cancelled slot - walk-ins cannot use it
-                      // Add to bucket count if walk-ins exist, or it's available only for A tokens
-                      if (hasExistingWalkIns) {
-                        bucketCount += 1;
-                      }
-                      // If no walk-ins exist but there are walk-ins after (shouldn't happen, but handle it),
-                      // it goes to bucket count
-                    } else {
-                      // No walk-ins after this cancelled slot - walk-ins CAN use it
+                // Only process if there's no active appointment at this slot
+                if (!slotsWithActiveAppointments.has(appointment.slotIndex)) {
+                  // Check if there are walk-ins scheduled AFTER this cancelled slot's time
+                  const hasWalkInsAfter = activeWalkInsWithTimes.some(
+                    walkIn => walkIn.slotTime && isAfter(walkIn.slotTime, slotMeta.time)
+                  );
+                  
+                  if (hasWalkInsAfter) {
+                    // There are walk-ins after this cancelled slot - walk-ins cannot use it
+                    // Add to bucket count if walk-ins exist, or it's available only for A tokens
+                    if (hasExistingWalkIns) {
+                      bucketCount += 1;
+                    }
+                    // If no walk-ins exist but there are walk-ins after (shouldn't happen, but handle it),
+                    // it goes to bucket count
+          } else {
+                    // No walk-ins after this cancelled slot - walk-ins CAN use it
                       // Only add to cancelledSlotsInWindow if slot is not in the past (for direct use)
                       if (!hasExistingWalkIns && !isBefore(slotMeta.time, now)) {
                         // No walk-ins exist at all - first walk-in can use this cancelled slot (if not past)
-                        cancelledSlotsInWindow.push({
-                          slotIndex: appointment.slotIndex,
-                          slotTime: slotMeta.time,
-                        });
-                      }
-                      // If walk-ins exist but none after this slot, walk-ins can still use it
-                      // So we don't add it to bucket count - it's available for walk-ins
+                      cancelledSlotsInWindow.push({
+                        slotIndex: appointment.slotIndex,
+                        slotTime: slotMeta.time,
+                      });
+                    }
+                    // If walk-ins exist but none after this slot, walk-ins can still use it
+                    // So we don't add it to bucket count - it's available for walk-ins
                     }
                   }
                 }
@@ -791,17 +808,17 @@ export async function generateNextTokenAndReserveSlot(
                       // It goes to bucket (only A tokens can use it, or bucket can use it when all slots filled)
                       cancelledSlotsInBucket.add(appointment.slotIndex);
                       console.warn(`[Walk-in Scheduling] ✅ BLOCKING cancelled slot ${appointment.slotIndex} (has walk-ins after)`);
-                    } else {
+      } else {
                       // If no walk-ins after this slot, it's NOT in bucket - walk-ins CAN use it
                       console.warn(`[Walk-in Scheduling] ❌ NOT blocking cancelled slot ${appointment.slotIndex} (no walk-ins after)`);
-                    }
-                  } else {
-                    console.warn(`[Walk-in Scheduling] Skipping cancelled slot ${appointment.slotIndex}: isInBucketWindow=${isInBucketWindow}, hasActiveAppt=${hasActiveAppt}`);
-                  }
-                }
-              }
             }
           } else {
+                    console.warn(`[Walk-in Scheduling] Skipping cancelled slot ${appointment.slotIndex}: isInBucketWindow=${isInBucketWindow}, hasActiveAppt=${hasActiveAppt}`);
+                  }
+            }
+          }
+        }
+      } else {
             console.warn('[Walk-in Scheduling] No existing walk-ins, skipping bucket logic');
           }
           
@@ -1609,10 +1626,10 @@ export async function generateNextTokenAndReserveSlot(
               continue;
             }
 
-            // CRITICAL: Double-check that this slot is NOT reserved for walk-ins (last 15% of its session)
+            // CRITICAL: Double-check that this slot is NOT reserved for walk-ins (last 15% of FUTURE slots in its session)
             // This check happens inside the transaction to prevent race conditions
             // Even if buildCandidateSlots included it (shouldn't happen), we reject it here
-            const reservedWSlots = calculatePerSessionReservedSlots(slots);
+            const reservedWSlots = calculatePerSessionReservedSlots(slots, now);
             if (type === 'A' && reservedWSlots.has(slotIndex)) {
               const slot = slots[slotIndex];
               console.error(`[BOOKING DEBUG] Request ${requestId}: ⚠️ REJECTED - Slot ${slotIndex} is reserved for walk-ins in session ${slot?.sessionIndex}`, {
@@ -1673,7 +1690,7 @@ export async function generateNextTokenAndReserveSlot(
               if (isStale) {
                 // Reservation is stale - clean it up and allow new booking
                 console.log(`[BOOKING DEBUG] Slot ${slotIndex} has STALE reservation - cleaning up`, {
-                  reservationId,
+                reservationId,
                   reservedAt: reservedAt?.toDate?.()?.toISOString(),
                   existingData: reservationData
                 });
@@ -1686,8 +1703,8 @@ export async function generateNextTokenAndReserveSlot(
                   reservationId,
                   reservedAt: reservedAt?.toDate?.()?.toISOString(),
                   existingData: reservationData
-                });
-                continue;
+              });
+              continue;
               }
             }
 
@@ -1822,7 +1839,7 @@ export async function generateNextTokenAndReserveSlot(
         // Advance bookings use slotIndex + 1 for tokens, so counter is not needed
         // Incrementing counter for advance bookings causes counter drift and potential token mismatches
         if (type === 'W' && counterState) {
-          commitNextTokenNumber(transaction, counterRef, counterState);
+        commitNextTokenNumber(transaction, counterRef, counterState);
         }
 
         // CRITICAL: Ensure token matches slotIndex before returning
