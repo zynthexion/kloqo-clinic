@@ -248,24 +248,42 @@ function buildCandidateSlots(
   if (type === 'A') {
     if (typeof preferredSlotIndex === 'number') {
       const slotTime = getSlotTime(slots, preferredSlotIndex);
-      const slot = slots[preferredSlotIndex];
+      const preferredSlot = slots[preferredSlotIndex];
+      const preferredSessionIndex = preferredSlot?.sessionIndex;
+      
       // CRITICAL: Also check if preferred slot is not reserved for walk-ins
       // This prevents booking cancelled slots that are in the reserved walk-in range (last 15% of session)
       if (reservedWSlots.has(preferredSlotIndex)) {
-        console.log(`[SLOT FILTER] Rejecting preferred slot ${preferredSlotIndex} - reserved for walk-ins in session ${slot?.sessionIndex}`);
+        console.log(`[SLOT FILTER] Rejecting preferred slot ${preferredSlotIndex} - reserved for walk-ins in session ${preferredSessionIndex}`);
       } else if (isAfter(slotTime, oneHourFromNow)) {
         addCandidate(preferredSlotIndex);
       } else {
         console.log(`[SLOT FILTER] Rejecting preferred slot ${preferredSlotIndex} - within 1 hour from now`);
       }
-    }
-
-    slots.forEach(slot => {
-      // CRITICAL: Only add slots that are after 1 hour AND not reserved for walk-ins (per session)
-      if (isAfter(slot.time, oneHourFromNow) && !reservedWSlots.has(slot.index)) {
-        addCandidate(slot.index);
+      
+      // CRITICAL: If preferred slot is not available, only look for alternatives within the SAME session
+      // This ensures bookings stay within the same sessionIndex and don't cross session boundaries
+      if (candidates.length === 0 && typeof preferredSessionIndex === 'number') {
+        slots.forEach(slot => {
+          // Only consider slots in the same session as the preferred slot
+          if (
+            slot.sessionIndex === preferredSessionIndex &&
+            isAfter(slot.time, oneHourFromNow) &&
+            !reservedWSlots.has(slot.index)
+          ) {
+            addCandidate(slot.index);
+          }
+        });
       }
-    });
+    } else {
+      // No preferred slot - look across all sessions
+      slots.forEach(slot => {
+        // CRITICAL: Only add slots that are after 1 hour AND not reserved for walk-ins (per session)
+        if (isAfter(slot.time, oneHourFromNow) && !reservedWSlots.has(slot.index)) {
+          addCandidate(slot.index);
+        }
+      });
+    }
     } else {
     const activeAppointments =
       options.appointments
@@ -1617,6 +1635,15 @@ export async function generateNextTokenAndReserveSlot(
           });
 
           if (candidates.length === 0) {
+            // If a preferred slot was provided, check if it's in a specific session
+            if (typeof appointmentData.slotIndex === 'number') {
+              const preferredSlot = slots[appointmentData.slotIndex];
+              const sessionIndex = preferredSlot?.sessionIndex;
+              throw new Error(
+                `No available slots in session ${typeof sessionIndex === 'number' ? sessionIndex + 1 : 'selected'}. ` +
+                `All slots in this session are either booked or reserved for walk-ins. Please select a different time slot.`
+              );
+            }
             throw new Error('No available slots match the booking rules.');
           }
 
