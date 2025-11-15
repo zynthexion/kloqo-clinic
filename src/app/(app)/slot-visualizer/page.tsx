@@ -760,6 +760,7 @@ const sessionSlots: SessionSlot[] = useMemo(() => {
   return [...slotsInAvailability, ...slotsOutsideAvailability].sort((a, b) => a.slotIndex - b.slotIndex);
 }, [availableSessions, appointmentsBySlot, fullDaySlots, selectedDoctor, selectedSessionIndex, outsideAvailabilitySlots]);
 
+// Keep futureSessionSlots for summary calculations, but show all slots in the grid
 const futureSessionSlots = useMemo(() => {
   const current = new Date();
   return sessionSlots.filter(slot => !isBefore(slot.time, current));
@@ -1253,13 +1254,15 @@ const sessionProgress = useMemo(() => {
                     Unable to determine the next advance slot based on the current data.
                           </div>
                                 )}
-                {futureSessionSlots.length === 0 ? (
+                {sessionSlots.length === 0 ? (
                   <div className="px-4 py-6 text-center text-sm text-muted-foreground">
                     No slots found for this session.
                         </div>
                                 ) : (
                   <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-                    {futureSessionSlots.map(slot => {
+                    {sessionSlots.map(slot => {
+                      const current = new Date();
+                      const isPastSlot = isBefore(slot.time, current);
                       const appointment = slot.appointment;
                       const isBlocked = blockedSlots.has(slot.slotIndex);
                       const isCancelled = appointment?.status === "Cancelled";
@@ -1287,6 +1290,7 @@ const sessionProgress = useMemo(() => {
                           "ring-2 ring-sky-500 ring-offset-2": !isCancelled && !isBlocked && isNextAdvanceTarget,
                           "border-dashed": isOutsideAvailability && !isBlocked && !hasActiveAppointment,
                           "bg-amber-50/50 border-amber-300": isOutsideAvailability && !isBlocked && !hasActiveAppointment,
+                          "opacity-60": isPastSlot,
                         }
                       );
 
@@ -1299,6 +1303,11 @@ const sessionProgress = useMemo(() => {
                           </div>
                             <Badge variant="outline">{format(slot.time, "hh:mm a")}</Badge>
                           </div>
+                          {isPastSlot && (
+                            <div className="flex items-center gap-2 rounded-full bg-muted/50 px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                              Past Slot
+                            </div>
+                          )}
                           {isOutsideAvailability && !isBlocked && (
                             <div className="flex items-center gap-2 rounded-full bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-amber-700">
                               Outside Availability Time

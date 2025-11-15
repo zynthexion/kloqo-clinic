@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { collection, doc, getDoc, writeBatch, where, query, onSnapshot, getDocs } from 'firebase/firestore';
+import { collection, doc, getDoc, writeBatch, where, query, onSnapshot, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/firebase';
 import type { Appointment, Doctor } from '@/lib/types';
@@ -114,16 +114,14 @@ function calculateDoctorDelay(
   };
 }
 
-// Update appointments with doctor delay: store delay separately, keep original cutOffTime/noShowTime
-// Status transitions (Pending → Skipped → No-show) always use ORIGINAL times, not delayed ones
-// The delay is stored in doctorDelayMinutes for display purposes only
+// Update appointments with doctor delay: add delay to cutOffTime and noShowTime
+// When doctor is not 'In' after consultation start time, delay is calculated and added to all appointments
+// Status transitions (Pending → Skipped → No-show) use the delayed cutOffTime/noShowTime
 async function updateAppointmentsWithDelay(
   clinicId: string,
   doctorId: string,
   totalDelayMinutes: number
 ): Promise<void> {
-  if (totalDelayMinutes <= 0) return;
-
   const today = format(new Date(), 'd MMMM yyyy');
   const appointmentsRef = collection(db, 'appointments');
   const q = query(
@@ -154,25 +152,21 @@ async function updateAppointmentsWithDelay(
       const appointmentDate = parse(appointment.date, 'd MMMM yyyy', new Date());
       const appointmentTime = parseTime(appointment.time, appointmentDate);
       
-      // Calculate original cutOffTime and noShowTime (these are NEVER delayed)
-      // These are used for status transitions (Pending → Skipped → No-show)
-      const originalCutOffTime = subMinutes(appointmentTime, 15);
-      const originalNoShowTime = addMinutes(appointmentTime, 15);
+      // Always calculate from base times (appointment time - 15 for cutOff, + 15 for noShow)
+      // Then add the current delay amount
+      const baseCutOffTime = subMinutes(appointmentTime, 15);
+      const baseNoShowTime = addMinutes(appointmentTime, 15);
       
-      // Store the original times if not already set (only set once, never update)
-      // Store the doctor delay separately for display purposes
+      // Add delay to base times (if delay is 0, times remain at base)
+      const delayedCutOffTime = addMinutes(baseCutOffTime, totalDelayMinutes);
+      const delayedNoShowTime = addMinutes(baseNoShowTime, totalDelayMinutes);
+      
+      // Update with delayed times and store delay amount
       const updates: any = {
+        cutOffTime: Timestamp.fromDate(delayedCutOffTime),
+        noShowTime: Timestamp.fromDate(delayedNoShowTime),
         doctorDelayMinutes: totalDelayMinutes
       };
-
-      // Only set cutOffTime and noShowTime if they don't exist (preserve original values)
-      // These should never be updated with delays - status transitions use original times
-      if (!appointment.cutOffTime) {
-        updates.cutOffTime = originalCutOffTime;
-      }
-      if (!appointment.noShowTime) {
-        updates.noShowTime = originalNoShowTime;
-      }
 
       batch.update(doc.ref, updates);
       hasWrites = true;
@@ -243,7 +237,7 @@ export function useAppointmentStatusUpdater() {
               console.log(`Auto-updating appointment ${apt.id} from Pending to Skipped (cutOffTime: ${cutOffTime.toISOString()}, now: ${now.toISOString()})`);
             }
           } else if (apt.status === 'Skipped') {
-            // Use stored noShowTime from Firestore (original, never delayed)
+            // Use stored noShowTime from Firestore (includes doctor delay if any)
             let noShowTime: Date;
             if (apt.noShowTime) {
               // Convert Firestore timestamp to Date
@@ -370,7 +364,7 @@ export function useAppointmentStatusUpdater() {
                   doctor.id,
                   delayMinutes // Total delay in minutes (stored in doctorDelayMinutes field)
                 );
-                console.log(`[Delay Update] Stored ${delayMinutes} minute doctor delay for doctor ${doctor.name} (consultation started at ${format(availabilityStartTime, 'hh:mm a')}, current time: ${format(now, 'hh:mm a')}). Status transitions use original cutOffTime/noShowTime.`);
+                console.log(`[Delay Update] Added ${delayMinutes} minute doctor delay to appointments for doctor ${doctor.name} (consultation started at ${format(availabilityStartTime, 'hh:mm a')}, current time: ${format(now, 'hh:mm a')}). Delay added to cutOffTime and noShowTime.`);
               } else {
                 // Consultation window has ended, clear the delay
                 await updateAppointmentsWithDelay(clinicId, doctor.id, 0);
