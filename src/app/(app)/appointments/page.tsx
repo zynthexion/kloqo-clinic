@@ -69,7 +69,6 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   calculateWalkInDetails,
-  calculateSkippedTokenRejoinSlot,
   generateNextTokenAndReserveSlot,
   previewWalkInPlacement,
 } from '@/lib/appointment-service';
@@ -1594,123 +1593,104 @@ export default function AppointmentsPage() {
     startTransition(async () => {
       if (!clinicId) return;
   
-      // Find the doctor from the appointment
-      const appointmentDoctor = doctors.find(d => d.name === appointment.doctor);
-      if (!appointmentDoctor) {
-        toast({ 
-          variant: "destructive", 
-          title: "Error", 
-          description: "Doctor not found for this appointment." 
-        });
-        return;
-      }
-  
       const recurrence = clinicDetails?.skippedTokenRecurrence || 3;
       const today = new Date();
       const todayStr = format(today, 'd MMMM yyyy');
       
-      // Get today's active appointments for the same doctor
-      const activeAppointments = appointments
-        .filter(a =>
-          a.doctor === appointment.doctor &&
-          a.date === todayStr &&
-          (a.status === 'Pending' || a.status === 'Confirmed')
-        );
-
       try {
-        // Calculate slot-based rejoin position
-        const rejoinDetails = await calculateSkippedTokenRejoinSlot(
-          appointment,
-          activeAppointments,
-          appointmentDoctor,
-          recurrence,
-          today
-        );
-
-        const targetSlotIndex = rejoinDetails.slotIndex;
-
-        // Find all appointments with slotIndex >= targetSlotIndex that need to be shifted forwards
-        const appointmentsToShift = appointments.filter(a => {
-          const slotIdx = a.slotIndex ?? -1;
-          return slotIdx >= targetSlotIndex && 
-                 a.id !== appointment.id && // Exclude the skipped appointment itself
-                 a.doctor === appointment.doctor &&
-                 a.date === todayStr &&
-                 (a.status === 'Pending' || a.status === 'Confirmed');
-        });
-
-        // Use transaction to atomically shift appointments and update skipped appointment
-        await runTransaction(db, async (transaction) => {
-          // STEP 1: Read all documents first (Firestore requires all reads before writes)
-          const appointmentRefs = appointmentsToShift.map(apt => ({
-            ref: doc(db, 'appointments', apt.id),
-            apt
-          }));
-          const skippedAppointmentRef = doc(db, 'appointments', appointment.id);
-          
-          // Read all documents that will be updated
-          const appointmentDocs = await Promise.all(
-            appointmentRefs.map(async ({ ref }) => await transaction.get(ref))
-          );
-          const skippedAppointmentDoc = await transaction.get(skippedAppointmentRef);
-          
-          // STEP 2: Now perform all writes after all reads
-          // First, shift subsequent appointments forwards (slotIndex + 1)
-          for (let i = 0; i < appointmentRefs.length; i++) {
-            const { ref, apt } = appointmentRefs[i];
-            const aptDoc = appointmentDocs[i];
-            if (aptDoc.exists()) {
-              transaction.update(ref, {
-                slotIndex: (apt.slotIndex ?? 0) + 1,
-                updatedAt: serverTimestamp()
-              });
-            }
+        // Helper function to parse appointment time
+        const parseAppointmentTime = (apt: Appointment): Date => {
+          try {
+            const appointmentDate = parse(apt.date, 'd MMMM yyyy', new Date());
+            return parseTime(apt.time, appointmentDate);
+          } catch {
+            return new Date(0); // Fallback for invalid dates
           }
+        };
 
-          // Then, update skipped appointment
-          if (skippedAppointmentDoc.exists()) {
-            transaction.update(skippedAppointmentRef, {
-              status: 'Confirmed',
-              slotIndex: targetSlotIndex,
-              time: rejoinDetails.time,
-              sessionIndex: rejoinDetails.sessionIndex,
-              updatedAt: serverTimestamp()
-            });
-          }
+        // Get arrived queue: Confirmed appointments for same doctor and date, sorted by time
+        const arrivedQueue = appointments
+          .filter(a =>
+            a.doctor === appointment.doctor &&
+            a.date === todayStr &&
+            a.status === 'Confirmed' &&
+            a.id !== appointment.id // Exclude the skipped appointment itself
+          )
+          .sort((a, b) => {
+            const timeA = parseAppointmentTime(a);
+            const timeB = parseAppointmentTime(b);
+            return timeA.getTime() - timeB.getTime();
+          });
+
+        // Calculate base time based on skippedTokenRecurrence
+        let baseTime: Date;
+        if (arrivedQueue.length >= recurrence) {
+          // Use the time of the appointment at position 'recurrence' (0-indexed: recurrence - 1)
+          const referenceAppointment = arrivedQueue[recurrence - 1];
+          baseTime = parseAppointmentTime(referenceAppointment);
+        } else if (arrivedQueue.length > 0) {
+          // Use the time of the last appointment in arrived queue
+          const lastAppointment = arrivedQueue[arrivedQueue.length - 1];
+          baseTime = parseAppointmentTime(lastAppointment);
+        } else {
+          // Arrived queue is empty, use current time + 1 minute
+          baseTime = addMinutes(today, 1);
+        }
+
+        // Add 1 minute to base time
+        let newTime = addMinutes(baseTime, 1);
+
+        // Check for existing rejoined appointments (status='Confirmed' AND has skippedAt field)
+        const rejoinedAppointments = appointments
+          .filter(a =>
+            a.doctor === appointment.doctor &&
+            a.date === todayStr &&
+            a.status === 'Confirmed' &&
+            a.skippedAt && // Only appointments that were previously skipped
+            a.id !== appointment.id
+          )
+          .sort((a, b) => {
+            // Sort by time (descending) to get the latest
+            const timeA = parseAppointmentTime(a);
+            const timeB = parseAppointmentTime(b);
+            return timeB.getTime() - timeA.getTime();
+          });
+
+        // If there are existing rejoined appointments, use the latest one's time + 1 minute
+        if (rejoinedAppointments.length > 0) {
+          const latestRejoined = rejoinedAppointments[0];
+          const latestRejoinedTime = parseAppointmentTime(latestRejoined);
+          newTime = addMinutes(latestRejoinedTime, 1);
+        }
+
+        // Format the new time
+        const newTimeString = format(newTime, 'hh:mm a');
+
+        // Update the skipped appointment: only change status and time, keep everything else
+        const appointmentRef = doc(db, 'appointments', appointment.id);
+        await updateDoc(appointmentRef, {
+          status: 'Confirmed',
+          time: newTimeString,
+          updatedAt: serverTimestamp()
         });
 
         // Update local state
         setAppointments(prev => {
-          const updated = prev.map(a => {
+          return prev.map(a => {
             if (a.id === appointment.id) {
               return { 
                 ...a, 
                 status: 'Confirmed' as const,
-                slotIndex: targetSlotIndex,
-                time: rejoinDetails.time,
-                sessionIndex: rejoinDetails.sessionIndex
+                time: newTimeString
               };
             }
-            // Shift subsequent appointments forwards
-            if (a.slotIndex && a.slotIndex >= targetSlotIndex &&
-                a.id !== appointment.id &&
-                a.doctor === appointment.doctor &&
-                a.date === todayStr &&
-                (a.status === 'Pending' || a.status === 'Confirmed')) {
-              return { ...a, slotIndex: (a.slotIndex ?? 0) + 1 };
-            }
             return a;
-          });
-          return updated.sort((a, b) => {
-            const slotA = a.slotIndex ?? Infinity;
-            const slotB = b.slotIndex ?? Infinity;
-            return slotA - slotB;
           });
         });
 
         toast({
           title: "Patient Re-joined Queue",
-          description: `${appointment.patientName} has been added back to the queue at position after ${recurrence} patient(s). Subsequent appointments have been shifted forwards.`
+          description: `${appointment.patientName} has been added back to the queue at position after ${recurrence} patient(s).`
         });
       } catch (error: any) {
         console.error("Error re-joining queue:", error);

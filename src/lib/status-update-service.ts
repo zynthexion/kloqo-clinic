@@ -51,6 +51,19 @@ async function updateAppointmentStatuses(clinicId: string): Promise<void> {
   const querySnapshot = await getDocs(q);
   console.log(`Found ${querySnapshot.size} appointments to check`);
   
+  // Get all doctors for this clinic to access their consultationStatus and availability
+  const doctorsRef = collection(db, 'doctors');
+  const doctorsQuery = query(
+    doctorsRef,
+    where('clinicId', '==', clinicId)
+  );
+  const doctorsSnapshot = await getDocs(doctorsQuery);
+  const doctorsMap = new Map<string, Doctor>();
+  doctorsSnapshot.forEach((doc) => {
+    const doctor = { id: doc.id, ...doc.data() } as Doctor;
+    doctorsMap.set(doctor.name, doctor);
+  });
+  
   const appointmentsToSkip: { id: string; appointment: Appointment }[] = [];
   const appointmentsToMarkNoShow: { id: string; appointment: Appointment }[] = [];
   
@@ -58,6 +71,49 @@ async function updateAppointmentStatuses(clinicId: string): Promise<void> {
     const appointment = docSnapshot.data() as Appointment;
     
     try {
+      // Get doctor information
+      const doctor = doctorsMap.get(appointment.doctor);
+      if (!doctor) {
+        console.warn(`Doctor not found for appointment ${docSnapshot.id}: ${appointment.doctor}`);
+        // Fall back to old logic if doctor not found
+        if (appointment.status === 'Pending') {
+          let cutOffTime: Date;
+          if (appointment.cutOffTime) {
+            cutOffTime = appointment.cutOffTime instanceof Date 
+              ? appointment.cutOffTime 
+              : appointment.cutOffTime?.toDate 
+                ? appointment.cutOffTime.toDate() 
+                : new Date(appointment.cutOffTime);
+          } else {
+            const appointmentDate = parse(appointment.date, 'd MMMM yyyy', new Date());
+            const appointmentTime = parseTime(appointment.time, appointmentDate);
+            cutOffTime = subMinutes(appointmentTime, 15);
+          }
+          if (isAfter(now, cutOffTime) || now.getTime() >= cutOffTime.getTime()) {
+            appointmentsToSkip.push({ id: docSnapshot.id, appointment });
+          }
+        } else if (appointment.status === 'Skipped') {
+          let noShowTime: Date;
+          if (appointment.noShowTime) {
+            noShowTime = appointment.noShowTime instanceof Date 
+              ? appointment.noShowTime 
+              : appointment.noShowTime?.toDate 
+                ? appointment.noShowTime.toDate() 
+                : new Date(appointment.noShowTime);
+          } else {
+            const appointmentDate = parse(appointment.date, 'd MMMM yyyy', new Date());
+            const appointmentTime = parseTime(appointment.time, appointmentDate);
+            noShowTime = addMinutes(appointmentTime, 15);
+          }
+          if (isAfter(now, noShowTime) || now.getTime() >= noShowTime.getTime()) {
+            appointmentsToMarkNoShow.push({ id: docSnapshot.id, appointment });
+          }
+        }
+        return;
+      }
+      
+      const consultationStatus = doctor.consultationStatus || 'Out';
+      
       if (appointment.status === 'Pending') {
         // Use stored cutOffTime from database (includes doctor delay if any)
         let cutOffTime: Date;
@@ -76,7 +132,26 @@ async function updateAppointmentStatuses(clinicId: string): Promise<void> {
         }
         
         // Check if current time is greater than stored cutOffTime
-        if (isAfter(now, cutOffTime) || now.getTime() >= cutOffTime.getTime()) {
+        const shouldSkipByTime = isAfter(now, cutOffTime) || now.getTime() >= cutOffTime.getTime();
+        
+        if (shouldSkipByTime) {
+          // If doctor is 'Out', check if cutOffTime is after the next upcoming availability start time
+          if (consultationStatus === 'Out') {
+            const nextAvailabilityStart = getNextUpcomingAvailabilityStartTime(doctor, now);
+            
+            if (nextAvailabilityStart) {
+              // Only skip if cutOffTime is before or equal to availability start time
+              // If cutOffTime is after availability start, don't skip (doctor hasn't started yet)
+              if (isAfter(cutOffTime, nextAvailabilityStart) || cutOffTime.getTime() > nextAvailabilityStart.getTime()) {
+                // cutOffTime is after availability start - don't skip
+                console.log(`Skipping status update for appointment ${docSnapshot.id}: doctor is Out and cutOffTime (${format(cutOffTime, 'hh:mm a')}) is after availability start (${format(nextAvailabilityStart, 'hh:mm a')})`);
+                return;
+              }
+            }
+            // If no availability found or cutOffTime is before availability start, proceed with skip
+          }
+          
+          // Doctor is 'In' or cutOffTime is before availability start - proceed with skip
           appointmentsToSkip.push({ id: docSnapshot.id, appointment });
         }
       } else if (appointment.status === 'Skipped') {
@@ -97,8 +172,16 @@ async function updateAppointmentStatuses(clinicId: string): Promise<void> {
         }
         
         // Check if current time is greater than stored noShowTime
-        if (isAfter(now, noShowTime) || now.getTime() >= noShowTime.getTime()) {
-          appointmentsToMarkNoShow.push({ id: docSnapshot.id, appointment });
+        const shouldMarkNoShow = isAfter(now, noShowTime) || now.getTime() >= noShowTime.getTime();
+        
+        if (shouldMarkNoShow) {
+          // Only mark as no-show if doctor is 'In'
+          // If doctor is 'Out', don't mark as no-show (doctor hasn't started yet)
+          if (consultationStatus === 'In') {
+            appointmentsToMarkNoShow.push({ id: docSnapshot.id, appointment });
+          } else {
+            console.log(`Skipping no-show update for appointment ${docSnapshot.id}: doctor is Out`);
+          }
         }
       }
     } catch (error) {
@@ -212,6 +295,46 @@ function parseTime(timeStr: string, referenceDate: Date): Date {
     date.setHours(hours, minutes, 0, 0);
     return date;
   }
+}
+
+/**
+ * Gets the next upcoming availability start time for a doctor today
+ * Returns the start time of the first session that hasn't ended yet, or null if none found
+ */
+function getNextUpcomingAvailabilityStartTime(doctor: Doctor, now: Date): Date | null {
+  if (!doctor.availabilitySlots || doctor.availabilitySlots.length === 0) {
+    return null;
+  }
+  
+  const todayDay = format(now, 'EEEE');
+  const todayAvailability = doctor.availabilitySlots.find(slot => 
+    slot.day.toLowerCase() === todayDay.toLowerCase()
+  );
+  
+  if (!todayAvailability || !todayAvailability.timeSlots || todayAvailability.timeSlots.length === 0) {
+    return null;
+  }
+  
+  // Find the next session (first session that hasn't ended yet)
+  for (let i = 0; i < todayAvailability.timeSlots.length; i++) {
+    const session = todayAvailability.timeSlots[i];
+    try {
+      const sessionStart = parseTime(session.from, now);
+      const sessionEnd = parseTime(session.to, now);
+      
+      // If current time is before session end, this is the next session
+      if (isBefore(now, sessionEnd) || now.getTime() === sessionEnd.getTime()) {
+        return sessionStart;
+      }
+    } catch (error) {
+      // Skip if parsing fails
+      console.warn(`Error parsing session time for doctor ${doctor.name}:`, error);
+      continue;
+    }
+  }
+  
+  // No upcoming session found (all sessions have ended)
+  return null;
 }
 
 /**
