@@ -24,11 +24,11 @@ import {
 } from "@/components/ui/table";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
-import { doc, updateDoc, collection, getDocs, setDoc, getDoc, query, where, writeBatch, arrayRemove } from "firebase/firestore";
+import { doc, updateDoc, collection, getDocs, setDoc, getDoc, query, where, writeBatch, arrayRemove, Timestamp } from "firebase/firestore";
 import { db, storage } from "@/lib/firebase";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import type { Doctor, Appointment, LeaveSlot, Department, TimeSlot } from "@/lib/types";
-import { format, parse, isSameDay, getDay, addMinutes, isWithinInterval, differenceInMinutes, isPast, parseISO, startOfDay, isToday, isBefore } from "date-fns";
+import { format, parse, isSameDay, getDay, addMinutes, subMinutes, isWithinInterval, differenceInMinutes, isPast, parseISO, startOfDay, isToday, isBefore } from "date-fns";
 import { Clock, User, BriefcaseMedical, Calendar as CalendarIcon, Info, Edit, Save, X, Trash, Copy, Loader2, ChevronLeft, ChevronRight, Search, Star, Users, CalendarDays, Link as LinkIcon, PlusCircle, DollarSign, Printer, FileDown, ChevronUp, ChevronDown, Minus, Trophy, Repeat, CalendarCheck, Upload, Trash2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -972,20 +972,33 @@ export default function DoctorsPage() {
             where("date", "==", dateStr)
         );
         const snapshot = await getDocs(appointmentsQuery);
-        const appointmentsToUpdate: {id: string, newTime: Date}[] = [];
+        const appointmentsToUpdate: {id: string, newTime: Date, newCutOffTime: Date, newNoShowTime: Date}[] = [];
 
         snapshot.docs.forEach(docSnap => {
             const appt = docSnap.data() as Appointment;
             if (!appt.time) return;
             const apptTime = parseTimeUtil(appt.time, leaveCalDate);
             if (apptTime >= startSlot) {
-                appointmentsToUpdate.push({ id: docSnap.id, newTime: addMinutes(apptTime, breakDuration) });
+                const newTime = addMinutes(apptTime, breakDuration);
+                // Calculate new cutOffTime and noShowTime based on new appointment time
+                const newCutOffTime = subMinutes(newTime, 15);
+                const newNoShowTime = addMinutes(newTime, 15);
+                appointmentsToUpdate.push({ 
+                    id: docSnap.id, 
+                    newTime,
+                    newCutOffTime,
+                    newNoShowTime
+                });
             }
         });
 
         for (const appt of appointmentsToUpdate) {
             const apptRef = doc(db, 'appointments', appt.id);
-            batch.update(apptRef, { time: format(appt.newTime, 'hh:mm a') });
+            batch.update(apptRef, { 
+                time: format(appt.newTime, 'hh:mm a'),
+                cutOffTime: Timestamp.fromDate(appt.newCutOffTime),
+                noShowTime: Timestamp.fromDate(appt.newNoShowTime)
+            });
         }
 
         const doctorRef = doc(db, 'doctors', selectedDoctor.id);
@@ -1075,7 +1088,18 @@ export default function DoctorsPage() {
         });
         const breakStart = new Date(Math.min(...allBreakSlots.map(d => d.getTime())));
         const breakEnd = addMinutes(new Date(Math.max(...allBreakSlots.map(d => d.getTime()))), selectedDoctor.averageConsultingTime || 15);
-        const breakDuration = differenceInMinutes(breakEnd, breakStart);
+        const fullBreakDuration = differenceInMinutes(breakEnd, breakStart);
+        
+        // If break has already started, only subtract remaining minutes
+        const now = new Date();
+        let breakDuration: number;
+        if (now >= breakStart && now < breakEnd) {
+            // Break is in progress - only subtract remaining minutes
+            breakDuration = differenceInMinutes(breakEnd, now);
+        } else {
+            // Break hasn't started yet - subtract full duration
+            breakDuration = fullBreakDuration;
+        }
   
         const dateStr = format(leaveCalDate, 'd MMMM yyyy');
         const appointmentsQuery = query(collection(db, "appointments"), 
@@ -1085,20 +1109,33 @@ export default function DoctorsPage() {
         );
         
         const snapshot = await getDocs(appointmentsQuery);
-        const appointmentsToUpdate: {id: string, newTime: Date}[] = [];
+        const appointmentsToUpdate: {id: string, newTime: Date, newCutOffTime: Date, newNoShowTime: Date}[] = [];
         
         snapshot.docs.forEach(docSnap => {
             const appt = docSnap.data() as Appointment;
             if (!appt.time) return;
             const apptTime = parseTimeUtil(appt.time, leaveCalDate);
              if (apptTime >= breakStart) {
-                 appointmentsToUpdate.push({ id: docSnap.id, newTime: addMinutes(apptTime, -breakDuration) });
+                const newTime = addMinutes(apptTime, -breakDuration);
+                // Calculate new cutOffTime and noShowTime based on new appointment time
+                const newCutOffTime = subMinutes(newTime, 15);
+                const newNoShowTime = addMinutes(newTime, 15);
+                appointmentsToUpdate.push({ 
+                    id: docSnap.id, 
+                    newTime,
+                    newCutOffTime,
+                    newNoShowTime
+                });
             }
         });
         
         for (const appt of appointmentsToUpdate) {
             const apptRef = doc(db, 'appointments', appt.id);
-            batch.update(apptRef, { time: format(appt.newTime, 'hh:mm a') });
+            batch.update(apptRef, { 
+                time: format(appt.newTime, 'hh:mm a'),
+                cutOffTime: Timestamp.fromDate(appt.newCutOffTime),
+                noShowTime: Timestamp.fromDate(appt.newNoShowTime)
+            });
         }
   
         const doctorRef = doc(db, 'doctors', selectedDoctor.id);
@@ -1567,7 +1604,7 @@ export default function DoctorsPage() {
                                                           'hover:bg-accent': !isSelected && !isOnLeave,
                                                         })}
                                                         onClick={() => handleSlotClick(slot)}
-                                                        disabled={isOnLeave || isBooked}
+                                                        disabled={isOnLeave}
                                                     >
                                                         <span className="font-semibold">{format(slot, 'hh:mm a')}</span>
                                                         {isBooked && !isOnLeave && <span className="text-xs">Booked</span>}

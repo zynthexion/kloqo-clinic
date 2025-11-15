@@ -259,21 +259,21 @@ function buildCandidateSlots(
         addCandidate(preferredSlotIndex);
       } else {
         console.log(`[SLOT FILTER] Rejecting preferred slot ${preferredSlotIndex} - within 1 hour from now`);
-      }
-      
+    }
+
       // CRITICAL: If preferred slot is not available, only look for alternatives within the SAME session
       // This ensures bookings stay within the same sessionIndex and don't cross session boundaries
       if (candidates.length === 0 && typeof preferredSessionIndex === 'number') {
-        slots.forEach(slot => {
+    slots.forEach(slot => {
           // Only consider slots in the same session as the preferred slot
           if (
             slot.sessionIndex === preferredSessionIndex &&
             isAfter(slot.time, oneHourFromNow) &&
             !reservedWSlots.has(slot.index)
           ) {
-            addCandidate(slot.index);
-          }
-        });
+        addCandidate(slot.index);
+      }
+    });
       }
     } else {
       // No preferred slot - look across all sessions
@@ -652,6 +652,83 @@ export async function generateNextTokenAndReserveSlot(
             );
           });
 
+          // CRITICAL: Read existing reservations BEFORE calling scheduler
+          // This prevents concurrent walk-ins from getting the same slot
+          // Also clean up stale reservations (older than 30 seconds)
+          // Calculate maximum possible slot index (for bucket compensation cases)
+          const allSlotIndicesFromAppointments = effectiveAppointments
+            .map(appointment => typeof appointment.slotIndex === 'number' ? appointment.slotIndex : -1)
+            .filter(idx => idx >= 0);
+          const maxSlotIndexFromAppointments = allSlotIndicesFromAppointments.length > 0 
+            ? Math.max(...allSlotIndicesFromAppointments) 
+            : -1;
+          const lastSlotIndexFromSlots = totalSlots > 0 ? totalSlots - 1 : -1;
+          const maxSlotIndex = Math.max(maxSlotIndexFromAppointments, lastSlotIndexFromSlots);
+          // Read reservations up to maxSlotIndex + 20 to cover bucket compensation cases with extra buffer
+          // This ensures we read the reservation for finalSlotIndex before any writes
+          const maxSlotToRead = Math.max(totalSlots, maxSlotIndex + 20);
+          
+          const existingReservations = new Map<number, Date>();
+          const staleReservationsToDelete: DocumentReference[] = [];
+          
+          for (let slotIdx = 0; slotIdx <= maxSlotToRead; slotIdx += 1) {
+            const reservationId = buildReservationDocId(clinicId, doctorName, dateStr, slotIdx);
+            const reservationRef = doc(db, 'slot-reservations', reservationId);
+            const reservationSnapshot = await transaction.get(reservationRef);
+            
+            if (reservationSnapshot.exists()) {
+              const reservationData = reservationSnapshot.data();
+              const reservedAt = reservationData?.reservedAt;
+              let reservedTime: Date | null = null;
+              
+              if (reservedAt) {
+                try {
+                  if (typeof reservedAt.toDate === 'function') {
+                    reservedTime = reservedAt.toDate();
+                  } else if (reservedAt instanceof Date) {
+                    reservedTime = reservedAt;
+                  } else if (reservedAt.seconds) {
+                    reservedTime = new Date(reservedAt.seconds * 1000);
+                  }
+                  
+                  if (reservedTime) {
+                    const ageInSeconds = (now.getTime() - reservedTime.getTime()) / 1000;
+                    if (ageInSeconds <= 30) {
+                      // Recent reservation - respect it
+                      existingReservations.set(slotIdx, reservedTime);
+                    } else {
+                      // Stale reservation - mark for deletion
+                      staleReservationsToDelete.push(reservationRef);
+                    }
+                  } else {
+                    // Can't parse time - assume stale and delete
+                    staleReservationsToDelete.push(reservationRef);
+                  }
+                } catch (e) {
+                  // Parsing error - assume stale and delete
+                  staleReservationsToDelete.push(reservationRef);
+                }
+              } else {
+                // No reservedAt timestamp - assume stale and delete
+                staleReservationsToDelete.push(reservationRef);
+              }
+            }
+          }
+          
+          // Delete stale reservations within the transaction
+          for (const staleRef of staleReservationsToDelete) {
+            transaction.delete(staleRef);
+          }
+
+          // Create placeholder walk-in candidates for reserved slots
+          // This tells the scheduler that these slots are already taken
+          const reservedWalkInCandidates = Array.from(existingReservations.entries()).map(([slotIndex, reservedTime], idx) => ({
+            id: `__reserved_${slotIndex}__`,
+            numericToken: totalSlots + 1000 + idx, // High token number to ensure they're placed correctly
+            createdAt: reservedTime,
+            currentSlotIndex: slotIndex,
+          }));
+
           const baseWalkInCandidates = activeWalkIns.map(appointment => ({
             id: appointment.id,
             numericToken: typeof appointment.numericToken === 'number' ? appointment.numericToken : 0,
@@ -933,7 +1010,7 @@ export async function generateNextTokenAndReserveSlot(
                 now,
                 walkInTokenAllotment: walkInSpacingValue,
                 advanceAppointments: blockedAdvanceAppointments,
-                walkInCandidates: [...baseWalkInCandidates, newWalkInCandidate],
+                walkInCandidates: [...baseWalkInCandidates, ...reservedWalkInCandidates, newWalkInCandidate],
               });
 
               const newAssignment = schedule.assignments.find(
@@ -1176,22 +1253,22 @@ export async function generateNextTokenAndReserveSlot(
               }
             } else {
               // No walk-ins exist or no spacing configured - use sequential placement
-              // Find the last slotIndex used across ALL sessions for this day
-              const allSlotIndicesFromAppointments = effectiveAppointments
-                .map(appointment => typeof appointment.slotIndex === 'number' ? appointment.slotIndex : -1)
-                .filter(idx => idx >= 0);
-              
-              const maxSlotIndexFromAppointments = allSlotIndicesFromAppointments.length > 0 
-                ? Math.max(...allSlotIndicesFromAppointments) 
-                : -1;
-              
-              const maxSlotIndex = Math.max(maxSlotIndexFromAppointments, lastSlotIndexFromSlots);
+            // Find the last slotIndex used across ALL sessions for this day
+            const allSlotIndicesFromAppointments = effectiveAppointments
+              .map(appointment => typeof appointment.slotIndex === 'number' ? appointment.slotIndex : -1)
+              .filter(idx => idx >= 0);
+            
+            const maxSlotIndexFromAppointments = allSlotIndicesFromAppointments.length > 0 
+              ? Math.max(...allSlotIndicesFromAppointments) 
+              : -1;
+            
+            const maxSlotIndex = Math.max(maxSlotIndexFromAppointments, lastSlotIndexFromSlots);
               newSlotIndex = maxSlotIndex + 1;
               
               console.info('[Walk-in Scheduling] Bucket compensation - sequential placement (no walk-ins or spacing):', {
-                maxSlotIndexFromAppointments,
-                lastSlotIndexFromSlots,
-                maxSlotIndex,
+              maxSlotIndexFromAppointments,
+              lastSlotIndexFromSlots,
+              maxSlotIndex,
                 newSlotIndex
               });
             }
@@ -1281,8 +1358,8 @@ export async function generateNextTokenAndReserveSlot(
                   const lastSlot = slots[slots.length - 1];
                   const slotsBeyondAvailability = newSlotIndex - lastSlotIndexFromSlots;
                   newSlotTime = lastSlot 
-                    ? addMinutes(lastSlot.time, slotDuration * slotsBeyondAvailability) 
-                    : addMinutes(now, slotDuration);
+              ? addMinutes(lastSlot.time, slotDuration * slotsBeyondAvailability) 
+              : addMinutes(now, slotDuration);
                 }
               } else {
                 // No reference appointment - use last slot time + duration
@@ -1292,8 +1369,8 @@ export async function generateNextTokenAndReserveSlot(
                   ? addMinutes(lastSlot.time, slotDuration * slotsBeyondAvailability) 
                   : addMinutes(now, slotDuration);
                 console.info('[Walk-in Scheduling] Bucket compensation - time from last slot:', {
-                  lastSlotIndexFromSlots,
-                  slotsBeyondAvailability,
+              lastSlotIndexFromSlots,
+              slotsBeyondAvailability,
                   newSlotTime
                 });
               }
@@ -1404,7 +1481,8 @@ export async function generateNextTokenAndReserveSlot(
             blockedSlots: Set<number>,
             advanceAssignments: Map<string, SchedulerAssignment>,
             walkInTime: Date,
-            averageConsultingTime: number
+            averageConsultingTime: number,
+            existingReservations: Map<number, Date>
           ): Promise<{
             reservationDeletes: DocumentReference[];
             appointmentUpdates: Array<{
@@ -1448,8 +1526,10 @@ export async function generateNextTokenAndReserveSlot(
               'slot-reservations',
               buildReservationDocId(clinicId, doctorName, dateStr, targetSlotIndex)
             );
-            const targetReservationSnapshot = await transaction.get(targetReservationRef);
-            if (targetReservationSnapshot.exists()) {
+            // CRITICAL: Use existingReservations map instead of reading again
+            // We already read all reservations before deleting stale ones
+            // Reading again here would violate "all reads before all writes" rule
+            if (existingReservations.has(targetSlotIndex)) {
               reservationDeletes.push(targetReservationRef);
             }
 
@@ -1536,8 +1616,10 @@ export async function generateNextTokenAndReserveSlot(
                 'slot-reservations',
                 buildReservationDocId(clinicId, doctorName, dateStr, newSlotIndex)
               );
-              const reservationSnapshotForSlot = await transaction.get(reservationRefForSlot);
-              if (reservationSnapshotForSlot.exists()) {
+              // CRITICAL: Use existingReservations map instead of reading again
+              // We already read all reservations before deleting stale ones
+              // Reading again here would violate "all reads before all writes" rule
+              if (existingReservations.has(newSlotIndex)) {
                 reservationDeletes.push(reservationRefForSlot);
               }
 
@@ -1690,7 +1772,8 @@ export async function generateNextTokenAndReserveSlot(
               new Set<number>(plannedWalkInSlots),
               advanceAssignments,
               calculatedWalkInTime,
-              doctor.averageConsultingTime || 15
+              doctor.averageConsultingTime || 15,
+              existingReservations
             );
 
             activeAdvanceAppointments = shiftPlan.updatedAdvanceAppointments;
@@ -1779,6 +1862,21 @@ export async function generateNextTokenAndReserveSlot(
           // Create reservation using the final chosenSlotIndex
           const reservationId = buildReservationDocId(clinicId, doctorName, dateStr, chosenSlotIndex);
           const reservationDocRef = doc(db, 'slot-reservations', reservationId);
+          
+          // CRITICAL: Check existingReservations map (already read at the beginning)
+          // This avoids violating Firestore's "all reads before all writes" transaction rule
+          if (existingReservations.has(chosenSlotIndex)) {
+            // Recent reservation exists - conflict
+            const conflictError = new Error('slot-reservation-conflict');
+            (conflictError as { code?: string }).code = 'slot-reservation-conflict';
+            throw conflictError;
+          }
+          // If not in existingReservations, either:
+          // 1. It doesn't exist (proceed)
+          // 2. It was stale and already deleted (proceed)
+          // Note: The reservation was already read in the initial loop,
+          // so transaction.set() is safe here
+          
           reservationRef = reservationDocRef;
         } else {
           const occupiedSlots = buildOccupiedSlotSet(effectiveAppointments);
