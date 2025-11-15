@@ -84,9 +84,10 @@ export type Appointment = {
   completedAt?: any;
   skippedAt?: any; // Timestamp when appointment was marked as Skipped
   lateMinutes?: number; // Late minutes for skipped appointments
-  cutOffTime?: any; // Cut-off time (appointment time - 15 minutes) - when Pending becomes Skipped
-  noShowTime?: any; // No-show time (appointment time + 15 minutes) - when Skipped becomes No-show
+  cutOffTime?: any; // Cut-off time (appointment time - 15 minutes) - when Pending becomes Skipped (ORIGINAL, never delayed)
+  noShowTime?: any; // No-show time (appointment time + 15 minutes) - when Skipped becomes No-show (ORIGINAL, never delayed)
   delay?: number; // Delay in minutes added when W tokens are inserted before this appointment
+  doctorDelayMinutes?: number; // Delay in minutes due to doctor not starting on time (for display only, doesn't affect status transitions)
 };
 
 export type Patient = {

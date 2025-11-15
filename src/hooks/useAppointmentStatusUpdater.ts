@@ -114,13 +114,15 @@ function calculateDoctorDelay(
   };
 }
 
-// Update appointments with delay: add delay to noShowTime and cutOffTime
+// Update appointments with doctor delay: store delay separately, keep original cutOffTime/noShowTime
+// Status transitions (Pending → Skipped → No-show) always use ORIGINAL times, not delayed ones
+// The delay is stored in doctorDelayMinutes for display purposes only
 async function updateAppointmentsWithDelay(
   clinicId: string,
   doctorId: string,
-  delayMinutes: number
+  totalDelayMinutes: number
 ): Promise<void> {
-  if (delayMinutes <= 0) return;
+  if (totalDelayMinutes <= 0) return;
 
   const today = format(new Date(), 'd MMMM yyyy');
   const appointmentsRef = collection(db, 'appointments');
@@ -142,65 +144,40 @@ async function updateAppointmentsWithDelay(
   snapshot.forEach((doc) => {
     const appointment = doc.data() as Appointment;
     
-    // Parse current noShowTime and cutOffTime
-    let currentNoShowTime: Date | null = null;
-    let currentCutOffTime: Date | null = null;
-
     try {
-      // Handle noShowTime
-      if (appointment.noShowTime) {
-        if (appointment.noShowTime instanceof Date) {
-          currentNoShowTime = appointment.noShowTime;
-        } else if (typeof (appointment.noShowTime as any).toDate === 'function') {
-          currentNoShowTime = (appointment.noShowTime as any).toDate();
-        } else if ((appointment.noShowTime as any).seconds) {
-          currentNoShowTime = new Date((appointment.noShowTime as any).seconds * 1000);
-        } else if (typeof appointment.noShowTime === 'string') {
-          // Try parsing as date string
-          const parsed = new Date(appointment.noShowTime);
-          if (!isNaN(parsed.getTime())) {
-            currentNoShowTime = parsed;
-          }
-        }
+      if (!appointment.time || !appointment.date) {
+        console.warn(`Appointment ${doc.id} missing time or date, skipping delay update`);
+        return;
       }
 
-      // Handle cutOffTime
-      if (appointment.cutOffTime) {
-        if (appointment.cutOffTime instanceof Date) {
-          currentCutOffTime = appointment.cutOffTime;
-        } else if (typeof (appointment.cutOffTime as any).toDate === 'function') {
-          currentCutOffTime = (appointment.cutOffTime as any).toDate();
-        } else if ((appointment.cutOffTime as any).seconds) {
-          currentCutOffTime = new Date((appointment.cutOffTime as any).seconds * 1000);
-        } else if (typeof appointment.cutOffTime === 'string') {
-          // Try parsing as date string
-          const parsed = new Date(appointment.cutOffTime);
-          if (!isNaN(parsed.getTime())) {
-            currentCutOffTime = parsed;
-          }
-        }
+      // Parse appointment date and time
+      const appointmentDate = parse(appointment.date, 'd MMMM yyyy', new Date());
+      const appointmentTime = parseTime(appointment.time, appointmentDate);
+      
+      // Calculate original cutOffTime and noShowTime (these are NEVER delayed)
+      // These are used for status transitions (Pending → Skipped → No-show)
+      const originalCutOffTime = subMinutes(appointmentTime, 15);
+      const originalNoShowTime = addMinutes(appointmentTime, 15);
+      
+      // Store the original times if not already set (only set once, never update)
+      // Store the doctor delay separately for display purposes
+      const updates: any = {
+        doctorDelayMinutes: totalDelayMinutes
+      };
+
+      // Only set cutOffTime and noShowTime if they don't exist (preserve original values)
+      // These should never be updated with delays - status transitions use original times
+      if (!appointment.cutOffTime) {
+        updates.cutOffTime = originalCutOffTime;
+      }
+      if (!appointment.noShowTime) {
+        updates.noShowTime = originalNoShowTime;
       }
 
-      // If we have the times, add delay
-      if (currentNoShowTime || currentCutOffTime) {
-        const updates: any = {};
-        
-        if (currentNoShowTime) {
-          const newNoShowTime = addMinutes(currentNoShowTime, delayMinutes);
-          updates.noShowTime = newNoShowTime;
-        }
-        
-        if (currentCutOffTime) {
-          const newCutOffTime = addMinutes(currentCutOffTime, delayMinutes);
-          updates.cutOffTime = newCutOffTime;
-        }
-
-        if (Object.keys(updates).length > 0) {
-          batch.update(doc.ref, updates);
-          hasWrites = true;
-          updatedCount++;
-        }
-      }
+      batch.update(doc.ref, updates);
+      hasWrites = true;
+      updatedCount++;
+      
     } catch (error) {
       console.warn(`Error updating appointment ${doc.id} with delay:`, error);
     }
@@ -209,7 +186,7 @@ async function updateAppointmentsWithDelay(
   if (hasWrites) {
     try {
       await batch.commit();
-      console.log(`[Delay Update] Updated ${updatedCount} appointments with ${delayMinutes} minute delay for doctor ${doctorId}`);
+      console.log(`[Delay Update] Updated ${updatedCount} appointments with ${totalDelayMinutes} minute doctor delay (stored separately, original cutOffTime/noShowTime preserved for status transitions)`);
     } catch (error) {
       console.error('Error committing delay updates:', error);
     }
@@ -237,14 +214,25 @@ export function useAppointmentStatusUpdater() {
       
       for (const apt of appointmentsToCheck) {
         try {
-          // Parse appointment date and time
-          const appointmentDate = parse(apt.date, 'd MMMM yyyy', new Date());
-          const appointmentTime = parseTime(apt.time, appointmentDate);
-          
           if (apt.status === 'Pending') {
-            // Check if 15 minutes before appointment (cut-off time) has passed
-            const confirmDeadline = subMinutes(appointmentTime, 15);
-            if (isAfter(now, confirmDeadline)) {
+            // Use stored cutOffTime from Firestore (original, never delayed)
+            let cutOffTime: Date;
+            if (apt.cutOffTime) {
+              // Convert Firestore timestamp to Date
+              cutOffTime = apt.cutOffTime instanceof Date 
+                ? apt.cutOffTime 
+                : apt.cutOffTime?.toDate 
+                  ? apt.cutOffTime.toDate() 
+                  : new Date(apt.cutOffTime);
+            } else {
+              // Fallback: calculate if not stored (for old appointments)
+              const appointmentDate = parse(apt.date, 'd MMMM yyyy', new Date());
+              const appointmentTime = parseTime(apt.time, appointmentDate);
+              cutOffTime = subMinutes(appointmentTime, 15);
+            }
+            
+            // Check if current time is greater than stored cutOffTime
+            if (isAfter(now, cutOffTime) || now.getTime() >= cutOffTime.getTime()) {
               const aptRef = doc(db, 'appointments', apt.id);
               batch.update(aptRef, { 
                 status: 'Skipped',
@@ -252,19 +240,34 @@ export function useAppointmentStatusUpdater() {
                 updatedAt: new Date()
               });
               hasWrites = true;
-              console.log(`Auto-updating appointment ${apt.id} from Pending to Skipped`);
+              console.log(`Auto-updating appointment ${apt.id} from Pending to Skipped (cutOffTime: ${cutOffTime.toISOString()}, now: ${now.toISOString()})`);
             }
           } else if (apt.status === 'Skipped') {
-            // Check if appointment time + 15 minutes has passed
-            const noShowTime = addMinutes(appointmentTime, 15);
-            if (isAfter(now, noShowTime)) {
+            // Use stored noShowTime from Firestore (original, never delayed)
+            let noShowTime: Date;
+            if (apt.noShowTime) {
+              // Convert Firestore timestamp to Date
+              noShowTime = apt.noShowTime instanceof Date 
+                ? apt.noShowTime 
+                : apt.noShowTime?.toDate 
+                  ? apt.noShowTime.toDate() 
+                  : new Date(apt.noShowTime);
+            } else {
+              // Fallback: calculate if not stored (for old appointments)
+              const appointmentDate = parse(apt.date, 'd MMMM yyyy', new Date());
+              const appointmentTime = parseTime(apt.time, appointmentDate);
+              noShowTime = addMinutes(appointmentTime, 15);
+            }
+            
+            // Check if current time is greater than stored noShowTime
+            if (isAfter(now, noShowTime) || now.getTime() >= noShowTime.getTime()) {
               const aptRef = doc(db, 'appointments', apt.id);
               batch.update(aptRef, { 
                 status: 'No-show',
                 updatedAt: new Date()
               });
               hasWrites = true;
-              console.log(`Auto-updating appointment ${apt.id} from Skipped to No-show`);
+              console.log(`Auto-updating appointment ${apt.id} from Skipped to No-show (noShowTime: ${noShowTime.toISOString()}, now: ${now.toISOString()})`);
             }
           }
         } catch (e) {
@@ -326,7 +329,9 @@ export function useAppointmentStatusUpdater() {
     };
 
     // Function to check and update appointment delays based on doctor consultation status
-    // Adds 1 minute delay per check (every minute) while doctor is not 'In'
+    // Calculates total delay (minutes since consultation start while doctor is not 'In')
+    // and applies it to all appointments' cutOffTime and noShowTime
+    // This ensures correct delays even if the app was closed and reopened
     const checkAndUpdateDelays = async (clinicId: string) => {
       try {
         const doctorsRef = collection(db, 'doctors');
@@ -336,17 +341,41 @@ export function useAppointmentStatusUpdater() {
 
         for (const doctorDoc of doctorsSnapshot.docs) {
           const doctor = { id: doctorDoc.id, ...doctorDoc.data() } as Doctor;
-          const { delayMinutes } = calculateDoctorDelay(doctor, now);
+          const { delayMinutes, availabilityStartTime } = calculateDoctorDelay(doctor, now);
           
           // Only add delay if doctor is not 'In' and availability has started
-          // Add 1 minute per check (incremental) to avoid compounding
-          if (delayMinutes > 0) {
-            // Add 1 minute delay (incremental, not total)
-            await updateAppointmentsWithDelay(
-              clinicId,
-              doctor.id,
-              1 // Add 1 minute per check
+          if (delayMinutes > 0 && availabilityStartTime) {
+            // Check if we're still within the consultation window
+            const currentDay = format(now, 'EEEE');
+            const todaysAvailability = doctor.availabilitySlots?.find(
+              slot => slot.day.toLowerCase() === currentDay.toLowerCase()
             );
+            
+            if (todaysAvailability && todaysAvailability.timeSlots?.length > 0) {
+              // Get the last session end time to check if we're still in consultation window
+              const lastSession = todaysAvailability.timeSlots[todaysAvailability.timeSlots.length - 1];
+              let availabilityEndTime: Date;
+              try {
+                availabilityEndTime = parseTime(lastSession.to, now);
+              } catch {
+                continue; // Skip if we can't parse end time
+              }
+              
+              // Only apply delay if we're still within the consultation window
+              if (isBefore(now, availabilityEndTime) || now.getTime() === availabilityEndTime.getTime()) {
+                // Store doctor delay separately (for display only)
+                // Status transitions (Pending → Skipped → No-show) always use ORIGINAL cutOffTime/noShowTime
+                await updateAppointmentsWithDelay(
+                  clinicId,
+                  doctor.id,
+                  delayMinutes // Total delay in minutes (stored in doctorDelayMinutes field)
+                );
+                console.log(`[Delay Update] Stored ${delayMinutes} minute doctor delay for doctor ${doctor.name} (consultation started at ${format(availabilityStartTime, 'hh:mm a')}, current time: ${format(now, 'hh:mm a')}). Status transitions use original cutOffTime/noShowTime.`);
+              } else {
+                // Consultation window has ended, clear the delay
+                await updateAppointmentsWithDelay(clinicId, doctor.id, 0);
+              }
+            }
           }
         }
       } catch (error) {
@@ -390,7 +419,18 @@ export function useAppointmentStatusUpdater() {
             // Run delay check immediately on mount
             checkAndUpdateDelays(clinicId);
 
+            // Set up real-time listener for doctor status changes
+            // This ensures delays stop immediately when doctor goes 'In'
+            const doctorsRef = collection(db, 'doctors');
+            const doctorsQuery = query(doctorsRef, where('clinicId', '==', clinicId));
+            const doctorsUnsubscribe = onSnapshot(doctorsQuery, (doctorsSnapshot) => {
+                // When doctor status changes, immediately recalculate delays
+                // If doctor goes 'In', delays will stop; if doctor goes 'Out' during consultation, delays will resume
+                checkAndUpdateDelays(clinicId);
+            });
+
             // Set an interval to re-run the check periodically, as a fallback for time passing
+            // Reduced to 30 seconds for more responsive updates while app is open
             const intervalId = setInterval(() => {
                 // Re-fetch to check for time-based status changes
                 getDocs(q).then(snapshot => {
@@ -404,11 +444,12 @@ export function useAppointmentStatusUpdater() {
                 checkAndUpdateDoctorStatuses(clinicId);
                 // Check and update appointment delays based on doctor consultation status
                 checkAndUpdateDelays(clinicId);
-            }, 60000); // Check every 1 minute (more frequent for better responsiveness)
+            }, 30000); // Check every 30 seconds for more responsive updates while app is open
 
             // Cleanup function
             return () => {
                 unsubscribe();
+                doctorsUnsubscribe();
                 clearInterval(intervalId);
             };
         }
