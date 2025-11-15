@@ -58,22 +58,46 @@ async function updateAppointmentStatuses(clinicId: string): Promise<void> {
     const appointment = docSnapshot.data() as Appointment;
     
     try {
-      // Parse appointment date and time
-      const appointmentDate = parse(appointment.date, 'd MMMM yyyy', new Date());
-      const appointmentTime = parseTime(appointment.time, appointmentDate);
-      const confirmDeadline = subMinutes(appointmentTime, 15); // 15 minutes before appointment (cut-off time)
-      
       if (appointment.status === 'Pending') {
-        // Check if 15 minutes before appointment time has passed and appointment is still Pending (not confirmed)
-        // If patient hasn't confirmed by 15 minutes before, mark as Skipped
-        if (isAfter(now, confirmDeadline)) {
+        // Use stored cutOffTime from database (includes doctor delay if any)
+        let cutOffTime: Date;
+        if (appointment.cutOffTime) {
+          // Convert Firestore timestamp to Date
+          cutOffTime = appointment.cutOffTime instanceof Date 
+            ? appointment.cutOffTime 
+            : appointment.cutOffTime?.toDate 
+              ? appointment.cutOffTime.toDate() 
+              : new Date(appointment.cutOffTime);
+        } else {
+          // Fallback: calculate if not stored (for old appointments)
+          const appointmentDate = parse(appointment.date, 'd MMMM yyyy', new Date());
+          const appointmentTime = parseTime(appointment.time, appointmentDate);
+          cutOffTime = subMinutes(appointmentTime, 15);
+        }
+        
+        // Check if current time is greater than stored cutOffTime
+        if (isAfter(now, cutOffTime) || now.getTime() >= cutOffTime.getTime()) {
           appointmentsToSkip.push({ id: docSnapshot.id, appointment });
         }
       } else if (appointment.status === 'Skipped') {
-        // Check if appointment time + 15 minutes has passed
-        const noShowTime = addMinutes(appointmentTime, 15);
+        // Use stored noShowTime from database (includes doctor delay if any)
+        let noShowTime: Date;
+        if (appointment.noShowTime) {
+          // Convert Firestore timestamp to Date
+          noShowTime = appointment.noShowTime instanceof Date 
+            ? appointment.noShowTime 
+            : appointment.noShowTime?.toDate 
+              ? appointment.noShowTime.toDate() 
+              : new Date(appointment.noShowTime);
+        } else {
+          // Fallback: calculate if not stored (for old appointments)
+          const appointmentDate = parse(appointment.date, 'd MMMM yyyy', new Date());
+          const appointmentTime = parseTime(appointment.time, appointmentDate);
+          noShowTime = addMinutes(appointmentTime, 15);
+        }
         
-        if (isAfter(now, noShowTime)) {
+        // Check if current time is greater than stored noShowTime
+        if (isAfter(now, noShowTime) || now.getTime() >= noShowTime.getTime()) {
           appointmentsToMarkNoShow.push({ id: docSnapshot.id, appointment });
         }
       }

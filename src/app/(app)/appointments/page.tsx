@@ -192,20 +192,11 @@ export default function AppointmentsPage() {
     return () => clearInterval(timerId);
   }, []);
 
-  // Check if Confirm Arrival button should be shown (disappears 5 minutes before appointment)
+  // Check if Confirm Arrival button should be shown (show for all pending appointments)
   const shouldShowConfirmArrival = useCallback((appointment: Appointment): boolean => {
-    if (appointment.status !== 'Pending') return false;
-    
-    try {
-      const appointmentDate = parse(appointment.date, 'd MMMM yyyy', new Date());
-      const appointmentTime = parseTime(appointment.time, appointmentDate);
-      const confirmDeadline = subMinutes(appointmentTime, 15); // 15 minutes before appointment (cut-off time)
-      // Show button if current time is before the deadline (15 minutes before appointment)
-      return isBefore(currentTime, confirmDeadline);
-    } catch {
-      return false;
-    }
-  }, [currentTime]);
+    // Show confirm arrival icon for all pending appointments
+    return appointment.status === 'Pending';
+  }, []);
 
   const { toast } = useToast();
   const isEditing = !!editingAppointment;
@@ -2280,11 +2271,61 @@ export default function AppointmentsPage() {
     computeAllQueues();
   }, [filteredAppointments, today, clinicId, doctors]);
   
+  // Calculate next sessionIndex for each doctor
+  const nextSessionIndexByDoctor = useMemo(() => {
+    const result = new Map<string, number>();
+    const now = currentTime;
+    const todayDay = format(now, 'EEEE');
+    
+    doctors.forEach(doctor => {
+      if (!doctor.availabilitySlots) return;
+      
+      const todayAvailability = doctor.availabilitySlots.find(slot => slot.day === todayDay);
+      if (!todayAvailability?.timeSlots) return;
+      
+      // Find the next session (first session that hasn't ended yet)
+      for (let i = 0; i < todayAvailability.timeSlots.length; i++) {
+        const session = todayAvailability.timeSlots[i];
+        try {
+          const sessionStart = parseTime(session.from, now);
+          const sessionEnd = parseTime(session.to, now);
+          
+          // If current time is before session end, this is the next session
+          if (isBefore(now, sessionEnd) || now.getTime() === sessionEnd.getTime()) {
+            result.set(doctor.name, i);
+            break;
+          }
+        } catch {
+          // Skip if parsing fails
+          continue;
+        }
+      }
+    });
+    
+    return result;
+  }, [doctors, currentTime]);
+
   const todaysAppointments = useMemo(() => {
     const filteredForToday = filteredAppointments.filter(apt => apt.date === today);
     const skipped = filteredForToday.filter(apt => apt.status === 'Skipped');
     const confirmed = filteredForToday.filter(apt => apt.status === 'Confirmed');
-    const pending = filteredForToday.filter(apt => apt.status === 'Pending');
+    
+    // Filter Pending to only show appointments from the next sessionIndex for each doctor
+    const pending = filteredForToday.filter(apt => {
+      if (apt.status !== 'Pending') return false;
+      
+      // If appointment doesn't have sessionIndex, include it (for backward compatibility)
+      if (apt.sessionIndex === undefined) return true;
+      
+      // Get the next sessionIndex for this doctor
+      const nextSessionIndex = nextSessionIndexByDoctor.get(apt.doctor);
+      
+      // If we couldn't determine next session for this doctor, include the appointment
+      if (nextSessionIndex === undefined) return true;
+      
+      // Only include if appointment's sessionIndex matches the next sessionIndex
+      return apt.sessionIndex === nextSessionIndex;
+    });
   
     const parseTimeForSort = (timeStr: string) => parse(timeStr, "hh:mm a", new Date()).getTime();
   
@@ -2304,7 +2345,7 @@ export default function AppointmentsPage() {
   
     // Return Confirmed at top, then Pending, then Skipped
     return [...confirmed, ...pending, ...skipped];
-  }, [filteredAppointments, today]);
+  }, [filteredAppointments, today, nextSessionIndexByDoctor]);
   
   // Get buffer queue for a specific doctor (first 2 from arrived queue)
   const getBufferQueue = (doctorName: string): Appointment[] => {

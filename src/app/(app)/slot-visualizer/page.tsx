@@ -1373,6 +1373,10 @@ const sessionProgress = useMemo(() => {
                                 </p>
                                 <div className="space-y-1 text-[11px] text-muted-foreground">
                                   <p>
+                                    <span className="font-semibold text-foreground/80">Status:</span>{" "}
+                                    <span className="font-medium">{appointment.status ?? "—"}</span>
+                                  </p>
+                                  <p>
                                     <span className="font-semibold text-foreground/80">Appointment:</span>{" "}
                                     {formatTimeDisplay(appointment.time)}
                                   </p>
@@ -1393,6 +1397,26 @@ const sessionProgress = useMemo(() => {
 
                           <div>
                             <div className="flex flex-wrap items-center gap-2">
+                              {appointment?.status && (
+                                <Badge 
+                                  variant={
+                                    appointment.status === "Pending" ? "secondary" :
+                                    appointment.status === "Confirmed" ? "default" :
+                                    appointment.status === "Completed" ? "default" :
+                                    appointment.status === "Skipped" ? "outline" :
+                                    appointment.status === "No-show" ? "destructive" :
+                                    appointment.status === "Cancelled" ? "destructive" :
+                                    "outline"
+                                  }
+                                  className={
+                                    appointment.status === "Completed" ? "bg-green-500 text-white" :
+                                    appointment.status === "Skipped" ? "border-orange-400 text-orange-700" :
+                                    ""
+                                  }
+                                >
+                                  {appointment.status}
+                                </Badge>
+                              )}
                               {isBlocked ? (
                                 <Badge variant="outline" className="border-gray-400 text-gray-700 bg-gray-100">
                                   Blocked (Cancelled & No-Show Bucket)
