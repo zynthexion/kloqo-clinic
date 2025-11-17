@@ -220,6 +220,7 @@ export default function DoctorsPage() {
   const [newFollowUp, setNewFollowUp] = useState<number | string>(0);
   const [isEditingBooking, setIsEditingBooking] = useState(false);
   const [newBooking, setNewBooking] = useState<number | string>(0);
+  const [isUpdatingConsultationStatus, setIsUpdatingConsultationStatus] = useState(false);
 
   // State for break scheduling
   const [startSlot, setStartSlot] = useState<Date | null>(null);
@@ -1212,6 +1213,37 @@ export default function DoctorsPage() {
     return appointments.filter(apt => apt.doctor === selectedDoctor.name && apt.date === todayStr).length;
   }, [appointments, selectedDoctor]);
 
+  const handleConsultationStatusToggle = useCallback(async (nextStatus: 'In' | 'Out') => {
+    if (!selectedDoctor || selectedDoctor.consultationStatus === nextStatus) {
+      return;
+    }
+    setIsUpdatingConsultationStatus(true);
+    try {
+      await updateDoc(doc(db, 'doctors', selectedDoctor.id), {
+        consultationStatus: nextStatus,
+        updatedAt: new Date(),
+      });
+      setSelectedDoctor(prev => {
+        if (!prev || prev.id !== selectedDoctor.id) return prev;
+        return { ...prev, consultationStatus: nextStatus };
+      });
+      setDoctors(prev =>
+        prev.map(docItem =>
+          docItem.id === selectedDoctor.id ? { ...docItem, consultationStatus: nextStatus } : docItem
+        )
+      );
+      toast({
+        title: `Status updated`,
+        description: `Consultation status set to ${nextStatus}.`,
+      });
+    } catch (error) {
+      console.error('Error updating consultation status:', error);
+      toast({ variant: 'destructive', title: 'Failed to update status', description: 'Please try again.' });
+    } finally {
+      setIsUpdatingConsultationStatus(false);
+    }
+  }, [selectedDoctor, toast]);
+
 
   return (
     <>
@@ -1419,18 +1451,41 @@ export default function DoctorsPage() {
                         </div>
                     )}
                     <div className="flex-grow"></div>
-                     <div className={cn(
-                        "flex items-center space-x-2 p-2 rounded-md",
-                        selectedDoctor.consultationStatus === 'In' ? 'bg-green-500' : 'bg-red-500'
-                    )}>
-                      <div className="relative flex h-3 w-3">
-                          {selectedDoctor.consultationStatus === 'In' && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>}
-                          <span className={cn("relative inline-flex rounded-full h-3 w-3 bg-white")}></span>
-                      </div>
-                      <Label className="font-semibold text-white">
-                        {selectedDoctor.consultationStatus || 'Out'}
-                      </Label>
-                   </div>
+                    <div className="flex flex-col items-end gap-2">
+                      <Button
+                        variant="secondary"
+                        disabled={isUpdatingConsultationStatus}
+                        onClick={() =>
+                          handleConsultationStatusToggle(
+                            selectedDoctor.consultationStatus === 'In' ? 'Out' : 'In'
+                          )
+                        }
+                        className={cn(
+                          'flex items-center gap-3 rounded-full px-4 py-2 text-white border-none shadow-md transition-colors',
+                          selectedDoctor.consultationStatus === 'In'
+                            ? 'bg-green-500 hover:bg-green-600'
+                            : 'bg-red-500 hover:bg-red-600',
+                          isUpdatingConsultationStatus && 'opacity-70 cursor-not-allowed'
+                        )}
+                      >
+                        <div className="relative flex h-3 w-3">
+                          {selectedDoctor.consultationStatus === 'In' && (
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                          )}
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-white" />
+                        </div>
+                        <span className="font-semibold">
+                          {isUpdatingConsultationStatus
+                            ? 'Updating...'
+                            : selectedDoctor.consultationStatus === 'In'
+                            ? 'Mark as Out'
+                            : 'Mark as In'}
+                        </span>
+                      </Button>
+                      <span className="text-xs uppercase tracking-wide text-white/80">
+                        Current: {selectedDoctor.consultationStatus || 'Out'}
+                      </span>
+                    </div>
                 </div>
             </div>
 

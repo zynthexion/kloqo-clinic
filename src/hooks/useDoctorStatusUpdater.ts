@@ -5,8 +5,8 @@ import { useEffect } from 'react';
 import { collection, doc, getDoc, getDocs, query, writeBatch, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/firebase';
-import type { Doctor } from '@/lib/types';
-import { isWithinInterval, parse, format } from 'date-fns';
+import type { Doctor, Appointment } from '@/lib/types';
+import { isWithinInterval, parse, format, addMinutes } from 'date-fns';
 
 /**
  * Parses time string to Date object, handling both "hh:mm a" and "HH:mm" formats
@@ -31,6 +31,20 @@ function parseTime(timeStr: string, date: Date): Date {
   }
 }
 
+function parseAppointmentDateTime(appointment: Appointment, fallback: Date): Date | null {
+  try {
+    if (appointment.date && appointment.time) {
+      return parse(`${appointment.date} ${appointment.time}`, 'd MMMM yyyy hh:mm a', fallback);
+    }
+    if (appointment.date) {
+      return parse(appointment.date, 'd MMMM yyyy', fallback);
+    }
+  } catch (error) {
+    console.error('Failed to parse appointment date/time', appointment.id, error);
+  }
+  return null;
+}
+
 export function useDoctorStatusUpdater() {
   const { currentUser } = useAuth();
 
@@ -44,11 +58,37 @@ export function useDoctorStatusUpdater() {
         if (!clinicId) return;
 
         const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
-        const doctorsSnapshot = await getDocs(doctorsQuery);
+        const appointmentsQuery = query(
+          collection(db, "appointments"),
+          where("clinicId", "==", clinicId),
+          where("status", "==", "Confirmed")
+        );
+        const [doctorsSnapshot, appointmentsSnapshot] = await Promise.all([
+          getDocs(doctorsQuery),
+          getDocs(appointmentsQuery)
+        ]);
         const doctors = doctorsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Doctor));
+        const now = new Date();
+        const todayStr = format(now, 'd MMMM yyyy');
+        const todaysConfirmedAppointments = appointmentsSnapshot.docs
+          .map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Appointment))
+          .filter(appt => appt.date === todayStr);
+        const appointmentsByDoctor = new Map<string, Appointment[]>();
+        const pushAppointment = (key: string | undefined | null, appointment: Appointment) => {
+          if (!key) return;
+          const existing = appointmentsByDoctor.get(key) ?? [];
+          existing.push(appointment);
+          appointmentsByDoctor.set(key, existing);
+        };
+        todaysConfirmedAppointments.forEach(appt => {
+          if (appt.doctorId) {
+            pushAppointment(appt.doctorId, appt);
+          } else if (appt.doctor) {
+            pushAppointment(`name:${appt.doctor}`, appt);
+          }
+        });
         
         const batch = writeBatch(db);
-        const now = new Date();
         const todayDay = format(now, 'EEEE'); // e.g., 'Monday', 'Tuesday'
 
         let batchHasWrites = false;
@@ -76,6 +116,31 @@ export function useDoctorStatusUpdater() {
           } else {
             // No availability slots = should be out
             shouldBeOut = true;
+          }
+
+          if (shouldBeOut) {
+            const doctorAppointments =
+              appointmentsByDoctor.get(doctor.id) ??
+              appointmentsByDoctor.get(`name:${doctor.name}`) ??
+              [];
+
+            if (doctorAppointments.length > 0) {
+              if (doctorAppointments.length > 1) {
+                shouldBeOut = false;
+              } else {
+                const appointmentDateTime = parseAppointmentDateTime(doctorAppointments[0], now);
+                if (appointmentDateTime) {
+                  const avgConsultingTime = Math.max(Number(doctor.averageConsultingTime) || 15, 5);
+                  const graceDeadline = addMinutes(appointmentDateTime, avgConsultingTime * 2);
+                  if (now <= graceDeadline) {
+                    shouldBeOut = false;
+                  }
+                } else {
+                  // Could not parse appointment time, give benefit of doubt
+                  shouldBeOut = false;
+                }
+              }
+            }
           }
           
           // Only auto-set to 'Out', never auto-set to 'In'

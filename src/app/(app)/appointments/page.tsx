@@ -17,7 +17,7 @@ import type { Appointment, Doctor, Patient, User } from "@/lib/types";
 import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc, orderBy, onSnapshot, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
-import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes, isAfter, startOfDay, addHours, differenceInMinutes, parseISO } from "date-fns";
+import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes, isAfter, startOfDay, addHours, differenceInMinutes, parseISO, addDays } from "date-fns";
 import { updateAppointmentAndDoctorStatuses } from "@/lib/status-update-service";
 import { cn } from "@/lib/utils";
 import {
@@ -220,6 +220,116 @@ function applyBreakOffsets(originalTime: Date, intervals: BreakInterval[]): Date
     }
     return acc;
   }, new Date(originalTime));
+}
+
+function isDoctorAdvanceCapacityReachedOnDate(
+  doctor: Doctor,
+  date: Date,
+  appointments: Appointment[],
+  options: { isEditing?: boolean; editingAppointment?: Appointment | null } = {}
+): boolean {
+  const dayOfWeekName = daysOfWeek[getDay(date)];
+  const availabilityForDay = doctor.availabilitySlots?.find(slot => slot.day === dayOfWeekName);
+  if (!availabilityForDay?.timeSlots?.length) {
+    return false;
+  }
+
+  const slotDuration = doctor.averageConsultingTime || 15;
+  const now = new Date();
+  const slotsBySession: Array<{ sessionIndex: number; slotCount: number }> = [];
+
+  availabilityForDay.timeSlots.forEach((session, sessionIndex) => {
+    let currentTime = parseDateFns(session.from, 'hh:mm a', date);
+    const sessionEnd = parseDateFns(session.to, 'hh:mm a', date);
+    let futureSlotCount = 0;
+
+    while (isBefore(currentTime, sessionEnd)) {
+      const slotTime = new Date(currentTime);
+      if (isAfter(slotTime, now) || slotTime.getTime() >= now.getTime()) {
+        futureSlotCount += 1;
+      }
+      currentTime = addMinutes(currentTime, slotDuration);
+    }
+
+    if (futureSlotCount > 0) {
+      slotsBySession.push({ sessionIndex, slotCount: futureSlotCount });
+    }
+  });
+
+  if (slotsBySession.length === 0) {
+    return false;
+  }
+
+  let maximumAdvanceTokens = 0;
+  slotsBySession.forEach(({ slotCount }) => {
+    const sessionMinimumWalkInReserve = slotCount > 0 ? Math.ceil(slotCount * 0.15) : 0;
+    const sessionAdvanceCapacity = Math.max(slotCount - sessionMinimumWalkInReserve, 0);
+    maximumAdvanceTokens += sessionAdvanceCapacity;
+  });
+
+  if (maximumAdvanceTokens === 0) {
+    return true;
+  }
+
+  const formattedDate = format(date, 'd MMMM yyyy');
+  let activeAdvanceCount = appointments.filter(appointment => {
+    return (
+      appointment.doctor === doctor.name &&
+      appointment.bookedVia !== 'Walk-in' &&
+      appointment.date === formattedDate &&
+      (appointment.status === 'Pending' || appointment.status === 'Confirmed')
+    );
+  }).length;
+
+  const { isEditing, editingAppointment } = options;
+  if (
+    isEditing &&
+    editingAppointment &&
+    editingAppointment.bookedVia !== 'Walk-in' &&
+    (editingAppointment.status === 'Pending' || editingAppointment.status === 'Confirmed') &&
+    editingAppointment.date === formattedDate &&
+    editingAppointment.doctor === doctor.name
+  ) {
+    activeAdvanceCount = Math.max(0, activeAdvanceCount - 1);
+  }
+
+  return activeAdvanceCount >= maximumAdvanceTokens;
+}
+
+function getNextAvailableDate(
+  doctor?: Doctor | null,
+  opts: {
+    startDate?: Date;
+    appointments?: Appointment[];
+    isEditing?: boolean;
+    editingAppointment?: Appointment | null;
+  } = {}
+): Date {
+  const { startDate = new Date(), appointments = [], isEditing = false, editingAppointment = null } = opts;
+
+  if (!doctor?.availabilitySlots || doctor.availabilitySlots.length === 0) {
+    return startOfDay(startDate);
+  }
+
+  const searchStart = startOfDay(startDate);
+
+  for (let offset = 0; offset < 60; offset++) {
+    const candidate = addDays(searchStart, offset);
+    const dayName = format(candidate, 'EEEE');
+    const availability = doctor.availabilitySlots.find(
+      slot => slot.day?.toLowerCase() === dayName.toLowerCase() && slot.timeSlots?.length
+    );
+
+    if (!availability) {
+      continue;
+    }
+
+    if (!isDoctorAdvanceCapacityReachedOnDate(doctor, candidate, appointments, { isEditing, editingAppointment })) {
+      return candidate;
+    }
+  }
+
+  return searchStart;
 }
 
 
@@ -434,10 +544,25 @@ export default function AppointmentsPage() {
         const doctorsUnsubscribe = onSnapshot(doctorsQuery, (snapshot) => {
             const doctorsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
             setDoctors(doctorsList);
-            if (doctorsList.length > 0 && !form.getValues('doctor')) {
+
+            const currentDoctorId = form.getValues('doctor');
+            const currentDoctorStillExists = doctorsList.some(doc => doc.id === currentDoctorId);
+
+            if (doctorsList.length > 0 && (!currentDoctorId || !currentDoctorStillExists)) {
                 const firstDoctor = doctorsList[0];
                 form.setValue("doctor", firstDoctor.id, { shouldValidate: true });
                 form.setValue("department", firstDoctor.department || "", { shouldValidate: true });
+                const upcomingDate = getNextAvailableDate(firstDoctor);
+                form.setValue("date", upcomingDate, { shouldValidate: true });
+            } else if (currentDoctorId) {
+                const currentDoctor = doctorsList.find(doc => doc.id === currentDoctorId);
+                if (currentDoctor) {
+                    form.setValue("department", currentDoctor.department || "", { shouldValidate: true });
+                    const upcomingDate = getNextAvailableDate(currentDoctor);
+                    form.setValue("date", upcomingDate, { shouldValidate: true });
+                }
+            } else {
+                form.setValue("department", "", { shouldValidate: true });
             }
         }, (error) => {
             console.error("Error fetching doctors:", error);
@@ -484,7 +609,9 @@ export default function AppointmentsPage() {
   });
 
   const selectedDoctor = useMemo(() => {
-    if (!watchedDoctorId) return doctors.length > 0 ? doctors[0] : null;
+    if (!watchedDoctorId) {
+      return doctors.length > 0 ? doctors[0] : null;
+    }
     return doctors.find(d => d.id === watchedDoctorId) || null;
   }, [doctors, watchedDoctorId]);
 
@@ -1822,7 +1949,8 @@ export default function AppointmentsPage() {
     const doctor = doctors.find(d => d.id === doctorId);
     if (doctor) {
       form.setValue("department", doctor.department || "", { shouldValidate: true });
-      form.setValue("date", undefined, { shouldValidate: true });
+      const upcomingDate = getNextAvailableDate(doctor);
+      form.setValue("date", upcomingDate, { shouldValidate: true });
       form.setValue("time", "", { shouldValidate: true });
     }
   };
@@ -1915,87 +2043,57 @@ export default function AppointmentsPage() {
     .filter((date): date is Date => date !== null);
   }, [selectedDoctor?.leaveSlots]);
 
-  const { isAdvanceCapacityReached } = useMemo(() => {
-    if (!selectedDoctor || appointmentType !== 'Advanced Booking') {
-      return { isAdvanceCapacityReached: false };
+  const isAdvanceCapacityReached = useMemo(() => {
+    if (!selectedDoctor || appointmentType !== 'Advanced Booking' || !selectedDate) {
+      return false;
     }
-
-    const dayOfWeek = daysOfWeek[getDay(selectedDate)];
-    const availabilityForDay = selectedDoctor.availabilitySlots?.find(slot => slot.day === dayOfWeek);
-    if (!availabilityForDay?.timeSlots?.length) {
-      return { isAdvanceCapacityReached: false };
-    }
-
-    const slotDuration = selectedDoctor.averageConsultingTime || 15;
-    const now = new Date(); // Use current time to calculate capacity based on future slots only
-    
-    // Calculate total FUTURE slots per session and maximum advance tokens per session (85% of future slots in each session)
-    // This dynamically adjusts as time passes - capacity is recalculated based on remaining future slots
-    const slotsBySession: Array<{ sessionIndex: number; slotCount: number }> = [];
-    availabilityForDay.timeSlots.forEach((session, sessionIndex) => {
-      let currentTime = parseDateFns(session.from, 'hh:mm a', selectedDate);
-      const sessionEnd = parseDateFns(session.to, 'hh:mm a', selectedDate);
-      let futureSlotCount = 0;
-      
-      // Only count future slots (including current time)
-      while (isBefore(currentTime, sessionEnd)) {
-        const slotTime = new Date(currentTime);
-        if (isAfter(slotTime, now) || slotTime.getTime() >= now.getTime()) {
-          futureSlotCount += 1;
-        }
-        currentTime = addMinutes(currentTime, slotDuration);
-      }
-      
-      if (futureSlotCount > 0) {
-        slotsBySession.push({ sessionIndex, slotCount: futureSlotCount });
-      }
-    });
-
-    if (slotsBySession.length === 0) {
-      return { isAdvanceCapacityReached: false };
-    }
-
-    // Calculate maximum advance tokens as sum of 85% capacity from FUTURE slots in each session
-    let maximumAdvanceTokens = 0;
-    slotsBySession.forEach(({ slotCount }) => {
-      const sessionMinimumWalkInReserve = slotCount > 0 ? Math.ceil(slotCount * 0.15) : 0;
-      const sessionAdvanceCapacity = Math.max(slotCount - sessionMinimumWalkInReserve, 0);
-      maximumAdvanceTokens += sessionAdvanceCapacity;
-    });
-
-    if (maximumAdvanceTokens === 0) {
-      return { isAdvanceCapacityReached: true };
-    }
-
-    const formattedDate = format(selectedDate, 'd MMMM yyyy');
-    let activeAdvanceCount = appointments.filter(appointment => {
-      return (
-        appointment.bookedVia !== 'Walk-in' &&
-        appointment.date === formattedDate &&
-        (appointment.status === 'Pending' || appointment.status === 'Confirmed')
-      );
-    }).length;
-
-    if (
-      isEditing &&
-      editingAppointment &&
-      editingAppointment.bookedVia !== 'Walk-in' &&
-      (editingAppointment.status === 'Pending' || editingAppointment.status === 'Confirmed') &&
-      editingAppointment.date === formattedDate
-    ) {
-      activeAdvanceCount = Math.max(0, activeAdvanceCount - 1);
-    }
-
-    return {
-      isAdvanceCapacityReached: activeAdvanceCount >= maximumAdvanceTokens,
-    };
+    return isDoctorAdvanceCapacityReachedOnDate(selectedDoctor, selectedDate, appointments, { isEditing, editingAppointment });
   }, [selectedDoctor, selectedDate, appointments, appointmentType, isEditing, editingAppointment]);
 
   useEffect(() => {
-    if (appointmentType === 'Advanced Booking' && isAdvanceCapacityReached) {
+    if (appointmentType !== 'Advanced Booking') {
+      return;
+    }
+    if (isAdvanceCapacityReached) {
       form.setValue('time', '', { shouldValidate: true });
     }
-  }, [appointmentType, isAdvanceCapacityReached, form]);
+    if (
+      isAdvanceCapacityReached &&
+      selectedDoctor &&
+      selectedDate
+    ) {
+      const maxLookAheadDays = 90;
+      for (let offset = 1; offset <= maxLookAheadDays; offset++) {
+        const candidate = addDays(selectedDate, offset);
+        const dayName = format(candidate, 'EEEE');
+        const availability = selectedDoctor.availabilitySlots?.find(
+          slot => slot.day === dayName && slot.timeSlots?.length
+        );
+        if (!availability) {
+          continue;
+        }
+        const capacityReached = isDoctorAdvanceCapacityReachedOnDate(
+          selectedDoctor,
+          candidate,
+          appointments,
+          { isEditing, editingAppointment }
+        );
+        if (!capacityReached) {
+          form.setValue('date', candidate, { shouldValidate: true });
+          break;
+        }
+      }
+    }
+  }, [
+    appointmentType,
+    isAdvanceCapacityReached,
+    selectedDoctor,
+    selectedDate,
+    appointments,
+    isEditing,
+    editingAppointment,
+    form,
+  ]);
 
   const sessionSlots = useMemo(() => {
     if (appointmentType === 'Advanced Booking' && isAdvanceCapacityReached) {
@@ -2899,33 +2997,42 @@ export default function AppointmentsPage() {
                                     </Label>
                                   </RadioGroup>
                                 </div>
-                                <FormField control={form.control} name="doctor" render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Doctor</FormLabel>
-                                    <Select onValueChange={onDoctorChange} defaultValue={doctors.length > 0 ? doctors[0].id : ""} value={field.value}>
-                                      <FormControl>
-                                        <SelectTrigger>
-                                          <SelectValue placeholder="Select a doctor" />
-                                        </SelectTrigger>
-                                      </FormControl>
-                                      <SelectContent>
-                                        {doctors.map(doc => (
-                                          <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                  </FormItem>
-                                )} />
-                                <FormField control={form.control} name="department" render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>Department</FormLabel>
-                                    <FormControl>
-                                      <Input readOnly placeholder="Department" {...field} value={field.value ?? ''} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )} />
+                                {doctors.length > 1 ? (
+                                  <FormField control={form.control} name="doctor" render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Doctor</FormLabel>
+                                      <Select
+                                        onValueChange={onDoctorChange}
+                                        value={field.value || undefined}
+                                      >
+                                        <FormControl>
+                                          <SelectTrigger>
+                                            <SelectValue placeholder="Select a doctor" />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                          {doctors.map(doc => (
+                                            <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )} />
+                                ) : (
+                                  <div className="space-y-2">
+                                    <Label className="text-sm text-muted-foreground">Doctor</Label>
+                                    <p className="text-lg font-semibold">
+                                      {selectedDoctor ? `${selectedDoctor.name} — ${selectedDoctor.specialty}` : 'No doctors available'}
+                                    </p>
+                                  </div>
+                                )}
+                                <div className="space-y-2">
+                                  <Label className="text-sm text-muted-foreground">Department</Label>
+                                  <p className="text-base">
+                                    {selectedDoctor?.department || 'Not assigned'}
+                                  </p>
+                                </div>
                                 {appointmentType === 'Advanced Booking' && selectedDoctor && selectedDate && (
                                     <div className="space-y-4 max-h-60 overflow-y-auto pr-2">
                                         {isAdvanceCapacityReached && (
@@ -3100,16 +3207,46 @@ export default function AppointmentsPage() {
                       </>
                     ) : (
                       <>
-                        <CardTitle>Today's Appointments</CardTitle>
-                        <div className="relative">
-                          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            type="search"
-                            placeholder="Search by patient, doctor..."
-                            className="w-full rounded-lg bg-background pl-8 h-9"
-                            value={drawerSearchTerm}
-                            onChange={(e) => setDrawerSearchTerm(e.target.value)}
-                          />
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full">
+                          <div className="flex items-center gap-2">
+                            <CardTitle>Today's Appointments</CardTitle>
+                            {doctors.length > 1 && (
+                              <>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" size="icon" className="h-8 w-8">
+                                      <Stethoscope className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="start">
+                                    <DropdownMenuItem onClick={() => setSelectedDrawerDoctor('all')}>
+                                      All Doctors
+                                    </DropdownMenuItem>
+                                    {doctors.map(doc => (
+                                      <DropdownMenuItem key={doc.id} onClick={() => setSelectedDrawerDoctor(doc.name)}>
+                                        {doc.name}
+                                      </DropdownMenuItem>
+                                    ))}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                                <span className="text-xs text-muted-foreground">
+                                  {selectedDrawerDoctor && selectedDrawerDoctor !== 'all'
+                                    ? `Doctor: ${selectedDrawerDoctor}`
+                                    : 'All Doctors'}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                          <div className="relative w-full sm:w-64">
+                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              type="search"
+                              placeholder="Search by patient, doctor..."
+                              className="w-full rounded-lg bg-background pl-8 h-9"
+                              value={drawerSearchTerm}
+                              onChange={(e) => setDrawerSearchTerm(e.target.value)}
+                            />
+                          </div>
                         </div>
                         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                           <TabsList className="grid w-full grid-cols-2">
