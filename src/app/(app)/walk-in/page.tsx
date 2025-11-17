@@ -21,7 +21,7 @@ import { db } from '@/lib/firebase';
 import { doc, getDoc, collection, addDoc, query, where, getDocs, serverTimestamp, setDoc, deleteDoc } from 'firebase/firestore';
 import type { Appointment, Doctor, Patient } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
-import { format, isWithinInterval, parse, subMinutes, addMinutes } from 'date-fns';
+import { format, isWithinInterval, parse, subMinutes, addMinutes, differenceInMinutes, parseISO } from 'date-fns';
 import { parseTime } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -52,6 +52,80 @@ const formSchema = z.object({
 
 // Define a type for the unsaved appointment data
 type UnsavedAppointment = Omit<Appointment, 'id'> & { createdAt: any };
+
+type BreakInterval = {
+  start: Date;
+  end: Date;
+};
+
+function buildBreakIntervals(doctor: Doctor | null, referenceDate: Date | null): BreakInterval[] {
+  if (!doctor?.leaveSlots || !referenceDate) {
+    return [];
+  }
+
+  const consultationTime = doctor.averageConsultingTime || 15;
+
+  const slotsForDay = (doctor.leaveSlots || [])
+    .map((leave) => {
+      if (typeof leave === 'string') {
+        try {
+          return parseISO(leave);
+        } catch {
+          return null;
+        }
+      }
+      if (leave && typeof (leave as any).toDate === 'function') {
+        try {
+          return (leave as any).toDate();
+        } catch {
+          return null;
+        }
+      }
+      if (leave instanceof Date) {
+        return leave;
+      }
+      return null;
+    })
+    .filter((date): date is Date => !!date && !isNaN(date.getTime()) && format(date, 'yyyy-MM-dd') === format(referenceDate, 'yyyy-MM-dd'))
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  if (slotsForDay.length === 0) {
+    return [];
+  }
+
+  const intervals: BreakInterval[] = [];
+  let currentInterval: BreakInterval | null = null;
+
+  for (const slot of slotsForDay) {
+    if (!currentInterval) {
+      currentInterval = { start: slot, end: addMinutes(slot, consultationTime) };
+      continue;
+    }
+
+    if (slot.getTime() === currentInterval.end.getTime()) {
+      currentInterval.end = addMinutes(slot, consultationTime);
+    } else {
+      intervals.push(currentInterval);
+      currentInterval = { start: slot, end: addMinutes(slot, consultationTime) };
+    }
+  }
+
+  if (currentInterval) {
+    intervals.push(currentInterval);
+  }
+
+  return intervals;
+}
+
+function applyBreakOffsets(originalTime: Date, intervals: BreakInterval[]): Date {
+  return intervals.reduce((acc, interval) => {
+    if (acc.getTime() >= interval.start.getTime()) {
+      const offset = differenceInMinutes(interval.end, interval.start);
+      return addMinutes(acc, offset);
+    }
+    return acc;
+  }, new Date(originalTime));
+}
 
 function WalkInRegistrationContent() {
   const router = useRouter();
@@ -317,9 +391,11 @@ function WalkInRegistrationContent() {
       
         // Calculate cut-off time and no-show time
         const appointmentDate = parse(format(new Date(), "d MMMM yyyy"), "d MMMM yyyy", new Date());
-        const appointmentTime = estimatedTime;
-        const cutOffTime = subMinutes(appointmentTime, 15);
-        const noShowTime = addMinutes(appointmentTime, 15);
+        const previewBreakIntervals = buildBreakIntervals(doctor, appointmentDate);
+        const adjustedEstimatedTime = applyBreakOffsets(estimatedTime, previewBreakIntervals);
+        const adjustedEstimatedTimeStr = format(adjustedEstimatedTime, "hh:mm a");
+        const cutOffTime = subMinutes(adjustedEstimatedTime, 15);
+        const noShowTime = addMinutes(adjustedEstimatedTime, 15);
         
         const newAppointmentData: UnsavedAppointment = {
             patientName: values.patientName,
@@ -333,8 +409,8 @@ function WalkInRegistrationContent() {
             department: doctor.department,
             bookedVia: 'Walk-in',
             date: format(new Date(), "d MMMM yyyy"),
-            time: format(estimatedTime, "hh:mm a"),
-            arriveByTime: format(estimatedTime, "hh:mm a"),
+            time: adjustedEstimatedTimeStr,
+            arriveByTime: adjustedEstimatedTimeStr,
             status: 'Confirmed', // Walk-ins are physically present at clinic
             tokenNumber,
             numericToken: numericTokenFromService,
@@ -411,12 +487,14 @@ function WalkInRegistrationContent() {
         // W tokens don't have a fixed time - use the time from the appointment before this slot
         // Calculate cut-off time and no-show time based on the actual slot time
         const appointmentDate = parse(format(new Date(), "d MMMM yyyy"), "d MMMM yyyy", new Date());
-        const appointmentTime = recalculatedDetails.estimatedTime;
-        const cutOffTime = subMinutes(appointmentTime, 15);
-        const noShowTime = addMinutes(appointmentTime, 15);
+        const walkInBreakIntervals = buildBreakIntervals(doctor, appointmentDate);
+        const adjustedAppointmentTime = applyBreakOffsets(recalculatedDetails.estimatedTime, walkInBreakIntervals);
+        const adjustedTimeStr = format(adjustedAppointmentTime, "hh:mm a");
+        const cutOffTime = subMinutes(adjustedAppointmentTime, 15);
+        const noShowTime = addMinutes(adjustedAppointmentTime, 15);
         
         // Update appointment data with recalculated values
-        const finalAppointmentTime = format(recalculatedDetails.estimatedTime, "hh:mm a");
+        const finalAppointmentTime = adjustedTimeStr;
         const updatedAppointmentData = {
             ...appointmentToSave,
             time: finalAppointmentTime,

@@ -17,7 +17,7 @@ import type { Appointment, Doctor, Patient, User } from "@/lib/types";
 import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc, orderBy, onSnapshot, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
-import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes, isAfter, startOfDay, addHours, differenceInMinutes } from "date-fns";
+import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes, isAfter, startOfDay, addHours, differenceInMinutes, parseISO } from "date-fns";
 import { updateAppointmentAndDoctorStatuses } from "@/lib/status-update-service";
 import { cn } from "@/lib/utils";
 import {
@@ -140,6 +140,86 @@ function parseTime(timeString: string, referenceDate: Date): Date {
 
 function parseAppointmentDateTime(dateStr: string, timeStr: string): Date {
     return parse(`${dateStr} ${timeStr}`, 'd MMMM yyyy hh:mm a', new Date());
+}
+
+type BreakInterval = {
+  start: Date;
+  end: Date;
+};
+
+function buildBreakIntervals(doctor: Doctor | null | undefined, referenceDate: Date | null | undefined): BreakInterval[] {
+  if (!doctor?.leaveSlots || !referenceDate) {
+    return [];
+  }
+
+  const consultationTime = doctor.averageConsultingTime || 15;
+
+  const slotsForDay = (doctor.leaveSlots || [])
+    .map((leave) => {
+      if (typeof leave === 'string') {
+        try {
+          return parseISO(leave);
+        } catch {
+          return null;
+        }
+      }
+      if (leave && typeof (leave as any).toDate === 'function') {
+        try {
+          return (leave as any).toDate();
+        } catch {
+          return null;
+        }
+      }
+      if (leave instanceof Date) {
+        return leave;
+      }
+      return null;
+    })
+    .filter((date): date is Date => !!date && !isNaN(date.getTime()) && isSameDay(date, referenceDate))
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  if (slotsForDay.length === 0) {
+    return [];
+  }
+
+  const intervals: BreakInterval[] = [];
+  let currentInterval: BreakInterval | null = null;
+
+  for (const slot of slotsForDay) {
+    if (!currentInterval) {
+      currentInterval = {
+        start: slot,
+        end: addMinutes(slot, consultationTime),
+      };
+      continue;
+    }
+
+    if (slot.getTime() === currentInterval.end.getTime()) {
+      currentInterval.end = addMinutes(slot, consultationTime);
+    } else {
+      intervals.push(currentInterval);
+      currentInterval = {
+        start: slot,
+        end: addMinutes(slot, consultationTime),
+      };
+    }
+  }
+
+  if (currentInterval) {
+    intervals.push(currentInterval);
+  }
+
+  return intervals;
+}
+
+function applyBreakOffsets(originalTime: Date, intervals: BreakInterval[]): Date {
+  return intervals.reduce((acc, interval) => {
+    if (acc.getTime() >= interval.start.getTime()) {
+      const offset = differenceInMinutes(interval.end, interval.start);
+      return addMinutes(acc, offset);
+    }
+    return acc;
+  }, new Date(originalTime));
 }
 
 
@@ -884,9 +964,12 @@ export default function AppointmentsPage() {
           
           // Calculate cut-off time and no-show time
           const appointmentDate = parse(format(date, "d MMMM yyyy"), "d MMMM yyyy", new Date());
-        const appointmentTime = parse(actualTimeString, "hh:mm a", appointmentDate);
-          const cutOffTime = subMinutes(appointmentTime, 15);
-          const noShowTime = addMinutes(appointmentTime, 15);
+          const reservationTime = parse(actualTimeString, "hh:mm a", appointmentDate);
+          const walkInBreakIntervals = buildBreakIntervals(selectedDoctor, appointmentDate);
+          const adjustedWalkInTime = applyBreakOffsets(reservationTime, walkInBreakIntervals);
+          const adjustedWalkInTimeStr = format(adjustedWalkInTime, "hh:mm a");
+          const cutOffTime = subMinutes(adjustedWalkInTime, 15);
+          const noShowTime = addMinutes(adjustedWalkInTime, 15);
           
           const appointmentData: Omit<Appointment, 'id'> = {
             bookedVia: appointmentType,
@@ -902,8 +985,8 @@ export default function AppointmentsPage() {
             communicationPhone: communicationPhone,
             place: values.place,
             status: 'Confirmed', // Walk-ins are physically present at clinic
-            time: actualTimeString,
-            arriveByTime: actualTimeString,
+            time: adjustedWalkInTimeStr,
+            arriveByTime: adjustedWalkInTimeStr,
             tokenNumber: tokenNumber,
             numericToken: numericToken,
             slotIndex: actualSlotIndex, // Use the actual slotIndex returned from the function
@@ -1069,13 +1152,22 @@ export default function AppointmentsPage() {
             // Fall back to original time if recalculation fails
           }
 
+          const breakIntervals = buildBreakIntervals(selectedDoctor, values.date ?? null);
+          if (breakIntervals.length > 0) {
+            const adjustedTime = applyBreakOffsets(actualAppointmentTime, breakIntervals);
+            if (adjustedTime.getTime() !== actualAppointmentTime.getTime()) {
+              actualAppointmentTime = adjustedTime;
+              actualAppointmentTimeStr = format(adjustedTime, "hh:mm a");
+            }
+          }
+
           // Calculate cut-off time and no-show time
           let cutOffTime: Date | undefined;
           let noShowTime: Date | undefined;
           let inheritedDelay = 0;
           try {
             const appointmentDate = parse(appointmentDateStr, "d MMMM yyyy", new Date());
-            const appointmentTime = parseDateFns(actualAppointmentTimeStr, "hh:mm a", appointmentDate); // Use recalculated time
+            const appointmentTime = actualAppointmentTime;
             cutOffTime = subMinutes(appointmentTime, 15);
             
             // Inherit delay from previous appointment (if any)

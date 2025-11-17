@@ -908,6 +908,36 @@ export default function DoctorsPage() {
     return combinedBreaks;
   }, [selectedDoctor?.leaveSlots, leaveCalDate, selectedDoctor?.averageConsultingTime]);
 
+  const canCancelBreak = useMemo(() => {
+    if (!selectedDoctor || !leaveCalDate || dailyLeaveSlots.length === 0) {
+      return false;
+    }
+
+    const dayOfWeek = format(leaveCalDate, 'EEEE');
+    const availabilityForDay = selectedDoctor.availabilitySlots?.find(
+      (slot) => slot.day === dayOfWeek
+    );
+
+    if (!availabilityForDay?.timeSlots?.length) {
+      return true;
+    }
+
+    let earliestStart: Date | null = null;
+    for (const slot of availabilityForDay.timeSlots) {
+      const start = parseTimeUtil(slot.from, leaveCalDate);
+      if (!earliestStart || start.getTime() < earliestStart.getTime()) {
+        earliestStart = start;
+      }
+    }
+
+    if (!earliestStart) {
+      return true;
+    }
+
+    const minutesUntilStart = differenceInMinutes(earliestStart, new Date());
+    return minutesUntilStart >= 60;
+  }, [selectedDoctor, leaveCalDate, dailyLeaveSlots]);
+
   const allTimeSlotsForDay = useMemo((): Date[] => {
     if (!selectedDoctor || !leaveCalDate) return [];
     const dayOfWeek = format(leaveCalDate, 'EEEE');
@@ -994,8 +1024,10 @@ export default function DoctorsPage() {
 
         for (const appt of appointmentsToUpdate) {
             const apptRef = doc(db, 'appointments', appt.id);
+            const newTimeStr = format(appt.newTime, 'hh:mm a');
             batch.update(apptRef, { 
-                time: format(appt.newTime, 'hh:mm a'),
+                time: newTimeStr,
+                arriveByTime: newTimeStr,
                 cutOffTime: Timestamp.fromDate(appt.newCutOffTime),
                 noShowTime: Timestamp.fromDate(appt.newNoShowTime)
             });
@@ -1131,8 +1163,10 @@ export default function DoctorsPage() {
         
         for (const appt of appointmentsToUpdate) {
             const apptRef = doc(db, 'appointments', appt.id);
+            const newTimeStr = format(appt.newTime, 'hh:mm a');
             batch.update(apptRef, { 
-                time: format(appt.newTime, 'hh:mm a'),
+                time: newTimeStr,
+                arriveByTime: newTimeStr,
                 cutOffTime: Timestamp.fromDate(appt.newCutOffTime),
                 noShowTime: Timestamp.fromDate(appt.newNoShowTime)
             });
@@ -1628,7 +1662,12 @@ export default function DoctorsPage() {
                                         )}
                                       </div>
                                     {dailyLeaveSlots.length > 0 ? (
-                                        <Button className="w-full" variant="secondary" disabled={isSubmittingBreak} onClick={handleCancelBreak}>
+                                        <Button
+                                          className="w-full"
+                                          variant="secondary"
+                                          disabled={isSubmittingBreak || !canCancelBreak}
+                                          onClick={handleCancelBreak}
+                                        >
                                             {isSubmittingBreak ? <Loader2 className="animate-spin" /> : 'Cancel This Break'}
                                         </Button>
                                     ) : (
