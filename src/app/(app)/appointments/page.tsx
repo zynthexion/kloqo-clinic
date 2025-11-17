@@ -903,6 +903,7 @@ export default function AppointmentsPage() {
             place: values.place,
             status: 'Confirmed', // Walk-ins are physically present at clinic
             time: actualTimeString,
+            arriveByTime: actualTimeString,
             tokenNumber: tokenNumber,
             numericToken: numericToken,
             slotIndex: actualSlotIndex, // Use the actual slotIndex returned from the function
@@ -1113,6 +1114,10 @@ export default function AppointmentsPage() {
             console.error('Error calculating cut-off and no-show times:', error);
           }
           
+          const arriveByTimeValue = isEditing
+            ? editingAppointment?.arriveByTime ?? editingAppointment?.time ?? actualAppointmentTimeStr
+            : actualAppointmentTimeStr;
+
           const appointmentData: Appointment = {
             id: appointmentId,
             clinicId: clinicId,
@@ -1125,6 +1130,7 @@ export default function AppointmentsPage() {
             doctor: selectedDoctor.name,
             date: appointmentDateStr,
             time: actualAppointmentTimeStr, // Use the recalculated time from actual slotIndex
+            arriveByTime: arriveByTimeValue,
             department: values.department,
             status: isEditing ? editingAppointment!.status : "Pending",
             treatment: "General Consultation",

@@ -334,6 +334,7 @@ function WalkInRegistrationContent() {
             bookedVia: 'Walk-in',
             date: format(new Date(), "d MMMM yyyy"),
             time: format(estimatedTime, "hh:mm a"),
+            arriveByTime: format(estimatedTime, "hh:mm a"),
             status: 'Confirmed', // Walk-ins are physically present at clinic
             tokenNumber,
             numericToken: numericTokenFromService,
@@ -415,9 +416,11 @@ function WalkInRegistrationContent() {
         const noShowTime = addMinutes(appointmentTime, 15);
         
         // Update appointment data with recalculated values
+        const finalAppointmentTime = format(recalculatedDetails.estimatedTime, "hh:mm a");
         const updatedAppointmentData = {
             ...appointmentToSave,
-            time: format(recalculatedDetails.estimatedTime, "hh:mm a"),
+            time: finalAppointmentTime,
+            arriveByTime: finalAppointmentTime,
             tokenNumber: walkInTokenNumber,
             numericToken: walkInNumericToken,
             slotIndex: actualSlotIndex, // Use the actual slotIndex returned from the function

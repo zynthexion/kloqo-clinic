@@ -68,6 +68,7 @@ export type Appointment = {
   doctor: string;
   date: string;
   time: string;
+  arriveByTime?: string;
   department: string;
   status: 'Confirmed' | 'Pending' | 'Cancelled' | 'Completed' | 'No-show' | 'Skipped';
   treatment: string;
