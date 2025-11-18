@@ -6,7 +6,7 @@ import { collection, doc, getDoc, writeBatch, where, query, onSnapshot, getDocs,
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/firebase';
 import type { Appointment, Doctor } from '@/lib/types';
-import { addMinutes, isAfter, parse, format, subMinutes, differenceInMinutes, isBefore } from 'date-fns';
+import { addMinutes, isAfter, parse, format, subMinutes, differenceInMinutes, isBefore, isSameDay, parseISO, isWithinInterval } from 'date-fns';
 
 function parseAppointmentDateTime(dateStr: string, timeStr: string): Date {
     // This format needs to exactly match how dates/times are stored in Firestore
@@ -24,6 +24,109 @@ function parseTime(timeStr: string, referenceDate: Date): Date {
     date.setHours(hours, minutes, 0, 0);
     return date;
   }
+}
+
+type BreakInterval = {
+  start: Date;
+  end: Date;
+};
+
+// Build break intervals for a given doctor and date
+function buildBreakIntervals(doctor: Doctor | null | undefined, referenceDate: Date | null | undefined): BreakInterval[] {
+  if (!doctor?.leaveSlots || !referenceDate) {
+    console.log(`[Break Intervals] No leaveSlots or referenceDate - doctor: ${doctor?.name}, leaveSlots: ${doctor?.leaveSlots?.length}, refDate: ${referenceDate}`);
+    return [];
+  }
+
+  const consultationTime = doctor.averageConsultingTime || 15;
+  console.log(`[Break Intervals] Doctor: ${doctor.name}, Total leaveSlots: ${doctor.leaveSlots.length}, ConsultationTime: ${consultationTime}min, RefDate: ${format(referenceDate, 'yyyy-MM-dd hh:mm a')}`);
+
+  const slotsForDay = (doctor.leaveSlots || [])
+    .map((leave, index) => {
+      if (typeof leave === 'string') {
+        try {
+          const parsed = parseISO(leave);
+          console.log(`[Break Intervals] Slot ${index}: ISO string "${leave}" -> ${format(parsed, 'yyyy-MM-dd hh:mm a')}`);
+          return parsed;
+        } catch (e) {
+          console.log(`[Break Intervals] Slot ${index}: Failed to parse ISO string "${leave}"`);
+          return null;
+        }
+      }
+      if (leave && typeof (leave as any).toDate === 'function') {
+        try {
+          const parsed = (leave as any).toDate();
+          console.log(`[Break Intervals] Slot ${index}: Firestore timestamp -> ${format(parsed, 'yyyy-MM-dd hh:mm a')}`);
+          return parsed;
+        } catch (e) {
+          console.log(`[Break Intervals] Slot ${index}: Failed to convert Firestore timestamp`);
+          return null;
+        }
+      }
+      if (leave instanceof Date) {
+        console.log(`[Break Intervals] Slot ${index}: Already Date object -> ${format(leave, 'yyyy-MM-dd hh:mm a')}`);
+        return leave;
+      }
+      console.log(`[Break Intervals] Slot ${index}: Unknown type`, typeof leave);
+      return null;
+    })
+    .filter((date): date is Date => {
+      if (!date || isNaN(date.getTime())) {
+        return false;
+      }
+      const matches = isSameDay(date, referenceDate);
+      console.log(`[Break Intervals] Checking ${format(date, 'yyyy-MM-dd hh:mm a')} against ${format(referenceDate, 'yyyy-MM-dd')}: ${matches ? 'MATCH' : 'no match'}`);
+      return matches;
+    })
+    .sort((a, b) => a.getTime() - b.getTime());
+  
+  console.log(`[Break Intervals] Slots matching today: ${slotsForDay.length}`);
+
+  if (slotsForDay.length === 0) {
+    return [];
+  }
+
+  const intervals: BreakInterval[] = [];
+  let currentInterval: BreakInterval | null = null;
+
+  for (const slot of slotsForDay) {
+    if (!currentInterval) {
+      currentInterval = {
+        start: slot,
+        end: addMinutes(slot, consultationTime),
+      };
+      continue;
+    }
+
+    if (slot.getTime() === currentInterval.end.getTime()) {
+      currentInterval.end = addMinutes(slot, consultationTime);
+    } else {
+      intervals.push(currentInterval);
+      currentInterval = {
+        start: slot,
+        end: addMinutes(slot, consultationTime),
+      };
+    }
+  }
+
+  if (currentInterval) {
+    intervals.push(currentInterval);
+  }
+
+  return intervals;
+}
+
+// Check if current time is within any break interval
+function isWithinBreak(currentTime: Date, breakIntervals: BreakInterval[]): boolean {
+  if (breakIntervals.length === 0) return false;
+  
+  return breakIntervals.some(interval => {
+    try {
+      return isWithinInterval(currentTime, { start: interval.start, end: interval.end });
+    } catch {
+      return false;
+    }
+  });
 }
 
 // Calculate doctor delay: minutes since availability start while doctor is not 'In'
@@ -240,6 +343,7 @@ export function useAppointmentStatusUpdater() {
     // Calculates total delay (minutes since consultation start while doctor is not 'In')
     // and applies it to all appointments' cutOffTime and noShowTime
     // This ensures correct delays even if the app was closed and reopened
+    // IMPORTANT: Does NOT update if current time is within a break period
     const checkAndUpdateDelays = async (clinicId: string) => {
       try {
         const doctorsRef = collection(db, 'doctors');
@@ -249,6 +353,22 @@ export function useAppointmentStatusUpdater() {
 
         for (const doctorDoc of doctorsSnapshot.docs) {
           const doctor = { id: doctorDoc.id, ...doctorDoc.data() } as Doctor;
+          
+          // Check if current time is within a break - if so, clear delays and skip updates
+          const breakIntervals = buildBreakIntervals(doctor, now);
+          console.log(`[Break Check] Doctor: ${doctor.name}, Current time: ${format(now, 'hh:mm a')}, Break intervals found: ${breakIntervals.length}`);
+          if (breakIntervals.length > 0) {
+            console.log(`[Break Check] Intervals:`, breakIntervals.map(i => `${format(i.start, 'hh:mm a')} - ${format(i.end, 'hh:mm a')}`));
+          }
+          if (isWithinBreak(now, breakIntervals)) {
+            console.log(`[Break Protection] Doctor ${doctor.name} is in break period - clearing all delays`);
+            // Clear any existing delays by setting to 0
+            await updateAppointmentsWithDelay(clinicId, doctor.id, 0);
+            console.log(`[Break Protection] Delays cleared for doctor ${doctor.name} - skipping further updates during break`);
+            continue; // Skip this doctor, don't update appointments during breaks
+          }
+          console.log(`[Break Check] Doctor ${doctor.name} not in break - proceeding with updates`);
+          
           const { delayMinutes, availabilityStartTime } = calculateDoctorDelay(doctor, now);
           
           // Only add delay if doctor is not 'In' and availability has started
