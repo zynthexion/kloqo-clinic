@@ -1264,7 +1264,7 @@ export async function generateNextTokenAndReserveSlot(
             
             const maxSlotIndex = Math.max(maxSlotIndexFromAppointments, lastSlotIndexFromSlots);
               newSlotIndex = maxSlotIndex + 1;
-              
+            
               console.info('[Walk-in Scheduling] Bucket compensation - sequential placement (no walk-ins or spacing):', {
               maxSlotIndexFromAppointments,
               lastSlotIndexFromSlots,
@@ -1587,7 +1587,7 @@ export async function generateNextTokenAndReserveSlot(
             } else {
               // targetSlotIndex is 0, use walk-in time
               previousAppointmentTime = walkInTime;
-            }
+              }
 
             // CRITICAL: For W booking, simply increment slotIndex by 1 for each appointment being shifted
             // Sort appointments by their current slotIndex to process them in order
@@ -1608,7 +1608,7 @@ export async function generateNextTokenAndReserveSlot(
                 // If slot doesn't exist, skip this appointment (shouldn't happen, but safety check)
                 console.warn(`[BOOKING DEBUG] Slot ${newSlotIndex} does not exist, skipping appointment ${appointmentToMove.id}`);
                 continue;
-              }
+                }
               const newSessionIndex = newSlotMeta.sessionIndex;
 
               const reservationRefForSlot = doc(
@@ -2084,7 +2084,7 @@ export async function generateNextTokenAndReserveSlot(
         if (type === 'A' && chosenSlotIndex >= 0) {
           const expectedNumericToken = chosenSlotIndex + 1;
           const expectedTokenNumber = `A${String(expectedNumericToken).padStart(3, '0')}`;
-          
+
           if (numericToken !== expectedNumericToken || tokenNumber !== expectedTokenNumber) {
             console.warn(`[BOOKING DEBUG] Request ${requestId}: Token not properly assigned in loop - fixing now`, {
               slotIndex: chosenSlotIndex,

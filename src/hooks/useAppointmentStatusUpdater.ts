@@ -39,7 +39,7 @@ function calculateDoctorDelay(
   if (!todaysAvailability || !todaysAvailability.timeSlots?.length) {
     return { delayMinutes: 0, availabilityStartTime: null };
   }
-
+  
   // Get the first session start time (when availability begins)
   const firstSession = todaysAvailability.timeSlots[0];
   let availabilityStartTime: Date;
@@ -59,7 +59,7 @@ function calculateDoctorDelay(
   if (doctor.consultationStatus === 'In') {
     return { delayMinutes: 0, availabilityStartTime: null };
   }
-
+  
   // Calculate delay: minutes since availability started while doctor is not 'In'
   const delayMinutes = differenceInMinutes(now, availabilityStartTime);
   
@@ -136,7 +136,7 @@ async function updateAppointmentsWithDelay(
     try {
       await batch.commit();
       console.log(`[Delay Update] Updated ${updatedCount} appointments with ${totalDelayMinutes} minute doctor delay (stored separately, original cutOffTime/noShowTime preserved for status transitions)`);
-    } catch (error) {
+  } catch (error) {
       console.error('Error committing delay updates:', error);
     }
   }
@@ -175,8 +175,8 @@ export function useAppointmentStatusUpdater() {
                   : new Date(apt.cutOffTime);
             } else {
               // Fallback: calculate if not stored (for old appointments)
-              const appointmentDate = parse(apt.date, 'd MMMM yyyy', new Date());
-              const appointmentTime = parseTime(apt.time, appointmentDate);
+          const appointmentDate = parse(apt.date, 'd MMMM yyyy', new Date());
+          const appointmentTime = parseTime(apt.time, appointmentDate);
               cutOffTime = subMinutes(appointmentTime, 15);
             }
             
@@ -210,12 +210,12 @@ export function useAppointmentStatusUpdater() {
             
             // Check if current time is greater than stored noShowTime
             if (isAfter(now, noShowTime) || now.getTime() >= noShowTime.getTime()) {
-              const aptRef = doc(db, 'appointments', apt.id);
+            const aptRef = doc(db, 'appointments', apt.id);
               batch.update(aptRef, { 
                 status: 'No-show',
                 updatedAt: new Date()
               });
-              hasWrites = true;
+            hasWrites = true;
               console.log(`Auto-updating appointment ${apt.id} from Skipped to No-show (noShowTime: ${noShowTime.toISOString()}, now: ${now.toISOString()})`);
             }
           }
@@ -245,7 +245,7 @@ export function useAppointmentStatusUpdater() {
         const doctorsRef = collection(db, 'doctors');
         const q = query(doctorsRef, where('clinicId', '==', clinicId));
         const doctorsSnapshot = await getDocs(q);
-        const now = new Date();
+      const now = new Date();
 
         for (const doctorDoc of doctorsSnapshot.docs) {
           const doctor = { id: doctorDoc.id, ...doctorDoc.data() } as Doctor;
@@ -257,8 +257,8 @@ export function useAppointmentStatusUpdater() {
             const currentDay = format(now, 'EEEE');
             const todaysAvailability = doctor.availabilitySlots?.find(
               slot => slot.day.toLowerCase() === currentDay.toLowerCase()
-            );
-            
+      );
+      
             if (todaysAvailability && todaysAvailability.timeSlots?.length > 0) {
               // Get the last session end time to check if we're still in consultation window
               const lastSession = todaysAvailability.timeSlots[todaysAvailability.timeSlots.length - 1];

@@ -1336,7 +1336,7 @@ export default function AppointmentsPage() {
           const arriveByTimeValue = isEditing
             ? editingAppointment?.arriveByTime ?? editingAppointment?.time ?? actualAppointmentTimeStr
             : actualAppointmentTimeStr;
-
+          
           const appointmentData: Appointment = {
             id: appointmentId,
             clinicId: clinicId,
@@ -1835,9 +1835,9 @@ export default function AppointmentsPage() {
 
         // Get arrived queue: Confirmed appointments for same doctor and date, sorted by time
         const arrivedQueue = appointments
-          .filter(a =>
-            a.doctor === appointment.doctor &&
-            a.date === todayStr &&
+        .filter(a =>
+          a.doctor === appointment.doctor &&
+          a.date === todayStr &&
             a.status === 'Confirmed' &&
             a.id !== appointment.id // Exclude the skipped appointment itself
           )
@@ -1868,8 +1868,8 @@ export default function AppointmentsPage() {
         // Check for existing rejoined appointments (status='Confirmed' AND has skippedAt field)
         const rejoinedAppointments = appointments
           .filter(a =>
-            a.doctor === appointment.doctor &&
-            a.date === todayStr &&
+                 a.doctor === appointment.doctor &&
+                 a.date === todayStr &&
             a.status === 'Confirmed' &&
             a.skippedAt && // Only appointments that were previously skipped
             a.id !== appointment.id
@@ -1894,9 +1894,9 @@ export default function AppointmentsPage() {
         // Update the skipped appointment: only change status and time, keep everything else
         const appointmentRef = doc(db, 'appointments', appointment.id);
         await updateDoc(appointmentRef, {
-          status: 'Confirmed',
+              status: 'Confirmed',
           time: newTimeString,
-          updatedAt: serverTimestamp()
+              updatedAt: serverTimestamp()
         });
 
         // Update local state
@@ -2056,7 +2056,7 @@ export default function AppointmentsPage() {
     }
     if (isAdvanceCapacityReached) {
       form.setValue('time', '', { shouldValidate: true });
-    }
+      }
     if (
       isAdvanceCapacityReached &&
       selectedDoctor &&
@@ -2071,7 +2071,7 @@ export default function AppointmentsPage() {
         );
         if (!availability) {
           continue;
-        }
+    }
         const capacityReached = isDoctorAdvanceCapacityReachedOnDate(
           selectedDoctor,
           candidate,
@@ -2480,7 +2480,7 @@ export default function AppointmentsPage() {
     
     return result;
   }, [doctors, currentTime]);
-
+  
   const todaysAppointments = useMemo(() => {
     const filteredForToday = filteredAppointments.filter(apt => apt.date === today);
     const skipped = filteredForToday.filter(apt => apt.status === 'Skipped');
@@ -2998,27 +2998,27 @@ export default function AppointmentsPage() {
                                   </RadioGroup>
                                 </div>
                                 {doctors.length > 1 ? (
-                                  <FormField control={form.control} name="doctor" render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Doctor</FormLabel>
+                                <FormField control={form.control} name="doctor" render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Doctor</FormLabel>
                                       <Select
                                         onValueChange={onDoctorChange}
                                         value={field.value || undefined}
                                       >
-                                        <FormControl>
-                                          <SelectTrigger>
-                                            <SelectValue placeholder="Select a doctor" />
-                                          </SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent>
-                                          {doctors.map(doc => (
-                                            <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )} />
+                                      <FormControl>
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Select a doctor" />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                        {doctors.map(doc => (
+                                          <SelectItem key={doc.id} value={doc.id}>{doc.name} - {doc.specialty}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                  </FormItem>
+                                )} />
                                 ) : (
                                   <div className="space-y-2">
                                     <Label className="text-sm text-muted-foreground">Doctor</Label>
@@ -3209,7 +3209,7 @@ export default function AppointmentsPage() {
                       <>
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full">
                           <div className="flex items-center gap-2">
-                            <CardTitle>Today's Appointments</CardTitle>
+                        <CardTitle>Today's Appointments</CardTitle>
                             {doctors.length > 1 && (
                               <>
                                 <DropdownMenu>
@@ -3238,14 +3238,14 @@ export default function AppointmentsPage() {
                             )}
                           </div>
                           <div className="relative w-full sm:w-64">
-                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input
-                              type="search"
-                              placeholder="Search by patient, doctor..."
-                              className="w-full rounded-lg bg-background pl-8 h-9"
-                              value={drawerSearchTerm}
-                              onChange={(e) => setDrawerSearchTerm(e.target.value)}
-                            />
+                          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            type="search"
+                            placeholder="Search by patient, doctor..."
+                            className="w-full rounded-lg bg-background pl-8 h-9"
+                            value={drawerSearchTerm}
+                            onChange={(e) => setDrawerSearchTerm(e.target.value)}
+                          />
                           </div>
                         </div>
                         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
