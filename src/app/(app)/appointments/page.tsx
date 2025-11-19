@@ -3422,30 +3422,28 @@ export default function AppointmentsPage() {
                                             <TableCell>{appointment.time}</TableCell>
                                             <TableCell className="text-right">
                                               <div className="flex justify-end gap-2">
-                                                {index === 0 && (
-                                                  <TooltipProvider>
-                                                    <Tooltip>
-                                                      <TooltipTrigger asChild>
-                                                        <div>
-                                                          <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="p-0 h-auto text-green-600 hover:text-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                            onClick={() => setAppointmentToComplete(appointment)}
-                                                            disabled={!isDoctorInConsultation}
-                                                          >
-                                                            <CheckCircle2 className="h-5 w-5" />
-                                                          </Button>
-                                                        </div>
-                                                      </TooltipTrigger>
-                                                      {!isDoctorInConsultation && (
-                                                        <TooltipContent>
-                                                          <p>Doctor is not in consultation.</p>
-                                                        </TooltipContent>
-                                                      )}
-                                                    </Tooltip>
-                                                  </TooltipProvider>
-                                                )}
+                                                <TooltipProvider>
+                                                  <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                      <div>
+                                                        <Button
+                                                          variant="ghost"
+                                                          size="icon"
+                                                          className="p-0 h-auto text-green-600 hover:text-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                          onClick={() => setAppointmentToComplete(appointment)}
+                                                          disabled={!isDoctorInConsultation}
+                                                        >
+                                                          <CheckCircle2 className="h-5 w-5" />
+                                                        </Button>
+                                                      </div>
+                                                    </TooltipTrigger>
+                                                    {!isDoctorInConsultation && (
+                                                      <TooltipContent>
+                                                        <p>Doctor is not in consultation.</p>
+                                                      </TooltipContent>
+                                                    )}
+                                                  </Tooltip>
+                                                </TooltipProvider>
                                               </div>
                                             </TableCell>
                                           </TableRow>
