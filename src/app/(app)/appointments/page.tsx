@@ -14,7 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Appointment, Doctor, Patient, User } from "@/lib/types";
-import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc, orderBy, onSnapshot, runTransaction, Timestamp } from "firebase/firestore";
+import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc, orderBy, onSnapshot, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes, isAfter, startOfDay, addHours, differenceInMinutes, parseISO, addDays } from "date-fns";
@@ -40,7 +40,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck, UserPlus, Users, Plus, X, Clock, Calendar as CalendarLucide, CheckCircle2, Info, Send, MessageSquare, Smartphone, Hourglass, Repeat, SkipForward } from "lucide-react";
+import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck, UserPlus, Users, Plus, X, Clock, Calendar as CalendarLucide, CheckCircle2, Info, Send, MessageSquare, Smartphone, Hourglass, Repeat } from "lucide-react";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
@@ -1729,11 +1729,10 @@ export default function AppointmentsPage() {
                  (a.status === 'Pending' || a.status === 'Confirmed');
         });
 
-        // Step 1: Mark as skipped with timestamp and set noShowTime to now + 30 min
+        // Step 1: Mark as skipped with timestamp
         await updateDoc(appointmentRef, { 
           status: 'Skipped',
-          skippedAt: serverTimestamp(),
-          noShowTime: Timestamp.fromDate(addMinutes(new Date(), 30)),
+          skippedAt: serverTimestamp()
         });
 
         // Step 2: Shift subsequent appointments backwards (slotIndex - 1) using batch
@@ -3056,8 +3055,16 @@ export default function AppointmentsPage() {
                                                                     variant={form.getValues("time") === format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm') ? "default" : "outline"}
                                                                     onClick={() => {
                                                                         const val = format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm');
-                                                                        form.setValue("time", val, { shouldValidate: true });
+                                                                        form.setValue("time", val, { shouldValidate: true, shouldDirty: true });
                                                                         if (val) form.clearErrors("time");
+                                                                        form.trigger();
+                                                                        form.trigger().then((isValid) => {
+                                                                            console.log('[BookingButton] Slot selected', {
+                                                                                selectedTime: val,
+                                                                                isValidAfterSelect: isValid,
+                                                                                errorsAfterSelect: form.formState.errors,
+                                                                            });
+                                                                        });
                                                                     }}
                                                                     disabled={slotStatus !== 'available'}
                                                                     className={cn("text-xs", {
@@ -3431,42 +3438,22 @@ export default function AppointmentsPage() {
                                                           <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            className="p-0 h-auto text-amber-600 hover:text-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                            onClick={() => handleSkip(appointment)}
+                                                            className="p-0 h-auto text-green-600 hover:text-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            onClick={() => setAppointmentToComplete(appointment)}
                                                             disabled={!isDoctorInConsultation}
                                                           >
-                                                            <SkipForward className="h-5 w-5" />
+                                                            <CheckCircle2 className="h-5 w-5" />
                                                           </Button>
                                                         </div>
                                                       </TooltipTrigger>
-                                                      <TooltipContent>
-                                                        <p>{isDoctorInConsultation ? 'Skip this appointment' : 'Doctor is not in consultation.'}</p>
-                                                      </TooltipContent>
+                                                      {!isDoctorInConsultation && (
+                                                        <TooltipContent>
+                                                          <p>Doctor is not in consultation.</p>
+                                                        </TooltipContent>
+                                                      )}
                                                     </Tooltip>
                                                   </TooltipProvider>
                                                 )}
-                                                <TooltipProvider>
-                                                  <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                      <div>
-                                                        <Button
-                                                          variant="ghost"
-                                                          size="icon"
-                                                          className="p-0 h-auto text-green-600 hover:text-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                          onClick={() => setAppointmentToComplete(appointment)}
-                                                          disabled={!isDoctorInConsultation}
-                                                        >
-                                                          <CheckCircle2 className="h-5 w-5" />
-                                                        </Button>
-                                                      </div>
-                                                    </TooltipTrigger>
-                                                    {!isDoctorInConsultation && (
-                                                      <TooltipContent>
-                                                        <p>Doctor is not in consultation.</p>
-                                                      </TooltipContent>
-                                                    )}
-                                                  </Tooltip>
-                                                </TooltipProvider>
                                               </div>
                                             </TableCell>
                                           </TableRow>

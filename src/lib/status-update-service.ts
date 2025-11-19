@@ -15,6 +15,9 @@ export async function updateAppointmentAndDoctorStatuses(clinicId: string): Prom
     // Update appointment statuses
     await updateAppointmentStatuses(clinicId);
     
+    // Update doctor consultation statuses
+    await updateDoctorConsultationStatuses(clinicId);
+    
     console.log('Status updates completed successfully');
   } catch (error) {
     console.error('Error updating statuses:', error);
@@ -335,6 +338,78 @@ function getNextUpcomingAvailabilityStartTime(doctor: Doctor, now: Date): Date |
 }
 
 /**
+ * Updates doctor consultation status to 'Out' if current time is outside their availability
+ */
+async function updateDoctorConsultationStatuses(clinicId: string): Promise<void> {
+  const now = new Date();
+  const currentTime = format(now, 'HH:mm');
+  const currentDay = format(now, 'EEEE'); // e.g., 'Monday', 'Tuesday'
+  
+  console.log('Checking doctors for status updates...', {
+    currentTime,
+    currentDay,
+    now: now.toISOString()
+  });
+  
+  // Query all doctors for this clinic
+  const doctorsRef = collection(db, 'doctors');
+  const q = query(
+    doctorsRef,
+    where('clinicId', '==', clinicId)
+  );
+  
+  const querySnapshot = await getDocs(q);
+  console.log(`Found ${querySnapshot.size} doctors to check`);
+  
+  const doctorsToUpdate: { id: string; doctor: Doctor }[] = [];
+  
+  querySnapshot.forEach((docSnapshot) => {
+    const doctor = docSnapshot.data() as Doctor;
+    
+    console.log('Checking doctor:', {
+      id: docSnapshot.id,
+      name: doctor.name,
+      currentStatus: doctor.consultationStatus,
+      availabilitySlots: doctor.availabilitySlots?.length || 0,
+      rawAvailabilitySlots: doctor.availabilitySlots
+    });
+    
+    // Check if doctor should be marked as 'Out'
+    // Only auto-set to 'Out', never auto-set to 'In' (manual only)
+    const shouldBeOut = shouldDoctorBeOut(doctor, currentDay, currentTime);
+    
+    // Only update if doctor is currently 'In' and should be 'Out'
+    if (doctor.consultationStatus === 'In' && shouldBeOut) {
+      doctorsToUpdate.push({ id: docSnapshot.id, doctor });
+      console.log(`Doctor ${doctor.name} should be marked as Out (outside availability)`);
+    } else {
+      console.log(`Doctor ${doctor.name} status is correct (${doctor.consultationStatus})`);
+    }
+  });
+  
+  console.log(`Found ${doctorsToUpdate.length} doctors to update`);
+  
+  if (doctorsToUpdate.length > 0) {
+    console.log(`Updating ${doctorsToUpdate.length} doctors to Out status`);
+    
+    // Use batch update for better performance
+    const batch = writeBatch(db);
+    
+    doctorsToUpdate.forEach(({ id }) => {
+      const doctorRef = doc(db, 'doctors', id);
+      batch.update(doctorRef, { 
+        consultationStatus: 'Out',
+        updatedAt: new Date()
+      });
+      console.log(`Updating doctor ${id} to Out`);
+    });
+    
+    await batch.commit();
+    console.log(`Successfully updated ${doctorsToUpdate.length} doctors to Out status`);
+  }
+}
+
+/**
  * Parses appointment date and time into a Date object
  */
 function parseAppointmentDateTime(dateStr: string, timeStr: string): Date | null {
@@ -379,114 +454,38 @@ function shouldDoctorBeOut(doctor: Doctor, currentDay: string, currentTime: stri
     currentStatus: doctor.consultationStatus,
     availabilitySlots: doctor.availabilitySlots?.length || 0
   });
-
+  
+  // If no availability slots, mark as 'Out'
   if (!doctor.availabilitySlots || doctor.availabilitySlots.length === 0) {
-    console.log('No availability slots found, keeping current status:', doctor.consultationStatus);
-    return false;
+    console.log('No availability slots found, marking as Out');
+    return true;
   }
-
-  const todaySlot = doctor.availabilitySlots.find(slot =>
+  
+  // Find today's availability slot
+  const todaySlot = doctor.availabilitySlots.find(slot => 
     slot.day.toLowerCase() === currentDay.toLowerCase()
   );
-
-  if (!todaySlot || !todaySlot.timeSlots || todaySlot.timeSlots.length === 0) {
-    console.log('No slots for today, keeping current status:', doctor.consultationStatus);
-    return false;
-  }
-
-  // If the doctor is already marked as 'In', never force them to 'Out' automatically.
-  if (doctor.consultationStatus === 'In') {
-    console.log('Doctor currently marked In, keeping as In even if outside schedule');
-    return false;
-  }
-
-  // Convert current time to minutes
-  const currentMinutes = timeStringToMinutes(currentTime);
-
-  // Get first slot start to check for early start
-  const normalizedSlots = todaySlot.timeSlots
-    .map(slot => ({
-      from: normalizeTimeString(slot.from),
-      to: normalizeTimeString(slot.to),
-    }))
-    .sort((a, b) => timeStringToMinutes(a.from) - timeStringToMinutes(b.from));
-
-  console.log('Normalized slots for today:', normalizedSlots);
-
-  if (normalizedSlots.length === 0) {
-    console.log('No normalized slots, keeping current status:', doctor.consultationStatus);
-    return false;
-  }
-
-  const firstSlotStart = timeStringToMinutes(normalizedSlots[0].from);
-  console.log('First slot start (minutes):', firstSlotStart, 'Current minutes:', currentMinutes, 'Status:', doctor.consultationStatus);
-
-  if (doctor.consultationStatus === 'In' && currentMinutes < firstSlotStart + 60) {
-    console.log('Doctor started early within 60 minutes before first slot, keeping as In');
-    return false;
-  }
-
-  if (currentMinutes < firstSlotStart) {
-    console.log('Current time is before first availability slot, keeping status as', doctor.consultationStatus);
-    return false;
-  }
-
-  const isWithinAnySlot = normalizedSlots.some(slot => {
-    const start = timeStringToMinutes(slot.from);
-    const end = timeStringToMinutes(slot.to);
-    return currentMinutes >= start && currentMinutes <= end;
+  
+  console.log('Today slot found:', {
+    found: !!todaySlot,
+    day: todaySlot?.day,
+    timeSlots: todaySlot?.timeSlots?.length || 0
   });
-
-  console.log('Is current time within any slot?', isWithinAnySlot, '=> should be Out:', !isWithinAnySlot);
+  
+  if (!todaySlot || !todaySlot.timeSlots || todaySlot.timeSlots.length === 0) {
+    console.log('No time slots for today, marking as Out');
+    return true;
+  }
+  
+  // Check if current time is within any of the doctor's time slots
+  const isWithinAnySlot = todaySlot.timeSlots.some(slot => {
+    const isWithin = isTimeWithinSlot(currentTime, slot.from, slot.to);
+    console.log('Checking slot:', { from: slot.from, to: slot.to, isWithin });
+    return isWithin;
+  });
+  
+  console.log('Final result:', { isWithinAnySlot, shouldBeOut: !isWithinAnySlot });
   return !isWithinAnySlot;
-}
-
-function normalizeTimeString(timeStr: string): string {
-  if (!timeStr) return timeStr;
-  const trimmed = timeStr.trim();
-  const upper = trimmed.toUpperCase();
-
-  const candidates = [
-    { value: upper, format: 'h:mm A' },
-    { value: upper, format: 'hh:mm A' },
-    { value: trimmed, format: 'H:mm' },
-    { value: trimmed, format: 'HH:mm' },
-  ];
-
-  for (const candidate of candidates) {
-    try {
-      const parsed = parse(candidate.value, candidate.format, new Date());
-      if (!isNaN(parsed.getTime())) {
-        return format(parsed, 'hh:mm a');
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  return trimmed;
-}
-
-function timeStringToMinutes(timeStr: string): number {
-  if (!timeStr) return 0;
-  try {
-    const normalized = normalizeTimeString(timeStr);
-    const parsed = parse(normalized, 'hh:mm a', new Date());
-    if (!isNaN(parsed.getTime())) {
-      return parsed.getHours() * 60 + parsed.getMinutes();
-    }
-  } catch {
-    // Ignore errors and fall back
-  }
-
-  const match = timeStr.match(/(\d{1,2}):(\d{2})/);
-  if (match) {
-    const hours = parseInt(match[1], 10);
-    const minutes = parseInt(match[2], 10);
-    return hours * 60 + minutes;
-  }
-
-  return 0;
 }
 
 /**
