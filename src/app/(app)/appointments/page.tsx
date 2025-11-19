@@ -550,19 +550,23 @@ export default function AppointmentsPage() {
 
             if (doctorsList.length > 0 && (!currentDoctorId || !currentDoctorStillExists)) {
                 const firstDoctor = doctorsList[0];
-                form.setValue("doctor", firstDoctor.id, { shouldValidate: true });
-                form.setValue("department", firstDoctor.department || "", { shouldValidate: true });
+                form.setValue("doctor", firstDoctor.id, { shouldValidate: true, shouldDirty: true });
+                form.setValue("department", firstDoctor.department || "", { shouldValidate: true, shouldDirty: true });
                 const upcomingDate = getNextAvailableDate(firstDoctor);
-                form.setValue("date", upcomingDate, { shouldValidate: true });
+                form.setValue("date", upcomingDate, { shouldValidate: true, shouldDirty: true });
+                form.clearErrors(['doctor', 'department']);
+                form.trigger(['doctor', 'department']);
             } else if (currentDoctorId) {
                 const currentDoctor = doctorsList.find(doc => doc.id === currentDoctorId);
                 if (currentDoctor) {
-                    form.setValue("department", currentDoctor.department || "", { shouldValidate: true });
+                    form.setValue("department", currentDoctor.department || "", { shouldValidate: true, shouldDirty: true });
                     const upcomingDate = getNextAvailableDate(currentDoctor);
-                    form.setValue("date", upcomingDate, { shouldValidate: true });
+                    form.setValue("date", upcomingDate, { shouldValidate: true, shouldDirty: true });
+                    form.clearErrors(['doctor', 'department']);
+                    form.trigger(['doctor', 'department']);
                 }
             } else {
-                form.setValue("department", "", { shouldValidate: true });
+                form.setValue("department", "", { shouldValidate: true, shouldDirty: true });
             }
         }, (error) => {
             console.error("Error fetching doctors:", error);
@@ -1945,13 +1949,15 @@ export default function AppointmentsPage() {
   };
 
   const onDoctorChange = (doctorId: string) => {
-    form.setValue("doctor", doctorId);
+    form.setValue("doctor", doctorId, { shouldValidate: true, shouldDirty: true });
     const doctor = doctors.find(d => d.id === doctorId);
     if (doctor) {
-      form.setValue("department", doctor.department || "", { shouldValidate: true });
+      form.setValue("department", doctor.department || "", { shouldValidate: true, shouldDirty: true });
       const upcomingDate = getNextAvailableDate(doctor);
-      form.setValue("date", upcomingDate, { shouldValidate: true });
+      form.setValue("date", upcomingDate, { shouldValidate: true, shouldDirty: true });
       form.setValue("time", "", { shouldValidate: true });
+      form.clearErrors(['doctor', 'department']);
+      form.trigger(['doctor', 'department']);
     }
   };
 
@@ -2573,10 +2579,58 @@ export default function AppointmentsPage() {
   const isBookingButtonDisabled = useMemo(() => {
     if (isPending) return true;
     if (appointmentType === 'Walk-in') {
-        return !form.getValues('patientName') || !walkInEstimate || isCalculatingEstimate;
+        const patientName = form.getValues('patientName');
+        const disabledWalkIn = !patientName || !walkInEstimate || isCalculatingEstimate;
+        console.log('[BookingButton] Walk-in validation', {
+            patientName,
+            walkInEstimate,
+            isCalculatingEstimate,
+            disabledWalkIn,
+        });
+        return disabledWalkIn;
     }
+
+    const valueSnapshot = {
+        patientName: form.getValues('patientName'),
+        phone: form.getValues('phone'),
+        age: form.getValues('age'),
+        sex: form.getValues('sex'),
+        doctor: form.getValues('doctor') || selectedDoctor?.id,
+        department: form.getValues('department') || selectedDoctor?.department,
+        date: form.getValues('date'),
+        time: form.getValues('time'),
+        place: form.getValues('place'),
+    };
+
+    const errors = form.formState.errors;
+    const requiredFields = Object.keys(valueSnapshot) as Array<keyof typeof valueSnapshot>;
+    const fieldStatus = requiredFields.reduce<Record<string, { filled: boolean; value: any; error?: any }>>((acc, key) => {
+        const value = valueSnapshot[key];
+        const filled = value !== undefined && value !== null && value !== '';
+        acc[key] = { filled, value, error: errors[key] };
+        return acc;
+    }, {});
+
+    console.table(fieldStatus);
+
+    const errorMessages = Object.fromEntries(
+        Object.entries(errors).map(([key, value]) => [
+            key,
+            (value as { message?: string })?.message ?? value,
+        ]),
+    );
+
+    console.log('[BookingButton] Advanced validation', {
+        disabledAdvanced: !form.formState.isValid,
+        formStateIsValid: form.formState.isValid,
+        missingFields: Object.entries(fieldStatus)
+            .filter(([_, status]) => !status.filled)
+            .map(([key]) => key),
+        errors: errorMessages,
+    });
+
     return !form.formState.isValid;
-  }, [isPending, appointmentType, walkInEstimate, isCalculatingEstimate, form.formState.isValid, form.getValues('patientName')]);
+  }, [isPending, appointmentType, walkInEstimate, isCalculatingEstimate, form.formState.isValid, form.formState.errors, form, selectedDoctor]);
 
   return (
     <>
@@ -3025,6 +3079,7 @@ export default function AppointmentsPage() {
                                     <p className="text-lg font-semibold">
                                       {selectedDoctor ? `${selectedDoctor.name} — ${selectedDoctor.specialty}` : 'No doctors available'}
                                     </p>
+                                    <input type="hidden" value={selectedDoctor?.id || ''} {...form.register('doctor')} />
                                   </div>
                                 )}
                                 <div className="space-y-2">
@@ -3032,6 +3087,7 @@ export default function AppointmentsPage() {
                                   <p className="text-base">
                                     {selectedDoctor?.department || 'Not assigned'}
                                   </p>
+                                  <input type="hidden" value={selectedDoctor?.department || ''} {...form.register('department')} />
                                 </div>
                                 {appointmentType === 'Advanced Booking' && selectedDoctor && selectedDate && (
                                     <div className="space-y-4 max-h-60 overflow-y-auto pr-2">
