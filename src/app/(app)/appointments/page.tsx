@@ -14,7 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Appointment, Doctor, Patient, User } from "@/lib/types";
-import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc, orderBy, onSnapshot, runTransaction } from "firebase/firestore";
+import { collection, getDocs, setDoc, doc, query, where, getDoc as getFirestoreDoc, updateDoc, increment, arrayUnion, deleteDoc, writeBatch, serverTimestamp, addDoc, orderBy, onSnapshot, runTransaction, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes, isAfter, startOfDay, addHours, differenceInMinutes, parseISO, addDays } from "date-fns";
@@ -40,7 +40,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck, UserPlus, Users, Plus, X, Clock, Calendar as CalendarLucide, CheckCircle2, Info, Send, MessageSquare, Smartphone, Hourglass, Repeat } from "lucide-react";
+import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck, UserPlus, Users, Plus, X, Clock, Calendar as CalendarLucide, CheckCircle2, Info, Send, MessageSquare, Smartphone, Hourglass, Repeat, SkipForward } from "lucide-react";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
@@ -1729,10 +1729,11 @@ export default function AppointmentsPage() {
                  (a.status === 'Pending' || a.status === 'Confirmed');
         });
 
-        // Step 1: Mark as skipped with timestamp
+        // Step 1: Mark as skipped with timestamp and set noShowTime to now + 30 min
         await updateDoc(appointmentRef, { 
           status: 'Skipped',
-          skippedAt: serverTimestamp()
+          skippedAt: serverTimestamp(),
+          noShowTime: Timestamp.fromDate(addMinutes(new Date(), 30)),
         });
 
         // Step 2: Shift subsequent appointments backwards (slotIndex - 1) using batch
@@ -3422,6 +3423,28 @@ export default function AppointmentsPage() {
                                             <TableCell>{appointment.time}</TableCell>
                                             <TableCell className="text-right">
                                               <div className="flex justify-end gap-2">
+                                                {index === 0 && (
+                                                  <TooltipProvider>
+                                                    <Tooltip>
+                                                      <TooltipTrigger asChild>
+                                                        <div>
+                                                          <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="p-0 h-auto text-amber-600 hover:text-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            onClick={() => handleSkip(appointment)}
+                                                            disabled={!isDoctorInConsultation}
+                                                          >
+                                                            <SkipForward className="h-5 w-5" />
+                                                          </Button>
+                                                        </div>
+                                                      </TooltipTrigger>
+                                                      <TooltipContent>
+                                                        <p>{isDoctorInConsultation ? 'Skip this appointment' : 'Doctor is not in consultation.'}</p>
+                                                      </TooltipContent>
+                                                    </Tooltip>
+                                                  </TooltipProvider>
+                                                )}
                                                 <TooltipProvider>
                                                   <Tooltip>
                                                     <TooltipTrigger asChild>
