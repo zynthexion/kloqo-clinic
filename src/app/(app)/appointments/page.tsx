@@ -409,6 +409,7 @@ export default function AppointmentsPage() {
   });
 
   const patientInputRef = useRef<HTMLInputElement>(null);
+  const watchedPatientName = form.watch('patientName');
 
   const handlePatientSearch = useCallback(async (phone: string) => {
     if (phone.length < 10 || !clinicId) {
@@ -501,12 +502,7 @@ export default function AppointmentsPage() {
 
         // Update appointment and doctor statuses on page refresh
         try {
-            console.log('Starting status update for clinic:', fetchedClinicId);
-            console.log('Current time:', new Date().toISOString());
-            console.log('Current day:', format(new Date(), 'EEEE'));
-            console.log('Current time formatted:', format(new Date(), 'HH:mm'));
             await updateAppointmentAndDoctorStatuses(fetchedClinicId);
-            console.log('Status update completed successfully');
         } catch (error) {
             console.error('Error updating statuses on page refresh:', error);
             // Don't show error toast as this is a background operation
@@ -658,46 +654,17 @@ export default function AppointmentsPage() {
         selectedDoctor.id
       );
 
-      console.group(`[clinic-admin walk-in preview] ${selectedDoctor.name}`);
-      if (preview.placeholderAssignment) {
-        console.info('Next walk-in target', {
-          slotIndex: preview.placeholderAssignment.slotIndex,
-          time: format(preview.placeholderAssignment.slotTime, 'hh:mm a'),
-        });
-      } else {
-        console.warn('No walk-in placement available.');
-      }
-
-      if (preview.advanceShifts.length === 0) {
-        console.info('No advance appointments need to move.');
-      } else {
-        preview.advanceShifts.forEach(shift => {
-          console.info('Advance shift', {
-            appointmentId: shift.id,
-            tokenNumber: shift.tokenNumber,
-            fromSlot: shift.fromSlot,
-            toSlot: shift.toSlot,
-            fromTime: shift.fromTime ? format(shift.fromTime, 'hh:mm a') : null,
-            toTime: format(shift.toTime, 'hh:mm a'),
-          });
-        });
-      }
-
-      preview.walkInAssignments.forEach(assignment => {
-        console.info('Walk-in assignment', {
-          id: assignment.id,
-          slotIndex: assignment.slotIndex,
-          time: format(assignment.slotTime, 'hh:mm a'),
-        });
-      });
-      console.groupEnd();
+      const placeholderDescription = preview.placeholderAssignment
+        ? `Placeholder slot #${preview.placeholderAssignment.slotIndex + 1} at ${format(preview.placeholderAssignment.slotTime, 'hh:mm a')}`
+        : 'No placeholder assignment available.';
+      const advanceShiftCount = preview.advanceShifts.length;
+      const assignmentCount = preview.walkInAssignments.length;
 
       toast({
         title: 'Walk-in preview complete',
-        description: 'Check the console for placement details.',
+        description: `${placeholderDescription} • Advance shifts: ${advanceShiftCount} • Assignments: ${assignmentCount}`,
       });
     } catch (error) {
-      console.error('[clinic-admin walk-in preview] failed', error);
       toast({
         variant: 'destructive',
         title: 'Unable to preview walk-in placement.',
@@ -1182,12 +1149,6 @@ export default function AppointmentsPage() {
                 if (format(currentTime, "hh:mm a") === appointmentTimeStr) {
                   slotIndex = globalSlotIndex;
                   sessionIndex = i;
-                  console.log('🔍 [DEBUG] Slot calculation:', {
-                    selectedTime: appointmentTimeStr,
-                    calculatedSlotIndex: slotIndex,
-                    currentTime: format(currentTime, "hh:mm a"),
-                    globalSlotIndex
-                  });
                   break;
                 }
                 currentTime = addMinutes(currentTime, slotDuration);
@@ -1196,13 +1157,6 @@ export default function AppointmentsPage() {
               if (slotIndex !== -1) break;
             }
           }
-          
-          console.log('🔍 [DEBUG] Final slot calculation result:', {
-            selectedTime: appointmentTimeStr,
-            calculatedSlotIndex: slotIndex,
-            sessionIndex
-          });
-
 
           // Generate token and reserve slot atomically (for both new and rescheduled appointments)
           // For rescheduling, regenerate token using same logic as new appointment
@@ -1395,7 +1349,6 @@ export default function AppointmentsPage() {
 
           // Send notification for new appointments
           if (!isEditing) {
-            console.log('🎯 DEBUG: Sending notification for new appointment');
             try {
               const clinicName = `The clinic`; // You can fetch from clinic doc if needed
               
@@ -1410,9 +1363,8 @@ export default function AppointmentsPage() {
                 tokenNumber: appointmentData.tokenNumber,
                 bookedBy: 'admin',
               });
-              console.log('🎯 DEBUG: Notification sent to patient');
             } catch (notifError) {
-              console.error('🎯 DEBUG: Failed to send notification:', notifError);
+              console.error('Failed to send notification:', notifError);
             }
           }
 
@@ -1485,7 +1437,6 @@ export default function AppointmentsPage() {
                     }
                 }
             }
-            console.log("User already exists, sending booking link");
         } else {
             // User doesn't exist, create new user and patient records
             const batch = writeBatch(db);
@@ -1618,7 +1569,6 @@ export default function AppointmentsPage() {
                 time: appointment.time,
                 cancelledBy: 'clinic',
             });
-            console.log('Appointment cancelled notification sent');
         } catch (notifError) {
             console.error('Failed to send cancellation notification:', notifError);
             // Don't fail the cancellation if notification fails
@@ -1696,7 +1646,6 @@ export default function AppointmentsPage() {
                 tokenNumber: appointment.tokenNumber,
                 doctorName: appointment.doctor,
             });
-            console.log('Token called notification sent');
         } catch (notifError) {
             console.error('Failed to send token called notification:', notifError);
             // Don't fail the completion if notification fails
@@ -2295,22 +2244,6 @@ export default function AppointmentsPage() {
         slotTimeIterator = new Date(slotTimeIterator.getTime() + selectedDoctor.averageConsultingTime! * 60000);
       }
       
-      console.log(`🔍 [CLINIC APP] Session ${sessionIndex + 1} slot filtering:`, {
-        totalSlotsGenerated,
-        pastSlotsSkipped,
-        oneHourWindowSlotsSkipped,
-        reservedSlotsSkipped,
-        bookedSlotsCount,
-        leaveSlotsCount,
-        availableSlotsCount,
-        visibleSlotsCount: slots.length,
-        firstAvailableSlot: foundFirstAvailable ? slots.find(s => s.status === 'available')?.time : 'none',
-        currentTime: format(now, 'hh:mm a'),
-        oneHourFromNow: isToday(selectedDate) ? format(addMinutes(now, 60), 'hh:mm a') : 'N/A',
-        isToday: isToday(selectedDate),
-        appointmentType
-      });
-      
       const sessionTitle = `Session ${sessionIndex + 1} (${session.from} - ${session.to})`;
       return { title: sessionTitle, slots };
     });
@@ -2579,58 +2512,10 @@ export default function AppointmentsPage() {
   const isBookingButtonDisabled = useMemo(() => {
     if (isPending) return true;
     if (appointmentType === 'Walk-in') {
-        const patientName = form.getValues('patientName');
-        const disabledWalkIn = !patientName || !walkInEstimate || isCalculatingEstimate;
-        console.log('[BookingButton] Walk-in validation', {
-            patientName,
-            walkInEstimate,
-            isCalculatingEstimate,
-            disabledWalkIn,
-        });
-        return disabledWalkIn;
+        return !watchedPatientName || !walkInEstimate || isCalculatingEstimate;
     }
-
-    const valueSnapshot = {
-        patientName: form.getValues('patientName'),
-        phone: form.getValues('phone'),
-        age: form.getValues('age'),
-        sex: form.getValues('sex'),
-        doctor: form.getValues('doctor') || selectedDoctor?.id,
-        department: form.getValues('department') || selectedDoctor?.department,
-        date: form.getValues('date'),
-        time: form.getValues('time'),
-        place: form.getValues('place'),
-    };
-
-    const errors = form.formState.errors;
-    const requiredFields = Object.keys(valueSnapshot) as Array<keyof typeof valueSnapshot>;
-    const fieldStatus = requiredFields.reduce<Record<string, { filled: boolean; value: any; error?: any }>>((acc, key) => {
-        const value = valueSnapshot[key];
-        const filled = value !== undefined && value !== null && value !== '';
-        acc[key] = { filled, value, error: errors[key] };
-        return acc;
-    }, {});
-
-    console.table(fieldStatus);
-
-    const errorMessages = Object.fromEntries(
-        Object.entries(errors).map(([key, value]) => [
-            key,
-            (value as { message?: string })?.message ?? value,
-        ]),
-    );
-
-    console.log('[BookingButton] Advanced validation', {
-        disabledAdvanced: !form.formState.isValid,
-        formStateIsValid: form.formState.isValid,
-        missingFields: Object.entries(fieldStatus)
-            .filter(([_, status]) => !status.filled)
-            .map(([key]) => key),
-        errors: errorMessages,
-    });
-
     return !form.formState.isValid;
-  }, [isPending, appointmentType, walkInEstimate, isCalculatingEstimate, form.formState.isValid, form.formState.errors, form, selectedDoctor]);
+  }, [isPending, appointmentType, watchedPatientName, walkInEstimate, isCalculatingEstimate, form.formState.isValid]);
 
   return (
     <>
@@ -3114,13 +2999,6 @@ export default function AppointmentsPage() {
                                                                         form.setValue("time", val, { shouldValidate: true, shouldDirty: true });
                                                                         if (val) form.clearErrors("time");
                                                                         form.trigger();
-                                                                        form.trigger().then((isValid) => {
-                                                                            console.log('[BookingButton] Slot selected', {
-                                                                                selectedTime: val,
-                                                                                isValidAfterSelect: isValid,
-                                                                                errorsAfterSelect: form.formState.errors,
-                                                                            });
-                                                                        });
                                                                     }}
                                                                     disabled={slotStatus !== 'available'}
                                                                     className={cn("text-xs", {
@@ -3247,11 +3125,9 @@ export default function AppointmentsPage() {
                             variant="outline" 
                             size="sm" 
                             onClick={async () => {
-                              console.log('Manual status update triggered');
                               if (clinicId) {
                                 try {
                                   await updateAppointmentAndDoctorStatuses(clinicId);
-                                  console.log('Manual status update completed');
                                 } catch (error) {
                                   console.error('Manual status update failed:', error);
                                 }
