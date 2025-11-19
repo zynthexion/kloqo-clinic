@@ -40,7 +40,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck, UserPlus, Users, Plus, X, Clock, Calendar as CalendarLucide, CheckCircle2, Info, Send, MessageSquare, Smartphone, Hourglass, Repeat } from "lucide-react";
+import { ChevronLeft, FileDown, Printer, Search, MoreHorizontal, Eye, Edit, Trash2, ChevronRight, Stethoscope, Phone, Footprints, Loader2, Link as LinkIcon, Crown, UserCheck, UserPlus, Users, Plus, X, Clock, Calendar as CalendarLucide, CheckCircle2, Info, Send, MessageSquare, Smartphone, Hourglass, Repeat, SkipForward } from "lucide-react";
 import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
@@ -3370,11 +3370,11 @@ export default function AppointmentsPage() {
                                                           <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            className="p-0 h-auto text-green-600 hover:text-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                            onClick={() => setAppointmentToComplete(appointment)}
+                                                            className="p-0 h-auto text-amber-600 hover:text-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            onClick={() => handleSkip(appointment)}
                                                             disabled={!isDoctorInConsultation}
                                                           >
-                                                            <CheckCircle2 className="h-5 w-5" />
+                                                            <SkipForward className="h-5 w-5" />
                                                           </Button>
                                                         </div>
                                                       </TooltipTrigger>
@@ -3386,6 +3386,28 @@ export default function AppointmentsPage() {
                                                     </Tooltip>
                                                   </TooltipProvider>
                                                 )}
+                                                <TooltipProvider>
+                                                  <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                      <div>
+                                                        <Button
+                                                          variant="ghost"
+                                                          size="icon"
+                                                          className="p-0 h-auto text-green-600 hover:text-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                          onClick={() => setAppointmentToComplete(appointment)}
+                                                          disabled={!isDoctorInConsultation}
+                                                        >
+                                                          <CheckCircle2 className="h-5 w-5" />
+                                                        </Button>
+                                                      </div>
+                                                    </TooltipTrigger>
+                                                    {!isDoctorInConsultation && (
+                                                      <TooltipContent>
+                                                        <p>Doctor is not in consultation.</p>
+                                                      </TooltipContent>
+                                                    )}
+                                                  </Tooltip>
+                                                </TooltipProvider>
                                               </div>
                                             </TableCell>
                                           </TableRow>
