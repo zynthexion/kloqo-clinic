@@ -4,13 +4,18 @@ import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getStorage } from 'firebase-admin/storage';
 
 // Import the service account key from the JSON file
-import serviceAccount from '../../../../service-account-key.json';
+const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
 
-// Ensure the service account has the correct properties
+if (!serviceAccountJson) {
+  throw new Error('Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable for Firebase Admin credentials.');
+}
+
+const parsedServiceAccount = JSON.parse(serviceAccountJson);
+
 const serviceAccountParams = {
-  projectId: serviceAccount.project_id,
-  clientEmail: serviceAccount.client_email,
-  privateKey: serviceAccount.private_key,
+  projectId: parsedServiceAccount.project_id,
+  clientEmail: parsedServiceAccount.client_email,
+  privateKey: parsedServiceAccount.private_key?.replace(/\\n/g, '\n'),
 };
 
 export async function GET() {
