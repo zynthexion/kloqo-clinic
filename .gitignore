@@ -38,3 +38,7 @@ next-env.d.ts
 # studio
 .firebase/
 service-account.json
+
+# Secrets
+service-account-key.json
+bak.env.bak
