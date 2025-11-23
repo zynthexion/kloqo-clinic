@@ -1048,6 +1048,7 @@ export default function AppointmentsPage() {
           slotIndex: actualSlotIndex,
           sessionIndex: actualSessionIndex,
           time: actualTimeString,
+          reservationId,
         } = await generateNextTokenAndReserveSlot(
             clinicId,
             selectedDoctor.name,
@@ -1069,11 +1070,15 @@ export default function AppointmentsPage() {
           const cutOffTime = subMinutes(adjustedWalkInTime, 15);
           const noShowTime = addMinutes(adjustedWalkInTime, 15);
           
-          const appointmentData: Omit<Appointment, 'id'> = {
+          const appointmentDateStr = format(date, "d MMMM yyyy");
+          const appointmentRef = doc(collection(db, 'appointments'));
+          
+          const appointmentData: Appointment = {
+            id: appointmentRef.id,
             bookedVia: appointmentType,
             clinicId: selectedDoctor.clinicId,
             doctorId: selectedDoctor.id, // Add doctorId
-            date: format(date, "d MMMM yyyy"),
+            date: appointmentDateStr,
             department: selectedDoctor.department,
             doctor: selectedDoctor.name,
             sex: values.sex,
@@ -1094,9 +1099,168 @@ export default function AppointmentsPage() {
             cutOffTime: cutOffTime,
             noShowTime: noShowTime,
           };
-          const appointmentRef = doc(collection(db, 'appointments'));
-          await setDoc(appointmentRef, { ...appointmentData, id: appointmentRef.id });
-          setAppointments(prev => [...prev, { ...appointmentData, id: appointmentRef.id }]);
+
+          // CRITICAL: Check for existing appointments at this slot before creating
+          // This prevents duplicate bookings from concurrent requests
+          const existingAppointmentsQuery = query(
+            collection(db, 'appointments'),
+            where('clinicId', '==', clinicId),
+            where('doctor', '==', selectedDoctor.name),
+            where('date', '==', appointmentDateStr),
+            where('slotIndex', '==', actualSlotIndex)
+          );
+          const existingAppointmentsSnapshot = await getDocs(existingAppointmentsQuery);
+          const existingActiveAppointments = existingAppointmentsSnapshot.docs.filter(docSnap => {
+            const data = docSnap.data();
+            return (data.status === 'Pending' || data.status === 'Confirmed');
+          });
+
+          if (existingActiveAppointments.length > 0) {
+            console.error(`[CLINIC WALK-IN DEBUG] ⚠️ DUPLICATE DETECTED - Appointment already exists at slotIndex ${actualSlotIndex}`, {
+              existingAppointmentIds: existingActiveAppointments.map(docSnap => docSnap.id),
+              timestamp: new Date().toISOString()
+            });
+            toast({
+              variant: "destructive",
+              title: "Slot Already Booked",
+              description: "This time slot was just booked by someone else. Please try again.",
+            });
+            return;
+          }
+
+          // Get references to existing appointments to verify in transaction
+          const existingAppointmentRefs = existingActiveAppointments.map(docSnap => 
+            doc(db, 'appointments', docSnap.id)
+          );
+
+          // CRITICAL: Use transaction to atomically claim reservation and create appointment
+          // The reservation document acts as a lock - only one transaction can delete it
+          // This prevents race conditions across different browsers/devices
+          try {
+            await runTransaction(db, async (transaction) => {
+              console.log(`[CLINIC WALK-IN DEBUG] Transaction STARTED`, {
+                reservationId,
+                appointmentId: appointmentRef.id,
+                slotIndex: actualSlotIndex,
+                timestamp: new Date().toISOString()
+              });
+
+              const reservationRef = doc(db, 'slot-reservations', reservationId);
+              const reservationDoc = await transaction.get(reservationRef);
+              
+              console.log(`[CLINIC WALK-IN DEBUG] Reservation check result`, {
+                reservationId,
+                exists: reservationDoc.exists(),
+                data: reservationDoc.exists() ? reservationDoc.data() : null,
+                timestamp: new Date().toISOString()
+              });
+              
+              if (!reservationDoc.exists()) {
+                // Reservation was already claimed by another request - slot is taken
+                console.error(`[CLINIC WALK-IN DEBUG] Reservation does NOT exist - already claimed`, {
+                  reservationId,
+                  timestamp: new Date().toISOString()
+                });
+                const conflictError = new Error('Reservation already claimed by another booking');
+                (conflictError as { code?: string }).code = 'SLOT_ALREADY_BOOKED';
+                throw conflictError;
+              }
+              
+              // Verify the reservation matches our slot
+              const reservationData = reservationDoc.data();
+              console.log(`[CLINIC WALK-IN DEBUG] Verifying reservation match`, {
+                reservationSlotIndex: reservationData?.slotIndex,
+                expectedSlotIndex: actualSlotIndex,
+                reservationClinicId: reservationData?.clinicId,
+                expectedClinicId: clinicId,
+                reservationDoctor: reservationData?.doctorName,
+                expectedDoctor: selectedDoctor.name,
+                timestamp: new Date().toISOString()
+              });
+
+              if (reservationData?.slotIndex !== actualSlotIndex || 
+                  reservationData?.clinicId !== clinicId ||
+                  reservationData?.doctorName !== selectedDoctor.name) {
+                console.error(`[CLINIC WALK-IN DEBUG] Reservation mismatch`, {
+                  reservationData,
+                  expected: { slotIndex: actualSlotIndex, clinicId, doctorName: selectedDoctor.name }
+                });
+                const conflictError = new Error('Reservation does not match booking details');
+                (conflictError as { code?: string }).code = 'RESERVATION_MISMATCH';
+                throw conflictError;
+              }
+              
+              // CRITICAL: Verify no appointment exists at this slotIndex by reading the documents we found
+              // This ensures we see the latest state even if appointments were created between our query and transaction
+              if (existingAppointmentRefs.length > 0) {
+                const existingAppointmentSnapshots = await Promise.all(
+                  existingAppointmentRefs.map(ref => transaction.get(ref))
+                );
+                const stillActive = existingAppointmentSnapshots.filter(snap => {
+                  if (!snap.exists()) return false;
+                  const data = snap.data() as Appointment;
+                  return (data.status === 'Pending' || data.status === 'Confirmed');
+                });
+
+                if (stillActive.length > 0) {
+                  console.error(`[CLINIC WALK-IN DEBUG] ⚠️ DUPLICATE DETECTED IN TRANSACTION - Appointment exists at slotIndex ${actualSlotIndex}`, {
+                    existingAppointmentIds: stillActive.map(snap => snap.id),
+                    timestamp: new Date().toISOString()
+                  });
+                  const conflictError = new Error('An appointment already exists at this slot');
+                  (conflictError as { code?: string }).code = 'SLOT_ALREADY_BOOKED';
+                  throw conflictError;
+                }
+              }
+
+              console.log(`[CLINIC WALK-IN DEBUG] No existing appointment found - deleting reservation and creating appointment`, {
+                reservationId,
+                appointmentId: appointmentRef.id,
+                slotIndex: actualSlotIndex,
+                timestamp: new Date().toISOString()
+              });
+
+              // CRITICAL: Delete the reservation as part of the transaction
+              // This ensures only ONE request can successfully claim it
+              // If multiple requests try simultaneously, only one can delete the reservation
+              transaction.delete(reservationRef);
+              
+              // Create appointment atomically in the same transaction
+              transaction.set(appointmentRef, appointmentData);
+              
+              console.log(`[CLINIC WALK-IN DEBUG] Transaction operations queued - about to commit`, {
+                reservationDeleted: true,
+                appointmentCreated: true,
+                timestamp: new Date().toISOString()
+              });
+            });
+            
+            console.log(`[CLINIC WALK-IN DEBUG] Transaction COMMITTED successfully`, {
+              appointmentId: appointmentRef.id,
+              slotIndex: actualSlotIndex,
+              timestamp: new Date().toISOString()
+            });
+            
+            setAppointments(prev => [...prev, appointmentData]);
+          } catch (error: any) {
+            console.error(`[CLINIC WALK-IN DEBUG] Transaction FAILED`, {
+              errorMessage: error.message,
+              errorCode: error.code,
+              errorName: error.name,
+              reservationId,
+              timestamp: new Date().toISOString()
+            });
+
+            if (error.code === 'SLOT_ALREADY_BOOKED' || error.code === 'RESERVATION_MISMATCH') {
+              toast({
+                variant: "destructive",
+                title: "Slot Already Booked",
+                description: "This time slot was just booked by someone else. Please try again.",
+              });
+              return;
+            }
+            throw error;
+          }
 
           // Ensure clinicId is added to patient's clinicIds array if it doesn't exist
           if (!isEditing) {
@@ -1324,7 +1488,167 @@ export default function AppointmentsPage() {
           };
 
           const appointmentRef = doc(db, 'appointments', appointmentId);
-          await setDoc(appointmentRef, appointmentData, { merge: true });
+          const reservationId = tokenData.reservationId;
+
+          // CRITICAL: Check for existing appointments at this slot before creating
+          // This prevents duplicate bookings from concurrent requests
+          const existingAppointmentsQuery = query(
+            collection(db, 'appointments'),
+            where('clinicId', '==', clinicId),
+            where('doctor', '==', selectedDoctor.name),
+            where('date', '==', appointmentDateStr),
+            where('slotIndex', '==', actualSlotIndex)
+          );
+          const existingAppointmentsSnapshot = await getDocs(existingAppointmentsQuery);
+          const existingActiveAppointments = existingAppointmentsSnapshot.docs.filter(docSnap => {
+            const data = docSnap.data();
+            return (data.status === 'Pending' || data.status === 'Confirmed') && docSnap.id !== appointmentId;
+          });
+
+          if (existingActiveAppointments.length > 0) {
+            console.error(`[CLINIC APPOINTMENT DEBUG] ⚠️ DUPLICATE DETECTED - Appointment already exists at slotIndex ${actualSlotIndex}`, {
+              existingAppointmentIds: existingActiveAppointments.map(docSnap => docSnap.id),
+              timestamp: new Date().toISOString()
+            });
+            toast({
+              variant: "destructive",
+              title: "Slot Already Booked",
+              description: "This time slot was just booked by someone else. Please select another time.",
+            });
+            return;
+          }
+
+          // Get references to existing appointments to verify in transaction
+          const existingAppointmentRefs = existingActiveAppointments.map(docSnap => 
+            doc(db, 'appointments', docSnap.id)
+          );
+
+          // CRITICAL: Use transaction to atomically claim reservation and create appointment
+          // The reservation document acts as a lock - only one transaction can delete it
+          // This prevents race conditions across different browsers/devices
+          try {
+            await runTransaction(db, async (transaction) => {
+              console.log(`[CLINIC APPOINTMENT DEBUG] Transaction STARTED`, {
+                reservationId,
+                appointmentId,
+                slotIndex: actualSlotIndex,
+                timestamp: new Date().toISOString()
+              });
+
+              const reservationRef = doc(db, 'slot-reservations', reservationId);
+              const reservationDoc = await transaction.get(reservationRef);
+              
+              console.log(`[CLINIC APPOINTMENT DEBUG] Reservation check result`, {
+                reservationId,
+                exists: reservationDoc.exists(),
+                data: reservationDoc.exists() ? reservationDoc.data() : null,
+                timestamp: new Date().toISOString()
+              });
+              
+              if (!reservationDoc.exists()) {
+                // Reservation was already claimed by another request - slot is taken
+                console.error(`[CLINIC APPOINTMENT DEBUG] Reservation does NOT exist - already claimed`, {
+                  reservationId,
+                  timestamp: new Date().toISOString()
+                });
+                const conflictError = new Error('Reservation already claimed by another booking');
+                (conflictError as { code?: string }).code = 'SLOT_ALREADY_BOOKED';
+                throw conflictError;
+              }
+              
+              // Verify the reservation matches our slot
+              const reservationData = reservationDoc.data();
+              console.log(`[CLINIC APPOINTMENT DEBUG] Verifying reservation match`, {
+                reservationSlotIndex: reservationData?.slotIndex,
+                expectedSlotIndex: actualSlotIndex,
+                reservationClinicId: reservationData?.clinicId,
+                expectedClinicId: clinicId,
+                reservationDoctor: reservationData?.doctorName,
+                expectedDoctor: selectedDoctor.name,
+                timestamp: new Date().toISOString()
+              });
+
+              if (reservationData?.slotIndex !== actualSlotIndex || 
+                  reservationData?.clinicId !== clinicId ||
+                  reservationData?.doctorName !== selectedDoctor.name) {
+                console.error(`[CLINIC APPOINTMENT DEBUG] Reservation mismatch`, {
+                  reservationData,
+                  expected: { slotIndex: actualSlotIndex, clinicId, doctorName: selectedDoctor.name }
+                });
+                const conflictError = new Error('Reservation does not match booking details');
+                (conflictError as { code?: string }).code = 'RESERVATION_MISMATCH';
+                throw conflictError;
+              }
+              
+              // CRITICAL: Verify no appointment exists at this slotIndex by reading the documents we found
+              // This ensures we see the latest state even if appointments were created between our query and transaction
+              if (existingAppointmentRefs.length > 0) {
+                const existingAppointmentSnapshots = await Promise.all(
+                  existingAppointmentRefs.map(ref => transaction.get(ref))
+                );
+                const stillActive = existingAppointmentSnapshots.filter(snap => {
+                  if (!snap.exists()) return false;
+                  const data = snap.data() as Appointment;
+                  return (data.status === 'Pending' || data.status === 'Confirmed');
+                });
+
+                if (stillActive.length > 0) {
+                  console.error(`[CLINIC APPOINTMENT DEBUG] ⚠️ DUPLICATE DETECTED IN TRANSACTION - Appointment exists at slotIndex ${actualSlotIndex}`, {
+                    existingAppointmentIds: stillActive.map(snap => snap.id),
+                    timestamp: new Date().toISOString()
+                  });
+                  const conflictError = new Error('An appointment already exists at this slot');
+                  (conflictError as { code?: string }).code = 'SLOT_ALREADY_BOOKED';
+                  throw conflictError;
+                }
+              }
+
+              console.log(`[CLINIC APPOINTMENT DEBUG] No existing appointment found - deleting reservation and creating appointment`, {
+                reservationId,
+                appointmentId,
+                slotIndex: actualSlotIndex,
+                timestamp: new Date().toISOString()
+              });
+
+              // CRITICAL: Delete the reservation as part of the transaction
+              // This ensures only ONE request can successfully claim it
+              // If multiple requests try simultaneously, only one can delete the reservation
+              transaction.delete(reservationRef);
+              
+              // Create appointment atomically in the same transaction
+              transaction.set(appointmentRef, appointmentData);
+              
+              console.log(`[CLINIC APPOINTMENT DEBUG] Transaction operations queued - about to commit`, {
+                reservationDeleted: true,
+                appointmentCreated: true,
+                timestamp: new Date().toISOString()
+              });
+            });
+            
+            console.log(`[CLINIC APPOINTMENT DEBUG] Transaction COMMITTED successfully`, {
+              appointmentId,
+              slotIndex: actualSlotIndex,
+              timestamp: new Date().toISOString()
+            });
+          } catch (error: any) {
+            console.error(`[CLINIC APPOINTMENT DEBUG] Transaction FAILED`, {
+              errorMessage: error.message,
+              errorCode: error.code,
+              errorName: error.name,
+              reservationId,
+              timestamp: new Date().toISOString()
+            });
+
+            if (error.code === 'SLOT_ALREADY_BOOKED' || error.code === 'RESERVATION_MISMATCH') {
+              toast({
+                variant: "destructive",
+                title: "Slot Already Booked",
+                description: "This time slot was just booked by someone else. Please select another time.",
+              });
+              return;
+            }
+            throw error;
+          }
 
           if (!isEditing) {
             const patientRef = doc(db, 'patients', patientForAppointmentId);
