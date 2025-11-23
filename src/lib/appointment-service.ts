@@ -1442,37 +1442,53 @@ export async function generateNextTokenAndReserveSlot(
           const finalSchedule = scheduleAttempt.schedule;
           const walkInAssignment = scheduleAttempt.newAssignment;
 
-          // CRITICAL: Calculate walk-in time based on previous appointment instead of scheduler time
-          // Get the appointment before the walk-in slot
-          let calculatedWalkInTime: Date = walkInAssignment.slotTime;
-          if (walkInAssignment.slotIndex > 0) {
-            const appointmentBeforeWalkIn = effectiveAppointments
-              .filter(appointment => 
-                appointment.bookedVia !== 'Walk-in' &&
-                typeof appointment.slotIndex === 'number' &&
-                appointment.slotIndex === walkInAssignment.slotIndex - 1 &&
-                ACTIVE_STATUSES.has(appointment.status)
-              )
-              .sort((a, b) => {
-                const aIdx = typeof a.slotIndex === 'number' ? a.slotIndex : -1;
-                const bIdx = typeof b.slotIndex === 'number' ? b.slotIndex : -1;
-                return bIdx - aIdx; // Get the last one at that slot (should be only one)
-              })[0];
-            
-            if (appointmentBeforeWalkIn && appointmentBeforeWalkIn.time) {
-              try {
-                const appointmentDate = parse(dateStr, 'd MMMM yyyy', date);
-                const previousAppointmentTime = parse(
-                  appointmentBeforeWalkIn.time,
-                  'hh:mm a',
-                  appointmentDate
-                );
-                // Walk-in time = previous appointment time (same time as A004)
-                calculatedWalkInTime = previousAppointmentTime;
-              } catch (e) {
-                // If parsing fails, use scheduler's time
+          // CRITICAL: Calculate walk-in time based on the slot at walkInAssignment.slotIndex
+          // If the slot is within availability, use the slot's time directly
+          // Otherwise, calculate based on previous appointment or scheduler time
+          let calculatedWalkInTime: Date;
+          const slotDuration = doctor.averageConsultingTime || 15;
+          
+          if (walkInAssignment.slotIndex < slots.length) {
+            // Slot is within availability - use the slot's time directly (matches patient app)
+            const slotMeta = slots[walkInAssignment.slotIndex];
+            calculatedWalkInTime = slotMeta ? slotMeta.time : walkInAssignment.slotTime;
+          } else {
+            // Slot is outside availability - calculate based on previous appointment
+            if (walkInAssignment.slotIndex > 0) {
+              const appointmentBeforeWalkIn = effectiveAppointments
+                .filter(appointment => 
+                  appointment.bookedVia !== 'Walk-in' &&
+                  typeof appointment.slotIndex === 'number' &&
+                  appointment.slotIndex === walkInAssignment.slotIndex - 1 &&
+                  ACTIVE_STATUSES.has(appointment.status)
+                )
+                .sort((a, b) => {
+                  const aIdx = typeof a.slotIndex === 'number' ? a.slotIndex : -1;
+                  const bIdx = typeof b.slotIndex === 'number' ? b.slotIndex : -1;
+                  return bIdx - aIdx; // Get the last one at that slot (should be only one)
+                })[0];
+              
+              if (appointmentBeforeWalkIn && appointmentBeforeWalkIn.time) {
+                try {
+                  const appointmentDate = parse(dateStr, 'd MMMM yyyy', date);
+                  const previousAppointmentTime = parse(
+                    appointmentBeforeWalkIn.time,
+                    'hh:mm a',
+                    appointmentDate
+                  );
+                  // Walk-in time = previous appointment time (for bucket slots outside availability)
+                  calculatedWalkInTime = previousAppointmentTime;
+                } catch (e) {
+                  // If parsing fails, use scheduler's time
+                  calculatedWalkInTime = walkInAssignment.slotTime;
+                }
+              } else {
+                // No appointment before, use scheduler's time
                 calculatedWalkInTime = walkInAssignment.slotTime;
               }
+            } else {
+              // slotIndex is 0, use scheduler's time
+              calculatedWalkInTime = walkInAssignment.slotTime;
             }
           }
 
