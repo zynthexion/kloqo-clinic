@@ -2416,7 +2416,17 @@ export async function calculateWalkInDetails(
     throw new Error('No walk-in slots are available at this time.');
   }
 
-  const patientsAhead = activeWalkIns.length;
+  // Count all appointments ahead with status Pending, Confirmed, or Skipped
+  // that have a slotIndex less than the walk-in's assigned slotIndex
+  const allActiveStatuses = new Set(['Pending', 'Confirmed', 'Skipped']);
+  const patientsAhead = appointments.filter(appointment => {
+    return (
+      typeof appointment.slotIndex === 'number' &&
+      appointment.slotIndex < assignment.slotIndex &&
+      allActiveStatuses.has(appointment.status)
+    );
+  }).length;
+
   const numericToken = placeholderNumericToken;
 
   return {

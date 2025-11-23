@@ -1786,6 +1786,9 @@ export default function AppointmentsPage() {
           }
         };
 
+        // Get skipped appointment's original time
+        const skippedOriginalTime = parseAppointmentTime(appointment);
+
         // Get arrived queue: Confirmed appointments for same doctor and date, sorted by time
         const arrivedQueue = appointments
         .filter(a =>
@@ -1800,14 +1803,24 @@ export default function AppointmentsPage() {
             return timeA.getTime() - timeB.getTime();
           });
 
-        // Calculate base time based on skippedTokenRecurrence
+        // Filter confirmed appointments to only those that come AFTER skipped appointment's original time
+        const appointmentsAfterSkipped = arrivedQueue.filter(a => {
+          const appointmentTime = parseAppointmentTime(a);
+          return appointmentTime.getTime() > skippedOriginalTime.getTime();
+        });
+
+        // Calculate base time based on skippedTokenRecurrence using filtered list
         let baseTime: Date;
-        if (arrivedQueue.length >= recurrence) {
-          // Use the time of the appointment at position 'recurrence' (0-indexed: recurrence - 1)
-          const referenceAppointment = arrivedQueue[recurrence - 1];
+        if (appointmentsAfterSkipped.length >= recurrence) {
+          // Use the time of the appointment at position 'recurrence' (0-indexed: recurrence - 1) in filtered list
+          const referenceAppointment = appointmentsAfterSkipped[recurrence - 1];
           baseTime = parseAppointmentTime(referenceAppointment);
+        } else if (appointmentsAfterSkipped.length > 0) {
+          // Use the time of the last appointment in filtered list
+          const lastAppointment = appointmentsAfterSkipped[appointmentsAfterSkipped.length - 1];
+          baseTime = parseAppointmentTime(lastAppointment);
         } else if (arrivedQueue.length > 0) {
-          // Use the time of the last appointment in arrived queue
+          // No appointments after skipped time, use the last appointment in arrived queue
           const lastAppointment = arrivedQueue[arrivedQueue.length - 1];
           baseTime = parseAppointmentTime(lastAppointment);
         } else {
@@ -3190,8 +3203,12 @@ export default function AppointmentsPage() {
                         </div>
                         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                           <TabsList className="grid w-full grid-cols-2">
-                            <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
-                            <TabsTrigger value="skipped">Skipped</TabsTrigger>
+                            <TabsTrigger value="upcoming">
+                              Pending ({todaysAppointments.filter(apt => apt.status === 'Pending').length})
+                            </TabsTrigger>
+                            <TabsTrigger value="skipped">
+                              Skipped ({todaysAppointments.filter(apt => apt.status === 'Skipped').length})
+                            </TabsTrigger>
                           </TabsList>
                         </Tabs>
                       </>
