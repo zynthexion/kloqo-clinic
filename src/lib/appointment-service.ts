@@ -1854,7 +1854,7 @@ export async function generateNextTokenAndReserveSlot(
           }
 
           // Handle slot assignment based on how we scheduled
-          // CRITICAL: Use calculated walk-in time (based on previous appointment) instead of scheduler time
+          // CRITICAL: Use calculated walk-in time (uses slot time when within availability, previous appointment time for bucket slots)
           if (usedCancelledSlot !== null) {
             // Case 1: First walk-in using cancelled slot directly - reuse the slotIndex
             chosenSlotIndex = usedCancelledSlot;
