@@ -3203,8 +3203,12 @@ export default function AppointmentsPage() {
                         </div>
                         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                           <TabsList className="grid w-full grid-cols-2">
-                            <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
-                            <TabsTrigger value="skipped">Skipped</TabsTrigger>
+                            <TabsTrigger value="upcoming">
+                              Pending ({todaysAppointments.filter(apt => apt.status === 'Pending').length})
+                            </TabsTrigger>
+                            <TabsTrigger value="skipped">
+                              Skipped ({todaysAppointments.filter(apt => apt.status === 'Skipped').length})
+                            </TabsTrigger>
                           </TabsList>
                         </Tabs>
                       </>
