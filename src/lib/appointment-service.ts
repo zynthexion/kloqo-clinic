@@ -1549,8 +1549,14 @@ export async function generateNextTokenAndReserveSlot(
               reservationDeletes.push(targetReservationRef);
             }
 
-            const targetAppointment = advanceOccupancy[targetSlotIndex];
-            if (!targetAppointment) {
+            // CRITICAL: Only shift appointments if the walk-in slot is actually occupied
+            // If the slot is empty (reserved for walk-ins), no shifting is needed
+            const targetAdvanceAppointment = advanceOccupancy[targetSlotIndex];
+            const isSlotOccupied = targetAdvanceAppointment !== null || 
+                                   activeWalkIns.some(w => typeof w.slotIndex === 'number' && w.slotIndex === targetSlotIndex);
+            
+            if (!isSlotOccupied) {
+              // Slot is empty - no shifting needed
               return {
                 reservationDeletes,
                 appointmentUpdates,
