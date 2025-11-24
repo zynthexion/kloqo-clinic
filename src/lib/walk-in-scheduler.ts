@@ -54,7 +54,7 @@ export function computeWalkInSchedule({
   advanceAppointments,
   walkInCandidates,
 }: SchedulerInput): SchedulerOutput {
-  const DEBUG = process.env.NEXT_PUBLIC_DEBUG_WALK_IN === 'true';
+  const DEBUG = true; // Always enable for debugging walk-in scheduling
   if (DEBUG) {
     console.info('[walk-in scheduler] start', {
       slots: slots.length,
@@ -147,7 +147,10 @@ export function computeWalkInSchedule({
       pos < positionCount;
       pos += 1
     ) {
-      if (occupancy[pos]?.type === 'A') {
+      const occupant = occupancy[pos];
+      // Count only advance appointments, exclude blocked appointments (skipped/cancelled)
+      // Blocked appointments have IDs starting with '__blocked_'
+      if (occupant?.type === 'A' && !occupant.id.startsWith('__blocked_')) {
         count += 1;
       }
     }
@@ -164,7 +167,10 @@ export function computeWalkInSchedule({
       pos < positionCount;
       pos += 1
     ) {
-      if (occupancy[pos]?.type === 'A') {
+      const occupant = occupancy[pos];
+      // Count only advance appointments, exclude blocked appointments (skipped/cancelled)
+      // Blocked appointments have IDs starting with '__blocked_'
+      if (occupant?.type === 'A' && !occupant.id.startsWith('__blocked_')) {
         count += 1;
         if (count === nth) {
           return pos;
@@ -321,11 +327,21 @@ export function computeWalkInSchedule({
     let assignedPosition: number | null = null;
 
     const preferredPosition = preferredPositions.get(candidate.id);
+    
+    // Check if interval logic should be enforced BEFORE bubble logic
+    // This ensures interval logic takes precedence over bubbling into 1-hour window
+    const anchorPosition = getLastWalkInPosition();
+    const advanceAfterAnchor = countAdvanceAfter(anchorPosition);
+    const shouldEnforceInterval = spacing > 0 && advanceAfterAnchor > 0;
+    
     const earliestWindowPosition = findEarliestWindowEmptyPosition();
     const preferredThreshold =
       typeof preferredPosition === 'number' ? preferredPosition : Number.POSITIVE_INFINITY;
 
+    // Only bubble into 1-hour window if interval logic shouldn't be enforced
+    // This prevents bypassing interval logic when spacing is configured
     if (
+      !shouldEnforceInterval &&
       earliestWindowPosition !== -1 &&
       earliestWindowPosition < preferredThreshold
     ) {
@@ -343,6 +359,16 @@ export function computeWalkInSchedule({
           });
         }
         continue;
+      }
+    } else if (shouldEnforceInterval && earliestWindowPosition !== -1) {
+      if (DEBUG) {
+        console.info('[walk-in scheduler] Skipping bubble logic - interval logic will be enforced', {
+          candidateId: candidate.id,
+          earliestWindowPosition,
+          anchorPosition,
+          advanceAfterAnchor,
+          spacing
+        });
       }
     }
 
@@ -398,10 +424,20 @@ export function computeWalkInSchedule({
     }
 
     // Check if interval logic should be enforced before filling empty slots
+    // Note: shouldEnforceInterval was already calculated above for bubble logic check
     // This ensures interval logic works the same way before and after consultation starts
-    const anchorPosition = getLastWalkInPosition();
-    const advanceAfterAnchor = countAdvanceAfter(anchorPosition);
-    const shouldEnforceInterval = spacing > 0 && advanceAfterAnchor > 0;
+    
+    if (DEBUG) {
+      console.info('[walk-in scheduler] Empty slot loop check', {
+        candidateId: candidate.id,
+        anchorPosition,
+        advanceAfterAnchor,
+        spacing,
+        shouldEnforceInterval,
+        effectiveFirstFuturePosition,
+        positionCount
+      });
+    }
     
     // Only fill empty slots if interval logic shouldn't be enforced
     // (e.g., no spacing configured or no advance appointments available)
@@ -426,15 +462,48 @@ export function computeWalkInSchedule({
       let targetPosition = -1;
 
       const advanceAfterAnchor = countAdvanceAfter(anchorPosition);
+      
+      if (DEBUG) {
+        console.info('[walk-in scheduler] Interval logic calculation', {
+          candidateId: candidate.id,
+          anchorPosition,
+          advanceAfterAnchor,
+          spacing,
+          effectiveFirstFuturePosition,
+          occupancy: occupancy.map((occ, idx) => ({ position: idx, type: occ?.type, id: occ?.id }))
+        });
+      }
+      
       if (spacing > 0 && advanceAfterAnchor >= spacing) {
         const nthAdvancePosition = findNthAdvanceAfter(anchorPosition, spacing);
+        if (DEBUG) {
+          console.info('[walk-in scheduler] Interval logic - nth position found', {
+            candidateId: candidate.id,
+            nthAdvancePosition,
+            spacing,
+            anchorPosition
+          });
+        }
         if (nthAdvancePosition !== -1) {
           targetPosition = nthAdvancePosition + 1;
+        }
+      } else {
+        if (DEBUG) {
+          console.info('[walk-in scheduler] Interval logic skipped', {
+            candidateId: candidate.id,
+            reason: spacing === 0 ? 'spacing is 0' : `advanceAfterAnchor (${advanceAfterAnchor}) < spacing (${spacing})`
+          });
         }
       }
 
       if (targetPosition === -1) {
         const lastAdvancePosition = findLastAdvanceAfter(anchorPosition);
+        if (DEBUG) {
+          console.info('[walk-in scheduler] Fallback to last advance position', {
+            candidateId: candidate.id,
+            lastAdvancePosition
+          });
+        }
         if (lastAdvancePosition !== -1) {
           targetPosition = lastAdvancePosition + 1;
         }
@@ -442,10 +511,34 @@ export function computeWalkInSchedule({
 
       if (targetPosition === -1) {
         targetPosition = findFirstEmptyPosition(effectiveFirstFuturePosition);
+        if (DEBUG) {
+          console.info('[walk-in scheduler] Fallback to first empty position (from effectiveFirstFuturePosition)', {
+            candidateId: candidate.id,
+            targetPosition,
+            effectiveFirstFuturePosition
+          });
+        }
       }
 
       if (targetPosition === -1) {
         targetPosition = findFirstEmptyPosition(0);
+        if (DEBUG) {
+          console.info('[walk-in scheduler] Fallback to first empty position (from 0)', {
+            candidateId: candidate.id,
+            targetPosition
+          });
+        }
+      }
+      
+      if (DEBUG && targetPosition !== -1) {
+        const targetSlot = orderedSlots[targetPosition];
+        console.info('[walk-in scheduler] Final target position determined', {
+          candidateId: candidate.id,
+          targetPosition,
+          slotIndex: targetSlot?.index,
+          slotTime: targetSlot?.time?.toISOString(),
+          sessionIndex: targetSlot?.sessionIndex
+        });
       }
 
       const prepared = makeSpaceForWalkIn(
