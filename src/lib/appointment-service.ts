@@ -2436,7 +2436,7 @@ export async function calculateWalkInDetails(
   clinicId: string,
   doctorName: string,
   doctor: Doctor,
-  walkInTokenAllotment: number = 0,
+  walkInTokenAllotment?: number,
   walkInCapacityThreshold: number = 0
 ): Promise<{
   estimatedTime: Date;
@@ -2448,6 +2448,20 @@ export async function calculateWalkInDetails(
 }> {
   const now = new Date();
   const date = now;
+  
+  // Fetch walkInTokenAllotment from database if not provided (same as generateNextTokenAndReserveSlot)
+  let spacingValue = 0;
+  if (walkInTokenAllotment !== undefined && Number.isFinite(walkInTokenAllotment) && walkInTokenAllotment > 0) {
+    // Use provided value if valid
+    spacingValue = Math.floor(walkInTokenAllotment);
+  } else {
+    // Fetch from database if not provided
+    if (clinicId) {
+      const clinicSnap = await getDoc(doc(db, 'clinics', clinicId));
+      const rawSpacing = clinicSnap.exists() ? Number(clinicSnap.data()?.walkInTokenAllotment ?? 0) : 0;
+      spacingValue = Number.isFinite(rawSpacing) && rawSpacing > 0 ? Math.floor(rawSpacing) : 0;
+    }
+  }
 
   const { slots } = await loadDoctorAndSlots(clinicId, doctorName, date, doctor.id);
   const appointments = await fetchDayAppointments(clinicId, doctorName, date);
@@ -2499,7 +2513,7 @@ export async function calculateWalkInDetails(
   const schedule = computeWalkInSchedule({
     slots,
     now,
-        walkInTokenAllotment,
+    walkInTokenAllotment: spacingValue,
     advanceAppointments: activeAdvanceAppointments.map(entry => ({
       id: entry.id,
       slotIndex: typeof entry.slotIndex === 'number' ? entry.slotIndex : -1,
