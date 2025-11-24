@@ -840,6 +840,22 @@ export async function generateNextTokenAndReserveSlot(
             walkInsOutsideAvailability: usedBucketSlots,
             effectiveBucketCount: firestoreBucketCount,
           });
+          
+          // DEBUG: Additional detailed bucket calculation info
+          console.info('[Walk-in Scheduling] DEBUG - Bucket Calculation Details:', {
+            totalEffectiveAppointments: effectiveAppointments.length,
+            cancelledAppointments: effectiveAppointments.filter(a => a.status === 'Cancelled').length,
+            noShowAppointments: effectiveAppointments.filter(a => a.status === 'No-show').length,
+            activeWalkInsCount: activeWalkIns.length,
+            walkInsOutsideAvailabilityDetails: walkInsOutsideAvailability.map(w => ({
+              id: w.id,
+              slotIndex: w.slotIndex,
+              status: w.status,
+            })),
+            slotsWithActiveAppointments: Array.from(slotsWithActiveAppointments).sort((a, b) => a - b),
+            oneHourAhead: oneHourAhead.toISOString(),
+            currentTime: now.toISOString(),
+          });
 
           const averageConsultingTime = doctor.averageConsultingTime || 15;
           const totalMinutes =
@@ -1071,19 +1087,41 @@ export async function generateNextTokenAndReserveSlot(
               }
             });
             // Check if all slots in availability (future slots only, excluding cancelled slots in bucket) are occupied
+            const emptySlots: number[] = [];
+            const futureSlotsCount: number[] = [];
+            const cancelledInBucketSlots: number[] = [];
+            
             for (let i = 0; i < slots.length; i++) {
               if (isBefore(slots[i].time, now)) {
                 continue; // Skip past slots
               }
+              futureSlotsCount.push(i);
               // Skip cancelled slots in bucket - they're blocked, not available
               if (hasExistingWalkIns && cancelledSlotsInBucket.has(i)) {
+                cancelledInBucketSlots.push(i);
                 continue; // Skip cancelled slots in bucket
               }
               if (!occupiedSlots.has(i)) {
-                return false; // Found an empty slot
+                emptySlots.push(i); // Found an empty slot
               }
             }
-            return true; // All available future slots are occupied
+            
+            const isAllSlotsFilled = emptySlots.length === 0;
+            
+            // DEBUG: Log allSlotsFilled calculation details
+            console.info('[Walk-in Scheduling] DEBUG - allSlotsFilled Calculation:', {
+              futureSlotsTotal: futureSlotsCount.length,
+              futureSlots: futureSlotsCount,
+              cancelledInBucketSlotsTotal: cancelledInBucketSlots.length,
+              cancelledInBucketSlots: cancelledInBucketSlots,
+              emptySlotsTotal: emptySlots.length,
+              emptySlots: emptySlots,
+              occupiedSlotsTotal: occupiedSlots.size,
+              occupiedSlots: Array.from(occupiedSlots).sort((a, b) => a - b),
+              allSlotsFilled: isAllSlotsFilled,
+            });
+            
+            return isAllSlotsFilled; // All available future slots are occupied
           })();
 
           let scheduleAttempt: ScheduleAttemptResult | null = null;
@@ -1126,7 +1164,44 @@ export async function generateNextTokenAndReserveSlot(
 
           // Strategy 4: If normal scheduling fails and all slots are filled, check bucket count
           // Bucket count is calculated on-the-fly, so we can use it directly
+          
+          // DEBUG: Log all conditions before Strategy 4 check
+          console.info('[Walk-in Scheduling] DEBUG - Strategy 4 Pre-Check:', {
+            scheduleAttempt: !!scheduleAttempt,
+            allSlotsFilled,
+            hasExistingWalkIns,
+            activeWalkInsCount: activeWalkIns.length,
+            firestoreBucketCount,
+            bucketCount,
+            usedBucketSlots,
+            totalSlots: slots.length,
+            occupiedSlotsCount: effectiveAppointments.filter(a => 
+              typeof a.slotIndex === 'number' && 
+              ACTIVE_STATUSES.has(a.status)
+            ).length,
+            cancelledNoShowCount: effectiveAppointments.filter(a => 
+              (a.status === 'Cancelled' || a.status === 'No-show')
+            ).length,
+            willTriggerBucketCompensation: !scheduleAttempt && allSlotsFilled && hasExistingWalkIns && firestoreBucketCount > 0,
+          });
+          
+          // DEBUG: Log why Strategy 4 might NOT trigger
+          if (!scheduleAttempt && (!allSlotsFilled || !hasExistingWalkIns || firestoreBucketCount <= 0)) {
+            console.info('[Walk-in Scheduling] DEBUG - ❌ Strategy 4 NOT Triggered - Reasons:', {
+              scheduleAttemptExists: !!scheduleAttempt,
+              allSlotsFilled,
+              hasExistingWalkIns,
+              firestoreBucketCount,
+              reason: !allSlotsFilled ? 'allSlotsFilled is false' : 
+                      !hasExistingWalkIns ? 'hasExistingWalkIns is false' : 
+                      firestoreBucketCount <= 0 ? `firestoreBucketCount (${firestoreBucketCount}) <= 0` : 
+                      'unknown',
+            });
+          }
+          
           if (!scheduleAttempt && allSlotsFilled && hasExistingWalkIns && firestoreBucketCount > 0) {
+            console.info('[Walk-in Scheduling] DEBUG - ✅ Strategy 4 TRIGGERED - Bucket Compensation Starting');
+            
             // CRITICAL: Re-calculate bucket count within transaction to prevent concurrent usage
             // Count walk-ins placed outside availability (they're "using" bucket slots)
             const walkInsOutsideAvailabilityInTx = effectiveAppointments.filter(appt => {
