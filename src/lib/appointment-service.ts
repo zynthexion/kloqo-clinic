@@ -17,7 +17,7 @@ import type { Doctor, Appointment } from '@/lib/types';
 import { computeWalkInSchedule, type SchedulerAssignment } from '@/lib/walk-in-scheduler';
 import { parseTime as parseTimeString } from '@/lib/utils';
 
-const ACTIVE_STATUSES = new Set(['Pending', 'Confirmed']);
+const ACTIVE_STATUSES = new Set(['Pending', 'Confirmed', 'Skipped']);
 const MAX_TRANSACTION_ATTEMPTS = 5;
 const RESERVATION_CONFLICT_CODE = 'slot-reservation-conflict';
 
