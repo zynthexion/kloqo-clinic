@@ -1242,7 +1242,7 @@ export default function DoctorsPage() {
           const { parseTime } = await import('@/lib/utils');
           const { collection, query, where, getDocs } = await import('firebase/firestore');
           const { getDoc } = await import('firebase/firestore');
-          type Appointment = (await import('@/lib/types')).Appointment;
+          // Appointment type is already imported at the top of the file
           
           // Get clinic name
           const clinicId = selectedDoctor.clinicId;
