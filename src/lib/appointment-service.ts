@@ -17,7 +17,7 @@ import type { Doctor, Appointment } from '@/lib/types';
 import { computeWalkInSchedule, type SchedulerAssignment } from '@/lib/walk-in-scheduler';
 import { parseTime as parseTimeString } from '@/lib/utils';
 
-const ACTIVE_STATUSES = new Set(['Pending', 'Confirmed', 'Skipped']);
+const ACTIVE_STATUSES = new Set(['Pending', 'Confirmed', 'Skipped', 'Completed']);
 const MAX_TRANSACTION_ATTEMPTS = 5;
 const RESERVATION_CONFLICT_CODE = 'slot-reservation-conflict';
 
@@ -2513,9 +2513,9 @@ export async function calculateWalkInDetails(
     throw new Error('No walk-in slots are available at this time.');
   }
 
-  // Count all appointments ahead with status Pending, Confirmed, or Skipped
+  // Count all appointments ahead with status Pending, Confirmed, Skipped, or Completed
   // that have a slotIndex less than the walk-in's assigned slotIndex
-  const allActiveStatuses = new Set(['Pending', 'Confirmed', 'Skipped']);
+  const allActiveStatuses = new Set(['Pending', 'Confirmed', 'Skipped', 'Completed']);
   const patientsAhead = appointments.filter(appointment => {
     return (
       typeof appointment.slotIndex === 'number' &&
