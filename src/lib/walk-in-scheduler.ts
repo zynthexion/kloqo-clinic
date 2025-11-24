@@ -397,17 +397,27 @@ export function computeWalkInSchedule({
       }
     }
 
-    for (let pos = effectiveFirstFuturePosition; pos < positionCount; pos += 1) {
-      const slotMeta = orderedSlots[pos];
-      if (isAfter(slotMeta.time, oneHourFromNow)) {
-        break;
-      }
-      if (isBefore(slotMeta.time, now)) {
-        continue;
-      }
-      if (occupancy[pos] === null) {
-        assignedPosition = pos;
-        break;
+    // Check if interval logic should be enforced before filling empty slots
+    // This ensures interval logic works the same way before and after consultation starts
+    const anchorPosition = getLastWalkInPosition();
+    const advanceAfterAnchor = countAdvanceAfter(anchorPosition);
+    const shouldEnforceInterval = spacing > 0 && advanceAfterAnchor > 0;
+    
+    // Only fill empty slots if interval logic shouldn't be enforced
+    // (e.g., no spacing configured or no advance appointments available)
+    if (!shouldEnforceInterval) {
+      for (let pos = effectiveFirstFuturePosition; pos < positionCount; pos += 1) {
+        const slotMeta = orderedSlots[pos];
+        if (isAfter(slotMeta.time, oneHourFromNow)) {
+          break;
+        }
+        if (isBefore(slotMeta.time, now)) {
+          continue;
+        }
+        if (occupancy[pos] === null) {
+          assignedPosition = pos;
+          break;
+        }
       }
     }
 
