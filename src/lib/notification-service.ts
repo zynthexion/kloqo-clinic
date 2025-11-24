@@ -3,7 +3,10 @@
  * Sends notifications to patients when appointments are created
  */
 
-import { Firestore, doc, getDoc } from 'firebase/firestore';
+import { Firestore, doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { parse, format, subMinutes } from 'date-fns';
+import { parseTime } from '@/lib/utils';
+import type { Appointment } from '@/lib/types';
 
 export async function sendNotificationToPatient(params: {
   firestore: Firestore;
@@ -244,21 +247,55 @@ export async function sendBreakUpdateNotification(params: {
   oldTime: string;
   newTime: string;
   reason?: string;
+  arriveByTime?: string;
 }): Promise<boolean> {
-  const { firestore, patientId, appointmentId, doctorName, clinicName, oldTime, newTime, reason } = params;
+  const { firestore, patientId, appointmentId, doctorName, clinicName, oldTime, newTime, reason, arriveByTime } = params;
+
+  // If arriveByTime is provided, calculate new time as arriveByTime - 15 minutes
+  // Otherwise, use newTime - 15 minutes
+  let displayNewTime = newTime;
+  try {
+    // Get appointment date from appointmentId if needed
+    let appointmentDate: Date = new Date();
+    try {
+      const appointmentDoc = await getDoc(doc(firestore, 'appointments', appointmentId));
+      if (appointmentDoc.exists()) {
+        const appointmentData = appointmentDoc.data() as Appointment;
+        appointmentDate = parse(appointmentData.date, 'd MMMM yyyy', new Date());
+      }
+    } catch (e) {
+      // Use current date as fallback
+      appointmentDate = new Date();
+    }
+
+    if (arriveByTime) {
+      // Use arriveByTime from database - subtract 15 minutes
+      const arriveByDateTime = parseTime(arriveByTime, appointmentDate);
+      const calculatedNewTime = subMinutes(arriveByDateTime, 15);
+      displayNewTime = format(calculatedNewTime, 'hh:mm a');
+    } else {
+      // Use newTime - subtract 15 minutes
+      const newTimeDateTime = parseTime(newTime, appointmentDate);
+      const calculatedNewTime = subMinutes(newTimeDateTime, 15);
+      displayNewTime = format(calculatedNewTime, 'hh:mm a');
+    }
+  } catch (error) {
+    console.error('Error calculating new time from arriveByTime:', error);
+    // Fallback to provided newTime
+  }
 
   return sendNotificationToPatient({
     firestore,
     patientId,
     title: 'Appointment Time Changed',
-    body: `${clinicName} has rescheduled your appointment with Dr. ${doctorName} from ${oldTime} to ${newTime}.${reason ? ` Reason: ${reason}` : ''}`,
+    body: `${clinicName} has rescheduled your appointment with Dr. ${doctorName} from ${oldTime} to ${displayNewTime}.${reason ? ` Reason: ${reason}` : ''}`,
     data: {
       type: 'appointment_rescheduled',
       appointmentId,
       doctorName,
       clinicName,
       oldTime,
-      newTime,
+      newTime: displayNewTime,
       reason,
     },
   });
@@ -295,5 +332,197 @@ export async function sendAppointmentSkippedNotification(params: {
       url: '/live-token', // Click will open live token page
     },
   });
+}
+
+/**
+ * Send notification to patients about how many people are ahead of them
+ */
+export async function sendPeopleAheadNotification(params: {
+  firestore: Firestore;
+  patientId: string;
+  appointmentId: string;
+  clinicName: string;
+  tokenNumber: string;
+  doctorName: string;
+  peopleAhead: number;
+  appointmentTime: string;
+  appointmentDate: string;
+}): Promise<boolean> {
+  const { firestore, patientId, appointmentId, clinicName, tokenNumber, doctorName, peopleAhead, appointmentTime, appointmentDate } = params;
+
+  // Calculate display time (arriveByTime - 15 minutes)
+  let displayTime = appointmentTime;
+  try {
+    const appointmentDateObj = parse(appointmentDate, 'd MMMM yyyy', new Date());
+    const appointmentDateTime = parseTime(appointmentTime, appointmentDateObj);
+    const displayDateTime = subMinutes(appointmentDateTime, 15);
+    displayTime = format(displayDateTime, 'hh:mm a');
+  } catch (error) {
+    console.error('Error calculating display time:', error);
+  }
+
+  const peopleAheadText = peopleAhead === 1 ? '1 person' : `${peopleAhead} people`;
+  const body = peopleAhead === 0
+    ? `There is ${peopleAheadText} ahead of you. You will be next to see Dr. ${doctorName} at ${clinicName}. Your appointment time: ${displayTime}. Token: ${tokenNumber}`
+    : `There ${peopleAhead === 1 ? 'is' : 'are'} ${peopleAheadText} ahead of you. You will be next to see Dr. ${doctorName} at ${clinicName}. Your appointment time: ${displayTime}. Token: ${tokenNumber}`;
+
+  return sendNotificationToPatient({
+    firestore,
+    patientId,
+    title: peopleAhead === 0 ? 'You are Next!' : `Queue Update: ${peopleAheadText} Ahead`,
+    body,
+    data: {
+      type: 'queue_update',
+      appointmentId,
+      clinicName,
+      tokenNumber,
+      doctorName,
+      peopleAhead,
+      appointmentTime: displayTime,
+      appointmentDate,
+      url: '/live-token',
+    },
+  });
+}
+
+/**
+ * Send notification when doctor starts consultation (status becomes 'In')
+ */
+export async function sendDoctorConsultationStartedNotification(params: {
+  firestore: Firestore;
+  patientId: string;
+  appointmentId: string;
+  clinicName: string;
+  tokenNumber: string;
+  doctorName: string;
+  appointmentTime: string;
+  appointmentDate: string;
+  arriveByTime?: string;
+}): Promise<boolean> {
+  const { firestore, patientId, appointmentId, clinicName, tokenNumber, doctorName, appointmentTime, appointmentDate, arriveByTime } = params;
+
+  // Calculate display time (arriveByTime - 15 minutes if available, otherwise appointmentTime - 15)
+  let displayTime = appointmentTime;
+  try {
+    const appointmentDateObj = parse(appointmentDate, 'd MMMM yyyy', new Date());
+    if (arriveByTime) {
+      const arriveByDateTime = parseTime(arriveByTime, appointmentDateObj);
+      const displayDateTime = subMinutes(arriveByDateTime, 15);
+      displayTime = format(displayDateTime, 'hh:mm a');
+    } else {
+      const appointmentDateTime = parseTime(appointmentTime, appointmentDateObj);
+      const displayDateTime = subMinutes(appointmentDateTime, 15);
+      displayTime = format(displayDateTime, 'hh:mm a');
+    }
+  } catch (error) {
+    console.error('Error calculating display time:', error);
+  }
+
+  return sendNotificationToPatient({
+    firestore,
+    patientId,
+    title: 'Doctor Consultation Started',
+    body: `Dr. ${doctorName} has started consultation at ${clinicName}. Your appointment time: ${displayTime}. Token: ${tokenNumber}`,
+    data: {
+      type: 'doctor_consultation_started',
+      appointmentId,
+      clinicName,
+      tokenNumber,
+      doctorName,
+      appointmentTime: displayTime,
+      appointmentDate,
+      url: '/live-token',
+    },
+  });
+}
+
+/**
+ * Notify next patients in queue when an appointment is completed
+ */
+export async function notifyNextPatientsWhenCompleted(params: {
+  firestore: Firestore;
+  completedAppointmentId: string;
+  completedAppointment: Appointment;
+  clinicName: string;
+}): Promise<void> {
+  const { firestore, completedAppointmentId, completedAppointment, clinicName } = params;
+
+  try {
+    // Get all appointments for the same doctor and date
+    const appointmentsQuery = query(
+      collection(firestore, 'appointments'),
+      where('doctor', '==', completedAppointment.doctor),
+      where('date', '==', completedAppointment.date),
+      where('status', 'in', ['Pending', 'Confirmed'])
+    );
+
+    const appointmentsSnapshot = await getDocs(appointmentsQuery);
+    const allAppointments = appointmentsSnapshot.docs
+      .map(doc => ({ id: doc.id, ...doc.data() } as Appointment))
+      .filter(apt => apt.id !== completedAppointmentId);
+
+    // Sort by slotIndex or time
+    const sortedAppointments = allAppointments.sort((a, b) => {
+      if (typeof a.slotIndex === 'number' && typeof b.slotIndex === 'number') {
+        return a.slotIndex - b.slotIndex;
+      }
+      // Fallback to time comparison
+      try {
+        const dateA = parse(a.date, 'd MMMM yyyy', new Date());
+        const dateB = parse(b.date, 'd MMMM yyyy', new Date());
+        const timeA = parseTime(a.time, dateA);
+        const timeB = parseTime(b.time, dateB);
+        return timeA.getTime() - timeB.getTime();
+      } catch {
+        return 0;
+      }
+    });
+
+    // Get appointments that come after the completed one
+    const completedSlotIndex = typeof completedAppointment.slotIndex === 'number' ? completedAppointment.slotIndex : -1;
+    const nextAppointments = sortedAppointments.filter(apt => {
+      if (typeof apt.slotIndex === 'number' && completedSlotIndex >= 0) {
+        return apt.slotIndex > completedSlotIndex;
+      }
+      // Fallback to time comparison
+      try {
+        const dateCompleted = parse(completedAppointment.date, 'd MMMM yyyy', new Date());
+        const dateApt = parse(apt.date, 'd MMMM yyyy', new Date());
+        const timeCompleted = parseTime(completedAppointment.time, dateCompleted);
+        const timeApt = parseTime(apt.time, dateApt);
+        return timeApt.getTime() > timeCompleted.getTime();
+      } catch {
+        return false;
+      }
+    });
+
+    // Send notifications to next patients (limit to first 3 to avoid spam)
+    const appointmentsToNotify = nextAppointments.slice(0, 3);
+    for (let i = 0; i < appointmentsToNotify.length; i++) {
+      const appointment = appointmentsToNotify[i];
+      const peopleAhead = i; // Number of appointments ahead (0-indexed)
+
+      if (!appointment.patientId) continue;
+
+      try {
+        await sendPeopleAheadNotification({
+          firestore,
+          patientId: appointment.patientId,
+          appointmentId: appointment.id,
+          clinicName,
+          tokenNumber: appointment.tokenNumber,
+          doctorName: appointment.doctor,
+          peopleAhead,
+          appointmentTime: appointment.time,
+          appointmentDate: appointment.date,
+        });
+      } catch (error) {
+        console.error(`Failed to send notification to patient ${appointment.patientId}:`, error);
+        // Continue with other notifications
+      }
+    }
+  } catch (error) {
+    console.error('Error notifying next patients:', error);
+  }
 }
 

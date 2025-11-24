@@ -1957,21 +1957,21 @@ export default function AppointmentsPage() {
           // Don't fail the completion if counter update fails
         }
         
-        // Send token called notification
+        // Send notifications to next patients when appointment is completed
         try {
+            const { notifyNextPatientsWhenCompleted } = await import('@/lib/notification-service');
             const clinicDoc = await getFirestoreDoc(doc(db, 'clinics', appointment.clinicId));
             const clinicName = clinicDoc.data()?.name || 'The clinic';
             
-            await sendTokenCalledNotification({
+            await notifyNextPatientsWhenCompleted({
                 firestore: db,
-                patientId: appointment.patientId,
-                appointmentId: appointment.id,
+                completedAppointmentId: appointment.id,
+                completedAppointment: appointment,
                 clinicName,
-                tokenNumber: appointment.tokenNumber,
-                doctorName: appointment.doctor,
             });
+            console.log('Notifications sent to next patients in queue');
         } catch (notifError) {
-            console.error('Failed to send token called notification:', notifError);
+            console.error('Failed to send notifications to next patients:', notifError);
             // Don't fail the completion if notification fails
         }
         

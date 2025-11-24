@@ -1074,6 +1074,7 @@ export default function DoctorsPage() {
                         oldTime: apptData.time,
                         newTime: format(updatedAppt.newTime, 'hh:mm a'),
                         reason: 'Doctor on break',
+                        arriveByTime: apptData.arriveByTime,
                     });
                 }
                 
@@ -1232,6 +1233,91 @@ export default function DoctorsPage() {
           docItem.id === selectedDoctor.id ? { ...docItem, consultationStatus: nextStatus } : docItem
         )
       );
+      
+      // When status changes to 'In', notify all patients in the current session
+      if (nextStatus === 'In') {
+        try {
+          const { sendDoctorConsultationStartedNotification } = await import('@/lib/notification-service');
+          const { format, parse } = await import('date-fns');
+          const { parseTime } = await import('@/lib/utils');
+          const { collection, query, where, getDocs } = await import('firebase/firestore');
+          const { getDoc } = await import('firebase/firestore');
+          type Appointment = (await import('@/lib/types')).Appointment;
+          
+          // Get clinic name
+          const clinicId = selectedDoctor.clinicId;
+          if (clinicId) {
+            const clinicDocRef = doc(db, 'clinics', clinicId);
+            const clinicDoc = await getDoc(clinicDocRef).catch(() => null);
+            const clinicName = clinicDoc?.data()?.name || 'The clinic';
+            
+            // Get current session index
+            const today = format(new Date(), 'd MMMM yyyy');
+            const todayDay = format(new Date(), 'EEEE');
+            const todaysAvailability = selectedDoctor.availabilitySlots?.find(s => s.day === todayDay);
+            
+            if (todaysAvailability && todaysAvailability.timeSlots.length > 0) {
+              // Find current session
+              const now = new Date();
+              let currentSessionIndex: number | undefined = undefined;
+              
+              for (let i = 0; i < todaysAvailability.timeSlots.length; i++) {
+                const session = todaysAvailability.timeSlots[i];
+                const sessionStart = parseTime(session.from, now);
+                const sessionEnd = parseTime(session.to, now);
+                
+                if (now >= sessionStart && now <= sessionEnd) {
+                  currentSessionIndex = i;
+                  break;
+                }
+              }
+              
+              // Get all appointments for this doctor, date, and session
+              if (currentSessionIndex !== undefined) {
+                const appointmentsQuery = query(
+                  collection(db, 'appointments'),
+                  where('doctor', '==', selectedDoctor.name),
+                  where('date', '==', today),
+                  where('status', 'in', ['Pending', 'Confirmed'])
+                );
+                
+                const appointmentsSnapshot = await getDocs(appointmentsQuery);
+                const sessionAppointments = appointmentsSnapshot.docs
+                  .map(doc => ({ id: doc.id, ...doc.data() } as Appointment))
+                  .filter(apt => apt.sessionIndex === currentSessionIndex);
+                
+                // Send notifications to all patients in session
+                for (const appointment of sessionAppointments) {
+                  if (!appointment.patientId) continue;
+                  
+                  try {
+                    await sendDoctorConsultationStartedNotification({
+                      firestore: db,
+                      patientId: appointment.patientId,
+                      appointmentId: appointment.id,
+                      clinicName,
+                      tokenNumber: appointment.tokenNumber,
+                      doctorName: appointment.doctor,
+                      appointmentTime: appointment.time,
+                      appointmentDate: appointment.date,
+                      arriveByTime: appointment.arriveByTime,
+                    });
+                  } catch (error) {
+                    console.error(`Failed to send notification to patient ${appointment.patientId}:`, error);
+                    // Continue with other notifications
+                  }
+                }
+                
+                console.log(`Notifications sent to ${sessionAppointments.length} patients for consultation start`);
+              }
+            }
+          }
+        } catch (notifError) {
+          console.error('Failed to send consultation started notifications:', notifError);
+          // Don't fail the status update if notification fails
+        }
+      }
+      
       toast({
         title: `Status updated`,
         description: `Consultation status set to ${nextStatus}.`,
