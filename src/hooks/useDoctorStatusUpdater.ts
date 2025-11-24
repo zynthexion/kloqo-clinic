@@ -143,16 +143,17 @@ export function useDoctorStatusUpdater() {
             }
           }
           
-          // Only auto-set to 'Out', never auto-set to 'In'
-          if (doctor.consultationStatus === 'In' && shouldBeOut) {
-            const doctorRef = doc(db, 'doctors', doctor.id);
-            batch.update(doctorRef, { 
-              consultationStatus: 'Out',
-              updatedAt: new Date()
-            });
-            batchHasWrites = true;
-            console.log(`Auto-updating doctor ${doctor.name} status from In to Out (outside availability)`);
-          }
+          // REMOVED: Auto-set to 'Out' logic - doctors can now manually set status to 'In' before availability time
+          // Status changes are now completely manual - no automatic 'Out' based on availability
+          // if (doctor.consultationStatus === 'In' && shouldBeOut) {
+          //   const doctorRef = doc(db, 'doctors', doctor.id);
+          //   batch.update(doctorRef, { 
+          //     consultationStatus: 'Out',
+          //     updatedAt: new Date()
+          //   });
+          //   batchHasWrites = true;
+          //   console.log(`Auto-updating doctor ${doctor.name} status from In to Out (outside availability)`);
+          // }
         }
 
         if (batchHasWrites) {

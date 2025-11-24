@@ -378,13 +378,14 @@ async function updateDoctorConsultationStatuses(clinicId: string): Promise<void>
     // Only auto-set to 'Out', never auto-set to 'In' (manual only)
     const shouldBeOut = shouldDoctorBeOut(doctor, currentDay, currentTime);
     
-    // Only update if doctor is currently 'In' and should be 'Out'
-    if (doctor.consultationStatus === 'In' && shouldBeOut) {
-      doctorsToUpdate.push({ id: docSnapshot.id, doctor });
-      console.log(`Doctor ${doctor.name} should be marked as Out (outside availability)`);
-    } else {
-      console.log(`Doctor ${doctor.name} status is correct (${doctor.consultationStatus})`);
-    }
+    // REMOVED: Auto-set to 'Out' logic - doctors can now manually set status to 'In' before availability time
+    // Status changes are now completely manual - no automatic 'Out' based on availability
+    // if (doctor.consultationStatus === 'In' && shouldBeOut) {
+    //   doctorsToUpdate.push({ id: docSnapshot.id, doctor });
+    //   console.log(`Doctor ${doctor.name} should be marked as Out (outside availability)`);
+    // } else {
+    //   console.log(`Doctor ${doctor.name} status is correct (${doctor.consultationStatus})`);
+    // }
   });
   
   console.log(`Found ${doctorsToUpdate.length} doctors to update`);
