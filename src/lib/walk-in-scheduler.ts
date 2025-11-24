@@ -426,7 +426,7 @@ export function computeWalkInSchedule({
       let targetPosition = -1;
 
       const advanceAfterAnchor = countAdvanceAfter(anchorPosition);
-      if (spacing > 0 && advanceAfterAnchor > spacing) {
+      if (spacing > 0 && advanceAfterAnchor >= spacing) {
         const nthAdvancePosition = findNthAdvanceAfter(anchorPosition, spacing);
         if (nthAdvancePosition !== -1) {
           targetPosition = nthAdvancePosition + 1;
