@@ -38,3 +38,4 @@ next-env.d.ts
 # studio
 .firebase/
 service-account.json
+service-account-key.json
