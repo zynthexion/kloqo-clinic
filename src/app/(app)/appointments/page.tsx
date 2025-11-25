@@ -2813,6 +2813,31 @@ export default function AppointmentsPage() {
     // Return Confirmed at top, then Pending, then Skipped
     return [...confirmed, ...pending, ...skipped];
   }, [filteredAppointments, today, nextSessionIndexByDoctor]);
+
+  // Calculate tab counts separately to ensure they're always available regardless of active tab
+  // Count ALL pending and skipped appointments for today from base appointments array
+  // Respect selectedDrawerDoctor filter but NOT activeTab filter
+  const pendingCount = useMemo(() => {
+    let filtered = appointments.filter(apt => apt.date === today && apt.status === 'Pending');
+    
+    // Apply doctor filter if selected (but not activeTab filter)
+    if (selectedDrawerDoctor && selectedDrawerDoctor !== 'all') {
+      filtered = filtered.filter(apt => apt.doctor === selectedDrawerDoctor);
+    }
+    
+    return filtered.length;
+  }, [appointments, today, selectedDrawerDoctor]);
+
+  const skippedCount = useMemo(() => {
+    let filtered = appointments.filter(apt => apt.date === today && apt.status === 'Skipped');
+    
+    // Apply doctor filter if selected (but not activeTab filter)
+    if (selectedDrawerDoctor && selectedDrawerDoctor !== 'all') {
+      filtered = filtered.filter(apt => apt.doctor === selectedDrawerDoctor);
+    }
+    
+    return filtered.length;
+  }, [appointments, today, selectedDrawerDoctor]);
   
   // Get buffer queue for a specific doctor (first 2 from arrived queue)
   const getBufferQueue = (doctorName: string): Appointment[] => {
@@ -3543,10 +3568,10 @@ export default function AppointmentsPage() {
                         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                           <TabsList className="grid w-full grid-cols-2">
                             <TabsTrigger value="upcoming">
-                              Pending ({todaysAppointments.filter(apt => apt.status === 'Pending').length})
+                              Pending ({pendingCount})
                             </TabsTrigger>
                             <TabsTrigger value="skipped">
-                              Skipped ({todaysAppointments.filter(apt => apt.status === 'Skipped').length})
+                              Skipped ({skippedCount})
                             </TabsTrigger>
                           </TabsList>
                         </Tabs>
