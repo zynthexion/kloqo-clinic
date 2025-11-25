@@ -770,11 +770,26 @@ export default function AppointmentsPage() {
     if (appointmentType === 'Walk-in' && selectedDoctor && isWalkInAvailable) {
       setIsCalculatingEstimate(true);
       const allotment = clinicDetails?.walkInTokenAllotment || 3;
+      console.log('[WALK-IN DEBUG] Starting walk-in details calculation', {
+        doctor: selectedDoctor.name,
+        clinicId: clinicId ?? selectedDoctor.clinicId,
+        walkInTokenAllotment: allotment,
+        timestamp: new Date().toISOString()
+      });
       calculateWalkInDetails(clinicId ?? selectedDoctor.clinicId, selectedDoctor.name, selectedDoctor, allotment).then(details => {
+        console.log('[WALK-IN DEBUG] Walk-in details calculated', {
+          slotIndex: details.slotIndex,
+          patientsAhead: details.patientsAhead,
+          estimatedTime: details.estimatedTime.toISOString(),
+          numericToken: details.numericToken,
+          sessionIndex: details.sessionIndex,
+          actualSlotTime: details.actualSlotTime.toISOString(),
+          timestamp: new Date().toISOString()
+        });
         setWalkInEstimate(details);
         setIsCalculatingEstimate(false);
       }).catch(err => {
-        console.error("Error calculating walk-in details:", err);
+        console.error('[WALK-IN DEBUG] Error calculating walk-in details:', err);
         setWalkInEstimate(null);
         setIsCalculatingEstimate(false);
         const errorMessage = err.message || "";
