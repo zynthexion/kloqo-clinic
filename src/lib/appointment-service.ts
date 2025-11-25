@@ -2487,20 +2487,14 @@ export async function calculateWalkInDetails(
   const { slots } = await loadDoctorAndSlots(clinicId, doctorName, date, doctor.id);
   const appointments = await fetchDayAppointments(clinicId, doctorName, date);
 
-  // Get all active advance appointments (including skipped) for slot blocking
-  const allActiveAdvanceAppointments = appointments.filter(appointment => {
+  // Get all active advance appointments (including skipped) - now included in interval counting
+  const activeAdvanceAppointments = appointments.filter(appointment => {
     return (
       appointment.bookedVia !== 'Walk-in' &&
       typeof appointment.slotIndex === 'number' &&
       ACTIVE_STATUSES.has(appointment.status)
     );
   });
-
-  // Filter out skipped appointments for interval counting
-  // Skipped appointments should block slots but NOT count toward walkInTokenAllotment spacing
-  const activeAdvanceAppointments = allActiveAdvanceAppointments.filter(
-    appointment => appointment.status !== 'Skipped'
-  );
 
   const activeWalkIns = appointments.filter(appointment => {
     return (
@@ -2538,37 +2532,15 @@ export async function calculateWalkInDetails(
     },
   ];
 
-  // Build blocked appointments for slot blocking (include skipped as blocked slots)
-  // This ensures skipped appointments block slots but don't count for interval logic
-  const skippedAppointments = allActiveAdvanceAppointments.filter(
-    appointment => appointment.status === 'Skipped'
-  );
-  
-  const advanceAppointmentsForScheduler = [
-    // Include non-skipped advance appointments for interval counting
-    ...activeAdvanceAppointments.map(entry => ({
-      id: entry.id,
-      slotIndex: typeof entry.slotIndex === 'number' ? entry.slotIndex : -1,
-    })),
-    // Include skipped appointments as blocked slots (with special IDs to distinguish them)
-    ...skippedAppointments.map(entry => ({
-      id: `__blocked_skipped_${entry.id}`,
-      slotIndex: typeof entry.slotIndex === 'number' ? entry.slotIndex : -1,
-    })),
-  ];
+  // Include all advance appointments (including skipped) in interval counting
+  const advanceAppointmentsForScheduler = activeAdvanceAppointments.map(entry => ({
+    id: entry.id,
+    slotIndex: typeof entry.slotIndex === 'number' ? entry.slotIndex : -1,
+  }));
 
   console.log('[WALK-IN DEBUG] calculateWalkInDetails - Before scheduler call', {
-    allActiveAdvanceAppointmentsCount: allActiveAdvanceAppointments.length,
     activeAdvanceAppointmentsCount: activeAdvanceAppointments.length,
-    skippedAppointmentsCount: skippedAppointments.length,
     activeAdvanceAppointments: activeAdvanceAppointments.map(apt => ({
-      id: apt.id,
-      tokenNumber: apt.tokenNumber,
-      slotIndex: apt.slotIndex,
-      status: apt.status,
-      time: apt.time
-    })),
-    skippedAppointments: skippedAppointments.map(apt => ({
       id: apt.id,
       tokenNumber: apt.tokenNumber,
       slotIndex: apt.slotIndex,
