@@ -795,7 +795,7 @@ export async function generateNextTokenAndReserveSlot(
                   
                   if (hasWalkInsAfter) {
                     // There are walk-ins after this cancelled slot - walk-ins cannot use it
-                    // Add to bucket count if walk-ins exist, or it's available only for A tokens
+                    // Add to bucket count if walk-ins exist
                     if (hasExistingWalkIns) {
                       bucketCount += 1;
                     }
@@ -814,6 +814,26 @@ export async function generateNextTokenAndReserveSlot(
                     // If walk-ins exist but none after this slot, walk-ins can still use it
                     // So we don't add it to bucket count - it's available for walk-ins
                     }
+                  
+                  // CRITICAL FIX: When there are no walk-ins yet, count cancelled/no-show slots (especially past slots)
+                  // as potential bucket slots. This allows Strategy 4 to trigger when all slots are filled.
+                  // Only count slots that are NOT already in cancelledSlotsInWindow (i.e., past slots)
+                  if (!hasExistingWalkIns) {
+                    const isNotInCancelledWindow = cancelledSlotsInWindow.every(
+                      cs => cs.slotIndex !== appointment.slotIndex
+                    );
+                    
+                    if (isNotInCancelledWindow) {
+                      // This cancelled/no-show slot (likely a past slot) can be used for bucket compensation
+                      bucketCount += 1;
+                      console.info(`[Walk-in Scheduling] Adding cancelled/no-show slot ${appointment.slotIndex} to bucket count (no walk-ins yet, past slot):`, {
+                        slotIndex: appointment.slotIndex,
+                        slotTime: slotMeta.time.toISOString(),
+                        status: appointment.status,
+                        isPast: isBefore(slotMeta.time, now),
+                      });
+                    }
+                  }
                   }
                 }
               }
@@ -1184,7 +1204,7 @@ export async function generateNextTokenAndReserveSlot(
             cancelledNoShowCount: effectiveAppointments.filter(a => 
               (a.status === 'Cancelled' || a.status === 'No-show')
             ).length,
-            willTriggerBucketCompensation: !scheduleAttempt && allSlotsFilled && hasExistingWalkIns && firestoreBucketCount > 0,
+            willTriggerBucketCompensation: !scheduleAttempt && allSlotsFilled && (hasExistingWalkIns || firestoreBucketCount > 0) && firestoreBucketCount > 0,
           });
           
           // DEBUG: Log why Strategy 4 might NOT trigger
@@ -1194,14 +1214,16 @@ export async function generateNextTokenAndReserveSlot(
               allSlotsFilled,
               hasExistingWalkIns,
               firestoreBucketCount,
-              reason: !allSlotsFilled ? 'allSlotsFilled is false' : 
-                      !hasExistingWalkIns ? 'hasExistingWalkIns is false' : 
-                      firestoreBucketCount <= 0 ? `firestoreBucketCount (${firestoreBucketCount}) <= 0` : 
-                      'unknown',
+            reason: !allSlotsFilled ? 'allSlotsFilled is false' : 
+                    !hasExistingWalkIns && firestoreBucketCount <= 0 ? 'hasExistingWalkIns is false AND firestoreBucketCount <= 0' : 
+                    firestoreBucketCount <= 0 ? `firestoreBucketCount (${firestoreBucketCount}) <= 0` : 
+                    'unknown',
             });
           }
           
-          if (!scheduleAttempt && allSlotsFilled && hasExistingWalkIns && firestoreBucketCount > 0) {
+          // Strategy 4: Trigger if all slots are filled AND (has existing walk-ins OR has cancelled/no-show slots for bucket)
+          // This allows bucket compensation even when there are no walk-ins yet, as long as there are cancelled/no-show slots
+          if (!scheduleAttempt && allSlotsFilled && (hasExistingWalkIns || firestoreBucketCount > 0) && firestoreBucketCount > 0) {
             console.info('[Walk-in Scheduling] DEBUG - ✅ Strategy 4 TRIGGERED - Bucket Compensation Starting');
             
             // CRITICAL: Re-calculate bucket count within transaction to prevent concurrent usage
