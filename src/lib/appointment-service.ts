@@ -636,25 +636,14 @@ export async function generateNextTokenAndReserveSlot(
           numericToken = nextWalkInNumericToken;
           tokenNumber = `W${String(numericToken).padStart(3, '0')}`;
 
-          // Get all active advance appointments (including skipped) for slot blocking
-          const allActiveAdvanceAppointments = effectiveAppointments.filter(appointment => {
+          // Get all active advance appointments (including skipped) - now included in interval counting
+          let activeAdvanceAppointments = effectiveAppointments.filter(appointment => {
             return (
               appointment.bookedVia !== 'Walk-in' &&
               typeof appointment.slotIndex === 'number' &&
               ACTIVE_STATUSES.has(appointment.status)
             );
           });
-
-          // Filter out skipped appointments for interval counting
-          // Skipped appointments should block slots but NOT count toward walkInTokenAllotment spacing
-          const activeAdvanceAppointments = allActiveAdvanceAppointments.filter(
-            appointment => appointment.status !== 'Skipped'
-          );
-          
-          // Get skipped appointments separately for slot blocking
-          const skippedAppointments = allActiveAdvanceAppointments.filter(
-            appointment => appointment.status === 'Skipped'
-          );
 
           const activeWalkIns = effectiveAppointments.filter(appointment => {
             return (
@@ -1007,23 +996,15 @@ export async function generateNextTokenAndReserveSlot(
               // Normal scheduling - run scheduler
               // Include cancelled slots in bucket as "blocked" advance appointments
               // so the scheduler treats them as occupied and doesn't assign walk-ins to them
+              // Include all advance appointments (including skipped) in interval counting
               const blockedAdvanceAppointments = activeAdvanceAppointments.map(entry => ({
                 id: entry.id,
                 slotIndex: typeof entry.slotIndex === 'number' ? entry.slotIndex : -1,
               }));
               
-              // Add skipped appointments as blocked slots (treat as occupied but don't count for interval)
-              skippedAppointments.forEach(entry => {
-                blockedAdvanceAppointments.push({
-                  id: `__blocked_skipped_${entry.id}`,
-                  slotIndex: typeof entry.slotIndex === 'number' ? entry.slotIndex : -1,
-                });
-              });
-              
               // Add cancelled slots in bucket as blocked slots (treat as occupied)
               // These are cancelled slots that have walk-ins AFTER them, so walk-ins cannot use them
               console.warn('[Walk-in Scheduling] Before blocking - blockedAdvanceAppointments count:', blockedAdvanceAppointments.length);
-              console.warn('[Walk-in Scheduling] Skipped appointments count:', skippedAppointments.length);
               console.warn('[Walk-in Scheduling] Cancelled slots in bucket:', Array.from(cancelledSlotsInBucket));
               
               if (cancelledSlotsInBucket.size > 0) {
