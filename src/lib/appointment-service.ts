@@ -694,9 +694,22 @@ export async function generateNextTokenAndReserveSlot(
                   
                   if (reservedTime) {
                     const ageInSeconds = (now.getTime() - reservedTime.getTime()) / 1000;
-                    if (ageInSeconds <= 30) {
-                      // Recent reservation - respect it
-                      existingReservations.set(slotIdx, reservedTime);
+                    const isBooked = reservationData.status === 'booked';
+                    const threshold = isBooked ? 300 : 30; // 5 minutes for booked, 30 seconds for temporary
+
+                    if (ageInSeconds <= threshold) {
+                      // Check if there's an existing appointment at this slot
+                      const existingAppt = effectiveAppointments.find(
+                        a => typeof a.slotIndex === 'number' && a.slotIndex === slotIdx
+                      );
+
+                      // If appointment exists and is NOT active (Cancelled or No-show), ignore reservation
+                      if (existingAppt && !ACTIVE_STATUSES.has(existingAppt.status)) {
+                        staleReservationsToDelete.push(reservationRef);
+                      } else {
+                        // No appointment, or appointment is active - respect reservation
+                        existingReservations.set(slotIdx, reservedTime);
+                      }
                     } else {
                       // Stale reservation - mark for deletion
                       staleReservationsToDelete.push(reservationRef);

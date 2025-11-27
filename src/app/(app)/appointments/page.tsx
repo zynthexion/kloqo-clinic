@@ -1235,21 +1235,50 @@ export default function AppointmentsPage() {
                 timestamp: new Date().toISOString()
               });
 
-              // CRITICAL: Delete the reservation as part of the transaction
-              // This ensures only ONE request can successfully claim it
-              // If multiple requests try simultaneously, only one can delete the reservation
-              transaction.delete(reservationRef);
+              // ⚠️⚠️⚠️ RESERVATION UPDATE DEBUG ⚠️⚠️⚠️
+              console.error(`[RESERVATION DELETION TRACKER] ✅ CLINIC APP - UPDATING slot-reservation (NOT deleting)`, {
+                app: 'kloqo-clinic-admin',
+                page: 'appointments/page.tsx (walk-in)',
+                action: 'transaction.update(reservationRef, {status: "booked"})',
+                reservationId: reservationId,
+                reservationPath: reservationRef.path,
+                appointmentId: appointmentRef.id,
+                appointmentToken: appointmentData.tokenNumber,
+                slotIndex: actualSlotIndex,
+                timestamp: new Date().toISOString(),
+                stackTrace: new Error().stack
+              });
+
+              // CRITICAL: Mark reservation as booked instead of deleting it
+              // This acts as a persistent lock to prevent race conditions where other clients
+              // might miss the new appointment and try to claim the "free" slot
+              transaction.update(reservationRef, {
+                status: 'booked',
+                appointmentId: appointmentRef.id,
+                bookedAt: serverTimestamp()
+              });
               
               // Create appointment atomically in the same transaction
               transaction.set(appointmentRef, appointmentData);
               
               console.log(`[CLINIC WALK-IN DEBUG] Transaction operations queued - about to commit`, {
-                reservationDeleted: true,
+                reservationUpdated: true,
                 appointmentCreated: true,
                 timestamp: new Date().toISOString()
               });
             });
             
+            // ⚠️⚠️⚠️ RESERVATION UPDATE DEBUG ⚠️⚠️⚠️
+            console.error(`[RESERVATION DELETION TRACKER] ✅ CLINIC APP - Transaction COMMITTED (reservation was updated to booked)`, {
+              app: 'kloqo-clinic-admin',
+              page: 'appointments/page.tsx (walk-in)',
+              reservationId: reservationId,
+              appointmentId: appointmentRef.id,
+              appointmentToken: appointmentData.tokenNumber,
+              slotIndex: actualSlotIndex,
+              timestamp: new Date().toISOString()
+            });
+
             console.log(`[CLINIC WALK-IN DEBUG] Transaction COMMITTED successfully`, {
               appointmentId: appointmentRef.id,
               slotIndex: actualSlotIndex,
@@ -1625,21 +1654,50 @@ export default function AppointmentsPage() {
                 timestamp: new Date().toISOString()
               });
 
-              // CRITICAL: Delete the reservation as part of the transaction
-              // This ensures only ONE request can successfully claim it
-              // If multiple requests try simultaneously, only one can delete the reservation
-              transaction.delete(reservationRef);
+              // ⚠️⚠️⚠️ RESERVATION UPDATE DEBUG ⚠️⚠️⚠️
+              console.error(`[RESERVATION DELETION TRACKER] ✅ CLINIC APP - UPDATING slot-reservation (NOT deleting)`, {
+                app: 'kloqo-clinic-admin',
+                page: 'appointments/page.tsx (advance booking)',
+                action: 'transaction.update(reservationRef, {status: "booked"})',
+                reservationId: reservationId,
+                reservationPath: reservationRef.path,
+                appointmentId: appointmentId,
+                appointmentToken: appointmentData.tokenNumber,
+                slotIndex: actualSlotIndex,
+                timestamp: new Date().toISOString(),
+                stackTrace: new Error().stack
+              });
+
+              // CRITICAL: Mark reservation as booked instead of deleting it
+              // This acts as a persistent lock to prevent race conditions where other clients
+              // might miss the new appointment and try to claim the "free" slot
+              transaction.update(reservationRef, {
+                status: 'booked',
+                appointmentId: appointmentId,
+                bookedAt: serverTimestamp()
+              });
               
               // Create appointment atomically in the same transaction
               transaction.set(appointmentRef, appointmentData);
               
               console.log(`[CLINIC APPOINTMENT DEBUG] Transaction operations queued - about to commit`, {
-                reservationDeleted: true,
+                reservationUpdated: true,
                 appointmentCreated: true,
                 timestamp: new Date().toISOString()
               });
             });
             
+            // ⚠️⚠️⚠️ RESERVATION UPDATE DEBUG ⚠️⚠️⚠️
+            console.error(`[RESERVATION DELETION TRACKER] ✅ CLINIC APP - Transaction COMMITTED (reservation was updated to booked)`, {
+              app: 'kloqo-clinic-admin',
+              page: 'appointments/page.tsx (advance booking)',
+              reservationId: reservationId,
+              appointmentId: appointmentId,
+              appointmentToken: appointmentData.tokenNumber,
+              slotIndex: actualSlotIndex,
+              timestamp: new Date().toISOString()
+            });
+
             console.log(`[CLINIC APPOINTMENT DEBUG] Transaction COMMITTED successfully`, {
               appointmentId,
               slotIndex: actualSlotIndex,
