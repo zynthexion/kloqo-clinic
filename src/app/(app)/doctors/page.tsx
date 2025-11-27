@@ -1225,7 +1225,8 @@ export default function DoctorsPage() {
       const session = todaysAvailability.timeSlots[i];
       const sessionStart = parseTimeUtil(session.from, now);
       const sessionEnd = parseTimeUtil(session.to, now);
-      if (now >= sessionStart && now <= sessionEnd) {
+      const windowStart = subMinutes(sessionStart, 30);
+      if (now >= windowStart && now <= sessionEnd) {
         return i;
       }
     }
