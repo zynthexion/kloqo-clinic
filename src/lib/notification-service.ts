@@ -8,6 +8,8 @@ import { parse, format, subMinutes } from 'date-fns';
 import { parseTime } from '@/lib/utils';
 import type { Appointment } from '@/lib/types';
 
+const CONSULTATION_NOTIFICATION_STATUSES = ['Pending', 'Confirmed', 'Skipped', 'Completed', 'No-show'] as const;
+
 export async function sendNotificationToPatient(params: {
   firestore: Firestore;
   patientId: string;
@@ -434,6 +436,69 @@ export async function sendDoctorConsultationStartedNotification(params: {
       url: '/live-token',
     },
   });
+}
+
+type ConsultationNotificationStatus = typeof CONSULTATION_NOTIFICATION_STATUSES[number];
+
+type NotifySessionPatientsParams = {
+  firestore: Firestore;
+  clinicId: string;
+  clinicName: string;
+  doctorName: string;
+  date: string;
+  sessionIndex: number | undefined;
+};
+
+export async function notifySessionPatientsOfConsultationStart({
+  firestore,
+  clinicId,
+  clinicName,
+  doctorName,
+  date,
+  sessionIndex,
+}: NotifySessionPatientsParams): Promise<void> {
+  if (sessionIndex === undefined) {
+    console.warn('Cannot notify consultation start without session index');
+    return;
+  }
+
+  const appointmentStatuses = [...CONSULTATION_NOTIFICATION_STATUSES] as ConsultationNotificationStatus[];
+  const appointmentsQuery = query(
+    collection(firestore, 'appointments'),
+    where('clinicId', '==', clinicId),
+    where('doctor', '==', doctorName),
+    where('date', '==', date),
+    where('status', 'in', appointmentStatuses),
+    where('sessionIndex', '==', sessionIndex)
+  );
+
+  const appointmentsSnapshot = await getDocs(appointmentsQuery);
+  if (appointmentsSnapshot.empty) {
+    return;
+  }
+
+  await Promise.all(
+    appointmentsSnapshot.docs.map(async (docSnap) => {
+      const appointment = docSnap.data() as Appointment;
+      if (!appointment.patientId) return;
+
+      try {
+        await sendDoctorConsultationStartedNotification({
+          firestore,
+          patientId: appointment.patientId,
+          appointmentId: docSnap.id,
+          clinicName,
+          tokenNumber: appointment.tokenNumber || 'N/A',
+          doctorName: appointment.doctor,
+          appointmentTime: appointment.time,
+          appointmentDate: appointment.date,
+          arriveByTime: appointment.arriveByTime,
+        });
+      } catch (error) {
+        console.error(`Failed to notify patient ${appointment.patientId} for appointment ${docSnap.id}`, error);
+      }
+    })
+  );
 }
 
 /**

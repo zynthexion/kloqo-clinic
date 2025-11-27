@@ -1214,113 +1214,75 @@ export default function DoctorsPage() {
     return appointments.filter(apt => apt.doctor === selectedDoctor.name && apt.date === todayStr).length;
   }, [appointments, selectedDoctor]);
 
-  const handleConsultationStatusToggle = useCallback(async (nextStatus: 'In' | 'Out') => {
-    if (!selectedDoctor || selectedDoctor.consultationStatus === nextStatus) {
+  const getCurrentSessionIndex = () => {
+    if (!selectedDoctor?.availabilitySlots) return undefined;
+    const todayDay = format(new Date(), 'EEEE');
+    const todaysAvailability = selectedDoctor.availabilitySlots.find(s => s.day === todayDay);
+    if (!todaysAvailability?.timeSlots?.length) return undefined;
+
+    const now = new Date();
+    for (let i = 0; i < todaysAvailability.timeSlots.length; i++) {
+      const session = todaysAvailability.timeSlots[i];
+      const sessionStart = parseTimeUtil(session.from, now);
+      const sessionEnd = parseTimeUtil(session.to, now);
+      if (now >= sessionStart && now <= sessionEnd) {
+        return i;
+      }
+    }
+    return undefined;
+  };
+
+  const handleConsultationStatusToggle = useCallback(async () => {
+    if (!selectedDoctor || selectedDoctor.consultationStatus === 'In') {
       return;
     }
+
+    const sessionIndex = getCurrentSessionIndex();
+    if (sessionIndex === undefined) {
+      toast({
+        variant: 'destructive',
+        title: 'Outside Session Window',
+        description: 'Consultation can be started only during an active session.',
+      });
+      return;
+    }
+
     setIsUpdatingConsultationStatus(true);
     try {
       await updateDoc(doc(db, 'doctors', selectedDoctor.id), {
-        consultationStatus: nextStatus,
+        consultationStatus: 'In',
         updatedAt: new Date(),
       });
       setSelectedDoctor(prev => {
         if (!prev || prev.id !== selectedDoctor.id) return prev;
-        return { ...prev, consultationStatus: nextStatus };
+        return { ...prev, consultationStatus: 'In' };
       });
       setDoctors(prev =>
         prev.map(docItem =>
-          docItem.id === selectedDoctor.id ? { ...docItem, consultationStatus: nextStatus } : docItem
+          docItem.id === selectedDoctor.id ? { ...docItem, consultationStatus: 'In' } : docItem
         )
       );
-      
-      // When status changes to 'In', notify all patients in the current session
-      if (nextStatus === 'In') {
-        try {
-          const { sendDoctorConsultationStartedNotification } = await import('@/lib/notification-service');
-          const { format, parse } = await import('date-fns');
-          const { parseTime } = await import('@/lib/utils');
-          const { collection, query, where, getDocs } = await import('firebase/firestore');
-          const { getDoc } = await import('firebase/firestore');
-          // Appointment type is already imported at the top of the file
-          
-          // Get clinic name
-          const clinicId = selectedDoctor.clinicId;
-          if (clinicId) {
-            const clinicDocRef = doc(db, 'clinics', clinicId);
-            const clinicDoc = await getDoc(clinicDocRef).catch(() => null);
-            const clinicName = clinicDoc?.data()?.name || 'The clinic';
-            
-            // Get current session index
-            const today = format(new Date(), 'd MMMM yyyy');
-            const todayDay = format(new Date(), 'EEEE');
-            const todaysAvailability = selectedDoctor.availabilitySlots?.find(s => s.day === todayDay);
-            
-            if (todaysAvailability && todaysAvailability.timeSlots.length > 0) {
-              // Find current session
-              const now = new Date();
-              let currentSessionIndex: number | undefined = undefined;
-              
-              for (let i = 0; i < todaysAvailability.timeSlots.length; i++) {
-                const session = todaysAvailability.timeSlots[i];
-                const sessionStart = parseTime(session.from, now);
-                const sessionEnd = parseTime(session.to, now);
-                
-                if (now >= sessionStart && now <= sessionEnd) {
-                  currentSessionIndex = i;
-                  break;
-                }
-              }
-              
-              // Get all appointments for this doctor, date, and session
-              if (currentSessionIndex !== undefined) {
-                const appointmentsQuery = query(
-                  collection(db, 'appointments'),
-                  where('doctor', '==', selectedDoctor.name),
-                  where('date', '==', today),
-                  where('status', 'in', ['Pending', 'Confirmed'])
-                );
-                
-                const appointmentsSnapshot = await getDocs(appointmentsQuery);
-                const sessionAppointments = appointmentsSnapshot.docs
-                  .map(doc => ({ id: doc.id, ...doc.data() } as Appointment))
-                  .filter(apt => apt.sessionIndex === currentSessionIndex);
-                
-                // Send notifications to all patients in session
-                for (const appointment of sessionAppointments) {
-                  if (!appointment.patientId) continue;
-                  
-                  try {
-                    await sendDoctorConsultationStartedNotification({
-                      firestore: db,
-                      patientId: appointment.patientId,
-                      appointmentId: appointment.id,
-                      clinicName,
-                      tokenNumber: appointment.tokenNumber,
-                      doctorName: appointment.doctor,
-                      appointmentTime: appointment.time,
-                      appointmentDate: appointment.date,
-                      arriveByTime: appointment.arriveByTime,
-                    });
-                  } catch (error) {
-                    console.error(`Failed to send notification to patient ${appointment.patientId}:`, error);
-                    // Continue with other notifications
-                  }
-                }
-                
-                console.log(`Notifications sent to ${sessionAppointments.length} patients for consultation start`);
-              }
-            }
-          }
-        } catch (notifError) {
-          console.error('Failed to send consultation started notifications:', notifError);
-          // Don't fail the status update if notification fails
-        }
+
+      if (selectedDoctor.clinicId) {
+        const clinicDocRef = doc(db, 'clinics', selectedDoctor.clinicId);
+        const clinicDoc = await getDoc(clinicDocRef).catch(() => null);
+        const clinicName = clinicDoc?.data()?.name || 'The clinic';
+        const { notifySessionPatientsOfConsultationStart } = await import('@/lib/notification-service');
+        const today = format(new Date(), 'd MMMM yyyy');
+
+        await notifySessionPatientsOfConsultationStart({
+          firestore: db,
+          clinicId: selectedDoctor.clinicId,
+          clinicName,
+          doctorName: selectedDoctor.name,
+          date: today,
+          sessionIndex,
+        });
       }
-      
+
       toast({
-        title: `Status updated`,
-        description: `Consultation status set to ${nextStatus}.`,
+        title: 'Status updated',
+        description: 'Consultation status set to In.',
       });
     } catch (error) {
       console.error('Error updating consultation status:', error);
@@ -1328,7 +1290,7 @@ export default function DoctorsPage() {
     } finally {
       setIsUpdatingConsultationStatus(false);
     }
-  }, [selectedDoctor, toast]);
+  }, [selectedDoctor, setDoctors, setSelectedDoctor, toast]);
 
 
   return (
@@ -1540,31 +1502,27 @@ export default function DoctorsPage() {
                     <div className="flex flex-col items-end gap-2">
                       <Button
                         variant="secondary"
-                        disabled={isUpdatingConsultationStatus}
-                        onClick={() =>
-                          handleConsultationStatusToggle(
-                            selectedDoctor.consultationStatus === 'In' ? 'Out' : 'In'
-                          )
-                        }
+                        disabled={isUpdatingConsultationStatus || selectedDoctor.consultationStatus === 'In'}
+                        onClick={handleConsultationStatusToggle}
                         className={cn(
                           'flex items-center gap-3 rounded-full px-4 py-2 text-white border-none shadow-md transition-colors',
                           selectedDoctor.consultationStatus === 'In'
-                            ? 'bg-green-500 hover:bg-green-600'
+                            ? 'bg-green-500'
                             : 'bg-red-500 hover:bg-red-600',
                           isUpdatingConsultationStatus && 'opacity-70 cursor-not-allowed'
                         )}
                       >
-                      <div className="relative flex h-3 w-3">
+                        <div className="relative flex h-3 w-3">
                           {selectedDoctor.consultationStatus === 'In' && (
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
                           )}
                           <span className="relative inline-flex rounded-full h-3 w-3 bg-white" />
-                      </div>
+                        </div>
                         <span className="font-semibold">
                           {isUpdatingConsultationStatus
                             ? 'Updating...'
                             : selectedDoctor.consultationStatus === 'In'
-                            ? 'Mark as Out'
+                            ? 'Doctor Online'
                             : 'Mark as In'}
                         </span>
                       </Button>

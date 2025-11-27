@@ -6,7 +6,7 @@ import { collection, doc, getDoc, getDocs, query, writeBatch, where } from 'fire
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/firebase';
 import type { Doctor, Appointment } from '@/lib/types';
-import { isWithinInterval, parse, format, addMinutes } from 'date-fns';
+import { parse, format } from 'date-fns';
 
 /**
  * Parses time string to Date object, handling both "hh:mm a" and "HH:mm" formats
@@ -31,18 +31,16 @@ function parseTime(timeStr: string, date: Date): Date {
   }
 }
 
-function parseAppointmentDateTime(appointment: Appointment, fallback: Date): Date | null {
+const ACTIVE_APPOINTMENT_STATUSES = ['Pending', 'Confirmed', 'Skipped'] as const;
+
+function parseAppointmentDateTime(appointment: Appointment): Date | null {
+  if (!appointment.date || !appointment.time) return null;
   try {
-    if (appointment.date && appointment.time) {
-      return parse(`${appointment.date} ${appointment.time}`, 'd MMMM yyyy hh:mm a', fallback);
-    }
-    if (appointment.date) {
-      return parse(appointment.date, 'd MMMM yyyy', fallback);
-    }
+    return parse(`${appointment.date} ${appointment.time}`, 'd MMMM yyyy hh:mm a', new Date());
   } catch (error) {
     console.error('Failed to parse appointment date/time', appointment.id, error);
+    return null;
   }
-  return null;
 }
 
 export function useDoctorStatusUpdater() {
@@ -58,21 +56,19 @@ export function useDoctorStatusUpdater() {
         if (!clinicId) return;
 
         const doctorsQuery = query(collection(db, "doctors"), where("clinicId", "==", clinicId));
+        const now = new Date();
+        const todayStr = format(now, 'd MMMM yyyy');
         const appointmentsQuery = query(
           collection(db, "appointments"),
           where("clinicId", "==", clinicId),
-          where("status", "==", "Confirmed")
+          where("date", "==", todayStr),
+          where("status", "in", ACTIVE_APPOINTMENT_STATUSES)
         );
         const [doctorsSnapshot, appointmentsSnapshot] = await Promise.all([
           getDocs(doctorsQuery),
           getDocs(appointmentsQuery)
         ]);
         const doctors = doctorsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Doctor));
-        const now = new Date();
-        const todayStr = format(now, 'd MMMM yyyy');
-        const todaysConfirmedAppointments = appointmentsSnapshot.docs
-          .map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Appointment))
-          .filter(appt => appt.date === todayStr);
         const appointmentsByDoctor = new Map<string, Appointment[]>();
         const pushAppointment = (key: string | undefined | null, appointment: Appointment) => {
           if (!key) return;
@@ -80,80 +76,69 @@ export function useDoctorStatusUpdater() {
           existing.push(appointment);
           appointmentsByDoctor.set(key, existing);
         };
-        todaysConfirmedAppointments.forEach(appt => {
-          if (appt.doctorId) {
-            pushAppointment(appt.doctorId, appt);
-          } else if (appt.doctor) {
-            pushAppointment(`name:${appt.doctor}`, appt);
-          }
-        });
+        appointmentsSnapshot.docs
+          .map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Appointment))
+          .forEach(appt => {
+            if (appt.doctorId) {
+              pushAppointment(appt.doctorId, appt);
+            } else if (appt.doctor) {
+              pushAppointment(`name:${appt.doctor}`, appt);
+            }
+          });
         
         const batch = writeBatch(db);
         const todayDay = format(now, 'EEEE'); // e.g., 'Monday', 'Tuesday'
 
         let batchHasWrites = false;
 
-        // Only auto-set to 'Out' if doctor is currently 'In' and outside availability
-        // 'In' status is now manual only
         for (const doctor of doctors) {
+          if (doctor.consultationStatus !== 'In') {
+            continue;
+          }
+
           const todaysAvailability = doctor.availabilitySlots?.find(s => 
             s.day.toLowerCase() === todayDay.toLowerCase()
           );
-          
-          let shouldBeOut = false;
-          if (todaysAvailability && todaysAvailability.timeSlots?.length > 0) {
-            const isWithinAnySlot = todaysAvailability.timeSlots.some(slot => {
+
+          const doctorAppointments =
+            appointmentsByDoctor.get(doctor.id) ??
+            appointmentsByDoctor.get(`name:${doctor.name}`) ??
+            [];
+
+          const hasActiveAppointments = doctorAppointments.some((appointment) => {
+            const appointmentDateTime = parseAppointmentDateTime(appointment);
+            if (!appointmentDateTime) {
+              return true;
+            }
+            return appointmentDateTime.getTime() <= now.getTime();
+          });
+
+          let isWithinAnySlot = false;
+          if (todaysAvailability?.timeSlots?.length) {
+            isWithinAnySlot = todaysAvailability.timeSlots.some(slot => {
               try {
                 const startTime = parseTime(slot.from, now);
                 const endTime = parseTime(slot.to, now);
-                return isWithinInterval(now, { start: startTime, end: endTime });
+                return now.getTime() >= startTime.getTime() && now.getTime() <= endTime.getTime();
               } catch (error) {
                 console.error(`Error checking slot for doctor ${doctor.name}:`, error);
                 return false;
               }
             });
-            shouldBeOut = !isWithinAnySlot;
-          } else {
-            // No availability slots = should be out
-            shouldBeOut = true;
           }
 
-          if (shouldBeOut) {
-            const doctorAppointments =
-              appointmentsByDoctor.get(doctor.id) ??
-              appointmentsByDoctor.get(`name:${doctor.name}`) ??
-              [];
+          const isSessionFinished = !isWithinAnySlot;
 
-            if (doctorAppointments.length > 0) {
-              if (doctorAppointments.length > 1) {
-                shouldBeOut = false;
-              } else {
-                const appointmentDateTime = parseAppointmentDateTime(doctorAppointments[0], now);
-                if (appointmentDateTime) {
-                  const avgConsultingTime = Math.max(Number(doctor.averageConsultingTime) || 15, 5);
-                  const graceDeadline = addMinutes(appointmentDateTime, avgConsultingTime * 2);
-                  if (now <= graceDeadline) {
-                    shouldBeOut = false;
-                  }
-                } else {
-                  // Could not parse appointment time, give benefit of doubt
-                  shouldBeOut = false;
-                }
-              }
-            }
+          if (!isSessionFinished || hasActiveAppointments) {
+            continue;
           }
-          
-          // REMOVED: Auto-set to 'Out' logic - doctors can now manually set status to 'In' before availability time
-          // Status changes are now completely manual - no automatic 'Out' based on availability
-          // if (doctor.consultationStatus === 'In' && shouldBeOut) {
-          //   const doctorRef = doc(db, 'doctors', doctor.id);
-          //   batch.update(doctorRef, { 
-          //     consultationStatus: 'Out',
-          //     updatedAt: new Date()
-          //   });
-          //   batchHasWrites = true;
-          //   console.log(`Auto-updating doctor ${doctor.name} status from In to Out (outside availability)`);
-          // }
+
+          const doctorRef = doc(db, 'doctors', doctor.id);
+          batch.update(doctorRef, { 
+            consultationStatus: 'Out',
+            updatedAt: new Date()
+          });
+          batchHasWrites = true;
         }
 
         if (batchHasWrites) {
