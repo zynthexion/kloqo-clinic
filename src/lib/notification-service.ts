@@ -95,8 +95,26 @@ export async function sendNotificationToPatient(params: {
     
     if (!response.ok) {
       const errorText = await response.text();
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { message: errorText };
+      }
+      
       console.error('🔔 DEBUG: Failed to send notification. Status:', response.status);
       console.error('🔔 DEBUG: Error response:', errorText);
+      
+      // Check if token is invalid - this is a recoverable error
+      const errorCode = errorData?.details?.code || errorData?.code;
+      if (errorCode === 'messaging/registration-token-not-registered' || 
+          errorCode === 'messaging/invalid-registration-token') {
+        console.warn('🔔 DEBUG: ⚠️ Invalid/expired FCM token. Patient needs to refresh their token.');
+        console.warn('🔔 DEBUG: Notification failed but appointment booking will continue.');
+        // Return false but don't throw - this allows appointment booking to succeed
+        return false;
+      }
+      
       return false;
     }
 
