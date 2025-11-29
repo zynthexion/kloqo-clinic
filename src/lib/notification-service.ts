@@ -34,11 +34,41 @@ export async function sendNotificationToPatient(params: {
 
     const patientData = patientDoc.data();
     console.log('🔔 DEBUG: Patient data:', JSON.stringify(patientData));
-    const userId = patientData.primaryUserId;
-    console.log('🔔 DEBUG: Primary User ID:', userId);
+    let userId = patientData.primaryUserId;
+    console.log('🔔 DEBUG: Primary User ID (from patient doc):', userId);
+
+    // If primaryUserId is not found in patient document, find it by searching users collection
+    if (!userId) {
+      console.log('🔔 DEBUG: primaryUserId not found in patient document, searching by communicationPhone...');
+      const communicationPhone = patientData.communicationPhone || patientData.phone || null;
+      
+      if (communicationPhone) {
+        console.log('🔔 DEBUG: Searching users collection with communicationPhone:', communicationPhone, 'and role=patient');
+        try {
+          const usersQuery = query(
+            collection(firestore, 'users'),
+            where('phone', '==', communicationPhone),
+            where('role', '==', 'patient')
+          );
+          const usersSnapshot = await getDocs(usersQuery);
+          
+          if (!usersSnapshot.empty) {
+            const primaryUserDoc = usersSnapshot.docs[0];
+            userId = primaryUserDoc.id;
+            console.log('🔔 DEBUG: ✅ Found primary user by communicationPhone and role=patient:', userId);
+          } else {
+            console.warn('🔔 DEBUG: ⚠️ No user found with phone:', communicationPhone, 'and role=patient');
+          }
+        } catch (error) {
+          console.error('🔔 DEBUG: ❌ Error searching for primary user by communicationPhone:', error);
+        }
+      } else {
+        console.warn('🔔 DEBUG: ⚠️ Patient has no communicationPhone or phone. Cannot find primary user.');
+      }
+    }
 
     if (!userId) {
-      console.error('🔔 DEBUG: No primary user ID for patient');
+      console.error('🔔 DEBUG: ❌ No primary user ID found for patient. Cannot send notification.');
       return false;
     }
 
@@ -54,18 +84,44 @@ export async function sendNotificationToPatient(params: {
       uid: userData.uid,
       phone: userData.phone,
       notificationsEnabled: userData.notificationsEnabled,
+      notificationPermissionGranted: userData.notificationPermissionGranted,
       hasFCMToken: !!userData.fcmToken,
-      fcmTokenLength: userData.fcmToken?.length || 0
+      fcmTokenLength: userData.fcmToken?.length || 0,
+      fcmTokenUpdatedAt: userData.fcmTokenUpdatedAt || null,
     }));
     
     if (!userData.notificationsEnabled) {
-      console.error('🔔 DEBUG: Notifications disabled for user');
+      // This is expected - user hasn't enabled notifications in patient app
+      // Not an error, just informational
+      console.log('🔔 INFO: Skipping notification - user has not enabled notifications', {
+        userId,
+        phone: userData.phone,
+        notificationsEnabled: userData.notificationsEnabled,
+        notificationPermissionGranted: userData.notificationPermissionGranted,
+        hasFCMToken: !!userData.fcmToken,
+        reason: userData.notificationsEnabled === false 
+          ? 'User explicitly disabled notifications' 
+          : 'User has not enabled notifications yet (requires action in patient app)',
+      });
       return false;
     }
 
     const fcmToken = userData.fcmToken;
     if (!fcmToken) {
-      console.error('🔔 DEBUG: No FCM token for user');
+      // User has enabled notifications but token is missing - this might need attention
+      const reason = userData.fcmTokenUpdatedAt 
+        ? 'Token was previously saved but is now missing (patient app may need to refresh token)' 
+        : 'Token never saved (patient app may not have registered for notifications yet)';
+      
+      console.warn('🔔 WARNING: User has notifications enabled but no FCM token available', {
+        userId,
+        phone: userData.phone,
+        notificationsEnabled: userData.notificationsEnabled,
+        notificationPermissionGranted: userData.notificationPermissionGranted,
+        fcmTokenUpdatedAt: userData.fcmTokenUpdatedAt || null,
+        reason,
+        action: 'Patient needs to grant notification permission and register FCM token in patient app',
+      });
       return false;
     }
 
