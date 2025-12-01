@@ -681,7 +681,7 @@ export async function generateNextTokenAndReserveSlot(
               const reservationData = reservationSnapshot.data();
               const reservedAt = reservationData?.reservedAt;
               let reservedTime: Date | null = null;
-              
+
               if (reservedAt) {
                 try {
                   if (typeof reservedAt.toDate === 'function') {
@@ -695,6 +695,7 @@ export async function generateNextTokenAndReserveSlot(
                   if (reservedTime) {
                     const ageInSeconds = (now.getTime() - reservedTime.getTime()) / 1000;
                     const isBooked = reservationData.status === 'booked';
+                    const reservedBy = reservationData?.reservedBy as string | undefined;
                     const threshold = isBooked ? 300 : 30; // 5 minutes for booked, 30 seconds for temporary
 
                     if (ageInSeconds <= threshold) {
@@ -707,8 +708,14 @@ export async function generateNextTokenAndReserveSlot(
                       if (existingAppt && !ACTIVE_STATUSES.has(existingAppt.status)) {
                         staleReservationsToDelete.push(reservationRef);
                       } else {
-                        // No appointment, or appointment is active - respect reservation
-                        existingReservations.set(slotIdx, reservedTime);
+                        // No appointment, or appointment is active.
+                        // For walk-ins, do NOT treat reservations created by advance booking
+                        // (reservedBy === 'appointment-booking') as blocking. This allows
+                        // the scheduler to place a W token in that position and rely on
+                        // the shift plan to move the A token.
+                        if (!(isBooked && reservedBy === 'appointment-booking')) {
+                          existingReservations.set(slotIdx, reservedTime);
+                        }
                       }
                     } else {
                       // Stale reservation - mark for deletion
