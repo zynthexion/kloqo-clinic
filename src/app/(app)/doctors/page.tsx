@@ -1073,8 +1073,11 @@ export default function DoctorsPage() {
                         clinicName: clinicName,
                         oldTime: apptData.time,
                         newTime: format(updatedAppt.newTime, 'hh:mm a'),
+                        oldDate: apptData.date,
+                        newDate: apptData.date, // Same date when break is scheduled
                         reason: 'Doctor on break',
-                        arriveByTime: apptData.arriveByTime,
+                        oldArriveByTime: apptData.arriveByTime,
+                        newArriveByTime: format(updatedAppt.newTime, 'hh:mm a'), // New arriveByTime is same as newTime
                     });
                 }
                 
@@ -1192,7 +1195,50 @@ export default function DoctorsPage() {
         batch.update(doctorRef, { leaveSlots: updatedLeaveSlots });
         
         await batch.commit();
-  
+
+        // Send notifications to affected patients about earlier times
+        if (appointmentsToUpdate.length > 0) {
+          try {
+            const { sendBreakUpdateNotification } = await import('@/lib/notification-service');
+
+            // Get clinic name
+            const clinicDoc = await getDoc(doc(db, 'clinics', selectedDoctor.clinicId));
+            const clinicData = clinicDoc.data();
+            const clinicName = clinicData?.name || 'The clinic';
+
+            // Use snapshot from before commit to get original appointment data
+            const originalAppointments = snapshot.docs.map(docSnap => ({
+              id: docSnap.id,
+              ...docSnap.data() as Appointment,
+            }));
+
+            for (const update of appointmentsToUpdate) {
+              const apptData = originalAppointments.find(a => a.id === update.id);
+              if (!apptData || !apptData.patientId) continue;
+
+              await sendBreakUpdateNotification({
+                firestore: db,
+                patientId: apptData.patientId,
+                appointmentId: apptData.id,
+                doctorName: apptData.doctor,
+                clinicName,
+                oldTime: apptData.time,
+                newTime: format(update.newTime, 'hh:mm a'),
+                oldDate: apptData.date,
+                newDate: apptData.date, // Same date when break is cancelled
+                reason: 'Doctor break cancelled',
+                oldArriveByTime: apptData.arriveByTime,
+                newArriveByTime: format(update.newTime, 'hh:mm a'), // New arriveByTime is same as newTime
+              });
+            }
+
+            console.log(`Break cancel notifications sent to ${appointmentsToUpdate.length} patients`);
+          } catch (notifError) {
+            console.error('Failed to send break cancel notifications:', notifError);
+            // Do not fail the break cancel if notifications fail
+          }
+        }
+
         toast({ title: 'Break Canceled', description: 'The break has been removed and appointments have been rescheduled.'});
         const updatedDoctor = {...selectedDoctor, leaveSlots: updatedLeaveSlots };
         setSelectedDoctor(updatedDoctor);

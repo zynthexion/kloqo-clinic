@@ -554,6 +554,7 @@ function WalkInRegistrationContent() {
                 clinicName: clinicName,
                 date: updatedAppointmentData.date,
                 time: updatedAppointmentData.time,
+                arriveByTime: updatedAppointmentData.arriveByTime,
                 tokenNumber: updatedAppointmentData.tokenNumber,
                 bookedBy: 'admin',
             });

@@ -71,7 +71,7 @@ import {
   generateNextTokenAndReserveSlot,
   previewWalkInPlacement,
 } from '@/lib/appointment-service';
-import { sendAppointmentCancelledNotification, sendTokenCalledNotification, sendAppointmentBookedByStaffNotification } from '@/lib/notification-service';
+import { sendAppointmentCancelledNotification, sendTokenCalledNotification, sendAppointmentBookedByStaffNotification, sendBreakUpdateNotification } from '@/lib/notification-service';
 import { computeQueues, type QueueState } from '@/lib/queue-management-service';
 
 const formSchema = z.object({
@@ -1609,9 +1609,9 @@ export default function AppointmentsPage() {
             console.error('Error calculating cut-off and no-show times:', error);
           }
           
-          const arriveByTimeValue = isEditing
-            ? editingAppointment?.arriveByTime ?? editingAppointment?.time ?? actualAppointmentTimeStr
-            : actualAppointmentTimeStr;
+          // Always align arriveByTime with the actual appointment time (new slot),
+          // both for new bookings and reschedules
+          const arriveByTimeValue = actualAppointmentTimeStr;
           
           const appointmentData: Appointment = {
             id: appointmentId,
@@ -1867,6 +1867,7 @@ export default function AppointmentsPage() {
                 clinicName: clinicName,
                 date: appointmentData.date,
                 time: appointmentData.time,
+                arriveByTime: appointmentData.arriveByTime,
                 tokenNumber: appointmentData.tokenNumber,
                 bookedBy: 'admin',
               });
@@ -1875,9 +1876,31 @@ export default function AppointmentsPage() {
             }
           }
 
+          // When editing (rescheduling), also send a reschedule notification
           if (isEditing) {
             setAppointments(prev => prev.map(apt => apt.id === appointmentId ? appointmentData : apt));
             toast({ title: "Appointment Rescheduled", description: `Appointment for ${appointmentData.patientName} has been updated.` });
+
+            try {
+              const clinicName = `The clinic`; // You can fetch from clinic doc if needed
+              
+              await sendBreakUpdateNotification({
+                firestore: db,
+                patientId: patientForAppointmentId,
+                appointmentId,
+                doctorName: appointmentData.doctor,
+                clinicName,
+                oldTime: editingAppointment?.time || appointmentData.time,
+                newTime: appointmentData.time,
+                oldDate: editingAppointment?.date,
+                newDate: appointmentData.date,
+                reason: 'Appointment rescheduled by clinic',
+                oldArriveByTime: editingAppointment?.arriveByTime,
+                newArriveByTime: appointmentData.arriveByTime,
+              });
+            } catch (notifError) {
+              console.error('Failed to send reschedule notification:', notifError);
+            }
           } else {
             setAppointments(prev => [...prev, appointmentData]);
             toast({ title: "Appointment Booked", description: `Appointment for ${appointmentData.patientName} has been successfully booked.` });
@@ -2074,6 +2097,7 @@ export default function AppointmentsPage() {
                 clinicName,
                 date: appointment.date,
                 time: appointment.time,
+                arriveByTime: appointment.arriveByTime,
                 cancelledBy: 'clinic',
             });
         } catch (notifError) {

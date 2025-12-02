@@ -200,20 +200,32 @@ export async function sendAppointmentBookedByStaffNotification(params: {
   time: string;
   tokenNumber: string;
   bookedBy: 'nurse' | 'admin';
+  arriveByTime?: string;
 }): Promise<boolean> {
-  const { firestore, patientId, appointmentId, doctorName, clinicName, date, time, tokenNumber, bookedBy } = params;
+  const { firestore, patientId, appointmentId, doctorName, clinicName, date, time, tokenNumber, bookedBy, arriveByTime } = params;
+
+  // Always display user time based on arriveByTime - 15 minutes (or time - 15 if arriveByTime missing)
+  let displayTime = time;
+  try {
+    const appointmentDate = parse(date, 'd MMMM yyyy', new Date());
+    const baseTime = parseTime(arriveByTime || time, appointmentDate);
+    const shownTime = subMinutes(baseTime, 15);
+    displayTime = format(shownTime, 'hh:mm a');
+  } catch (error) {
+    console.error('Error calculating displayTime for booking notification:', error);
+  }
 
   return sendNotificationToPatient({
     firestore,
     patientId,
     title: 'Appointment Booked',
-    body: `${params.clinicName} has booked an appointment with Dr. ${doctorName} on ${date} at ${time}. Token: ${tokenNumber}`,
+    body: `${clinicName} has booked an appointment with Dr. ${doctorName} on ${date} at ${displayTime}. Token: ${tokenNumber}`,
     data: {
       type: 'appointment_confirmed',
       appointmentId,
       doctorName,
       date,
-      time,
+      time: displayTime,
       tokenNumber,
       bookedBy,
       url: '/appointments', // Click will open appointments page
@@ -261,23 +273,35 @@ export async function sendAppointmentCancelledNotification(params: {
   date: string;
   time: string;
   cancelledBy: 'patient' | 'clinic';
+  arriveByTime?: string;
 }): Promise<boolean> {
-  const { firestore, patientId, appointmentId, doctorName, clinicName, date, time, cancelledBy } = params;
+  const { firestore, patientId, appointmentId, doctorName, clinicName, date, time, cancelledBy, arriveByTime } = params;
+
+  // Always display user time based on arriveByTime - 15 minutes (or time - 15 if arriveByTime missing)
+  let displayTime = time;
+  try {
+    const appointmentDate = parse(date, 'd MMMM yyyy', new Date());
+    const baseTime = parseTime(arriveByTime || time, appointmentDate);
+    const shownTime = subMinutes(baseTime, 15);
+    displayTime = format(shownTime, 'hh:mm a');
+  } catch (error) {
+    console.error('Error calculating displayTime for cancellation notification:', error);
+  }
 
   return sendNotificationToPatient({
     firestore,
     patientId,
     title: 'Appointment Cancelled',
     body: cancelledBy === 'patient' 
-      ? `Your appointment with Dr. ${doctorName} on ${date} at ${time} has been cancelled.`
-      : `${clinicName} has cancelled your appointment with Dr. ${doctorName} on ${date} at ${time}.`,
+      ? `Your appointment with Dr. ${doctorName} on ${date} at ${displayTime} has been cancelled.`
+      : `${clinicName} has cancelled your appointment with Dr. ${doctorName} on ${date} at ${displayTime}.`,
     data: {
       type: 'appointment_cancelled',
       appointmentId,
       doctorName,
       clinicName,
       date,
-      time,
+      time: displayTime,
       cancelledBy,
     },
   });
@@ -322,56 +346,69 @@ export async function sendBreakUpdateNotification(params: {
   clinicName: string;
   oldTime: string;
   newTime: string;
+  oldDate?: string;
+  newDate?: string;
   reason?: string;
-  arriveByTime?: string;
+  oldArriveByTime?: string;
+  newArriveByTime?: string;
 }): Promise<boolean> {
-  const { firestore, patientId, appointmentId, doctorName, clinicName, oldTime, newTime, reason, arriveByTime } = params;
+  const { firestore, patientId, appointmentId, doctorName, clinicName, oldTime, newTime, oldDate, newDate, reason, oldArriveByTime, newArriveByTime } = params;
 
-  // If arriveByTime is provided, calculate new time as arriveByTime - 15 minutes
-  // Otherwise, use newTime - 15 minutes
+  let displayOldTime = oldTime;
   let displayNewTime = newTime;
+
   try {
-    // Get appointment date from appointmentId if needed
-    let appointmentDate: Date = new Date();
-    try {
+    // Get appointment date from appointmentId if needed for old time calculation
+    let oldAppointmentDate: Date = new Date();
+    if (oldDate) {
+      oldAppointmentDate = parse(oldDate, 'd MMMM yyyy', new Date());
+    } else {
       const appointmentDoc = await getDoc(doc(firestore, 'appointments', appointmentId));
       if (appointmentDoc.exists()) {
         const appointmentData = appointmentDoc.data() as Appointment;
-        appointmentDate = parse(appointmentData.date, 'd MMMM yyyy', new Date());
+        oldAppointmentDate = parse(appointmentData.date, 'd MMMM yyyy', new Date());
       }
-    } catch (e) {
-      // Use current date as fallback
-      appointmentDate = new Date();
     }
 
-    if (arriveByTime) {
-      // Use arriveByTime from database - subtract 15 minutes
-      const arriveByDateTime = parseTime(arriveByTime, appointmentDate);
-      const calculatedNewTime = subMinutes(arriveByDateTime, 15);
-      displayNewTime = format(calculatedNewTime, 'hh:mm a');
+    // Calculate displayOldTime from oldArriveByTime - 15 minutes (or oldTime - 15 if oldArriveByTime not available)
+    const oldBaseTime = parseTime(oldArriveByTime || oldTime, oldAppointmentDate);
+    displayOldTime = format(subMinutes(oldBaseTime, 15), 'hh:mm a');
+
+    // Get appointment date for new time calculation
+    let newAppointmentDate: Date = new Date();
+    if (newDate) {
+      newAppointmentDate = parse(newDate, 'd MMMM yyyy', new Date());
     } else {
-      // Use newTime - subtract 15 minutes
-      const newTimeDateTime = parseTime(newTime, appointmentDate);
-      const calculatedNewTime = subMinutes(newTimeDateTime, 15);
-      displayNewTime = format(calculatedNewTime, 'hh:mm a');
+      // Fallback to oldAppointmentDate if newDate is not provided
+      newAppointmentDate = oldAppointmentDate;
     }
+
+    // Calculate displayNewTime from newArriveByTime - 15 minutes (or newTime - 15 if newArriveByTime not available)
+    const newBaseTime = parseTime(newArriveByTime || newTime, newAppointmentDate);
+    displayNewTime = format(subMinutes(newBaseTime, 15), 'hh:mm a');
+
   } catch (error) {
-    console.error('Error calculating new time from arriveByTime:', error);
-    // Fallback to provided newTime
+    console.error('Error calculating display times for reschedule notification:', error);
   }
+
+  // Construct notification body with dates
+  const oldDateTimeString = `${oldDate ? `${oldDate} at ` : ''}${displayOldTime}`;
+  const newDateTimeString = `${newDate ? `${newDate} at ` : ''}${displayNewTime}`;
 
   return sendNotificationToPatient({
     firestore,
     patientId,
     title: 'Appointment Time Changed',
-    body: `${clinicName} has rescheduled your appointment with Dr. ${doctorName} from ${oldTime} to ${displayNewTime}.${reason ? ` Reason: ${reason}` : ''}`,
+    body: `${clinicName} has rescheduled your appointment with Dr. ${doctorName} from ${oldDateTimeString} to ${newDateTimeString}.${reason ? ` Reason: ${reason}` : ''}`,
     data: {
       type: 'appointment_rescheduled',
       appointmentId,
       doctorName,
       clinicName,
-      oldTime,
+      oldTime: displayOldTime,
       newTime: displayNewTime,
+      oldDate,
+      newDate,
       reason,
     },
   });
