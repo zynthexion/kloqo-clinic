@@ -3681,17 +3681,7 @@ export default function AppointmentsPage() {
                                 <TableCell>{appointment.bookedVia}</TableCell>
                                 <TableCell>{appointment.tokenNumber}</TableCell>
                                 <TableCell className="text-right">
-                                  {appointment.status === 'Completed' || appointment.status === 'Cancelled' || appointment.status === 'No-show' ? (
-                                    <Badge 
-                                      variant={
-                                        appointment.status === 'Completed' ? 'default' :
-                                        appointment.status === 'Cancelled' ? 'destructive' :
-                                        'secondary'
-                                      }
-                                    >
-                                      {appointment.status}
-                                    </Badge>
-                                  ) : (
+                                  {appointment.status === 'Pending' || appointment.status === 'Skipped' ? (
                                     <DropdownMenu>
                                       <DropdownMenuTrigger asChild>
                                         <Button variant="ghost" className="h-8 w-8 p-0">
@@ -3714,6 +3704,18 @@ export default function AppointmentsPage() {
                                         </DropdownMenuItem>
                                       </DropdownMenuContent>
                                     </DropdownMenu>
+                                  ) : (
+                                    <Badge 
+                                      variant={
+                                        appointment.status === 'Completed' ? 'default' :
+                                        appointment.status === 'Cancelled' ? 'destructive' :
+                                        appointment.status === 'No-show' ? 'secondary' :
+                                        appointment.status === 'Confirmed' ? 'default' :
+                                        'secondary'
+                                      }
+                                    >
+                                      {appointment.status}
+                                    </Badge>
                                   )}
                                 </TableCell>
                               </TableRow>
