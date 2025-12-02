@@ -3691,7 +3691,10 @@ export default function AppointmentsPage() {
                                         </Button>
                                       </DropdownMenuTrigger>
                                       <DropdownMenuContent align="end">
-                                        <DropdownMenuItem onClick={() => setEditingAppointment(appointment)}>
+                                        <DropdownMenuItem onClick={() => {
+                                          setIsDrawerExpanded(false);
+                                          setEditingAppointment(appointment);
+                                        }}>
                                           <Edit className="mr-2 h-4 w-4" />
                                           Reschedule
                                         </DropdownMenuItem>
