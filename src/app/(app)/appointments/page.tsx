@@ -676,30 +676,45 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     if (editingAppointment) {
-      // Try to find doctor by ID first, then by name
+      // Try to find doctor by ID first, then by name (case-insensitive)
       const doctor = editingAppointment.doctorId 
         ? doctors.find(d => d.id === editingAppointment.doctorId)
-        : doctors.find(d => d.name === editingAppointment.doctor);
-      if (doctor) {
-        const appointmentDate = parse(editingAppointment.date, "d MMMM yyyy", new Date());
-        const loadPatientForEditing = async () => {
-          if (editingAppointment.patientId) {
-            const patientDoc = await getFirestoreDoc(doc(db, "patients", editingAppointment.patientId));
-            if (patientDoc.exists()) {
-              const patientData = patientDoc.data() as Patient;
-              setSelectedPatient(patientData);
-              setPatientSearchTerm(patientData.communicationPhone?.replace('+91', '') || '');
-              form.setValue('phone', patientData.communicationPhone?.replace('+91', '') || '');
-            }
+        : doctors.find(d => d.name === editingAppointment.doctor || 
+                           d.name?.toLowerCase() === editingAppointment.doctor?.toLowerCase());
+      
+      const appointmentDate = parse(editingAppointment.date, "d MMMM yyyy", new Date());
+      const loadPatientForEditing = async () => {
+        if (editingAppointment.patientId) {
+          const patientDoc = await getFirestoreDoc(doc(db, "patients", editingAppointment.patientId));
+          if (patientDoc.exists()) {
+            const patientData = patientDoc.data() as Patient;
+            setSelectedPatient(patientData);
+            setPatientSearchTerm(patientData.communicationPhone?.replace('+91', '') || '');
+            form.setValue('phone', patientData.communicationPhone?.replace('+91', '') || '');
           }
-        };
-        loadPatientForEditing();
+        }
+      };
+      loadPatientForEditing();
 
-        // Ensure sex is a valid enum value
-        const validSex = editingAppointment.sex && ['Male', 'Female', 'Other'].includes(editingAppointment.sex) 
-          ? editingAppointment.sex as 'Male' | 'Female' | 'Other'
-          : undefined;
+      // Ensure sex is a valid enum value - use the value from database if it exists
+      let validSex: 'Male' | 'Female' | 'Other' | undefined = undefined;
+      if (editingAppointment.sex) {
+        const sexValue = String(editingAppointment.sex).trim();
+        if (sexValue && ['Male', 'Female', 'Other'].includes(sexValue)) {
+          validSex = sexValue as 'Male' | 'Female' | 'Other';
+        }
+      }
+      // If sex is still undefined but exists in appointment, try to use it anyway
+      if (!validSex && editingAppointment.sex) {
+        const sexStr = String(editingAppointment.sex).trim();
+        // Try case-insensitive match
+        const lowerSex = sexStr.toLowerCase();
+        if (lowerSex === 'male') validSex = 'Male';
+        else if (lowerSex === 'female') validSex = 'Female';
+        else if (lowerSex === 'other') validSex = 'Other';
+      }
 
+      if (doctor) {
         form.reset({
           ...editingAppointment,
           phone: editingAppointment.communicationPhone?.replace('+91', '') || '',
@@ -720,11 +735,9 @@ export default function AppointmentsPage() {
         form.reset({
           ...editingAppointment,
           phone: editingAppointment.communicationPhone?.replace('+91', '') || '',
-          date: parse(editingAppointment.date, "d MMMM yyyy", new Date()),
+          date: isNaN(appointmentDate.getTime()) ? undefined : appointmentDate,
           doctor: "",
-          sex: editingAppointment.sex && ['Male', 'Female', 'Other'].includes(editingAppointment.sex) 
-            ? editingAppointment.sex as 'Male' | 'Female' | 'Other'
-            : undefined,
+          sex: validSex,
           time: format(parseDateFns(editingAppointment.time, "hh:mm a", new Date()), 'HH:mm'),
           bookedVia: (editingAppointment.bookedVia === "Advanced Booking" || editingAppointment.bookedVia === "Walk-in") ? editingAppointment.bookedVia : "Advanced Booking",
         });
