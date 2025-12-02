@@ -2720,7 +2720,8 @@ export default function AppointmentsPage() {
       filtered = filtered.filter(apt => {
         try {
           const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
-          return (apt.status === 'Pending' || apt.status === 'Confirmed' || apt.status === 'Skipped') && (isFuture(aptDate) || isToday(aptDate));
+          // Show Pending, Skipped, and Confirmed appointments for today and future dates
+          return (apt.status === 'Pending' || apt.status === 'Skipped' || apt.status === 'Confirmed') && (isFuture(aptDate) || isToday(aptDate));
         } catch (e) {
           return false;
         }
