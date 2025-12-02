@@ -676,7 +676,10 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     if (editingAppointment) {
-      const doctor = doctors.find(d => d.name === editingAppointment.doctor);
+      // Try to find doctor by ID first, then by name
+      const doctor = editingAppointment.doctorId 
+        ? doctors.find(d => d.id === editingAppointment.doctorId)
+        : doctors.find(d => d.name === editingAppointment.doctor);
       if (doctor) {
         const appointmentDate = parse(editingAppointment.date, "d MMMM yyyy", new Date());
         const loadPatientForEditing = async () => {
@@ -692,11 +695,36 @@ export default function AppointmentsPage() {
         };
         loadPatientForEditing();
 
+        // Ensure sex is a valid enum value
+        const validSex = editingAppointment.sex && ['Male', 'Female', 'Other'].includes(editingAppointment.sex) 
+          ? editingAppointment.sex as 'Male' | 'Female' | 'Other'
+          : undefined;
+
         form.reset({
           ...editingAppointment,
-          phone: editingAppointment.communicationPhone.replace('+91', ''),
+          phone: editingAppointment.communicationPhone?.replace('+91', '') || '',
           date: isNaN(appointmentDate.getTime()) ? undefined : appointmentDate,
           doctor: doctor.id,
+          sex: validSex,
+          time: format(parseDateFns(editingAppointment.time, "hh:mm a", new Date()), 'HH:mm'),
+          bookedVia: (editingAppointment.bookedVia === "Advanced Booking" || editingAppointment.bookedVia === "Walk-in") ? editingAppointment.bookedVia : "Advanced Booking",
+        });
+      } else {
+        // If doctor not found, still reset form but show error
+        console.error('Doctor not found for appointment:', editingAppointment.doctor);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: `Doctor "${editingAppointment.doctor}" not found. Please select a doctor.`,
+        });
+        form.reset({
+          ...editingAppointment,
+          phone: editingAppointment.communicationPhone?.replace('+91', '') || '',
+          date: parse(editingAppointment.date, "d MMMM yyyy", new Date()),
+          doctor: "",
+          sex: editingAppointment.sex && ['Male', 'Female', 'Other'].includes(editingAppointment.sex) 
+            ? editingAppointment.sex as 'Male' | 'Female' | 'Other'
+            : undefined,
           time: format(parseDateFns(editingAppointment.time, "hh:mm a", new Date()), 'HH:mm'),
           bookedVia: (editingAppointment.bookedVia === "Advanced Booking" || editingAppointment.bookedVia === "Walk-in") ? editingAppointment.bookedVia : "Advanced Booking",
         });
@@ -704,7 +732,7 @@ export default function AppointmentsPage() {
     } else {
       resetForm();
     }
-  }, [editingAppointment, form, doctors, resetForm]);
+  }, [editingAppointment, form, doctors, resetForm, toast]);
 
   const isWithinBookingWindow = (doctor: Doctor | null): boolean => {
     if (!doctor || !doctor.availabilitySlots) return false;
