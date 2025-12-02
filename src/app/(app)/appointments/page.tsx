@@ -449,6 +449,13 @@ export default function AppointmentsPage() {
 
 
   useEffect(() => {
+    // When editing an existing appointment, don't run phone search or show suggestions
+    if (editingAppointment) {
+      setPatientSearchResults([]);
+      setIsPatientPopoverOpen(false);
+      return;
+    }
+
     const handler = setTimeout(() => {
       if (patientSearchTerm.length >= 5) {
         handlePatientSearch(patientSearchTerm);
@@ -461,7 +468,7 @@ export default function AppointmentsPage() {
     return () => {
       clearTimeout(handler);
     };
-  }, [patientSearchTerm, handlePatientSearch]);
+  }, [patientSearchTerm, handlePatientSearch, editingAppointment]);
 
 
   useEffect(() => {
@@ -607,12 +614,30 @@ export default function AppointmentsPage() {
     name: "doctor"
   });
 
+  // When rescheduling, derive the doctor ID from the existing appointment + doctors list
+  const editingDoctorId = useMemo(() => {
+    if (!editingAppointment) return undefined;
+    if (editingAppointment.doctorId) return editingAppointment.doctorId;
+    if (!editingAppointment.doctor) return undefined;
+    const targetName = editingAppointment.doctor.trim().toLowerCase();
+    const match = doctors.find(d => (d.name || "").trim().toLowerCase() === targetName);
+    return match?.id;
+  }, [editingAppointment, doctors]);
+
+  // Ensure the form state gets the resolved doctor ID when rescheduling
+  useEffect(() => {
+    if (editingDoctorId) {
+      form.setValue("doctor", editingDoctorId, { shouldValidate: true, shouldDirty: false });
+    }
+  }, [editingDoctorId, form]);
+
   const selectedDoctor = useMemo(() => {
-    if (!watchedDoctorId) {
+    const effectiveDoctorId = watchedDoctorId || editingDoctorId;
+    if (!effectiveDoctorId) {
       return doctors.length > 0 ? doctors[0] : null;
     }
-    return doctors.find(d => d.id === watchedDoctorId) || null;
-  }, [doctors, watchedDoctorId]);
+    return doctors.find(d => d.id === effectiveDoctorId) || null;
+  }, [doctors, watchedDoctorId, editingDoctorId]);
 
   const selectedDate = form.watch("date");
   const appointmentType = form.watch("bookedVia");
@@ -676,43 +701,82 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     if (editingAppointment) {
-      // Try to find doctor by ID first, then by name (case-insensitive)
-      const doctor = editingAppointment.doctorId 
-        ? doctors.find(d => d.id === editingAppointment.doctorId)
-        : doctors.find(d => d.name === editingAppointment.doctor || 
-                           d.name?.toLowerCase() === editingAppointment.doctor?.toLowerCase());
-      
+      // Wait until doctors list is loaded before trying to resolve the doctor
+      if (!doctors || doctors.length === 0) {
+        return;
+      }
+      // Try to find doctor by ID first, then by matching name/label (robust, case-insensitive)
+      let doctor: Doctor | undefined;
+
+      if (editingAppointment.doctorId) {
+        doctor = doctors.find(d => d.id === editingAppointment.doctorId);
+      }
+
+      if (!doctor && editingAppointment.doctor) {
+        const target = editingAppointment.doctor.trim().toLowerCase();
+        doctor = doctors.find(d => {
+          const name = (d.name || "").trim().toLowerCase();
+          const label = `${d.name || ""} - ${(d as any).specialty || ""}`.trim().toLowerCase();
+          return (
+            target === name ||
+            target === label ||
+            name === target ||
+            label === target ||
+            label.startsWith(target) ||
+            target.startsWith(name)
+          );
+        });
+      }
+
       const appointmentDate = parse(editingAppointment.date, "d MMMM yyyy", new Date());
+
+      // Ensure sex is a valid enum value - use the value from appointment if it exists
+      let validSex: 'Male' | 'Female' | 'Other' | undefined = undefined;
+      if (editingAppointment.sex) {
+        const sexValue = String(editingAppointment.sex).trim();
+        if (sexValue && ['Male', 'Female', 'Other'].includes(sexValue)) {
+          validSex = sexValue as 'Male' | 'Female' | 'Other';
+        } else {
+          const lowerSex = sexValue.toLowerCase();
+          if (lowerSex === 'male') validSex = 'Male';
+          else if (lowerSex === 'female') validSex = 'Female';
+          else if (lowerSex === 'other') validSex = 'Other';
+        }
+      }
+
+      // Load patient details for editing (phone + fallback sex)
       const loadPatientForEditing = async () => {
         if (editingAppointment.patientId) {
           const patientDoc = await getFirestoreDoc(doc(db, "patients", editingAppointment.patientId));
           if (patientDoc.exists()) {
             const patientData = patientDoc.data() as Patient;
             setSelectedPatient(patientData);
+            // Prefill search input visually, but search effect is disabled while editing
             setPatientSearchTerm(patientData.communicationPhone?.replace('+91', '') || '');
             form.setValue('phone', patientData.communicationPhone?.replace('+91', '') || '');
+
+            // If we still don't have a valid sex from the appointment, try from patient
+            if (!validSex && patientData.sex) {
+              const sexValue = String(patientData.sex).trim();
+              const lowerSex = sexValue.toLowerCase();
+              if (lowerSex === 'male') validSex = 'Male';
+              else if (lowerSex === 'female') validSex = 'Female';
+              else if (lowerSex === 'other') validSex = 'Other';
+
+              if (validSex) {
+                form.setValue('sex', validSex, { shouldValidate: true, shouldDirty: false });
+              }
+            } else if (validSex) {
+              // Ensure form field reflects validSex even if it came from appointment
+              form.setValue('sex', validSex, { shouldValidate: true, shouldDirty: false });
+            }
           }
+        } else if (validSex) {
+          // No patient record, but appointment has valid sex
+          form.setValue('sex', validSex, { shouldValidate: true, shouldDirty: false });
         }
       };
       loadPatientForEditing();
-
-      // Ensure sex is a valid enum value - use the value from database if it exists
-      let validSex: 'Male' | 'Female' | 'Other' | undefined = undefined;
-      if (editingAppointment.sex) {
-        const sexValue = String(editingAppointment.sex).trim();
-        if (sexValue && ['Male', 'Female', 'Other'].includes(sexValue)) {
-          validSex = sexValue as 'Male' | 'Female' | 'Other';
-        }
-      }
-      // If sex is still undefined but exists in appointment, try to use it anyway
-      if (!validSex && editingAppointment.sex) {
-        const sexStr = String(editingAppointment.sex).trim();
-        // Try case-insensitive match
-        const lowerSex = sexStr.toLowerCase();
-        if (lowerSex === 'male') validSex = 'Male';
-        else if (lowerSex === 'female') validSex = 'Female';
-        else if (lowerSex === 'other') validSex = 'Other';
-      }
 
       if (doctor) {
         form.reset({
@@ -724,6 +788,8 @@ export default function AppointmentsPage() {
           time: format(parseDateFns(editingAppointment.time, "hh:mm a", new Date()), 'HH:mm'),
           bookedVia: (editingAppointment.bookedVia === "Advanced Booking" || editingAppointment.bookedVia === "Walk-in") ? editingAppointment.bookedVia : "Advanced Booking",
         });
+        // Ensure the controlled select sees the correct doctor ID
+        form.setValue("doctor", doctor.id, { shouldValidate: true, shouldDirty: false });
       } else {
         // If doctor not found, still reset form but show error
         console.error('Doctor not found for appointment:', editingAppointment.doctor);
@@ -734,12 +800,16 @@ export default function AppointmentsPage() {
         });
         form.reset({
           ...editingAppointment,
-          phone: editingAppointment.communicationPhone?.replace('+91', '') || '',
+          phone: editingAppointment.communicationPhone?.replace("+91", "") || "",
           date: isNaN(appointmentDate.getTime()) ? undefined : appointmentDate,
           doctor: "",
           sex: validSex,
-          time: format(parseDateFns(editingAppointment.time, "hh:mm a", new Date()), 'HH:mm'),
-          bookedVia: (editingAppointment.bookedVia === "Advanced Booking" || editingAppointment.bookedVia === "Walk-in") ? editingAppointment.bookedVia : "Advanced Booking",
+          time: format(parseDateFns(editingAppointment.time, "hh:mm a", new Date()), "HH:mm"),
+          bookedVia:
+            editingAppointment.bookedVia === "Advanced Booking" ||
+            editingAppointment.bookedVia === "Walk-in"
+              ? editingAppointment.bookedVia
+              : "Advanced Booking",
         });
       }
     } else {
@@ -3009,6 +3079,21 @@ export default function AppointmentsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
+                  {/* When the right drawer is expanded (isDrawerExpanded === true),
+                      the booking card shrinks; hide the full form and show only a CTA button. */}
+                  {isDrawerExpanded ? (
+                    <div className="p-4 bg-muted/50 rounded-lg text-center">
+                      <button
+                        type="button"
+                        className="inline-flex items-center justify-center gap-2 rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90"
+                        onClick={() => setIsDrawerExpanded(false)}
+                      >
+                        {selectedPatient || hasSelectedOption || isEditing
+                          ? "Continue booking"
+                          : "Start booking"}
+                      </button>
+                    </div>
+                  ) : (
                   <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                       <div className="space-y-4">
@@ -3420,7 +3505,7 @@ export default function AppointmentsPage() {
                                     <FormLabel>Doctor</FormLabel>
                                       <Select
                                         onValueChange={onDoctorChange}
-                                        value={field.value || undefined}
+                                        value={(field.value as string | undefined) || editingDoctorId || undefined}
                                       >
                                       <FormControl>
                                         <SelectTrigger>
@@ -3534,6 +3619,7 @@ export default function AppointmentsPage() {
                       )}
                     </form>
                   </Form>
+                  )}
                 </CardContent>
               </Card>
             </main>
