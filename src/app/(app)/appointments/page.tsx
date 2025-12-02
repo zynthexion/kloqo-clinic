@@ -2720,13 +2720,15 @@ export default function AppointmentsPage() {
       filtered = filtered.filter(apt => {
         try {
           const aptDate = parse(apt.date, 'd MMMM yyyy', new Date());
-          return (apt.status === 'Confirmed' || apt.status === 'Pending') && (isFuture(aptDate) || isToday(aptDate));
+          return (apt.status === 'Pending' || apt.status === 'Confirmed' || apt.status === 'Skipped') && (isFuture(aptDate) || isToday(aptDate));
         } catch (e) {
           return false;
         }
       });
     } else if (activeTab === 'completed') {
-      filtered = filtered.filter(apt => apt.status === 'Completed');
+      filtered = filtered.filter(apt => apt.status === 'Completed' || apt.status === 'Cancelled');
+    } else if (activeTab === 'no-show') {
+      filtered = filtered.filter(apt => apt.status === 'No-show');
     } else if (activeTab !== 'all') {
       filtered = filtered.filter(apt => apt.status.toLowerCase() === activeTab);
     }
@@ -3679,28 +3681,40 @@ export default function AppointmentsPage() {
                                 <TableCell>{appointment.bookedVia}</TableCell>
                                 <TableCell>{appointment.tokenNumber}</TableCell>
                                 <TableCell className="text-right">
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button variant="ghost" className="h-8 w-8 p-0">
-                                        <span className="sr-only">Open menu</span>
-                                        <MoreHorizontal className="h-4 w-4" />
-                                      </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                      <DropdownMenuItem>
-                                        <Eye className="mr-2 h-4 w-4" />
-                                        View
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem onClick={() => setEditingAppointment(appointment)}>
-                                        <Edit className="mr-2 h-4 w-4" />
-                                        Reschedule
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem onClick={() => setAppointmentToCancel(appointment)} className="text-red-600">
-                                        <X className="mr-2 h-4 w-4" />
-                                        Cancel
-                                      </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
+                                  {appointment.status === 'Completed' || appointment.status === 'Cancelled' || appointment.status === 'No-show' ? (
+                                    <Badge 
+                                      variant={
+                                        appointment.status === 'Completed' ? 'default' :
+                                        appointment.status === 'Cancelled' ? 'destructive' :
+                                        'secondary'
+                                      }
+                                    >
+                                      {appointment.status}
+                                    </Badge>
+                                  ) : (
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" className="h-8 w-8 p-0">
+                                          <span className="sr-only">Open menu</span>
+                                          <MoreHorizontal className="h-4 w-4" />
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end">
+                                        <DropdownMenuItem>
+                                          <Eye className="mr-2 h-4 w-4" />
+                                          View
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => setEditingAppointment(appointment)}>
+                                          <Edit className="mr-2 h-4 w-4" />
+                                          Reschedule
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => setAppointmentToCancel(appointment)} className="text-red-600">
+                                          <X className="mr-2 h-4 w-4" />
+                                          Cancel
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  )}
                                 </TableCell>
                               </TableRow>
                             ))}
