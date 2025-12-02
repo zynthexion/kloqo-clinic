@@ -51,7 +51,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import WeeklyDoctorAvailability from "@/components/dashboard/weekly-doctor-availability";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -4039,7 +4038,6 @@ export default function AppointmentsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <WeeklyDoctorAvailability />
     </>
   );
 }

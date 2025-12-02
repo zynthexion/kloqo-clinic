@@ -23,6 +23,7 @@ import Image from 'next/image';
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
 
@@ -38,6 +39,7 @@ export default function LoginPage() {
       return;
     }
 
+    setIsLoading(true);
     const email = (event.currentTarget.elements.namedItem('email') as HTMLInputElement).value;
     const password = (event.currentTarget.elements.namedItem('password') as HTMLInputElement).value;
     
@@ -60,6 +62,7 @@ export default function LoginPage() {
                     if (registrationStatus === 'Pending') {
                         // Sign out the user
                         await auth.signOut();
+                        setIsLoading(false);
                         toast({
                             variant: "destructive",
                             title: "Registration Pending",
@@ -71,6 +74,7 @@ export default function LoginPage() {
                     if (registrationStatus === 'Rejected') {
                         // Sign out the user
                         await auth.signOut();
+                        setIsLoading(false);
                         toast({
                             variant: "destructive",
                             title: "Registration Rejected",
@@ -87,6 +91,7 @@ export default function LoginPage() {
         router.push('/dashboard');
     } catch (error: any) {
         console.error("Login failed:", error);
+        setIsLoading(false);
         toast({
             variant: "destructive",
             title: "Login Failed",
@@ -126,6 +131,7 @@ export default function LoginPage() {
                 type="email"
                 placeholder="m@example.com"
                 required
+                disabled={isLoading}
               />
             </div>
             <div className="grid gap-2">
@@ -145,6 +151,7 @@ export default function LoginPage() {
                   name="password"
                   type={showPassword ? 'text' : 'password'}
                   required
+                  disabled={isLoading}
                 />
                 <Button
                   type="button"
@@ -152,6 +159,7 @@ export default function LoginPage() {
                   size="icon"
                   className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground"
                   onClick={() => setShowPassword(!showPassword)}
+                  disabled={isLoading}
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4" />
@@ -161,8 +169,15 @@ export default function LoginPage() {
                 </Button>
               </div>
             </div>
-            <Button type="submit" className="w-full">
-              Login
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                  Logging in...
+                </>
+              ) : (
+                'Login'
+              )}
             </Button>
           </form>
           <div className="mt-4 text-center text-sm">
