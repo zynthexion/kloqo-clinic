@@ -409,7 +409,8 @@ function WalkInRegistrationContent() {
             department: doctor.department,
             bookedVia: 'Walk-in',
             date: format(new Date(), "d MMMM yyyy"),
-            time: adjustedEstimatedTimeStr,
+            // Keep original estimated slot time in `time`, adjusted only for arriveBy/cutoff/noshow
+            time: format(estimatedTime, "hh:mm a"),
             arriveByTime: adjustedEstimatedTimeStr,
             status: 'Confirmed', // Walk-ins are physically present at clinic
             tokenNumber,

@@ -41,6 +41,13 @@ export type Doctor = {
   reviewList?: Review[];
   actualAverageConsultationTime?: number;
   actualAverageConsultationTimeUpdatedAt?: any;
+  availabilityExtensions?: {
+    [date: string]: {
+      extendedBy: number;  // minutes
+      originalEndTime: string;  // "05:00 PM"
+      newEndTime: string;  // "06:00 PM"
+    }
+  };
 };
 
 export type Review = {

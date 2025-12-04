@@ -19,7 +19,7 @@ import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { parse, isSameDay, parse as parseDateFns, format, getDay, isPast, isFuture, isToday, startOfYear, endOfYear, addMinutes, isBefore, subMinutes, isAfter, startOfDay, addHours, differenceInMinutes, parseISO, addDays } from "date-fns";
 import { updateAppointmentAndDoctorStatuses } from "@/lib/status-update-service";
-import { cn } from "@/lib/utils";
+import { cn, parseTime as parseTimeUtil } from "@/lib/utils";
 import {
   Form,
   FormControl,
@@ -1213,7 +1213,8 @@ export default function AppointmentsPage() {
             communicationPhone: communicationPhone,
             place: values.place,
             status: 'Confirmed', // Walk-ins are physically present at clinic
-            time: adjustedWalkInTimeStr,
+            // Keep original slot time in `time`, use adjusted time only for arriveBy/cutoff/noshow
+            time: actualTimeString,
             arriveByTime: adjustedWalkInTimeStr,
             tokenNumber: tokenNumber,
             numericToken: numericToken,
@@ -1556,13 +1557,8 @@ export default function AppointmentsPage() {
           }
 
           const breakIntervals = buildBreakIntervals(selectedDoctor, values.date ?? null);
-          if (breakIntervals.length > 0) {
-            const adjustedTime = applyBreakOffsets(actualAppointmentTime, breakIntervals);
-            if (adjustedTime.getTime() !== actualAppointmentTime.getTime()) {
-              actualAppointmentTime = adjustedTime;
-              actualAppointmentTimeStr = format(adjustedTime, "hh:mm a");
-            }
-          }
+          const adjustedAppointmentTime =
+            breakIntervals.length > 0 ? applyBreakOffsets(actualAppointmentTime, breakIntervals) : actualAppointmentTime;
 
           // Calculate cut-off time and no-show time
           let cutOffTime: Date | undefined;
@@ -1570,7 +1566,7 @@ export default function AppointmentsPage() {
           let inheritedDelay = 0;
           try {
             const appointmentDate = parse(appointmentDateStr, "d MMMM yyyy", new Date());
-            const appointmentTime = actualAppointmentTime;
+            const appointmentTime = adjustedAppointmentTime;
             cutOffTime = subMinutes(appointmentTime, 15);
             
             // Inherit delay from previous appointment (if any)
@@ -1611,7 +1607,52 @@ export default function AppointmentsPage() {
           
           // Always align arriveByTime with the actual appointment time (new slot),
           // both for new bookings and reschedules
-          const arriveByTimeValue = actualAppointmentTimeStr;
+          const arriveByTimeValue = format(adjustedAppointmentTime, "hh:mm a");
+          
+          // Validate that the original slot time is within availability (original or extended)
+          // Note: We check actualAppointmentTime (original slot) not adjustedAppointmentTime (after break offsets)
+          const appointmentDateForValidation = parse(appointmentDateStr, "d MMMM yyyy", new Date());
+          const dayOfWeekStr = format(appointmentDateForValidation, 'EEEE');
+          const availabilityForDayForValidation = selectedDoctor.availabilitySlots?.find(s => s.day === dayOfWeekStr);
+          if (availabilityForDayForValidation && availabilityForDayForValidation.timeSlots.length > 0) {
+            const extension = selectedDoctor.availabilityExtensions?.[appointmentDateStr];
+            
+            // Get the last session's end time (original or extended)
+            const lastSession = availabilityForDayForValidation.timeSlots[availabilityForDayForValidation.timeSlots.length - 1];
+            const actualOriginalEndTime = parseTimeUtil(lastSession.to, appointmentDateForValidation);
+            let availabilityEndTime = actualOriginalEndTime;
+            
+            // Only use extension if it's valid
+            if (extension) {
+              try {
+                const extensionOriginalEndTime = parseTimeUtil(extension.originalEndTime, appointmentDateForValidation);
+                const extendedEndTime = parseTimeUtil(extension.newEndTime, appointmentDateForValidation);
+                
+                // Validate extension: originalEndTime should match actual session end time, and newEndTime should be later
+                if (extensionOriginalEndTime.getTime() === actualOriginalEndTime.getTime() && isAfter(extendedEndTime, actualOriginalEndTime)) {
+                  availabilityEndTime = extendedEndTime;
+                } else {
+                  console.warn('Invalid extension data - originalEndTime mismatch or newEndTime is not after original, ignoring extension', {
+                    extensionOriginalEndTime: extension.originalEndTime,
+                    actualOriginalEndTime: lastSession.to,
+                    newEndTime: extension.newEndTime
+                  });
+                }
+              } catch (error) {
+                console.error('Error parsing extension, using original end time:', error);
+              }
+            }
+            
+            // Check if the original slot time is outside availability
+            if (actualAppointmentTime > availabilityEndTime) {
+              toast({
+                variant: 'destructive',
+                title: 'Booking Not Allowed',
+                description: `The appointment time (${actualAppointmentTimeStr}) is outside the doctor's availability. Please select an earlier time slot.`,
+              });
+              return;
+            }
+          }
           
           const appointmentData: Appointment = {
             id: appointmentId,
@@ -1624,7 +1665,8 @@ export default function AppointmentsPage() {
             doctorId: selectedDoctor.id, // Add doctorId
             doctor: selectedDoctor.name,
             date: appointmentDateStr,
-            time: actualAppointmentTimeStr, // Use the recalculated time from actual slotIndex
+            // Keep original slot time (before break adjustments)
+            time: actualAppointmentTimeStr,
             arriveByTime: arriveByTimeValue,
             department: values.department,
             status: isEditing ? editingAppointment!.status : "Pending",
@@ -2594,6 +2636,25 @@ export default function AppointmentsPage() {
     form,
   ]);
 
+  // Helper function to get display time with break offsets
+  const getDisplayTimeForAppointment = useCallback((appointment: Appointment): string => {
+    try {
+      const appointmentDate = parse(appointment.date, "d MMMM yyyy", new Date());
+      const appointmentTime = parseDateFns(appointment.time, "hh:mm a", appointmentDate);
+      const appointmentDoctor = doctors.find(d => d.name === appointment.doctor);
+      if (appointmentDoctor) {
+        const breakIntervals = buildBreakIntervals(appointmentDoctor, appointmentDate);
+        const adjustedTime = breakIntervals.length > 0 
+          ? applyBreakOffsets(appointmentTime, breakIntervals)
+          : appointmentTime;
+        return format(adjustedTime, 'hh:mm a');
+      }
+      return appointment.time;
+    } catch {
+      return appointment.time;
+    }
+  }, [doctors]);
+
   const sessionSlots = useMemo(() => {
     if (appointmentType === 'Advanced Booking' && isAdvanceCapacityReached) {
       return [];
@@ -2622,8 +2683,6 @@ export default function AppointmentsPage() {
         return acc;
       }, {} as Record<string, string>);
     
-    const leaveForDate = selectedDoctor.leaveSlots?.find(ls => typeof ls !== 'string' && ls.date && isSameDay(parse(ls.date, 'yyyy-MM-dd', new Date()), selectedDate));
-    const leaveTimeSlots = leaveForDate && typeof leaveForDate !== 'string' ? leaveForDate.slots : [];
 
     // Calculate per-session reserved slots (15% of FUTURE slots only in each session)
     // This dynamically adjusts as time passes - reserved slots are recalculated based on remaining future slots
@@ -2670,6 +2729,29 @@ export default function AppointmentsPage() {
       }
     });
 
+    // Calculate break intervals and availability end time once (outside the loop)
+    const breakIntervals = buildBreakIntervals(selectedDoctor, selectedDate);
+    const dateStr = format(selectedDate, 'd MMMM yyyy');
+    const extension = selectedDoctor?.availabilityExtensions?.[dateStr];
+    
+    // Get the last session's end time (original or extended)
+    const lastSession = availabilityForDay.timeSlots[availabilityForDay.timeSlots.length - 1];
+    const originalEndTime = parseDateFns(lastSession.to, 'hh:mm a', selectedDate);
+    let availabilityEndTime = originalEndTime;
+    
+    if (extension) {
+        try {
+            const extensionOriginalEndTime = parseDateFns(extension.originalEndTime, 'hh:mm a', selectedDate);
+            const extendedEndTime = parseDateFns(extension.newEndTime, 'hh:mm a', selectedDate);
+            // Validate extension: originalEndTime should match actual session end time, and newEndTime should be later
+            if (extensionOriginalEndTime.getTime() === originalEndTime.getTime() && isAfter(extendedEndTime, originalEndTime)) {
+                availabilityEndTime = extendedEndTime;
+            }
+        } catch (error) {
+            console.error('Error parsing extension, using original end time:', error);
+        }
+    }
+
     const sessions = availabilityForDay.timeSlots.map((session, sessionIndex) => {
       const slots = [];
       let foundFirstAvailable = false;
@@ -2682,7 +2764,6 @@ export default function AppointmentsPage() {
       let pastSlotsSkipped = 0;
       let oneHourWindowSlotsSkipped = 0;
       let bookedSlotsCount = 0;
-      let leaveSlotsCount = 0;
       let availableSlotsCount = 0;
       let reservedSlotsSkipped = 0;
       
@@ -2743,16 +2824,22 @@ export default function AppointmentsPage() {
             }
         }
 
+        // Filter out slots where slot time + break duration would be outside availability
+        // Calculate what the adjusted time would be (slot + break offsets)
+        const adjustedTime = breakIntervals.length > 0 
+            ? applyBreakOffsets(slotTimeIterator, breakIntervals)
+            : slotTimeIterator;
+        
+        // Skip slot if adjusted time would be outside availability
+        if (adjustedTime > availabilityEndTime) {
+            currentSlotIndexInSession++;
+            slotTimeIterator = new Date(slotTimeIterator.getTime() + selectedDoctor.averageConsultingTime! * 60000);
+            continue;
+        }
+
         if (slotTime in bookedSlotsForDay) {
           status = 'booked';
           bookedSlotsCount++;
-        } else if (leaveTimeSlots.some((leaveSlot: any) => {
-          const leaveStart = parseDateFns(leaveSlot.from, 'hh:mm a', selectedDate);
-          const leaveEnd = parseDateFns(leaveSlot.to, 'hh:mm a', selectedDate);
-          return slotTimeIterator >= leaveStart && slotTimeIterator < leaveEnd;
-        })) {
-          status = 'leave';
-          leaveSlotsCount++;
         } else {
           availableSlotsCount++;
         }
@@ -2788,7 +2875,24 @@ export default function AppointmentsPage() {
         slotTimeIterator = new Date(slotTimeIterator.getTime() + selectedDoctor.averageConsultingTime! * 60000);
       }
       
-      const sessionTitle = `Session ${sessionIndex + 1} (${session.from} - ${session.to})`;
+      // Find breaks that overlap with this session
+      const sessionStart = parseDateFns(session.from, 'hh:mm a', selectedDate);
+      const sessionEnd = parseDateFns(session.to, 'hh:mm a', selectedDate);
+      const sessionBreaks = breakIntervals.filter(interval => {
+        // Check if break overlaps with session
+        return (interval.start < sessionEnd && interval.end > sessionStart);
+      });
+      
+      let sessionTitle = `Session ${sessionIndex + 1} (${session.from} - ${session.to})`;
+      if (sessionBreaks.length > 0) {
+        const breakTexts = sessionBreaks.map(interval => {
+          const breakStart = format(interval.start, 'hh:mm a');
+          const breakEnd = format(interval.end, 'hh:mm a');
+          return `${breakStart} - ${breakEnd}`;
+        });
+        sessionTitle += ` [Break: ${breakTexts.join(', ')}]`;
+      }
+      
       return { title: sessionTitle, slots };
     });
 
@@ -3569,44 +3673,52 @@ export default function AppointmentsPage() {
                                           </div>
                                         )}
                                         {sessionSlots.length > 0 ? (
-                                            sessionSlots.map((session, index) => (
-                                                <div key={index}>
-                                                    <h4 className="text-sm font-semibold mb-2">{session.title}</h4>
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        {session.slots.map(slot => {
-                                                            const slotMeta = slot as { status?: string; tokenNumber?: string };
-                                                            const slotStatus = slotMeta.status ?? 'available';
-                                                            return (
-                                                                <Button
-                                                                    key={slot.time}
-                                                                    type="button"
-                                                                    variant={form.getValues("time") === format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm') ? "default" : "outline"}
-                                                                    onClick={() => {
-                                                                        const val = format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm');
-                                                                        form.setValue("time", val, { shouldValidate: true, shouldDirty: true });
-                                                                        if (val) form.clearErrors("time");
-                                                                        form.trigger();
-                                                                    }}
-                                                                    disabled={slotStatus !== 'available'}
-                                                                    className={cn("text-xs", {
-                                                                        "line-through bg-muted text-muted-foreground": slotStatus === 'booked',
-                                                                        "line-through bg-destructive/20 text-destructive-foreground": slotStatus === 'leave',
-                                                                    })}
-                                                                >
-                                                                    {slotStatus === 'booked' && slotMeta.tokenNumber ? slotMeta.tokenNumber : (() => {
-                                                                        try {
-                                                                            const slotTime = parseDateFns(slot.time, "hh:mm a", selectedDate || new Date());
-                                                                            return format(subMinutes(slotTime, 15), 'hh:mm a');
-                                                                        } catch {
-                                                                            return slot.time;
-                                                                        }
-                                                                    })()}
-                                                                </Button>
-                                                            );
-                                                        })}
+                                            (() => {
+                                                // Calculate break intervals for display
+                                                const displayBreakIntervals = buildBreakIntervals(selectedDoctor, selectedDate);
+                                                return sessionSlots.map((session, index) => (
+                                                    <div key={index}>
+                                                        <h4 className="text-sm font-semibold mb-2">{session.title}</h4>
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            {session.slots.map(slot => {
+                                                                const slotMeta = slot as { status?: string; tokenNumber?: string };
+                                                                const slotStatus = slotMeta.status ?? 'available';
+                                                                return (
+                                                                    <Button
+                                                                        key={slot.time}
+                                                                        type="button"
+                                                                        variant={form.getValues("time") === format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm') ? "default" : "outline"}
+                                                                        onClick={() => {
+                                                                            const val = format(parseDateFns(slot.time, "hh:mm a", new Date()), 'HH:mm');
+                                                                            form.setValue("time", val, { shouldValidate: true, shouldDirty: true });
+                                                                            if (val) form.clearErrors("time");
+                                                                            form.trigger();
+                                                                        }}
+                                                                        disabled={slotStatus !== 'available'}
+                                                                        className={cn("text-xs", {
+                                                                            "line-through bg-muted text-muted-foreground": slotStatus === 'booked',
+                                                                            "line-through bg-destructive/20 text-destructive-foreground": slotStatus === 'leave',
+                                                                        })}
+                                                                    >
+                                                                        {slotStatus === 'booked' && slotMeta.tokenNumber ? slotMeta.tokenNumber : (() => {
+                                                                            try {
+                                                                                const slotTime = parseDateFns(slot.time, "hh:mm a", selectedDate || new Date());
+                                                                                // Add break offsets for display only
+                                                                                const displayTime = displayBreakIntervals.length > 0 
+                                                                                    ? applyBreakOffsets(slotTime, displayBreakIntervals)
+                                                                                    : slotTime;
+                                                                                return format(subMinutes(displayTime, 15), 'hh:mm a');
+                                                                            } catch {
+                                                                                return slot.time;
+                                                                            }
+                                                                        })()}
+                                                                    </Button>
+                                                                );
+                                                            })}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))
+                                                ));
+                                            })()
                                         ) : (
                                           <p className="text-sm text-muted-foreground col-span-2">
                                             {isAdvanceCapacityReached
@@ -3829,7 +3941,7 @@ export default function AppointmentsPage() {
                                 <TableCell>{appointment.doctor}</TableCell>
                                 <TableCell>{appointment.department}</TableCell>
                                 <TableCell>{format(parse(appointment.date, "d MMMM yyyy", new Date()), "MMM d, yy")}</TableCell>
-                                <TableCell>{appointment.time}</TableCell>
+                                <TableCell>{getDisplayTimeForAppointment(appointment)}</TableCell>
                                 <TableCell>{appointment.bookedVia}</TableCell>
                                 <TableCell>{appointment.tokenNumber}</TableCell>
                                 <TableCell className="text-right">
@@ -3897,7 +4009,7 @@ export default function AppointmentsPage() {
                                     >
                                       <TableCell className="font-medium">{appointment.patientName}</TableCell>
                                       <TableCell>{appointment.tokenNumber}</TableCell>
-                                      <TableCell>{appointment.time}</TableCell>
+                                      <TableCell>{getDisplayTimeForAppointment(appointment)}</TableCell>
                                       <TableCell className="text-right">
                                         <div className="flex justify-end gap-2">
                                           <Badge variant="destructive">Skipped</Badge>

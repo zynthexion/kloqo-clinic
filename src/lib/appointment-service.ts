@@ -110,9 +110,27 @@ async function loadDoctorAndSlots(
   const slots: DailySlot[] = [];
   let slotIndex = 0;
 
+  // Check for availability extension
+  const dateStr = format(date, 'd MMMM yyyy');
+  const extension = doctor.availabilityExtensions?.[dateStr];
+
   availabilityForDay.timeSlots.forEach((session, sessionIndex) => {
     let currentTime = parseTimeString(session.from, date);
-    const endTime = parseTimeString(session.to, date);
+    let endTime = parseTimeString(session.to, date);
+    
+    // If this is the last session and there's an extension, use the extended end time
+    if (sessionIndex === availabilityForDay.timeSlots.length - 1 && extension) {
+      try {
+        const extendedEndTime = parseTimeString(extension.newEndTime, date);
+        // Only use extended time if it's actually later than the original end time
+        if (isAfter(extendedEndTime, endTime)) {
+          endTime = extendedEndTime;
+        }
+      } catch (error) {
+        console.error('Error parsing extended end time, using original:', error);
+        // Fall back to original end time if parsing fails
+      }
+    }
 
     while (isBefore(currentTime, endTime)) {
       slots.push({ index: slotIndex, time: new Date(currentTime), sessionIndex });
@@ -2493,42 +2511,54 @@ export async function calculateWalkInDetails(
   const now = new Date();
   const date = now;
   
-  // Fetch walkInTokenAllotment from database if not provided (same as generateNextTokenAndReserveSlot)
-  let spacingValue = 0;
-  if (walkInTokenAllotment !== undefined && Number.isFinite(walkInTokenAllotment) && walkInTokenAllotment > 0) {
-    // Use provided value if valid
-    spacingValue = Math.floor(walkInTokenAllotment);
-  } else {
-    // Fetch from database if not provided
-    if (clinicId) {
-      const clinicSnap = await getDoc(doc(db, 'clinics', clinicId));
-      const rawSpacing = clinicSnap.exists() ? Number(clinicSnap.data()?.walkInTokenAllotment ?? 0) : 0;
-      spacingValue = Number.isFinite(rawSpacing) && rawSpacing > 0 ? Math.floor(rawSpacing) : 0;
-    }
-  }
-
   const { slots } = await loadDoctorAndSlots(clinicId, doctorName, date, doctor.id);
   const appointments = await fetchDayAppointments(clinicId, doctorName, date);
 
-  // Get all active advance appointments (including skipped) - now included in interval counting
-  const activeAdvanceAppointments = appointments.filter(appointment => {
-    return (
-      appointment.bookedVia !== 'Walk-in' &&
-      typeof appointment.slotIndex === 'number' &&
-      ACTIVE_STATUSES.has(appointment.status)
-    );
+  // Unified simple placement rule:
+  // - Treat any slot with an ACTIVE status (Pending, Confirmed, Skipped, Completed) as occupied.
+  // - Cancelled or never-used slots are free.
+  // - Choose the earliest free slot in the future; if none, the earliest free today.
+  const occupiedSlots = new Set<number>();
+  appointments.forEach(appt => {
+    if (
+      typeof appt.slotIndex === 'number' &&
+      ACTIVE_STATUSES.has(appt.status)
+    ) {
+      occupiedSlots.add(appt.slotIndex);
+    }
   });
 
-  const activeWalkIns = appointments.filter(appointment => {
-    return (
-      appointment.bookedVia === 'Walk-in' &&
-      typeof appointment.slotIndex === 'number' &&
-      ACTIVE_STATUSES.has(appointment.status)
-    );
-  });
+  const futureFreeSlots: DailySlot[] = [];
+  const allFreeSlots: DailySlot[] = [];
+  for (const slot of slots) {
+    if (!occupiedSlots.has(slot.index)) {
+      allFreeSlots.push(slot);
+      if (slot.time >= now) {
+        futureFreeSlots.push(slot);
+      }
+    }
+  }
 
-  const placeholderId = '__preview_walk_in__';
-  const existingNumericTokens = activeWalkIns
+  const chosenSlot =
+    futureFreeSlots.sort((a, b) => a.time.getTime() - b.time.getTime())[0] ||
+    allFreeSlots.sort((a, b) => a.time.getTime() - b.time.getTime())[0];
+
+  if (!chosenSlot) {
+    throw new Error('No walk-in slots are available at this time.');
+  }
+
+  const allActiveStatuses = new Set(['Pending', 'Confirmed', 'Skipped', 'Completed']);
+  const patientsAhead = appointments.filter(appointment => {
+    return (
+      typeof appointment.slotIndex === 'number' &&
+      appointment.slotIndex < chosenSlot.index &&
+      allActiveStatuses.has(appointment.status)
+    );
+  }).length;
+
+  // Numeric token: next after max existing W or slots length
+  const existingNumericTokens = appointments
+    .filter(appointment => appointment.bookedVia === 'Walk-in')
     .map(appointment => {
       if (typeof appointment.numericToken === 'number') {
         return appointment.numericToken;
@@ -2538,119 +2568,16 @@ export async function calculateWalkInDetails(
     })
     .filter(token => token > 0);
 
-  const placeholderNumericToken =
+  const numericToken =
     (existingNumericTokens.length > 0 ? Math.max(...existingNumericTokens) : slots.length) + 1;
 
-  const walkInCandidates = [
-    ...activeWalkIns.map(appointment => ({
-      id: appointment.id,
-      numericToken: typeof appointment.numericToken === 'number' ? appointment.numericToken : 0,
-      createdAt: toDate(appointment.createdAt),
-      currentSlotIndex: typeof appointment.slotIndex === 'number' ? appointment.slotIndex : undefined,
-    })),
-    {
-      id: placeholderId,
-      numericToken: placeholderNumericToken,
-      createdAt: now,
-    },
-  ];
-
-  // Include all advance appointments (including skipped) in interval counting
-  const advanceAppointmentsForScheduler = activeAdvanceAppointments.map(entry => ({
-    id: entry.id,
-    slotIndex: typeof entry.slotIndex === 'number' ? entry.slotIndex : -1,
-  }));
-
-  console.log('[WALK-IN DEBUG] calculateWalkInDetails - Before scheduler call', {
-    activeAdvanceAppointmentsCount: activeAdvanceAppointments.length,
-    activeAdvanceAppointments: activeAdvanceAppointments.map(apt => ({
-      id: apt.id,
-      tokenNumber: apt.tokenNumber,
-      slotIndex: apt.slotIndex,
-      status: apt.status,
-      time: apt.time
-    })),
-    activeWalkInsCount: activeWalkIns.length,
-    spacingValue,
-    slotsCount: slots.length,
-    placeholderNumericToken,
-    timestamp: new Date().toISOString()
-  });
-
-  const schedule = computeWalkInSchedule({
-    slots,
-    now,
-    walkInTokenAllotment: spacingValue,
-    advanceAppointments: advanceAppointmentsForScheduler,
-    walkInCandidates,
-  });
-
-  console.log('[WALK-IN DEBUG] Scheduler returned', {
-    assignmentsCount: schedule.assignments.length,
-    assignments: schedule.assignments.map(a => ({
-      id: a.id,
-      slotIndex: a.slotIndex,
-      sessionIndex: a.sessionIndex,
-      slotTime: a.slotTime.toISOString()
-    })),
-    timestamp: new Date().toISOString()
-  });
-
-  const assignment = schedule.assignments.find(entry => entry.id === placeholderId);
-
-  if (!assignment) {
-    throw new Error('No walk-in slots are available at this time.');
-  }
-
-  console.log('[WALK-IN DEBUG] Placeholder assignment found', {
-    slotIndex: assignment.slotIndex,
-    sessionIndex: assignment.sessionIndex,
-    slotTime: assignment.slotTime.toISOString(),
-    timestamp: new Date().toISOString()
-  });
-
-  // Count all appointments ahead with status Pending, Confirmed, Skipped, or Completed
-  // that have a slotIndex less than the walk-in's assigned slotIndex
-  const allActiveStatuses = new Set(['Pending', 'Confirmed', 'Skipped', 'Completed']);
-  const appointmentsAhead = appointments.filter(appointment => {
-    return (
-      typeof appointment.slotIndex === 'number' &&
-      appointment.slotIndex < assignment.slotIndex &&
-      allActiveStatuses.has(appointment.status)
-    );
-  });
-  
-  const patientsAhead = appointmentsAhead.length;
-
-  console.log('[WALK-IN DEBUG] Patients ahead calculation', {
-    walkInSlotIndex: assignment.slotIndex,
-    appointmentsAheadCount: patientsAhead,
-    appointmentsAhead: appointmentsAhead.map(apt => ({
-      id: apt.id,
-      tokenNumber: apt.tokenNumber,
-      slotIndex: apt.slotIndex,
-      status: apt.status,
-      time: apt.time
-    })),
-    allAppointments: appointments.map(apt => ({
-      id: apt.id,
-      tokenNumber: apt.tokenNumber,
-      slotIndex: apt.slotIndex,
-      status: apt.status,
-      time: apt.time
-    })),
-    timestamp: new Date().toISOString()
-  });
-
-  const numericToken = placeholderNumericToken;
-
   return {
-    estimatedTime: assignment.slotTime,
+    estimatedTime: chosenSlot.time,
     patientsAhead,
     numericToken,
-    slotIndex: assignment.slotIndex,
-    sessionIndex: assignment.sessionIndex,
-    actualSlotTime: assignment.slotTime,
+    slotIndex: chosenSlot.index,
+    sessionIndex: chosenSlot.sessionIndex,
+    actualSlotTime: chosenSlot.time,
   };
 }
 
