@@ -864,13 +864,28 @@ export default function AppointmentsPage() {
 
     // Get first session start time
     const firstSessionStart = getTimeOnDate(todaySlots.timeSlots[0].from, now);
-    // Get last session end time
-    const lastSessionEnd = getTimeOnDate(todaySlots.timeSlots[todaySlots.timeSlots.length - 1].to, now);
+    // Get last session start/end time
+    const lastSession = todaySlots.timeSlots[todaySlots.timeSlots.length - 1];
+    const lastSessionStart = getTimeOnDate(lastSession.from, now);
+    const lastSessionEnd = getTimeOnDate(lastSession.to, now);
     
-    // Walk-in opens 2 hours before the first session starts
-    const walkInOpenTime = subMinutes(firstSessionStart, 120);
-    // Walk-in closes 15 minutes before consultation end
-    const walkInCloseTime = subMinutes(lastSessionEnd, 15);
+    // Walk-in opens 30 minutes before the first session starts
+    const walkInOpenTime = subMinutes(firstSessionStart, 30);
+
+    // Walk-in closes 15 minutes before consultation end,
+    // plus any break duration that falls within the last session window
+    const breakIntervals = buildBreakIntervals(selectedDoctor, now);
+    let breakMinutesInLastSession = 0;
+    if (breakIntervals.length > 0) {
+      for (const interval of breakIntervals) {
+        const overlapStart = interval.start > lastSessionStart ? interval.start : lastSessionStart;
+        const overlapEnd = interval.end < lastSessionEnd ? interval.end : lastSessionEnd;
+        if (overlapEnd > overlapStart) {
+          breakMinutesInLastSession += differenceInMinutes(overlapEnd, overlapStart);
+        }
+      }
+    }
+    const walkInCloseTime = addMinutes(subMinutes(lastSessionEnd, 15), breakMinutesInLastSession);
     
     // Check if current time is within walk-in window
     return now >= walkInOpenTime && now <= walkInCloseTime;
@@ -3606,41 +3621,153 @@ export default function AppointmentsPage() {
                                       <CardHeader className="flex-row items-start gap-3 space-y-0 p-4">
                                         <Info className={cn("w-6 h-6 mt-1", walkInEstimate ? "text-green-600" : "text-red-600")} />
                                         <div>
-                                            <CardTitle className="text-base">{walkInEstimate ? "Walk-in Available" : "Walk-in Unavailable"}</CardTitle>
-                                            <CardDescription className={cn("text-xs", walkInEstimate ? "text-green-800" : "text-red-800")}>
-                                                {walkInEstimate ? "Estimated waiting time is shown below." : "This doctor is not available for walk-ins at this time."}
-                                            </CardDescription>
+                                            {(() => {
+                                              if (!walkInEstimate || !selectedDoctor) {
+                                                return (
+                                                  <>
+                                                    <CardTitle className="text-base">Walk-in Unavailable</CardTitle>
+                                                    <CardDescription className="text-xs text-red-800">
+                                                      This doctor is not available for walk-ins at this time.
+                                                    </CardDescription>
+                                                  </>
+                                                );
+                                              }
+                                              try {
+                                                const today = new Date();
+                                                const appointmentDate = parse(format(today, 'd MMMM yyyy'), 'd MMMM yyyy', today);
+                                                const breakIntervals = buildBreakIntervals(selectedDoctor, appointmentDate);
+                                                const adjusted = breakIntervals.length > 0
+                                                  ? applyBreakOffsets(walkInEstimate.estimatedTime, breakIntervals)
+                                                  : walkInEstimate.estimatedTime;
+                                                const dayOfWeekStr = format(appointmentDate, 'EEEE');
+                                                const availabilityForDay = selectedDoctor.availabilitySlots?.find(s => s.day === dayOfWeekStr);
+                                                let availabilityEnd: Date | null = null;
+                                                let availabilityEndLabel = '';
+                                                if (availabilityForDay && availabilityForDay.timeSlots.length > 0) {
+                                                  const lastSession = availabilityForDay.timeSlots[availabilityForDay.timeSlots.length - 1];
+                                                  const originalEnd = parseTimeUtil(lastSession.to, appointmentDate);
+                                                  availabilityEnd = originalEnd;
+                                                  availabilityEndLabel = format(originalEnd, 'hh:mm a');
+                                                  const dateKey = format(appointmentDate, 'd MMMM yyyy');
+                                                  const extension = (selectedDoctor as any).availabilityExtensions?.[dateKey];
+                                                  if (extension?.newEndTime) {
+                                                    try {
+                                                      const extendedEnd = parseTimeUtil(extension.newEndTime, appointmentDate);
+                                                      if (extendedEnd > availabilityEnd) {
+                                                        availabilityEnd = extendedEnd;
+                                                        availabilityEndLabel = format(extendedEnd, 'hh:mm a');
+                                                      }
+                                                    } catch {
+                                                      // ignore malformed extension
+                                                    }
+                                                  }
+                                                }
+                                                const isOutsideFrame = availabilityEnd ? isAfter(adjusted, availabilityEnd) : false;
+                                                if (isOutsideFrame) {
+                                                  return (
+                                                    <>
+                                                      <CardTitle className="text-base text-red-700">Walk-in Not Available</CardTitle>
+                                                      <CardDescription className="text-xs text-red-800">
+                                                        Next estimated time ~{format(adjusted, 'hh:mm a')} is outside today&apos;s availability
+                                                        (ends at {availabilityEndLabel}).
+                                                      </CardDescription>
+                                                    </>
+                                                  );
+                                                }
+                                                return (
+                                                  <>
+                                                    <CardTitle className="text-base">Walk-in Available</CardTitle>
+                                                    <CardDescription className="text-xs text-green-800">
+                                                      Estimated waiting time is shown below.
+                                                    </CardDescription>
+                                                  </>
+                                                );
+                                              } catch {
+                                                return (
+                                                  <>
+                                                    <CardTitle className="text-base">{walkInEstimate ? "Walk-in Available" : "Walk-in Unavailable"}</CardTitle>
+                                                    <CardDescription className={cn("text-xs", walkInEstimate ? "text-green-800" : "text-red-800")}>
+                                                      {walkInEstimate ? "Estimated waiting time is shown below." : "This doctor is not available for walk-ins at this time."}
+                                                    </CardDescription>
+                                                  </>
+                                                );
+                                              }
+                                            })()}
                                         </div>
                                       </CardHeader>
                                       {walkInEstimate && (
                                         <CardContent className="p-4 pt-0">
                                             {isCalculatingEstimate ? (
-                                                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Calculating wait time...</div>
+                                              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                Calculating wait time...
+                                              </div>
                                             ) : (
-                                                <div className="grid grid-cols-2 gap-2 text-center">
-                                              <div>
-                                                      <p className="text-xs text-muted-foreground">Est. Time</p>
-                                                      <p className="font-bold text-lg">
-                                                        {(() => {
-                                                          try {
-                                                            const today = new Date();
-                                                            const appointmentDate = parse(format(today, 'd MMMM yyyy'), 'd MMMM yyyy', today);
-                                                            const breakIntervals = buildBreakIntervals(selectedDoctor, appointmentDate);
-                                                            const adjusted = breakIntervals.length > 0
-                                                              ? applyBreakOffsets(walkInEstimate.estimatedTime, breakIntervals)
-                                                              : walkInEstimate.estimatedTime;
-                                                            return `~${format(adjusted, 'hh:mm a')}`;
-                                                          } catch {
-                                                            return `~${format(walkInEstimate.estimatedTime, 'hh:mm a')}`;
-                                                          }
-                                                        })()}
-                                                      </p>
-                                                  </div>
-                                                  <div>
-                                                      <p className="text-xs text-muted-foreground">Queue</p>
-                                                      <p className="font-bold text-lg">{walkInEstimate.patientsAhead} ahead</p>
-                                                  </div>
-                                                </div>
+                                              (() => {
+                                                try {
+                                                  const today = new Date();
+                                                  const appointmentDate = parse(format(today, 'd MMMM yyyy'), 'd MMMM yyyy', today);
+                                                  const breakIntervals = buildBreakIntervals(selectedDoctor, appointmentDate);
+                                                  const adjusted = breakIntervals.length > 0
+                                                    ? applyBreakOffsets(walkInEstimate.estimatedTime, breakIntervals)
+                                                    : walkInEstimate.estimatedTime;
+                                                  const dayOfWeekStr = format(appointmentDate, 'EEEE');
+                                                  const availabilityForDay = selectedDoctor.availabilitySlots?.find(s => s.day === dayOfWeekStr);
+                                                  let availabilityEnd: Date | null = null;
+                                                  if (availabilityForDay && availabilityForDay.timeSlots.length > 0) {
+                                                    const lastSession = availabilityForDay.timeSlots[availabilityForDay.timeSlots.length - 1];
+                                                    const originalEnd = parseTimeUtil(lastSession.to, appointmentDate);
+                                                    availabilityEnd = originalEnd;
+                                                    const dateKey = format(appointmentDate, 'd MMMM yyyy');
+                                                    const extension = (selectedDoctor as any).availabilityExtensions?.[dateKey];
+                                                    if (extension?.newEndTime) {
+                                                      try {
+                                                        const extendedEnd = parseTimeUtil(extension.newEndTime, appointmentDate);
+                                                        if (extendedEnd > availabilityEnd) {
+                                                          availabilityEnd = extendedEnd;
+                                                        }
+                                                      } catch {
+                                                        // ignore malformed extension
+                                                      }
+                                                    }
+                                                  }
+                                                  const isOutsideFrame = availabilityEnd ? isAfter(adjusted, availabilityEnd) : false;
+                                                  if (isOutsideFrame) {
+                                                    // Header already explains that the next estimated time is outside availability;
+                                                    // no need to show detailed estimate/queue grid.
+                                                    return null;
+                                                  }
+                                                  return (
+                                                    <div className="grid grid-cols-2 gap-2 text-center">
+                                                      <div>
+                                                        <p className="text-xs text-muted-foreground">Est. Time</p>
+                                                        <p className="font-bold text-lg">
+                                                          {`~${format(adjusted, 'hh:mm a')}`}
+                                                        </p>
+                                                      </div>
+                                                      <div>
+                                                        <p className="text-xs text-muted-foreground">Queue</p>
+                                                        <p className="font-bold text-lg">{walkInEstimate.patientsAhead} ahead</p>
+                                                      </div>
+                                                    </div>
+                                                  );
+                                                } catch {
+                                                  return (
+                                                    <div className="grid grid-cols-2 gap-2 text-center">
+                                                      <div>
+                                                        <p className="text-xs text-muted-foreground">Est. Time</p>
+                                                        <p className="font-bold text-lg">
+                                                          {`~${format(walkInEstimate.estimatedTime, 'hh:mm a')}`}
+                                                        </p>
+                                                      </div>
+                                                      <div>
+                                                        <p className="text-xs text-muted-foreground">Queue</p>
+                                                        <p className="font-bold text-lg">{walkInEstimate.patientsAhead} ahead</p>
+                                                      </div>
+                                                    </div>
+                                                  );
+                                                }
+                                              })()
                                             )}
                                         </CardContent>
                                       )}
