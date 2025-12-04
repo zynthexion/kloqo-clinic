@@ -237,6 +237,7 @@ export default function DoctorsPage() {
   const [endSlot, setEndSlot] = useState<Date | null>(null);
   const [showExtensionDialog, setShowExtensionDialog] = useState(false);
   const [pendingBreakData, setPendingBreakData] = useState<{ startSlot: Date; endSlot: Date } | null>(null);
+  const [extensionOptions, setExtensionOptions] = useState<{ hasOverrun: boolean; minimalExtension: number; fullExtension: number; lastTokenBefore: string; lastTokenAfter: string; originalEnd: string; breakDuration: number } | null>(null);
   const [allBookedSlots, setAllBookedSlots] = useState<number[]>([]);
   const [isSubmittingBreak, setIsSubmittingBreak] = useState(false);
 
@@ -1004,12 +1005,65 @@ export default function DoctorsPage() {
         return;
     }
     
+    // Calculate extension options before showing dialog
+    const consultationTime = selectedDoctor.averageConsultingTime || 15;
+    const breakDuration = differenceInMinutes(endSlot, startSlot) + consultationTime;
+    
+    const dayOfWeek = format(leaveCalDate, 'EEEE');
+    const availabilityForDay = (selectedDoctor.availabilitySlots || []).find(slot => slot.day === dayOfWeek);
+    
+    let hasOverrun = false;
+    let minimalExtension = 0;
+    let lastTokenBefore = '';
+    let lastTokenAfter = '';
+    let originalEnd = '';
+    
+    if (availabilityForDay && availabilityForDay.timeSlots.length > 0) {
+        const lastSession = availabilityForDay.timeSlots[availabilityForDay.timeSlots.length - 1];
+        originalEnd = lastSession.to;
+        const originalEndTimeDate = parseTimeUtil(originalEnd, leaveCalDate);
+        
+        const dateStr = format(leaveCalDate, 'd MMMM yyyy');
+        const appointmentsOnDate = appointments.filter(
+            (apt) => apt.doctor === selectedDoctor.name && apt.date === dateStr
+        );
+        
+        if (appointmentsOnDate.length > 0) {
+            const sortedByTime = [...appointmentsOnDate].sort((a, b) => {
+                const timeA = parseTimeUtil(a.time, leaveCalDate).getTime();
+                const timeB = parseTimeUtil(b.time, leaveCalDate).getTime();
+                return timeA - timeB;
+            });
+            
+            const lastAppointment = sortedByTime[sortedByTime.length - 1];
+            const lastBaseTime = parseTimeUtil(lastAppointment.time, leaveCalDate);
+            lastTokenBefore = format(lastBaseTime, 'hh:mm a');
+            
+            const lastTimeAfterBreak = addMinutes(lastBaseTime, breakDuration);
+            lastTokenAfter = format(lastTimeAfterBreak, 'hh:mm a');
+            
+            const overrunMinutes = Math.max(0, differenceInMinutes(lastTimeAfterBreak, originalEndTimeDate));
+            hasOverrun = overrunMinutes > 0;
+            minimalExtension = overrunMinutes;
+        }
+    }
+    
+    setExtensionOptions({
+        hasOverrun,
+        minimalExtension,
+        fullExtension: breakDuration,
+        lastTokenBefore,
+        lastTokenAfter,
+        originalEnd,
+        breakDuration
+    });
+    
     // Show dialog to ask about extending availability
     setPendingBreakData({ startSlot, endSlot });
     setShowExtensionDialog(true);
   };
 
-  const confirmBreakWithExtension = async (extendAvailability: boolean) => {
+  const confirmBreakWithExtension = async (extensionMinutes: number | null) => {
     if (!pendingBreakData || !selectedDoctor || !leaveCalDate) {
         setShowExtensionDialog(false);
         setPendingBreakData(null);
@@ -1020,6 +1074,7 @@ export default function DoctorsPage() {
     setIsSubmittingBreak(true);
     setShowExtensionDialog(false);
     setPendingBreakData(null);
+    setExtensionOptions(null);
     
     try {
         const doctorRef = doc(db, 'doctors', selectedDoctor.id);
@@ -1038,28 +1093,25 @@ export default function DoctorsPage() {
         // Handle availability extension if user chose to extend
         const doctorUpdates: any = { leaveSlots: updatedLeaveSlots };
         
-        if (extendAvailability) {
+        if (extensionMinutes !== null && extensionMinutes > 0) {
             const dayOfWeek = format(leaveCalDate, 'EEEE');
             const availabilityForDay = (selectedDoctor.availabilitySlots || []).find(slot => slot.day === dayOfWeek);
             
             if (availabilityForDay && availabilityForDay.timeSlots.length > 0) {
-                // Get the last session's end time
+                // Get the last session's end time (original availability end)
                 const lastSession = availabilityForDay.timeSlots[availabilityForDay.timeSlots.length - 1];
                 const originalEndTime = lastSession.to;
                 const originalEndTimeDate = parseTimeUtil(originalEndTime, leaveCalDate);
                 
-                // Calculate break duration
-                const breakDuration = differenceInMinutes(endSlot, startSlot) + consultationTime;
-                
-                // Extend the last session's end time
-                const newEndTimeDate = addMinutes(originalEndTimeDate, breakDuration);
+                const newEndTimeDate = addMinutes(originalEndTimeDate, extensionMinutes);
                 const newEndTime = format(newEndTimeDate, 'hh:mm a');
                 
                 const dateStr = format(leaveCalDate, 'd MMMM yyyy');
                 const availabilityExtensions = selectedDoctor.availabilityExtensions || {};
+                const existingExtension = availabilityExtensions[dateStr];
                 availabilityExtensions[dateStr] = {
-                    extendedBy: breakDuration,
-                    originalEndTime,
+                    extendedBy: (existingExtension?.extendedBy || 0) + extensionMinutes,
+                    originalEndTime: existingExtension?.originalEndTime || originalEndTime,
                     newEndTime,
                 };
                 doctorUpdates.availabilityExtensions = availabilityExtensions;
@@ -2192,23 +2244,102 @@ export default function DoctorsPage() {
         if (!open) {
             setShowExtensionDialog(false);
             setPendingBreakData(null);
+            setExtensionOptions(null);
         }
       }}>
         <AlertDialogContent>
             <AlertDialogHeader>
                 <AlertDialogTitle>Extend Availability Time?</AlertDialogTitle>
-                <AlertDialogDescription>
-                    {pendingBreakData && selectedDoctor ? (() => {
-                        const breakDuration = differenceInMinutes(pendingBreakData.endSlot, pendingBreakData.startSlot) + (selectedDoctor.averageConsultingTime || 15);
-                        return `Do you want to extend the availability time to compensate for the break duration? If yes, the last session's end time will be extended by ${breakDuration} minutes. This will allow more appointments to be scheduled in the extended time.`;
-                    })() : 'Do you want to extend the availability time to compensate for the break duration? If yes, the last session\'s end time will be extended by the break duration. This will allow more appointments to be scheduled in the extended time.'}
+                <AlertDialogDescription className="space-y-2">
+                    {extensionOptions ? (
+                        extensionOptions.hasOverrun ? (
+                            // Bad scenario: tokens outside availability
+                            <div className="space-y-3">
+                                <p>Some booked appointments will extend beyond the original availability after applying this break:</p>
+                                <ul className="list-disc list-inside space-y-1 text-sm">
+                                    <li><strong>Last booked token before break:</strong> {extensionOptions.lastTokenBefore}</li>
+                                    <li><strong>Last token after break:</strong> {extensionOptions.lastTokenAfter}</li>
+                                    <li><strong>Original availability ends at:</strong> {extensionOptions.originalEnd}</li>
+                                    <li><strong>Break taken:</strong> {extensionOptions.breakDuration} minutes</li>
+                                </ul>
+                                <p className="text-sm font-medium">Choose how to extend availability:</p>
+                            </div>
+                        ) : (
+                            // Safe scenario: all tokens within availability
+                            <div className="space-y-2">
+                                <p>Last booked token for this day is at {extensionOptions.lastTokenBefore || 'N/A'}. After applying this break, it will still finish within the original availability (ending at {extensionOptions.originalEnd}).</p>
+                                <p>Break duration is {extensionOptions.breakDuration} minutes. Do you want to extend the availability to fully compensate the break?</p>
+                            </div>
+                        )
+                    ) : (
+                        <p>Do you want to extend the availability time to compensate for the break duration?</p>
+                    )}
                 </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={() => confirmBreakWithExtension(false)}>No, Keep Same</AlertDialogAction>
-                <AlertDialogAction onClick={() => confirmBreakWithExtension(true)}>Yes, Extend</AlertDialogAction>
-            </AlertDialogFooter>
+            <div className="mt-4 flex flex-col space-y-2">
+                {extensionOptions?.hasOverrun ? (
+                    // Bad scenario: 2 buttons (minimal vs full extension)
+                    <>
+                        <AlertDialogCancel className="w-full justify-start">Cancel</AlertDialogCancel>
+                        <AlertDialogAction className="w-full justify-start" onClick={() => {
+                            const originalEndDate = parseTimeUtil(extensionOptions.originalEnd, leaveCalDate!);
+                            const minimalEndDate = addMinutes(originalEndDate, extensionOptions.minimalExtension);
+                            const minimalEndTime = format(minimalEndDate, 'hh:mm a');
+                            confirmBreakWithExtension(extensionOptions.minimalExtension);
+                        }}>
+                            <div className="flex flex-col items-start text-left">
+                                <span className="font-semibold flex flex-col items-start text-left">
+                                    <span>
+                                        Extend to {(() => {
+                                            if (!leaveCalDate) return '';
+                                            const originalEndDate = parseTimeUtil(extensionOptions.originalEnd, leaveCalDate);
+                                            const minimalEndDate = addMinutes(originalEndDate, extensionOptions.minimalExtension);
+                                            return format(minimalEndDate, 'hh:mm a');
+                                        })()}
+                                    </span>
+                                    <span>(+{extensionOptions.minimalExtension} min)</span>
+                                </span>
+                                <span className="text-xs font-normal text-muted-foreground">
+                                    finish booked patients
+                                </span>
+                            </div>
+                        </AlertDialogAction>
+                        <AlertDialogAction className="w-full justify-start" onClick={() => {
+                            confirmBreakWithExtension(extensionOptions.fullExtension);
+                        }}>
+                            <div className="flex flex-col items-start text-left">
+                                <span className="font-semibold flex flex-col items-start text-left">
+                                    <span>
+                                        Extend to {(() => {
+                                            if (!leaveCalDate) return '';
+                                            const originalEndDate = parseTimeUtil(extensionOptions.originalEnd, leaveCalDate);
+                                            const fullEndDate = addMinutes(originalEndDate, extensionOptions.fullExtension);
+                                            return format(fullEndDate, 'hh:mm a');
+                                        })()}
+                                    </span>
+                                    <span>(+{extensionOptions.fullExtension} min)</span>
+                                </span>
+                                <span className="text-xs font-normal text-muted-foreground">
+                                    fully compensate break
+                                </span>
+                            </div>
+                        </AlertDialogAction>
+                    </>
+                ) : (
+                    // Safe scenario: 3 buttons (Cancel, No Keep Same, Yes Extend)
+                    <>
+                        <AlertDialogCancel className="w-full justify-start">Cancel</AlertDialogCancel>
+                        <AlertDialogAction className="w-full justify-start" onClick={() => confirmBreakWithExtension(null)}>No, Keep Same</AlertDialogAction>
+                        <AlertDialogAction className="w-full justify-start" onClick={() => {
+                            if (extensionOptions) {
+                                confirmBreakWithExtension(extensionOptions.fullExtension);
+                            } else {
+                                confirmBreakWithExtension(null);
+                            }
+                        }}>Yes, Extend</AlertDialogAction>
+                    </>
+                )}
+            </div>
         </AlertDialogContent>
       </AlertDialog>
     </>

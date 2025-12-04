@@ -21,7 +21,7 @@ import { db } from '@/lib/firebase';
 import { doc, getDoc, collection, addDoc, query, where, getDocs, serverTimestamp, setDoc, deleteDoc } from 'firebase/firestore';
 import type { Appointment, Doctor, Patient } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
-import { format, isWithinInterval, parse, subMinutes, addMinutes, differenceInMinutes, parseISO } from 'date-fns';
+import { format, isWithinInterval, parse, subMinutes, addMinutes, differenceInMinutes, parseISO, isAfter } from 'date-fns';
 import { parseTime } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -125,6 +125,36 @@ function applyBreakOffsets(originalTime: Date, intervals: BreakInterval[]): Date
     }
     return acc;
   }, new Date(originalTime));
+}
+
+function getAvailabilityEndForDate(doctor: Doctor | null, referenceDate: Date | null): Date | null {
+  if (!doctor || !referenceDate || !doctor.availabilitySlots?.length) return null;
+
+  const dayOfWeek = format(referenceDate, 'EEEE');
+  const availabilityForDay = doctor.availabilitySlots.find((slot) => slot.day === dayOfWeek);
+  if (!availabilityForDay || !availabilityForDay.timeSlots?.length) return null;
+
+  const lastSession = availabilityForDay.timeSlots[availabilityForDay.timeSlots.length - 1];
+  let availabilityEnd = parseTime(lastSession.to, referenceDate);
+
+  const dateKey = format(referenceDate, 'd MMMM yyyy');
+  const extensions = (doctor as any).availabilityExtensions as
+    | { [date: string]: { extendedBy: number; originalEndTime: string; newEndTime: string } }
+    | undefined;
+  const extension = extensions?.[dateKey];
+
+  if (extension?.newEndTime) {
+    try {
+      const extendedEnd = parseTime(extension.newEndTime, referenceDate);
+      if (extendedEnd.getTime() > availabilityEnd.getTime()) {
+        availabilityEnd = extendedEnd;
+      }
+    } catch {
+      // ignore malformed extension
+    }
+  }
+
+  return availabilityEnd;
 }
 
 function WalkInRegistrationContent() {
@@ -393,6 +423,16 @@ function WalkInRegistrationContent() {
         const appointmentDate = parse(format(new Date(), "d MMMM yyyy"), "d MMMM yyyy", new Date());
         const previewBreakIntervals = buildBreakIntervals(doctor, appointmentDate);
         const adjustedEstimatedTime = applyBreakOffsets(estimatedTime, previewBreakIntervals);
+        const availabilityEnd = getAvailabilityEndForDate(doctor, appointmentDate);
+        if (availabilityEnd && isAfter(adjustedEstimatedTime, availabilityEnd)) {
+          toast({
+            variant: 'destructive',
+            title: 'Booking Not Allowed',
+            description: 'This walk-in time is outside the doctor\'s availability.',
+          });
+          setIsSubmitting(false);
+          return;
+        }
         const adjustedEstimatedTimeStr = format(adjustedEstimatedTime, "hh:mm a");
         const cutOffTime = subMinutes(adjustedEstimatedTime, 15);
         const noShowTime = addMinutes(adjustedEstimatedTime, 15);
@@ -490,6 +530,19 @@ function WalkInRegistrationContent() {
         const appointmentDate = parse(format(new Date(), "d MMMM yyyy"), "d MMMM yyyy", new Date());
         const walkInBreakIntervals = buildBreakIntervals(doctor, appointmentDate);
         const adjustedAppointmentTime = applyBreakOffsets(recalculatedDetails.estimatedTime, walkInBreakIntervals);
+        const availabilityEnd = getAvailabilityEndForDate(doctor, appointmentDate);
+        if (availabilityEnd && isAfter(adjustedAppointmentTime, availabilityEnd)) {
+          if (reservationId) {
+            await releaseReservation(reservationId);
+          }
+          toast({
+            variant: 'destructive',
+            title: 'Booking Not Allowed',
+            description: 'This walk-in time is outside the doctor\'s availability.',
+          });
+          setIsSubmitting(false);
+          return;
+        }
         const adjustedTimeStr = format(adjustedAppointmentTime, "hh:mm a");
         const cutOffTime = subMinutes(adjustedAppointmentTime, 15);
         const noShowTime = addMinutes(adjustedAppointmentTime, 15);

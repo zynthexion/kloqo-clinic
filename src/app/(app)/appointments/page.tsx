@@ -1191,11 +1191,50 @@ export default function AppointmentsPage() {
           const reservationTime = parse(actualTimeString, "hh:mm a", appointmentDate);
           const walkInBreakIntervals = buildBreakIntervals(selectedDoctor, appointmentDate);
           const adjustedWalkInTime = applyBreakOffsets(reservationTime, walkInBreakIntervals);
+          const appointmentDateStr = format(date, "d MMMM yyyy");
+          // Validate adjusted walk-in time against availability (original or extended)
+          try {
+            const dayOfWeekStr = format(appointmentDate, 'EEEE');
+            const availabilityForDay = selectedDoctor.availabilitySlots?.find(s => s.day === dayOfWeekStr);
+            if (availabilityForDay && availabilityForDay.timeSlots.length > 0) {
+              const extension = selectedDoctor.availabilityExtensions?.[appointmentDateStr];
+              const lastSession = availabilityForDay.timeSlots[availabilityForDay.timeSlots.length - 1];
+              const actualOriginalEndTime = parseTimeUtil(lastSession.to, appointmentDate);
+              let availabilityEndTime = actualOriginalEndTime;
+              if (extension?.newEndTime) {
+                try {
+                  const extendedEnd = parseTimeUtil(extension.newEndTime, appointmentDate);
+                  if (extendedEnd > availabilityEndTime) {
+                    availabilityEndTime = extendedEnd;
+                  }
+                } catch {
+                  // ignore malformed extension
+                }
+              }
+              console.log('[WALK-IN DEBUG] Availability validation', {
+                doctor: selectedDoctor.name,
+                appointmentDate: appointmentDateStr,
+                originalEndTime: format(actualOriginalEndTime, 'hh:mm a'),
+                extension,
+                effectiveAvailabilityEnd: format(availabilityEndTime, 'hh:mm a'),
+                adjustedWalkInTime: format(adjustedWalkInTime, 'hh:mm a'),
+              });
+              if (adjustedWalkInTime > availabilityEndTime) {
+                toast({
+                  variant: "destructive",
+                  title: "Booking Not Allowed",
+                  description: "This walk-in time is outside the doctor's availability.",
+                });
+                return;
+              }
+            }
+          } catch (e) {
+            console.error('[WALK-IN DEBUG] Error validating walk-in time against availability', e);
+          }
           const adjustedWalkInTimeStr = format(adjustedWalkInTime, "hh:mm a");
           const cutOffTime = subMinutes(adjustedWalkInTime, 15);
           const noShowTime = addMinutes(adjustedWalkInTime, 15);
           
-          const appointmentDateStr = format(date, "d MMMM yyyy");
           const appointmentRef = doc(collection(db, 'appointments'));
           
           const appointmentData: Appointment = {
@@ -3579,9 +3618,23 @@ export default function AppointmentsPage() {
                                                 <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Calculating wait time...</div>
                                             ) : (
                                                 <div className="grid grid-cols-2 gap-2 text-center">
-                                                  <div>
+                                              <div>
                                                       <p className="text-xs text-muted-foreground">Est. Time</p>
-                                                      <p className="font-bold text-lg">~{format(walkInEstimate.estimatedTime, 'hh:mm a')}</p>
+                                                      <p className="font-bold text-lg">
+                                                        {(() => {
+                                                          try {
+                                                            const today = new Date();
+                                                            const appointmentDate = parse(format(today, 'd MMMM yyyy'), 'd MMMM yyyy', today);
+                                                            const breakIntervals = buildBreakIntervals(selectedDoctor, appointmentDate);
+                                                            const adjusted = breakIntervals.length > 0
+                                                              ? applyBreakOffsets(walkInEstimate.estimatedTime, breakIntervals)
+                                                              : walkInEstimate.estimatedTime;
+                                                            return `~${format(adjusted, 'hh:mm a')}`;
+                                                          } catch {
+                                                            return `~${format(walkInEstimate.estimatedTime, 'hh:mm a')}`;
+                                                          }
+                                                        })()}
+                                                      </p>
                                                   </div>
                                                   <div>
                                                       <p className="text-xs text-muted-foreground">Queue</p>
