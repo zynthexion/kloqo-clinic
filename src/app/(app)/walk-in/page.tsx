@@ -409,7 +409,7 @@ function WalkInRegistrationContent() {
             name: values.patientName,
             age: values.age,
             place: values.place,
-            sex: values.sex,
+            sex: values.sex as 'Male' | 'Female' | 'Other' | '',
             clinicId,
             // For walk-ins, we can either use the existing patient's primary ID or create a new mock one.
             bookingUserId: selectedPatientId || `user_walkin_${fullPhoneNumber}`,
@@ -441,7 +441,7 @@ function WalkInRegistrationContent() {
             patientName: values.patientName,
             age: values.age,
             place: values.place,
-            sex: values.sex,
+            sex: values.sex as 'Male' | 'Female' | 'Other',
             communicationPhone: fullPhoneNumber,
             patientId,
             doctorId: doctor.id, // Add doctorId
